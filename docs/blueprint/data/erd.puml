@@ -1,0 +1,433 @@
+@startuml UniHub_Workshop_ERD
+!theme plain
+skinparam linetype ortho
+skinparam roundcorner 8
+skinparam classFontSize 11
+skinparam classAttributeFontSize 10
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+' ============================================================
+' COLOR SCHEME PER BOUNDED CONTEXT
+' ============================================================
+skinparam class {
+    BackgroundColor<<Identity>>     #DDEEFF
+    BorderColor<<Identity>>         #2255AA
+    BackgroundColor<<EventCore>>    #DDFFDD
+    BorderColor<<EventCore>>        #226622
+    BackgroundColor<<Transaction>>  #FFF3CC
+    BorderColor<<Transaction>>      #AA7700
+    BackgroundColor<<Async>>        #F5DDFF
+    BorderColor<<Async>>            #7722AA
+    BackgroundColor<<Redis>>        #FFE0E0
+    BorderColor<<Redis>>            #CC2222
+    HeaderBackgroundColor<<Identity>>     #2255AA
+    HeaderBackgroundColor<<EventCore>>    #226622
+    HeaderBackgroundColor<<Transaction>>  #AA7700
+    HeaderBackgroundColor<<Async>>        #7722AA
+    HeaderBackgroundColor<<Redis>>        #CC2222
+    HeaderFontColor white
+}
+
+' ============================================================
+' BOUNDED CONTEXT 1 — IDENTITY
+' ============================================================
+package "Identity" #EEF4FF {
+
+    class users <<Identity>> {
+        + user_id : UUID <<PK>>
+        --
+        email : VARCHAR(255) <<UQ>>
+        password_hash : VARCHAR(255)
+        role : ENUM(STUDENT, ORGANIZER, CHECKIN_STAFF)
+        status : ENUM(ACTIVE, SUSPENDED, PENDING_VERIFICATION)
+        created_at : TIMESTAMPTZ
+        updated_at : TIMESTAMPTZ
+        --
+        idx: email
+        idx: role
+    }
+
+    class students <<Identity>> {
+        + student_id : UUID <<PK>>
+        --
+        ~ user_id : UUID <<FK, UQ, NULLABLE>>
+        student_code : VARCHAR(20) <<UQ>>
+        full_name : VARCHAR(255)
+        faculty : VARCHAR(100)
+        class_year : SMALLINT
+        email_edu : VARCHAR(255)
+        last_synced_at : TIMESTAMPTZ
+        created_at : TIMESTAMPTZ
+        updated_at : TIMESTAMPTZ
+        --
+        idx: user_id
+        idx: student_code
+        idx: email_edu
+    }
+}
+
+' ============================================================
+' BOUNDED CONTEXT 2 — EVENT CORE
+' ============================================================
+package "Event Core" #EEFFEE {
+
+    class speakers <<EventCore>> {
+        + speaker_id : UUID <<PK>>
+        --
+        full_name : VARCHAR(255)
+        title : VARCHAR(255)
+        bio : TEXT
+        avatar_url : VARCHAR(1000)
+        created_at : TIMESTAMPTZ
+        updated_at : TIMESTAMPTZ
+    }
+
+    class rooms <<EventCore>> {
+        + room_id : UUID <<PK>>
+        --
+        name : VARCHAR(100)
+        building : VARCHAR(100)
+        floor : SMALLINT
+        capacity : SMALLINT
+        floor_plan_url : VARCHAR(1000)
+        facilities : JSONB
+        created_at : TIMESTAMPTZ
+        updated_at : TIMESTAMPTZ
+        --
+        chk: capacity > 0
+        idx: name
+    }
+
+    class workshops <<EventCore>> {
+        + workshop_id : UUID <<PK>>
+        --
+        ~ speaker_id : UUID <<FK>>
+        ~ room_id : UUID <<FK>>
+        ~ created_by : UUID <<FK>>
+        title : VARCHAR(500)
+        description : TEXT
+        starts_at : TIMESTAMPTZ
+        ends_at : TIMESTAMPTZ
+        capacity : SMALLINT
+        is_paid : BOOLEAN
+        price : NUMERIC(12,2)
+        status : ENUM(DRAFT, PUBLISHED, CANCELLED, COMPLETED)
+        created_at : TIMESTAMPTZ
+        updated_at : TIMESTAMPTZ
+        --
+        chk: ends_at > starts_at
+        chk: capacity > 0
+        chk: (is_paid=F AND price IS NULL) OR (is_paid=T AND price>0)
+        uq_idx: (room_id, starts_at, ends_at) WHERE status='PUBLISHED'
+        idx: status
+        idx: starts_at
+    }
+
+    class workshop_slots <<EventCore>> {
+        + slot_id : UUID <<PK>>
+        --
+        ~ workshop_id : UUID <<FK, UQ>>
+        total_capacity : SMALLINT
+        locked_count : SMALLINT DEFAULT 0
+        confirmed_count : SMALLINT DEFAULT 0
+        updated_at : TIMESTAMPTZ
+        --
+        chk: total_capacity > 0
+        chk: locked+confirmed <= total_capacity
+        ' available = total - locked - confirmed (computed)
+    }
+}
+
+' ============================================================
+' BOUNDED CONTEXT 3 — TRANSACTION
+' ============================================================
+package "Transaction" #FFFBEE {
+
+    class registrations <<Transaction>> {
+        + registration_id : UUID <<PK>>
+        --
+        ~ student_id : UUID <<FK>>
+        ~ workshop_id : UUID <<FK>>
+        status : ENUM(PENDING_PAYMENT, CONFIRMED,\nCANCELLED, WAITLISTED)
+        registered_at : TIMESTAMPTZ
+        confirmed_at : TIMESTAMPTZ
+        cancelled_at : TIMESTAMPTZ
+        cancellation_reason : TEXT
+        updated_at : TIMESTAMPTZ
+        --
+        uq: (student_id, workshop_id)
+        idx: student_id
+        idx: workshop_id
+        idx: status
+    }
+
+    class tickets <<Transaction>> {
+        + ticket_id : UUID <<PK>>
+        --
+        ~ registration_id : UUID <<FK, UQ>>
+        qr_token : VARCHAR(255) <<UQ>>
+        status : ENUM(ACTIVE, VOID)
+        issued_at : TIMESTAMPTZ
+        voided_at : TIMESTAMPTZ
+        --
+        chk: ACTIVE→voided_at IS NULL\n     VOID→voided_at IS NOT NULL
+        idx: qr_token
+        idx: status
+    }
+
+    class payments <<Transaction>> {
+        + payment_id : UUID <<PK>>
+        --
+        ~ registration_id : UUID <<FK>>
+        ~ student_id : UUID <<FK>>
+        amount : NUMERIC(12,2)
+        currency : CHAR(3) DEFAULT 'VND'
+        gateway : ENUM(VNPAY, STRIPE, MOMO, MOCK)
+        status : ENUM(PENDING, SUCCESS, FAILED,\nREFUNDED, TIMEOUT)
+        idempotency_key : VARCHAR(255) <<UQ>>
+        gateway_txn_id : VARCHAR(255)
+        initiated_at : TIMESTAMPTZ
+        completed_at : TIMESTAMPTZ
+        timeout_at : TIMESTAMPTZ
+        raw_gateway_response : JSONB
+        --
+        chk: amount > 0
+        idx: registration_id
+        idx: student_id
+        idx: status
+        idx: (initiated_at) WHERE status='PENDING'
+    }
+
+    class checkin_records <<Transaction>> {
+        + checkin_id : UUID <<PK>>
+        --
+        ~ registration_id : UUID <<FK>>
+        ~ ticket_id : UUID <<FK>>
+        ~ student_id : UUID <<FK>>
+        ~ workshop_id : UUID <<FK>>
+        ~ checked_in_by : UUID <<FK>>
+        checked_in_at : TIMESTAMPTZ
+        synced_at : TIMESTAMPTZ
+        source : ENUM(ONLINE, OFFLINE_SYNC)
+        device_id : VARCHAR(100)
+        --
+        uq: (ticket_id, workshop_id)
+        idx: workshop_id
+        idx: student_id
+        idx: (source) WHERE source='OFFLINE_SYNC'
+    }
+
+    class offline_checkin_queue <<Transaction>> {
+        + local_id : UUID <<PK, device-generated>>
+        --
+        ~ workshop_id : UUID
+        ~ checked_in_by : UUID
+        qr_token : VARCHAR(255)
+        checked_in_at : TIMESTAMPTZ
+        device_id : VARCHAR(100)
+        sync_status : ENUM(PENDING, SYNCED, CONFLICT)
+        synced_at : TIMESTAMPTZ
+        conflict_reason : TEXT
+        --
+        ' No FK — local-first table, synced via batch upsert
+    }
+}
+
+' ============================================================
+' BOUNDED CONTEXT 4 — ASYNC
+' ============================================================
+package "Async" #F8EEFF {
+
+    class notification_channel_configs <<Async>> {
+        + channel_config_id : UUID <<PK>>
+        --
+        channel_type : ENUM(APP, EMAIL, TELEGRAM) <<UQ>>
+        is_active : BOOLEAN DEFAULT TRUE
+        config_json : JSONB
+        created_at : TIMESTAMPTZ
+        updated_at : TIMESTAMPTZ
+    }
+
+    class notification_logs <<Async>> {
+        + notification_id : UUID <<PK>>
+        --
+        ~ user_id : UUID <<FK>>
+        ~ workshop_id : UUID <<FK, NULLABLE>>
+        type : ENUM(REGISTRATION_CONFIRMED,\nREGISTRATION_CANCELLED, WORKSHOP_UPDATED,\nWORKSHOP_CANCELLED, PAYMENT_SUCCESS,\nPAYMENT_FAILED, CHECKIN_REMINDER)
+        channel : ENUM(APP, EMAIL, TELEGRAM)
+        status : ENUM(PENDING, SENT, FAILED)
+        payload : JSONB
+        sent_at : TIMESTAMPTZ
+        error_message : TEXT
+        created_at : TIMESTAMPTZ
+        --
+        idx: user_id
+        idx: workshop_id
+        idx: (status) WHERE status='PENDING'
+    }
+
+    class workshop_documents <<Async>> {
+        + document_id : UUID <<PK>>
+        --
+        ~ workshop_id : UUID <<FK>>
+        ~ uploaded_by : UUID <<FK>>
+        file_url : VARCHAR(1000)
+        original_name : VARCHAR(500)
+        file_size_bytes : BIGINT
+        upload_status : ENUM(UPLOADED, PROCESSING,\nPROCESSED, FAILED)
+        uploaded_at : TIMESTAMPTZ
+        updated_at : TIMESTAMPTZ
+        --
+        idx: workshop_id
+    }
+
+    class ai_summaries <<Async>> {
+        + summary_id : UUID <<PK>>
+        --
+        ~ document_id : UUID <<FK, UQ>>
+        ~ workshop_id : UUID <<FK>>
+        raw_text : TEXT
+        summary_text : TEXT
+        model_used : VARCHAR(100)
+        status : ENUM(PENDING, PROCESSING, DONE, FAILED)
+        generated_at : TIMESTAMPTZ
+        error_message : TEXT
+        created_at : TIMESTAMPTZ
+        --
+        idx: workshop_id
+        idx: (status) WHERE status IN ('PENDING','PROCESSING')
+    }
+
+    class student_sync_jobs <<Async>> {
+        + job_id : UUID <<PK>>
+        --
+        triggered_at : TIMESTAMPTZ
+        source_file_name : VARCHAR(500)
+        status : ENUM(RUNNING, SUCCESS,\nPARTIAL_FAILURE, FAILED)
+        total_rows : INTEGER
+        processed_rows : INTEGER
+        error_rows : INTEGER
+        completed_at : TIMESTAMPTZ
+        error_log_url : VARCHAR(1000)
+        --
+        idx: status
+        idx: triggered_at DESC
+    }
+
+    class student_sync_errors <<Async>> {
+        + error_id : UUID <<PK>>
+        --
+        ~ job_id : UUID <<FK>>
+        row_number : INTEGER
+        raw_data : TEXT
+        error_reason : ENUM(DUPLICATE, INVALID_FORMAT,\nMISSING_FIELD, UNKNOWN)
+        error_detail : TEXT
+        created_at : TIMESTAMPTZ
+        --
+        idx: job_id
+    }
+}
+
+' ============================================================
+' REDIS STRUCTURES (Ephemeral — documented only)
+' ============================================================
+package "Redis (Ephemeral)" #FFF0F0 {
+
+    class "seat:available:{wid}" <<Redis>> {
+        Key: seat:available:{workshop_id}
+        Type: String (integer counter)
+        --
+        Cmd: DECR atomic
+        TTL: none (reset on publish/cancel)
+        --
+        Source of truth cho available seats.
+        DECR < 0 → INCR lại → hết chỗ.
+    }
+
+    class "seat:lock:{wid}:{rid}" <<Redis>> {
+        Key: seat:lock:{workshop_id}:{registration_id}
+        Type: String (JSON)
+        --
+        Value: {student_id, locked_at, amount}
+        Cmd: SET NX EX 900
+        TTL: 900s (15 phút — tự expire)
+    }
+
+    class "idempotency:{key}" <<Redis>> {
+        Key: idempotency:{idempotency_key}
+        Type: String
+        --
+        Value: {payment_id}
+        Cmd: SET NX EX 86400
+        TTL: 86400s (24 giờ)
+        --
+        Layer 1 chống double-charge.
+        Layer 2 = UNIQUE constraint trên payments.
+    }
+
+    class "circuit:payment:{gateway}" <<Redis>> {
+        Key: circuit:payment:{gateway}
+        Type: Hash
+        --
+        Fields: state, failure_count,\n        opened_at, last_attempt
+        TTL: none (managed by logic)
+        --
+        CLOSED→OPEN: 5 failures / 60s
+        OPEN→HALF_OPEN: after 30s
+        HALF_OPEN→CLOSED: 1 success
+    }
+
+    class "ratelimit:register:{uid}" <<Redis>> {
+        Key: ratelimit:register:{user_id}
+        Type: Hash (Token Bucket)
+        --
+        Fields: tokens, last_refill_at
+        TTL: 300s
+        --
+        Capacity: 5 req
+        Refill: 1 token / 10s
+        Global: 500 req/s ceiling
+    }
+}
+
+' ============================================================
+' RELATIONSHIPS
+' ============================================================
+
+' Identity
+users           "1" -- "0..1" students             : "maps to >"
+
+' Event Core
+speakers        "1" -- "0..*" workshops             : "presents >"
+rooms           "1" -- "0..*" workshops             : "hosts >"
+users           "1" -- "0..*" workshops             : "created_by >"
+workshops       "1" -- "1"    workshop_slots         : "has slot >"
+
+' Transaction
+students        "1" -- "0..*" registrations         : "registers >"
+workshops       "1" -- "0..*" registrations         : "receives >"
+registrations   "1" -- "0..1" tickets               : "issues >"
+registrations   "1" -- "0..1" payments              : "paid via >"
+students        "1" -- "0..*" payments              : "pays >"
+tickets         "1" -- "0..1" checkin_records       : "verified by >"
+registrations   "1" -- "0..1" checkin_records       : "check-in for >"
+students        "1" -- "0..*" checkin_records       : "attends >"
+workshops       "1" -- "0..*" checkin_records       : "attended at >"
+users           "1" -- "0..*" checkin_records       : "scanned by >"
+
+' Async
+users           "1" -- "0..*" notification_logs     : "notified >"
+workshops       "1" -- "0..*" notification_logs     : "triggers >"
+workshops       "1" -- "0..*" workshop_documents    : "has docs >"
+users           "1" -- "0..*" workshop_documents    : "uploaded by >"
+workshop_documents "1" -- "0..1" ai_summaries       : "summarized as >"
+workshops       "1" -- "0..*" ai_summaries          : "summary for >"
+student_sync_jobs "1" -- "0..*" student_sync_errors : "logs >"
+
+' Redis conceptual links (dashed)
+workshop_slots  . "seat:available:{wid}"            : "reconciles with"
+payments        . "idempotency:{key}"               : "checked via"
+registrations   . "seat:lock:{wid}:{rid}"           : "held by"
+
+@enduml
