@@ -99,8 +99,8 @@ const eslintConfig = defineConfig([
             default: 'disallow',
             rules: [
               { from: 'core', allow: ['core', 'shared'] },
+              { from: 'database', allow: ['database', 'core', 'shared'] },
               { from: 'shared', allow: ['shared'] },
-              { from: 'database', allow: ['shared', 'core'] },
 
               {
                 from: 'presentation',
