@@ -7,6 +7,7 @@
  * 3. Notify the application when the Refresh Token is also invalid (force logout).
  */
 
+import { API_ROUTES } from "@/constants/api-routes";
 import { ApiError, isRefreshTokenError } from "@/lib/api/errors";
 import type { ApiResponse } from "@/lib/api/types";
 
@@ -64,7 +65,7 @@ function rejectRefreshQueue(err: unknown): void {
 // ---------------------------------------------------------------------------
 
 async function refreshAccessToken(): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+  const response = await fetch(`${API_BASE_URL}${API_ROUTES.AUTH.REFRESH}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

@@ -6,6 +6,7 @@
  * not directly from this file.
  */
 
+import { API_ROUTES } from "@/constants/api-routes";
 import { ApiError } from "@/lib/api/errors";
 import type {
   ApiResponse,
@@ -18,7 +19,6 @@ import { onForcedLogout } from "./auth-session";
 import { API_BASE_URL } from "./config";
 import { request } from "./http";
 import { tokenStore } from "./token-store";
-
 
 export { onForcedLogout, tokenStore };
 
@@ -129,7 +129,7 @@ export const api = {
 export async function login<TCredentials, TSession>(
   credentials: TCredentials
 ): Promise<TSession> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await fetch(`${API_BASE_URL}${API_ROUTES.AUTH.LOGIN}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },

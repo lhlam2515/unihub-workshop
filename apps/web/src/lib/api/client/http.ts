@@ -22,7 +22,8 @@ export function buildUrl(
   path: string,
   params?: RequestOptions["params"]
 ): string {
-  const url = new URL(path, API_BASE_URL);
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = new URL(`${API_BASE_URL}${normalizedPath}`);
 
   if (params) {
     for (const [key, value] of Object.entries(params)) {
