@@ -14,13 +14,14 @@ if (!DATABASE_URL) {
 }
 
 const db = drizzle({ client: neon(DATABASE_URL), schema });
-export type Database = typeof db;
 
+export type DatabaseClient = typeof db;
 const databaseConnectionProvider = {
   provide: DATABASE_CONNECTION,
   useValue: db,
 };
 
+export type DatabaseSchema = typeof schema;
 const databaseSchemaProvider = {
   provide: DATABASE_SCHEMA,
   useValue: schema,
