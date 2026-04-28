@@ -109,6 +109,10 @@ module.exports = defineConfig([
               from: ["app", "neverImport"],
               allow: ["shared", "feature", "widget"],
             },
+            {
+              from: ["app"],
+              allow: [["app", { fileName: "${*.css}" }]],
+            },
           ],
         },
       ],
