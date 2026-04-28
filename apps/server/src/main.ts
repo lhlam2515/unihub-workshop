@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ZodValidationPipe } from 'nestjs-zod';
 
+import { getCorsConfig } from '@/core/config/cors.config';
 import { winstonLogger } from '@/core/config/logger.config';
 
 import { AppModule } from './app.module';
@@ -15,17 +16,7 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
 
-  const allowedOrigins = [
-    'http://localhost:5173', // Vite Frontend
-    process.env.FRONTEND_URL,
-  ].filter(Boolean) as string[];
-
-  app.enableCors({
-    origin: allowedOrigins,
-    credentials: true,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  });
+  app.enableCors(getCorsConfig());
 
   app.useGlobalPipes(new ZodValidationPipe());
 
