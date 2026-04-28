@@ -1,7 +1,10 @@
 import type { AppError, ErrorCategory, ErrorCode, FieldError } from './types';
 
 /**
- * Maps each error category to the HTTP status code returned by the API.
+ * Define HTTP status mapping for error categories
+ *
+ * Business rules:
+ * - Each category maps to a single status code across the API
  */
 export const CATEGORY_TO_HTTP_STATUS: Record<ErrorCategory, number> = {
   VALIDATION: 400,
@@ -18,25 +21,45 @@ export const CATEGORY_TO_HTTP_STATUS: Record<ErrorCategory, number> = {
 };
 
 /**
- * Resolves the HTTP status code for a given error category.
+ * Resolve HTTP status for a category
+ *
+ * @param category - Error category used by the response builder
+ * @returns HTTP status code associated with the category
+ * @throws Never. Returns a status code instead of throwing
  */
 export const categoryToStatus = (category: ErrorCategory): number =>
   CATEGORY_TO_HTTP_STATUS[category];
 
 /**
- * Input used to create a normalized `AppError`.
+ * Describe input used to create a normalized application error
  */
 export interface CreateErrorOptions {
+  /** Stable error code used by clients and analytics. */
   code: ErrorCode;
+  /** Human-readable message for logs and safe client exposure. */
   message: string;
+  /** High-level category used for HTTP mapping. */
   category: ErrorCategory;
+  /** Optional field-level validation details. */
   fieldErrors?: FieldError[];
+  /** Optional internal context for logging and tracing. */
   context?: Record<string, unknown>;
+  /** Optional original error preserved for internal diagnostics. */
   cause?: unknown;
 }
 
 /**
- * Creates a normalized `AppError` object.
+ * Create a normalized application error
+ *
+ * @param options - Error details used to build the payload
+ * @param options.code - Stable error code used by clients and analytics
+ * @param options.message - Human-readable message for logs and safe clients
+ * @param options.category - Category used for HTTP status mapping
+ * @param options.fieldErrors - Optional validation details
+ * @param options.context - Optional internal context for logging
+ * @param options.cause - Optional original error for diagnostics
+ * @returns Normalized application error
+ * @throws Never. Returns an error object instead of throwing
  */
 export const createError = (options: CreateErrorOptions): AppError => ({
   category: options.category,
@@ -48,9 +71,16 @@ export const createError = (options: CreateErrorOptions): AppError => ({
 });
 
 /**
- * Predefined authentication and authorization errors.
+ * Group authentication and authorization error factories
  */
 export const authErrors = {
+  /**
+   * Create an error for invalid or malformed access tokens
+   *
+   * @param cause - Original auth error for internal logging
+   * @returns Authentication error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   tokenInvalid: (cause?: unknown): AppError =>
     createError({
       category: 'AUTH',
@@ -58,12 +88,25 @@ export const authErrors = {
       message: 'JWT signature is invalid or malformed.',
       cause,
     }),
+  /**
+   * Create an error for expired access tokens
+   *
+   * @returns Authentication error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   tokenExpired: (): AppError =>
     createError({
       category: 'AUTH',
       code: 'TOKEN_EXPIRED',
       message: 'Access token has expired. Please refresh.',
     }),
+  /**
+   * Create an error for revoked tokens
+   *
+   * @param jti - Token identifier used for revocation tracking
+   * @returns Authentication error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   tokenRevoked: (jti: string): AppError =>
     createError({
       category: 'AUTH',
@@ -71,6 +114,13 @@ export const authErrors = {
       message: 'Token has been revoked.',
       context: { jti },
     }),
+  /**
+   * Create an error for invalid or expired refresh tokens
+   *
+   * @param cause - Original auth error for internal logging
+   * @returns Authentication error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   refreshTokenInvalid: (cause?: unknown): AppError =>
     createError({
       category: 'AUTH',
@@ -78,12 +128,25 @@ export const authErrors = {
       message: 'Refresh token is invalid or expired.',
       cause,
     }),
+  /**
+   * Create an error for invalid credentials
+   *
+   * @returns Authentication error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   invalidCredentials: (): AppError =>
     createError({
       category: 'AUTH',
       code: 'INVALID_CREDENTIALS',
       message: 'Email or password is incorrect.',
     }),
+  /**
+   * Create an error for suspended accounts
+   *
+   * @param userId - Identifier used for audit and support tooling
+   * @returns Authorization error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   userSuspended: (userId: string): AppError =>
     createError({
       category: 'FORBIDDEN',
@@ -91,6 +154,13 @@ export const authErrors = {
       message: 'Account has been suspended.',
       context: { userId },
     }),
+  /**
+   * Create an error for unauthorized check-in scope
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Authorization error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   checkinScopeDenied: (workshopId: string): AppError =>
     createError({
       category: 'FORBIDDEN',
@@ -101,9 +171,17 @@ export const authErrors = {
 } as const;
 
 /**
- * Predefined seat availability errors.
+ * Group seat availability error factories
  */
 export const seatErrors = {
+  /**
+   * Create an error when no seats remain
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @param decrementedTo - Value after atomic decrement, useful for diagnostics
+   * @returns Seat availability error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   unavailable: (workshopId: string, decrementedTo?: number): AppError =>
     createError({
       category: 'BUSINESS',
@@ -111,6 +189,14 @@ export const seatErrors = {
       message: 'No seats available for this workshop.',
       context: { workshopId, decrementedTo },
     }),
+  /**
+   * Create an error when a seat lock has expired
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @param registrationId - Registration identifier tied to the lock
+   * @returns Seat lock error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   lockExpired: (workshopId: string, registrationId: string): AppError =>
     createError({
       category: 'GONE',
@@ -122,9 +208,17 @@ export const seatErrors = {
 } as const;
 
 /**
- * Predefined registration lifecycle errors.
+ * Group registration lifecycle error factories
  */
 export const registrationErrors = {
+  /**
+   * Create an error for duplicate registrations
+   *
+   * @param studentId - Student identifier used for audit logging
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Registration conflict payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   duplicate: (studentId: string, workshopId: string): AppError =>
     createError({
       category: 'CONFLICT',
@@ -132,6 +226,13 @@ export const registrationErrors = {
       message: 'You have already registered for this workshop.',
       context: { studentId, workshopId },
     }),
+  /**
+   * Create an error when a registration is missing
+   *
+   * @param registrationId - Registration identifier used for audit logging
+   * @returns Registration not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   notFound: (registrationId: string): AppError =>
     createError({
       category: 'NOT_FOUND',
@@ -139,6 +240,13 @@ export const registrationErrors = {
       message: `Registration ${registrationId} not found.`,
       context: { registrationId },
     }),
+  /**
+   * Create an error when a registration was already cancelled
+   *
+   * @param registrationId - Registration identifier used for audit logging
+   * @returns Registration conflict payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   alreadyCancelled: (registrationId: string): AppError =>
     createError({
       category: 'CONFLICT',
@@ -149,9 +257,17 @@ export const registrationErrors = {
 } as const;
 
 /**
- * Predefined payment workflow errors.
+ * Group payment workflow error factories
  */
 export const paymentErrors = {
+  /**
+   * Create an error for duplicate idempotent payments
+   *
+   * @param idempotencyKey - Idempotency key associated with the request
+   * @param existingPaymentId - Existing payment identifier to return to clients
+   * @returns Payment conflict payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   duplicate: (idempotencyKey: string, existingPaymentId: string): AppError =>
     createError({
       category: 'CONFLICT',
@@ -159,6 +275,13 @@ export const paymentErrors = {
       message: 'A payment with this idempotency key already exists.',
       context: { idempotencyKey, existingPaymentId },
     }),
+  /**
+   * Create an error when payment is already successful
+   *
+   * @param paymentId - Payment identifier used for audit logging
+   * @returns Payment conflict payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   alreadySuccess: (paymentId: string): AppError =>
     createError({
       category: 'CONFLICT',
@@ -166,6 +289,14 @@ export const paymentErrors = {
       message: 'Payment has already been successfully completed.',
       context: { paymentId },
     }),
+  /**
+   * Create an error when the payment gateway circuit is open
+   *
+   * @param gateway - External gateway identifier
+   * @param openedAt - Timestamp used for circuit breaker diagnostics
+   * @returns Overload error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   gatewayOpen: (gateway: string, openedAt: string): AppError =>
     createError({
       category: 'OVERLOADED',
@@ -174,6 +305,14 @@ export const paymentErrors = {
         'Payment service is temporarily unavailable. Your booking is saved - please try again in a few minutes.',
       context: { gateway, openedAt },
     }),
+  /**
+   * Create an error for gateway failures
+   *
+   * @param gateway - External gateway identifier
+   * @param cause - Original gateway error for internal logging
+   * @returns External dependency error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   gatewayError: (gateway: string, cause?: unknown): AppError =>
     createError({
       category: 'EXTERNAL',
@@ -182,6 +321,14 @@ export const paymentErrors = {
       context: { gateway },
       cause,
     }),
+  /**
+   * Create an error for gateway timeouts
+   *
+   * @param gateway - External gateway identifier
+   * @param paymentId - Payment identifier used for audit logging
+   * @returns External dependency error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   timeout: (gateway: string, paymentId: string): AppError =>
     createError({
       category: 'EXTERNAL',
@@ -190,6 +337,13 @@ export const paymentErrors = {
         'Payment gateway did not respond in time. Your payment status will be confirmed shortly.',
       context: { gateway, paymentId },
     }),
+  /**
+   * Create an error when a payment record is missing
+   *
+   * @param paymentId - Payment identifier used for audit logging
+   * @returns Payment not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   notFound: (paymentId: string): AppError =>
     createError({
       category: 'NOT_FOUND',
@@ -200,9 +354,16 @@ export const paymentErrors = {
 } as const;
 
 /**
- * Predefined workshop-related errors.
+ * Group workshop-related error factories
  */
 export const workshopErrors = {
+  /**
+   * Create an error when a workshop is missing
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Workshop not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   notFound: (workshopId: string): AppError =>
     createError({
       category: 'NOT_FOUND',
@@ -210,6 +371,14 @@ export const workshopErrors = {
       message: `Workshop ${workshopId} not found.`,
       context: { workshopId },
     }),
+  /**
+   * Create an error when a workshop is not published
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @param status - Publication status used for diagnostics
+   * @returns Business rule error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   notPublished: (workshopId: string, status: string): AppError =>
     createError({
       category: 'BUSINESS',
@@ -217,6 +386,13 @@ export const workshopErrors = {
       message: 'This workshop is not available for registration.',
       context: { workshopId, status },
     }),
+  /**
+   * Create an error when a workshop is cancelled
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Business rule error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   cancelled: (workshopId: string): AppError =>
     createError({
       category: 'BUSINESS',
@@ -224,6 +400,13 @@ export const workshopErrors = {
       message: 'This workshop has been cancelled.',
       context: { workshopId },
     }),
+  /**
+   * Create an error when a workshop is fully booked
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Business rule error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   full: (workshopId: string): AppError =>
     createError({
       category: 'BUSINESS',
@@ -231,6 +414,15 @@ export const workshopErrors = {
       message: 'This workshop is fully booked.',
       context: { workshopId },
     }),
+  /**
+   * Create an error when a room is already booked
+   *
+   * @param roomId - Room identifier used for audit logging
+   * @param startsAt - Start timestamp for the conflicting booking
+   * @param endsAt - End timestamp for the conflicting booking
+   * @returns Conflict error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   roomConflict: (roomId: string, startsAt: string, endsAt: string): AppError =>
     createError({
       category: 'CONFLICT',
@@ -241,9 +433,16 @@ export const workshopErrors = {
 } as const;
 
 /**
- * Predefined ticket validation errors.
+ * Group ticket validation error factories
  */
 export const ticketErrors = {
+  /**
+   * Create an error when a ticket token is unknown
+   *
+   * @param qrToken - Scanned token identifier used for audit logging
+   * @returns Ticket not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   notFound: (qrToken: string): AppError =>
     createError({
       category: 'NOT_FOUND',
@@ -251,6 +450,13 @@ export const ticketErrors = {
       message: 'QR code does not match any ticket.',
       context: { qrToken },
     }),
+  /**
+   * Create an error when a ticket is voided
+   *
+   * @param ticketId - Ticket identifier used for audit logging
+   * @returns Business rule error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   void: (ticketId: string): AppError =>
     createError({
       category: 'BUSINESS',
@@ -258,6 +464,14 @@ export const ticketErrors = {
       message: 'This ticket has been voided and is no longer valid.',
       context: { ticketId },
     }),
+  /**
+   * Create an error when a ticket is already checked in
+   *
+   * @param ticketId - Ticket identifier used for audit logging
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Conflict error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   alreadyCheckedIn: (ticketId: string, workshopId: string): AppError =>
     createError({
       category: 'CONFLICT',
@@ -268,7 +482,11 @@ export const ticketErrors = {
 } as const;
 
 /**
- * Creates a validation error with field-level details.
+ * Create a validation error with field-level details
+ *
+ * @param fieldErrors - Field failures returned by validation logic
+ * @returns Validation error payload
+ * @throws Never. Returns an error object instead of throwing
  */
 export const validationError = (fieldErrors: FieldError[]): AppError =>
   createError({
@@ -279,7 +497,12 @@ export const validationError = (fieldErrors: FieldError[]): AppError =>
   });
 
 /**
- * Creates a rate limit error for request throttling scenarios.
+ * Create a rate limit error for throttled requests
+ *
+ * @param limit - Request limit enforced by the throttling policy
+ * @param retryAfterSeconds - Suggested retry delay in seconds
+ * @returns Rate limit error payload
+ * @throws Never. Returns an error object instead of throwing
  */
 export const rateLimitError = (
   limit: number,
@@ -293,9 +516,16 @@ export const rateLimitError = (
   });
 
 /**
- * Predefined system-level errors.
+ * Group system-level error factories
  */
 export const systemErrors = {
+  /**
+   * Create a catch-all internal error
+   *
+   * @param cause - Original error for internal logging
+   * @returns Internal error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   internal: (cause?: unknown): AppError =>
     createError({
       category: 'INTERNAL',
@@ -303,6 +533,14 @@ export const systemErrors = {
       message: 'An unexpected internal error occurred.',
       cause,
     }),
+  /**
+   * Create an error when the system is overloaded
+   *
+   * @param resource - Resource under contention
+   * @param timeoutMs - Timeout value used for diagnostics
+   * @returns Overload error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
   dbLockTimeout: (resource: string, timeoutMs: number): AppError =>
     createError({
       category: 'OVERLOADED',

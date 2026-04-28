@@ -1,5 +1,8 @@
 /**
- * High-level error categories used to determine the HTTP status code.
+ * Define high-level error categories used for HTTP mapping
+ *
+ * Business rules:
+ * - Each category maps to exactly one HTTP status code
  */
 export type ErrorCategory =
   | 'VALIDATION'
@@ -15,7 +18,7 @@ export type ErrorCategory =
   | 'INTERNAL';
 
 /**
- * Stable application error codes used across the API.
+ * Define stable application error codes used across the API
  */
 export type ErrorCode =
   | 'SEAT_UNAVAILABLE'
@@ -52,71 +55,71 @@ export type ErrorCode =
   | 'INTERNAL_ERROR';
 
 /**
- * Normalized validation issue attached to a specific field.
+ * Describe a validation failure tied to a specific field
  */
 export interface FieldError {
-  /** The field that failed validation. */
+  /** Field identifier used by clients to render field-level errors. */
   field: string;
-  /** The validation rule that failed. */
+  /** Rule identifier used by clients to map to localized messages. */
   rule: string;
-  /** Human-readable validation message. */
+  /** Human-readable message safe for client display. */
   message: string;
-  /** The raw received value, when available. */
+  /** Raw input captured for diagnostics when safe to log. */
   received?: unknown;
 }
 
 /**
- * Internal application error shape used by services and domain logic.
+ * Describe the internal error shape used by services and domain logic
  */
 export interface AppError {
-  /** High-level error category. */
+  /** Category used for HTTP mapping. */
   category: ErrorCategory;
-  /** Stable application error code. */
+  /** Stable error code used by clients and analytics. */
   code: ErrorCode;
-  /** Message describing the failure. */
+  /** Human-readable message safe for client exposure. */
   message: string;
-  /** Optional field-level validation details. */
+  /** Optional field-level validation details for user input errors. */
   fieldErrors?: FieldError[];
-  /** Extra structured context for debugging and observability. */
+  /** Optional internal context for logging and trace correlation. */
   context?: Record<string, unknown>;
-  /** Optional original cause. */
+  /** Optional original cause preserved for diagnostics. */
   cause?: unknown;
 }
 
 /**
- * Pagination metadata included in paginated API responses.
+ * Describe pagination metadata returned with list responses
  */
 export interface PaginationMeta {
-  /** Current page number. */
+  /** Current page index used for navigation. */
   page: number;
-  /** Page size. */
+  /** Page size requested by the client. */
   limit: number;
-  /** Total number of items. */
+  /** Total number of items matching the query. */
   total: number;
-  /** Total number of pages. */
+  /** Total number of pages calculated from total and limit. */
   totalPages: number;
-  /** Whether there is another page after the current one. */
+  /** Whether another page is available after the current one. */
   hasNextPage: boolean;
-  /** Whether there is a page before the current one. */
+  /** Whether a page exists before the current one. */
   hasPrevPage: boolean;
 }
 
 /**
- * Metadata attached to every API response.
+ * Describe metadata attached to every API response
  */
 export interface RequestMeta {
-  /** Correlation identifier for the request. */
+  /** Correlation identifier used for tracing and logs. */
   requestId: string;
-  /** ISO timestamp of when the response was built. */
+  /** Timestamp captured when the response is built. */
   timestamp: string;
-  /** API version identifier. */
+  /** API version tag included for client compatibility. */
   apiVersion: string;
-  /** Optional processing duration in milliseconds. */
+  /** Optional processing duration reported by the server. */
   processingMs?: number;
 }
 
 /**
- * Public error payload exposed to API clients.
+ * Describe the public error payload exposed to API clients
  */
 export interface ApiErrorShape {
   code: ErrorCode;
@@ -125,18 +128,22 @@ export interface ApiErrorShape {
 }
 
 /**
- * Standard API response envelope used by the server.
+ * Define the standard API response envelope used by the server
+ *
+ * Business rules:
+ * - `success` determines whether data or error is present
+ * - `meta` is always included for tracing
  */
 export type ApiResponse<T = void> =
   | {
       /** Indicates a successful response. */
       success: true;
-      /** Response payload. */
+      /** Response payload serialized for the client. */
       data: T;
       error?: never;
       /** Pagination details for list responses. */
       pagination?: PaginationMeta;
-      /** Request metadata. */
+      /** Request metadata for tracing and diagnostics. */
       meta: RequestMeta;
     }
   | {
@@ -146,14 +153,14 @@ export type ApiResponse<T = void> =
       /** Sanitized error payload. */
       error: ApiErrorShape;
       pagination?: never;
-      /** Request metadata. */
+      /** Request metadata for tracing and diagnostics. */
       meta: RequestMeta;
     };
 
 /**
- * Container for paginated data items.
+ * Describe the container used for paginated items
  */
 export interface PaginatedData<T> {
-  /** The list of items on the current page. */
+  /** Items returned for the current page. */
   items: T[];
 }
