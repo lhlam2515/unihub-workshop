@@ -1,159 +1,210 @@
-# Turborepo starter
+# UniHub Workshop
 
-This Turborepo starter is maintained by the Turborepo core team.
+Hệ thống quản lý toàn bộ vòng đời Workshop trường đại học — tạo sự kiện, đăng ký, thanh toán, điểm danh ngoại tuyến, và đồng bộ dữ liệu sinh viên.
 
-## Using this example
+## Prerequisites
 
-Run the following command:
+- **Node.js** >= 18
+- **pnpm** 9.x (`corepack enable && corepack prepare pnpm@9.0.0 --activate`)
+- **PostgreSQL** (Neon Serverless used in production)
+- **Redis** (for seat counters, rate limiting, token blacklist, circuit breaker)
 
-```sh
-npx create-turbo@latest
-```
-
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## Getting Started
 
 ```sh
-cd my-turborepo
-turbo build
+# Clone and install
+git clone <repo-url>
+cd unihub-workshop
+pnpm install
+
+# Set up environment
+cp .env.local .env
+# Edit .env with your DATABASE_URL and REDIS_URL
 ```
 
-Without global `turbo`, use your package manager:
+### Environment Variables
+
+Each app may need its own `.env`. Key variables:
+
+| Variable | App | Description |
+|----------|-----|-------------|
+| `DATABASE_URL` | server | Neon PostgreSQL connection string |
+| `REDIS_URL` | server | Redis connection string (ioredis compatible) |
+| `NEXT_PUBLIC_API_URL` | web | Base URL for the NestJS API (default: `http://localhost:3001/api/v1`) |
+| `PORT` | server | Server listen port (default: 3000) |
+
+## Development
 
 ```sh
-cd my-turborepo
-npx turbo build
-pnpm dlx turbo build
-pnpm exec turbo build
+# Run all apps in parallel
+pnpm dev
+
+# Run specific apps
+pnpm dev:server    # NestJS backend (port 3000)
+pnpm dev:web       # Next.js web (port 3000)
+pnpm dev:mobile    # Expo mobile
+
+# With turborepo filters
+pnpm dev --filter=server
+pnpm dev --filter=web
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+### Database (Server)
 
 ```sh
-turbo build --filter=docs
+cd apps/server
+
+# Generate migration files from schema changes
+pnpm db:generate
+
+# Apply migrations
+pnpm db:migrate
+
+# Push schema directly (prototyping only)
+pnpm db:push
 ```
 
-Without global `turbo`:
+### Other Tasks
 
 ```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+pnpm build         # build all apps
+pnpm lint          # lint all apps
+pnpm format        # prettier all apps
+pnpm check-types   # type-check all apps
 ```
 
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+### Testing (Server)
 
 ```sh
-cd my-turborepo
-turbo dev
+cd apps/server
+pnpm test              # unit tests
+pnpm test:watch        # watch mode
+pnpm test:cov          # coverage report
+pnpm test:e2e          # end-to-end tests
+
+# Run a single test
+pnpm test -- --testPathPattern=auth -t "should return 401"
 ```
 
-Without global `turbo`, use your package manager:
+## Project Structure
 
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
+```
+unihub-workshop/
+├── apps/
+│   ├── server/         # NestJS 11 backend (Modular Monolith)
+│   ├── web/            # Next.js 16 web portal (Student + Organizer)
+│   └── mobile/         # Expo mobile app (Check-in Staff, Offline-First)
+├── packages/
+│   └── eslint-config/  # shared ESLint + eslint-plugin-boundaries
+├── docs/
+│   ├── srs.md          # system spec: 50 functional requirements, 40 business rules
+│   └── screens.md      # 39-screen UI specification
+├── .agents/            # single source of truth for AI agent configuration
+│   ├── rules/          # coding rules (naming, architecture, JSDoc, context7)
+│   ├── skills/         # agent skills (19 total)
+│   └── commands/       # slash command definitions (opsx)
+├── .claude/            # Claude Code — symlinks → .agents/
+│   ├── settings.json   # MCP servers + permissions (committed)
+│   └── settings.local.json  # personal env vars (gitignored)
+├── .github/
+│   ├── skills/         # GitHub Copilot — symlinks → .agents/skills/
+│   └── prompts/        # Copilot prompt templates
+├── CLAUDE.md           # root agent guidance
+└── apps/*/CLAUDE.md    # per-app agent guidance
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+> **Symlink convention:** `.agents/` is the canonical location for all rules, skills, and commands. `.claude/` and `.github/skills/` contain only symlinks pointing back to `.agents/`. Edit files in `.agents/` — the symlinks ensure all AI tools see the same content.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+## Architecture
 
-```sh
-turbo dev --filter=web
-```
+### Backend: `apps/server`
 
-Without global `turbo`:
+NestJS Modular Monolith with strict layered architecture and Railway Oriented Programming (`Result<T, AppError>` pattern).
 
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+| Module | Domain |
+|--------|--------|
+| `iam` | Authentication, JWT, RBAC, token blacklist |
+| `catalog` | Workshop CRUD, rooms, speakers, publishing |
+| `booking` | Registration, seat locking (Redis), payment, circuit breaker |
+| `checkin` | QR validation, online/offline check-in, batch sync |
+| `background` | Cron jobs, payment timeout, reconciliation, notifications |
 
-### Remote Caching
+**Request lifecycle:** Guard (JWT/RBAC/Scope) → ZodValidationPipe → Controller → Service (returns `Result`) → ResponseInterceptor → GlobalExceptionFilter
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+**Tech:** NestJS, Drizzle ORM, PostgreSQL (Neon), Redis (ioredis), BullMQ, Zod v4, Winston
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+### Web Portal: `apps/web`
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+Next.js 16 App Router with Pragmatic Feature-Sliced Design. Serves Students and Organizers.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+**Route groups:** `(public)` — browse workshops | `(auth)` — login | `(student)` — registrations, tickets, payments | `(admin)` — workshop management, user admin, sync, system health
 
-```sh
-cd my-turborepo
-turbo login
-```
+**Data flow:** Page → Feature Service → API Client (token injection + 401 retry) → NestJS
 
-Without global `turbo`, use your package manager:
+**Tech:** Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, pino
 
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
+### Mobile App: `apps/mobile`
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+Expo Router app for Check-in Staff. Must work offline at workshop venues.
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+**Offline-first flow:** Pre-load active tickets to SQLite while online → scan QR → validate locally (JWT exp + SQLite lookup) → queue to local DB → batch sync with `INSERT ON CONFLICT DO NOTHING` when back online
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+**Tech:** Expo SDK 54, React Native 0.81, NativeWind, Drizzle ORM + expo-sqlite, expo-secure-store
 
-```sh
-turbo link
-```
+## AI Agent Tooling
 
-Without global `turbo`:
+This repository is configured for AI-assisted development with Claude Code and GitHub Copilot.
 
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
+### Agent Guidance (CLAUDE.md)
 
-## Useful Links
+- `CLAUDE.md` — root-level: build commands, architecture overview, key design decisions
+- `apps/server/CLAUDE.md` — NestJS specifics: modules, Result pattern, error factories, Redis keys
+- `apps/web/CLAUDE.md` — Next.js 16 specifics: FSD layers, auth flow (muted refresh), Server Action patterns
+- `apps/mobile/CLAUDE.md` — Expo specifics: offline-first flow, SQLite schema, hybrid token storage
 
-Learn more about the power of Turborepo:
+### MCP Servers (Project-Scoped)
 
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+Configured in `.claude/settings.json` with pre-approved tool permissions:
+
+| Server | Purpose |
+|--------|---------|
+| **Context7** | Real-time library documentation (React, Next.js, NestJS, Drizzle, etc.) |
+| **Chrome DevTools** | Browser automation, performance audits, UI testing |
+| **Next DevTools** | Next.js 16 runtime diagnostics, route inspection, upgrade tooling |
+
+API keys (e.g., `CONTEXT7_SECRET_KEY`) are stored in `.claude/settings.local.json` (gitignored).
+
+### Agent Rules (`.agents/rules/`)
+
+| Rule File | Scope |
+|-----------|-------|
+| `naming-convention.md` | Full-stack naming: kebab-case, PascalCase, CQS, DTO suffixes |
+| `layered-architecture.md` | NestJS Modular Monolith: layer boundaries, ESLint enforcement |
+| `api-implementation.md` | Request lifecycle, Zod DTOs, Result pattern, anti-patterns |
+| `api-service-layer.md` | Frontend service layer: API client → Feature Service → Server Action |
+| `fsd-architecture.md` | Frontend Feature-Sliced Design: entities, features, widgets, pages |
+| `documentation.md` | JSDoc conventions: intent over implementation, contract format |
+| `context7.md` | Context7 MCP usage guidelines |
+
+## Coding Conventions
+
+All code follows strict naming rules (see `.agents/rules/naming-convention.md` for full reference):
+
+- **Directories/files:** `kebab-case` (except React components)
+- **Backend files:** `[resource].[layer].ts` (e.g., `catalog.service.ts`)
+- **React components:** `PascalCase` matching filename (e.g., `QuestionCard.tsx`)
+- **NestJS classes:** `PascalCase` with role suffix (`WorkshopsAdminController`, `CatalogService`)
+- **Functions:** `camelCase` with CQS prefix (`get`, `find`, `list` for queries; `create`, `update`, `cancel` for commands)
+- **Backend:** Services never throw — always return `Result.ok()` or `Result.fail()`
+
+Additional agent rules covering API implementation, layered architecture, FSD, and JSDoc conventions live in `.agents/rules/`.
+
+## Documentation
+
+- [Software Requirements Specification](docs/srs.md) — full system spec: 50 functional requirements, 40 business rules, traceability matrix
+- [Screen Specification](docs/screens.md) — 39-screen UI breakdown (31 Web + 8 Mobile)
+- [Agent Rules](.agents/rules/) — canonical coding rules for AI agents (naming, architecture, JSDoc, API patterns)
+- [Root CLAUDE.md](CLAUDE.md) — agent guidance: commands, architecture, design decisions
+- [Server CLAUDE.md](apps/server/CLAUDE.md) — NestJS specifics
+- [Web CLAUDE.md](apps/web/CLAUDE.md) — Next.js 16 specifics
+- [Mobile CLAUDE.md](apps/mobile/CLAUDE.md) — Expo offline-first specifics
