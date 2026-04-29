@@ -33,6 +33,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Agent config (generated from .agents/ by @repo/agent-config)
+.claude/commands/
+.claude/rules/
+.claude/skills/
+.github/prompts/
+.github/skills/
+
 # Misc
 .DS_Store
 *.pem
