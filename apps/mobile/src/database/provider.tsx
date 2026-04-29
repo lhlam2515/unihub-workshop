@@ -1,5 +1,5 @@
 import { useMigrations } from "drizzle-orm/expo-sqlite/migrator";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
 import type { DatabaseClient } from "./client";
@@ -9,23 +9,34 @@ import type { DatabaseClient } from "./client";
 const DatabaseContext = createContext<DatabaseClient | null>(null);
 
 type DatabaseMigrations = (typeof import("./migrations/migrations"))["default"];
+type DatabaseStartupStatus = "bootstrapping" | "migrations" | "ready" | "error";
 
 // ── Provider ────────────────────────────────────────────────
 
 interface DatabaseProviderProps {
   children: React.ReactNode;
+  onStatusChange?: (status: DatabaseStartupStatus) => void;
 }
 
 /**
  * Wraps the app with a database context that:
  * 1. Runs drizzle migrations on mount (creates/updates tables)
- * 2. Blocks rendering until migrations complete
- * 3. Exposes the typed database client via React context
+ * 2. Exposes the typed database client via React context
+ * 3. Reports startup state so the root layout can render a single loading screen
  */
-export function DatabaseProvider({ children }: DatabaseProviderProps) {
+export function DatabaseProvider({
+  children,
+  onStatusChange,
+}: DatabaseProviderProps) {
   const [db, setDb] = useState<DatabaseClient | null>(null);
   const [migrations, setMigrations] = useState<DatabaseMigrations | null>(null);
   const [bootstrapError, setBootstrapError] = useState<Error | null>(null);
+  const [startupStatus, setStartupStatus] =
+    useState<DatabaseStartupStatus>("bootstrapping");
+
+  useEffect(() => {
+    onStatusChange?.(startupStatus);
+  }, [onStatusChange, startupStatus]);
 
   useEffect(() => {
     let isActive = true;
@@ -43,11 +54,13 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
 
         setDb(createDatabaseClient());
         setMigrations(migrationsModule.default);
+        setStartupStatus("migrations");
       } catch (error) {
         if (!isActive) {
           return;
         }
 
+        setStartupStatus("error");
         setBootstrapError(
           error instanceof Error
             ? error
@@ -84,17 +97,15 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
   }
 
   if (!db || !migrations) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ fontSize: 14, color: "#888" }}>
-          Đang khởi tạo cơ sở dữ liệu...
-        </Text>
-      </View>
-    );
+    return null;
   }
 
   return (
-    <DatabaseMigrationGate db={db} migrations={migrations}>
+    <DatabaseMigrationGate
+      db={db}
+      migrations={migrations}
+      onStatusChange={setStartupStatus}
+    >
       {children}
     </DatabaseMigrationGate>
   );
@@ -104,14 +115,30 @@ interface DatabaseMigrationGateProps {
   db: DatabaseClient;
   migrations: DatabaseMigrations;
   children: React.ReactNode;
+  onStatusChange?: (status: DatabaseStartupStatus) => void;
 }
 
 function DatabaseMigrationGate({
   db,
   migrations,
   children,
+  onStatusChange,
 }: DatabaseMigrationGateProps) {
   const { success, error } = useMigrations(db, migrations);
+
+  useEffect(() => {
+    if (error) {
+      onStatusChange?.("error");
+      return;
+    }
+
+    if (success) {
+      onStatusChange?.("ready");
+      return;
+    }
+
+    onStatusChange?.("migrations");
+  }, [error, onStatusChange, success]);
 
   if (error) {
     return (
@@ -134,13 +161,7 @@ function DatabaseMigrationGate({
   }
 
   if (!success) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ fontSize: 14, color: "#888" }}>
-          Đang khởi tạo cơ sở dữ liệu...
-        </Text>
-      </View>
-    );
+    return null;
   }
 
   return (
