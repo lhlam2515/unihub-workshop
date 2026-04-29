@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; case \"$f\" in *.ts|*.tsx) pnpm exec prettier --write \"$f\" && pnpm exec eslint --fix \"$f\";; *.js|*.json|*.css) pnpm exec prettier --write \"$f\";; esac; } 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
