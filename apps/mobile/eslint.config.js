@@ -51,6 +51,7 @@ module.exports = defineConfig([
           pattern: [
             "src/components/**/*",
             "src/context/**/*",
+            "src/database/**/*",
             "src/constants/**/*",
             "src/hooks/**/*",
             "src/lib/**/*",
