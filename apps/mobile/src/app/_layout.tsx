@@ -27,20 +27,19 @@ export default function RootLayout() {
     bootstrap();
   }, []);
 
-  // Block rendering until token store is hydrated
-  if (!isReady) return null;
+  const content = isReady ? (
+    <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="login" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="workshop" />
+      <Stack.Screen name="sync" options={{ presentation: "modal" }} />
+    </Stack>
+  ) : null;
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <DatabaseProvider>
-        <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="workshop" />
-          <Stack.Screen name="sync" options={{ presentation: "modal" }} />
-        </Stack>
-      </DatabaseProvider>
+      <DatabaseProvider>{content}</DatabaseProvider>
       <StatusBar style="auto" />
       <PortalHost />
     </ThemeProvider>

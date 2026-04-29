@@ -7,14 +7,23 @@ import * as schema from "./schema";
 export const DATABASE_NAME = "unihub.db";
 
 // ── Database Instance ───────────────────────────────────────
-const expoDb = openDatabaseSync(DATABASE_NAME);
+let dbInstance: ReturnType<typeof drizzle> | null = null;
 
-// Enable WAL mode for better concurrent read/write performance.
-// Critical for offline check-in: camera scan writes + sync worker reads
-// can happen simultaneously without blocking each other.
-expoDb.execSync("PRAGMA journal_mode = WAL;");
+export function createDatabaseClient() {
+  if (dbInstance) {
+    return dbInstance;
+  }
 
-export const db = drizzle(expoDb, { schema });
+  const expoDb = openDatabaseSync(DATABASE_NAME);
+
+  // Enable WAL mode for better concurrent read/write performance.
+  // Critical for offline check-in: camera scan writes + sync worker reads
+  // can happen simultaneously without blocking each other.
+  expoDb.execSync("PRAGMA journal_mode = WAL;");
+
+  dbInstance = drizzle(expoDb, { schema });
+  return dbInstance;
+}
 
 // ── Type Export ─────────────────────────────────────────────
-export type DatabaseClient = typeof db;
+export type DatabaseClient = ReturnType<typeof createDatabaseClient>;
