@@ -9,11 +9,12 @@
  * IDOR protected bằng @CurrentUser()
  */
 
-import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
-import { RolesGuard } from "@core/guards/roles.guard";
 import { Controller, Get, Param, UseGuards } from "@nestjs/common";
-import { CurrentUser } from "@shared/decorators/current-user.decorator";
-import { Roles } from "@shared/decorators/roles.decorator";
+
+import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RolesGuard } from "@/core/guards/roles.guard";
+import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { Roles } from "@/shared/decorators/roles.decorator";
 
 @Controller("students/me/tickets")
 @UseGuards(JwtAuthGuard, RolesGuard)

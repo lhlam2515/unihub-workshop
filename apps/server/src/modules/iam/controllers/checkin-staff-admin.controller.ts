@@ -10,10 +10,11 @@
  * Note: Eventual Consistency warning về phân công workshop
  */
 
-import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
-import { RolesGuard } from "@core/guards/roles.guard";
 import { Controller, Get, Post, Body, Param, UseGuards } from "@nestjs/common";
-import { Roles } from "@shared/decorators/roles.decorator";
+
+import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RolesGuard } from "@/core/guards/roles.guard";
+import { Roles } from "@/shared/decorators/roles.decorator";
 
 @Controller("admin/checkin-staff")
 @UseGuards(JwtAuthGuard, RolesGuard)

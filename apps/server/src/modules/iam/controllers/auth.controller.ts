@@ -8,7 +8,6 @@
  * - GET /auth/me (JWT required, ANY role)
  */
 
-import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
 import {
   Controller,
   Post,
@@ -18,8 +17,10 @@ import {
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
-import { CurrentUser } from "@shared/decorators/current-user.decorator";
-import { Public } from "@shared/decorators/public.decorator";
+
+import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { Public } from "@/shared/decorators/public.decorator";
 
 import { AuthService } from "../services/auth.service";
 

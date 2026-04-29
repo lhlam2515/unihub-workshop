@@ -10,7 +10,8 @@
  */
 
 import { Controller, Get, Param, Query } from "@nestjs/common";
-import { Public } from "@shared/decorators/public.decorator";
+
+import { Public } from "@/shared/decorators/public.decorator";
 
 import { WorkshopsService } from "../services/workshops.service";
 

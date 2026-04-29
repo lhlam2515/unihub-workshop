@@ -8,9 +8,6 @@
  * - GET /students/me/payments/{id} (STUDENT)
  */
 
-import { HmacSignatureGuard } from "@core/guards/hmac-signature.guard";
-import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
-import { RolesGuard } from "@core/guards/roles.guard";
 import {
   Controller,
   Get,
@@ -22,10 +19,14 @@ import {
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
-import { CurrentUser } from "@shared/decorators/current-user.decorator";
-import { IdempotencyKey } from "@shared/decorators/idempotency-key.decorator";
-import { Public } from "@shared/decorators/public.decorator";
-import { Roles } from "@shared/decorators/roles.decorator";
+
+import { HmacSignatureGuard } from "@/core/guards/hmac-signature.guard";
+import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RolesGuard } from "@/core/guards/roles.guard";
+import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
+import { Public } from "@/shared/decorators/public.decorator";
+import { Roles } from "@/shared/decorators/roles.decorator";
 
 @Controller()
 export class PaymentsController {
