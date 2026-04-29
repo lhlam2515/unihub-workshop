@@ -6,13 +6,28 @@ import {
 import { PortalHost } from "@rn-primitives/portal";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect, useState } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { tokenStore } from "@/lib/api/client";
 import "./global.css";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    async function bootstrap() {
+      // Hydrate memory cache from SecureStore before any API call
+      await tokenStore.init();
+      setIsReady(true);
+    }
+    bootstrap();
+  }, []);
+
+  // Block rendering until token store is hydrated
+  if (!isReady) return null;
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
