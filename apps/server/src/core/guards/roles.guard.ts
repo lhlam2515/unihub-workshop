@@ -1,13 +1,26 @@
 /**
  * Roles-Based Access Control (RBAC) Guard
  *
- * Phân quyền RBAC theo role. Đọc metadata 'roles' được set bởi @Roles() decorator.
- * So sánh với request.user.role từ JWT payload. Trả 403 FORBIDDEN nếu không khớp.
- * Phụ thuộc vào JwtAuthGuard chạy trước.
+ * Enforces role-level authorization. Runs after JwtAuthGuard and reads the
+ * `roles` metadata set by the `@Roles()` decorator to determine which roles
+ * are permitted to access the route.
  *
- * @see @Roles() decorator để định nghĩa roles
+ * Lifecycle position: Stage 1 — Inbound Security (after JwtAuthGuard).
+ * Depends on: JwtAuthGuard (requires `request.user` to be populated).
+ *
+ * Authorization flow:
+ * 1. Read the `roles` metadata from the route handler and controller class.
+ * 2. If no roles are specified, allow the request (no authorization required).
+ * 3. Extract `request.user.role` (set by JwtAuthGuard).
+ * 4. Compare against the required roles — deny with 403 on mismatch.
+ *
+ * Error mapping (caught by GlobalExceptionFilter):
+ * - Missing or empty `request.user.role` → 403 "Insufficient permissions"
+ * - Role not in required list → 403 "Insufficient permissions"
+ *
+ * @see {@link Roles} decorator for specifying required roles
+ * @see JwtAuthGuard for populating request.user
  */
-
 import {
   CanActivate,
   ExecutionContext,
@@ -19,28 +32,41 @@ import { Request } from "express";
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(private readonly reflector: Reflector) {}
 
+  /**
+   * Authorizes the request by comparing the user's role against the required roles.
+   *
+   * Business rules:
+   * - If no `@Roles()` decorator is present on the handler or controller, the route
+   *   is open to any authenticated user regardless of role.
+   * - If `@Roles()` is present, the user's role MUST be in the declared list.
+   * - Multiple roles on `@Roles()` are treated as a disjunction (any match grants access).
+   *
+   * @param context - NestJS execution context providing access to the HTTP request.
+   * @returns `true` if the user's role is permitted.
+   * @throws ForbiddenException if the user's role is not in the required list.
+   */
   canActivate(context: ExecutionContext): boolean {
-    // TODO: Implement role checking logic
-    // 1. Get roles metadata from route handler via reflector
-    // 2. Get user.role from request.user (from JwtAuthGuard)
-    // 3. Compare and throw ForbiddenException if not authorized
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>("roles", [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
-    const requiredRoles = this.reflector.get<string[]>(
-      "roles",
-      context.getHandler()
-    );
-    if (!requiredRoles) {
-      return true; // No role requirement
+    if (!requiredRoles || requiredRoles.length === 0) {
+      return true;
     }
 
     const request = context.switchToHttp().getRequest<Request>();
-    // const userRole = request.user?.role;
-    // TODO: Compare userRole with requiredRoles
-    // if (!requiredRoles.includes(userRole)) {
-    //   throw new ForbiddenException('Insufficient permissions');
-    // }
+    const user = request.user;
+
+    if (!user?.role) {
+      throw new ForbiddenException("Insufficient permissions");
+    }
+
+    if (!requiredRoles.includes(user.role)) {
+      throw new ForbiddenException("Insufficient permissions");
+    }
 
     return true;
   }
