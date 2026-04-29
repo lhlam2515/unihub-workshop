@@ -1,0 +1,1 @@
+/home/sojdev/Workspace/Active/unihub-workshop/.agents/rules/naming-convention.md
