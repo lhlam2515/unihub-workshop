@@ -1,0 +1,25 @@
+# Dependencies and build outputs
+**/node_modules
+**/dist
+**/coverage
+
+# Framework/build caches
+**/.expo
+**/.next
+**/.turbo
+**/.git
+
+# Root-level configuration files
+/package.json
+/tsconfig.json
+/turbo.json
+/nest-cli.json
+
+# Lockfiles and workspace files
+pnpm-lock.yaml
+pnpm-workspace.yaml
+*.lock
+
+# Documentation
+docs/
+**/*.md
