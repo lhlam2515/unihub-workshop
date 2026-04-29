@@ -164,8 +164,6 @@ This repository is configured for AI-assisted development with Claude Code and G
 
 ### MCP Servers (Project-Scoped)
 
-Configured in `.claude/settings.json` with pre-approved tool permissions:
-
 | Server | Purpose |
 |--------|---------|
 | **Context7** | Real-time library documentation (React, Next.js, NestJS, Drizzle, etc.) |
