@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import "react-native-reanimated";
 
+import { DatabaseProvider } from "@/database/provider";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { tokenStore } from "@/lib/api/client";
 import "./global.css";
@@ -31,13 +32,15 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="workshop" />
-        <Stack.Screen name="sync" options={{ presentation: "modal" }} />
-      </Stack>
+      <DatabaseProvider>
+        <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="workshop" />
+          <Stack.Screen name="sync" options={{ presentation: "modal" }} />
+        </Stack>
+      </DatabaseProvider>
       <StatusBar style="auto" />
       <PortalHost />
     </ThemeProvider>
