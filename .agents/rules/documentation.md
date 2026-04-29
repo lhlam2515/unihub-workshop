@@ -1,9 +1,11 @@
 ---
 paths:
-  - "apps/server/src/**/*.ts"
+  - "apps/**/src/**/*.{ts,tsx}"
 ---
 
 # JSDoc & Comment Convention (Pragmatic Documentation)
+
+> **Note:** All API documentation (JSDoc & Comments) in this repository should be written in English.
 
 ## Overview
 
