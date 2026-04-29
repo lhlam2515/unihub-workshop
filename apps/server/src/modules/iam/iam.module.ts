@@ -8,16 +8,14 @@
  * - Checkin staff assignments
  */
 
-import { DatabaseModule } from "@database/database.module";
 import { Module } from "@nestjs/common";
-import { RedisModule } from "@shared/redis/redis.module";
 
-// Controllers
+import { DatabaseModule } from "@/database/database.module";
+import { RedisModule } from "@/shared/redis/redis.module";
+
 import { AuthController } from "./controllers/auth.controller";
 import { CheckinStaffAdminController } from "./controllers/checkin-staff-admin.controller";
 import { UsersAdminController } from "./controllers/users-admin.controller";
-
-// Services
 import { CheckinStaffAssignmentsRepository } from "./repositories/checkin-staff-assignments.repository";
 import { StudentsRepository } from "./repositories/students.repository";
 import { UsersRepository } from "./repositories/users.repository";
@@ -26,9 +24,6 @@ import { CheckinStaffAssignmentService } from "./services/checkin-staff-assignme
 import { StudentProfileService } from "./services/student-profile.service";
 import { TokenService } from "./services/token.service";
 import { UsersService } from "./services/users.service";
-
-// Repositories
-
 @Module({
   imports: [DatabaseModule, RedisModule],
   controllers: [
