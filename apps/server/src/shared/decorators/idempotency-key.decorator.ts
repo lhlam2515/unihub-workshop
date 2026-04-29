@@ -1,17 +1,13 @@
 /**
  * Idempotency Key Decorator
  *
- * createParamDecorator trích xuất X-Idempotency-Key header.
- * Dùng trong PaymentsController để nhận idempotency key từ client.
- * Throw 400 VALIDATION_FAILED nếu header vắng mặt tại route yêu cầu.
+ * Extracts the `X-Idempotency-Key` header from the request.
+ * Used in PaymentsController to feed the IdempotencyMechanic for
+ * Layer 1 duplicate-payment prevention.
  *
- * @example
- * @Post()
- * create(@IdempotencyKey() key: string) {
- *   // key is the X-Idempotency-Key header value
- * }
+ * Throws 400 VALIDATION_FAILED if the header is missing on a route
+ * that requires it.
  */
-
 import {
   createParamDecorator,
   ExecutionContext,
@@ -20,7 +16,7 @@ import {
 import { Request } from "express";
 
 export const IdempotencyKey = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext) => {
+  (_data: unknown, ctx: ExecutionContext): string => {
     const request = ctx.switchToHttp().getRequest<Request>();
     const key = request.headers["x-idempotency-key"] as string;
 

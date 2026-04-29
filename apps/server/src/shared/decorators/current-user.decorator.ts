@@ -1,23 +1,21 @@
 /**
  * Current User Decorator
  *
- * createParamDecorator trích xuất request.user (JwtPayload được gắn bởi JwtAuthGuard).
- * Dùng trong controller để lấy user_id, role, allowed_workshop_ids mà không cần
- * inject request object trực tiếp.
+ * Extracts the JwtPayload from `request.user` (attached by JwtAuthGuard).
+ * Controllers use this to access the authenticated user's ID, role, and
+ * scope without injecting the raw request object.
  *
- * @example
- * @Post()
- * create(@CurrentUser() user: JwtPayload) {
- *   // user.id, user.role, etc.
- * }
+ * This is the primary defense against IDOR — the user ID comes from the
+ * verified JWT token, never from URL params or request body.
  */
-
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
 import { Request } from "express";
 
+import type { JwtPayload } from "@/types/jwt-payload";
+
 export const CurrentUser = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext) => {
+  (_data: unknown, ctx: ExecutionContext): JwtPayload => {
     const request = ctx.switchToHttp().getRequest<Request>();
-    return request.user; // JwtPayload attached by JwtAuthGuard
+    return request.user as JwtPayload;
   }
 );
