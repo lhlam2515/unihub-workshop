@@ -6,6 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "dev": "nest start --watch",
     "build": "nest build && tsc-alias",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",

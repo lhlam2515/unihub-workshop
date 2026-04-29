@@ -4,6 +4,10 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:apps": "turbo run dev --filter=mobile --filter=server --filter=web",
+    "dev:mobile": "turbo run dev --filter=mobile",
+    "dev:server": "turbo run dev --filter=server",
+    "dev:web": "turbo run dev --filter=web",
     "lint": "turbo run lint",
     "format": "turbo run format",
     "check-types": "turbo run check-types"
