@@ -9,8 +9,8 @@
  * sử dụng RedisService, không dùng ioredis trực tiếp.
  */
 
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import * as Redis from 'ioredis';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import * as Redis from "ioredis";
 
 @Injectable()
 export class RedisService implements OnModuleInit {
@@ -39,9 +39,9 @@ export class RedisService implements OnModuleInit {
     return null;
   }
 
-  async set(key: string, value: string, exSeconds?: number): Promise<'OK'> {
+  async set(key: string, value: string, exSeconds?: number): Promise<"OK"> {
     // TODO: Implement
-    return 'OK';
+    return "OK";
   }
 
   async setNx(

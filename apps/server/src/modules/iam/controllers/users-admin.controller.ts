@@ -10,8 +10,8 @@
  * Yêu cầu role: ORGANIZER
  */
 
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
 import {
   Controller,
   Get,
@@ -21,13 +21,13 @@ import {
   Param,
   Query,
   UseGuards,
-} from '@nestjs/common';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
-import { Roles } from '@shared/decorators/roles.decorator';
+} from "@nestjs/common";
+import { CurrentUser } from "@shared/decorators/current-user.decorator";
+import { Roles } from "@shared/decorators/roles.decorator";
 
-@Controller('admin/users')
+@Controller("admin/users")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ORGANIZER') // or use UserRole.ORGANIZER enum
+@Roles("ORGANIZER") // or use UserRole.ORGANIZER enum
 export class UsersAdminController {
   constructor(private readonly usersService: any) {}
 
@@ -45,8 +45,8 @@ export class UsersAdminController {
   /**
    * GET /admin/users/{id}
    */
-  @Get(':id')
-  async getUserById(@Param('id') id: string) {
+  @Get(":id")
+  async getUserById(@Param("id") id: string) {
     // TODO: Call usersService.getUserById(id)
     // TODO: Return UserResponseDto
   }
@@ -55,9 +55,9 @@ export class UsersAdminController {
    * PATCH /admin/users/{id}/status
    * @body { status: 'ACTIVE' | 'SUSPENDED' }
    */
-  @Patch(':id/status')
+  @Patch(":id/status")
   async updateUserStatus(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() updateStatusDto: any
   ) {
     // TODO: Validate with Zod (UpdateUserStatusSchema)
@@ -69,8 +69,8 @@ export class UsersAdminController {
    * POST /admin/users/{id}/revoke-token
    * Revoke all active tokens for a user
    */
-  @Post(':id/revoke-token')
-  async revokeUserTokens(@Param('id') id: string, @CurrentUser() admin: any) {
+  @Post(":id/revoke-token")
+  async revokeUserTokens(@Param("id") id: string, @CurrentUser() admin: any) {
     // TODO: Call tokenService to revoke all tokens for this user
     // TODO: Mark all issued tokens as blacklisted
   }

@@ -1,6 +1,6 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import type { NotificationLog } from '@database/types';
+import type { NotificationLog } from "@database/types";
 
 /**
  * NotificationLogResponseDto
@@ -28,8 +28,8 @@ export const NotificationLogResponseSchema = z.object({
   user_id: z.string().uuid(),
   workshop_id: z.string().uuid().optional(),
   type: z.string(),
-  channel: z.enum(['EMAIL', 'TELEGRAM']),
-  status: z.enum(['PENDING', 'SENT', 'FAILED']),
+  channel: z.enum(["EMAIL", "TELEGRAM"]),
+  status: z.enum(["PENDING", "SENT", "FAILED"]),
   payload: z.record(z.any()),
   sent_at: z.date().optional(),
   error_message: z.string().optional(),
@@ -49,8 +49,8 @@ export class NotificationLogResponse {
       user_id: log.user_id,
       workshop_id: log.workshop_id || undefined,
       type: log.notification_type,
-      channel: log.channel as 'EMAIL' | 'TELEGRAM',
-      status: log.status as 'PENDING' | 'SENT' | 'FAILED',
+      channel: log.channel as "EMAIL" | "TELEGRAM",
+      status: log.status as "PENDING" | "SENT" | "FAILED",
       payload: log.payload,
       sent_at: log.sent_at || undefined,
       error_message: log.error_message || undefined,

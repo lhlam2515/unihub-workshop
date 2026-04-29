@@ -5,7 +5,7 @@
  * { faculty?, date_from?, date_to?, is_paid?, page?, limit? }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const ListWorkshopsQuerySchema = z.object({
   faculty: z.string().optional(),

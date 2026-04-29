@@ -5,7 +5,7 @@
  * Validate: { items: Array<{ qr_token, timestamp }> }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const OfflineSyncSchema = z.object({
   items: z.array(

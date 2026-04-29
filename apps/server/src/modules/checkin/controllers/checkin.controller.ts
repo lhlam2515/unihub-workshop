@@ -11,9 +11,9 @@
  * GET .../tickets và POST /checkin/scan còn yêu cầu @UseGuards(WorkshopScopeGuard).
  */
 
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
-import { WorkshopScopeGuard } from '@core/guards/workshop-scope.guard';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
+import { WorkshopScopeGuard } from "@core/guards/workshop-scope.guard";
 import {
   Controller,
   Get,
@@ -23,13 +23,13 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
-import { Roles } from '@shared/decorators/roles.decorator';
+} from "@nestjs/common";
+import { CurrentUser } from "@shared/decorators/current-user.decorator";
+import { Roles } from "@shared/decorators/roles.decorator";
 
-@Controller('checkin')
+@Controller("checkin")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('CHECKIN_STAFF')
+@Roles("CHECKIN_STAFF")
 export class CheckinController {
   constructor(private readonly checkinService: any) {}
 
@@ -37,9 +37,9 @@ export class CheckinController {
    * GET /checkin/workshops/{id}/tickets
    * Get list of tickets for workshop
    */
-  @Get('workshops/:id/tickets')
+  @Get("workshops/:id/tickets")
   @UseGuards(WorkshopScopeGuard)
-  async getWorkshopTickets(@Param('id') workshopId: string) {
+  async getWorkshopTickets(@Param("id") workshopId: string) {
     // TODO: Call checkinService.getWorkshopTickets(workshopId)
   }
 
@@ -48,7 +48,7 @@ export class CheckinController {
    * QR code scanning endpoint
    * @body { qr_token, workshop_id, device_id }
    */
-  @Post('scan')
+  @Post("scan")
   @UseGuards(WorkshopScopeGuard)
   @HttpCode(HttpStatus.OK)
   async scanQR(@Body() scanDto: any, @CurrentUser() user: any) {
@@ -60,7 +60,7 @@ export class CheckinController {
    * Offline sync - batch process QR codes from mobile app
    * @body { items: [{ qr_token, timestamp }] }
    */
-  @Post('sync')
+  @Post("sync")
   @HttpCode(HttpStatus.OK)
   async syncOfflineData(@Body() syncDto: any, @CurrentUser() user: any) {
     // TODO: Call offlineSyncService.processSyncBatch(syncDto.items, user.id)
@@ -70,8 +70,8 @@ export class CheckinController {
    * GET /checkin/workshops/{id}/status
    * Get workshop check-in status and stats
    */
-  @Get('workshops/:id/status')
-  async getWorkshopStatus(@Param('id') workshopId: string) {
+  @Get("workshops/:id/status")
+  async getWorkshopStatus(@Param("id") workshopId: string) {
     // TODO: Call checkinService.getWorkshopCheckinStatus(workshopId)
   }
 }

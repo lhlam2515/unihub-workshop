@@ -14,10 +14,10 @@
  * - getStats(id)
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { RoomConflictService } from './room-conflict.service';
-import { WorkshopsRepository } from '../repositories/workshops.repository';
+import { RoomConflictService } from "./room-conflict.service";
+import { WorkshopsRepository } from "../repositories/workshops.repository";
 
 @Injectable()
 export class WorkshopsService {

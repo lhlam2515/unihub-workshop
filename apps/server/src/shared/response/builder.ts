@@ -1,7 +1,7 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
-import { categoryToStatus } from './errors';
-import { Result } from './result';
+import { categoryToStatus } from "./errors";
+import { Result } from "./result";
 
 import type {
   ApiErrorShape,
@@ -10,9 +10,9 @@ import type {
   PaginatedData,
   PaginationMeta,
   RequestMeta,
-} from './types';
+} from "./types";
 
-const API_VERSION = 'v1';
+const API_VERSION = "v1";
 
 /**
  * Build standard request metadata for API responses
@@ -33,7 +33,7 @@ export const buildMeta = (
   timestamp: new Date().toISOString(),
   apiVersion: API_VERSION,
   processingMs:
-    typeof processingStartMs === 'number'
+    typeof processingStartMs === "number"
       ? Date.now() - processingStartMs
       : undefined,
 });
@@ -52,8 +52,8 @@ export const buildMeta = (
 export const sanitizeError = (error: AppError): ApiErrorShape => ({
   code: error.code,
   message:
-    error.category === 'INTERNAL'
-      ? 'An unexpected error occurred. Please try again later.'
+    error.category === "INTERNAL"
+      ? "An unexpected error occurred. Please try again later."
       : error.message,
   fieldErrors: error.fieldErrors,
 });
@@ -179,7 +179,7 @@ export const resultToHttpResponse = <T>(
   const meta: Partial<RequestMeta> = {
     requestId: options.requestId,
     processingMs:
-      typeof options.processingStartMs === 'number'
+      typeof options.processingStartMs === "number"
         ? Date.now() - options.processingStartMs
         : undefined,
   };

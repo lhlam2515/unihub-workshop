@@ -5,7 +5,7 @@
  * Validate: { qr_token, workshop_id, device_id? }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const ScanQRSchema = z.object({
   qr_token: z.string(),

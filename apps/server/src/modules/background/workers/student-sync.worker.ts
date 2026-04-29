@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { StudentSyncService } from '../services/student-sync.service';
+import { StudentSyncService } from "../services/student-sync.service";
 
 /**
  * StudentSyncWorker

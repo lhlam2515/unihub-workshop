@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm';
+import { relations } from "drizzle-orm";
 
 import {
   aiSummaries,
@@ -6,23 +6,23 @@ import {
   studentSyncErrors,
   studentSyncJobs,
   workshopDocuments,
-} from './async.schema';
-import { rooms, speakers, workshops, workshopSlots } from './event-core.schema';
-import { students, users } from './identity.schema';
+} from "./async.schema";
+import { rooms, speakers, workshops, workshopSlots } from "./event-core.schema";
+import { students, users } from "./identity.schema";
 import {
   checkinRecords,
   payments,
   registrations,
   tickets,
-} from './transaction.schema';
+} from "./transaction.schema";
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   studentProfile: one(students),
-  createdWorkshops: many(workshops, { relationName: 'workshop_creator' }),
-  checkinScans: many(checkinRecords, { relationName: 'checkin_staff' }),
+  createdWorkshops: many(workshops, { relationName: "workshop_creator" }),
+  checkinScans: many(checkinRecords, { relationName: "checkin_staff" }),
   notificationLogs: many(notificationLogs),
   uploadedDocuments: many(workshopDocuments, {
-    relationName: 'document_uploader',
+    relationName: "document_uploader",
   }),
 }));
 
@@ -56,7 +56,7 @@ export const workshopsRelations = relations(workshops, ({ one, many }) => ({
   creator: one(users, {
     fields: [workshops.createdBy],
     references: [users.userId],
-    relationName: 'workshop_creator',
+    relationName: "workshop_creator",
   }),
   slot: one(workshopSlots),
   registrations: many(registrations),
@@ -129,7 +129,7 @@ export const checkinRecordsRelations = relations(checkinRecords, ({ one }) => ({
   checkedInBy: one(users, {
     fields: [checkinRecords.checkedInBy],
     references: [users.userId],
-    relationName: 'checkin_staff',
+    relationName: "checkin_staff",
   }),
 }));
 
@@ -157,7 +157,7 @@ export const workshopDocumentsRelations = relations(
     uploadedBy: one(users, {
       fields: [workshopDocuments.uploadedBy],
       references: [users.userId],
-      relationName: 'document_uploader',
+      relationName: "document_uploader",
     }),
     summary: one(aiSummaries),
   })

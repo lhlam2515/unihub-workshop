@@ -7,7 +7,7 @@
  * Refinement: if is_paid = true then price > 0
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const CreateWorkshopSchema = z
   .object({
@@ -22,7 +22,7 @@ export const CreateWorkshopSchema = z
     price: z.number().positive().optional(),
   })
   .refine((data) => !data.is_paid || data.price, {
-    message: 'Price is required when is_paid is true',
+    message: "Price is required when is_paid is true",
   });
 
 export type CreateWorkshopDto = z.infer<typeof CreateWorkshopSchema>;

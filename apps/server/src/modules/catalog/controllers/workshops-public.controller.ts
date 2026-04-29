@@ -9,12 +9,12 @@
  * Truy vấn available_seats từ Redis, không từ PostgreSQL
  */
 
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { Public } from '@shared/decorators/public.decorator';
+import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Public } from "@shared/decorators/public.decorator";
 
-import { WorkshopsService } from '../services/workshops.service';
+import { WorkshopsService } from "../services/workshops.service";
 
-@Controller('workshops')
+@Controller("workshops")
 export class WorkshopsPublicController {
   constructor(private readonly workshopsService: WorkshopsService) {}
 
@@ -35,9 +35,9 @@ export class WorkshopsPublicController {
    * GET /workshops/{id}
    * @returns WorkshopDetailDto with available_seats from Redis
    */
-  @Get(':id')
+  @Get(":id")
   @Public()
-  async getPublicDetail(@Param('id') id: string) {
+  async getPublicDetail(@Param("id") id: string) {
     // TODO: Call workshopsService.getPublicDetail(id)
     // TODO: Get available_seats from Redis
   }

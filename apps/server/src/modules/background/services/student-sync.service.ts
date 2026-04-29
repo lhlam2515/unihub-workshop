@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { Result } from '@shared/response/result';
+import { Injectable } from "@nestjs/common";
+import { Result } from "@shared/response/result";
 
-import { StudentSyncErrorsRepository } from '../repositories/student-sync-errors.repository';
-import { StudentSyncJobsRepository } from '../repositories/student-sync-jobs.repository';
+import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
+import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";
 
 /**
  * StudentSyncService

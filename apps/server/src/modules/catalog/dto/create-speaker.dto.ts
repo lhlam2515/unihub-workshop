@@ -4,7 +4,7 @@
  * Validate: { full_name, title?, bio?, avatar_url? }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const CreateSpeakerSchema = z.object({
   full_name: z.string().min(1),

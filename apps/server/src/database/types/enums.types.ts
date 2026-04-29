@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 import {
   aiSummaryStatusEnum,
@@ -16,7 +16,7 @@ import {
   userRoleEnum,
   userStatusEnum,
   workshopStatusEnum,
-} from '@/database/schema';
+} from "@/database/schema";
 
 export const userRoleSchema = z.enum(userRoleEnum.enumValues);
 export const userStatusSchema = z.enum(userStatusEnum.enumValues);

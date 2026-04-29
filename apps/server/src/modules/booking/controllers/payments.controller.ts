@@ -8,9 +8,9 @@
  * - GET /students/me/payments/{id} (STUDENT)
  */
 
-import { HmacSignatureGuard } from '@core/guards/hmac-signature.guard';
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
+import { HmacSignatureGuard } from "@core/guards/hmac-signature.guard";
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
 import {
   Controller,
   Get,
@@ -21,11 +21,11 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
-import { IdempotencyKey } from '@shared/decorators/idempotency-key.decorator';
-import { Public } from '@shared/decorators/public.decorator';
-import { Roles } from '@shared/decorators/roles.decorator';
+} from "@nestjs/common";
+import { CurrentUser } from "@shared/decorators/current-user.decorator";
+import { IdempotencyKey } from "@shared/decorators/idempotency-key.decorator";
+import { Public } from "@shared/decorators/public.decorator";
+import { Roles } from "@shared/decorators/roles.decorator";
 
 @Controller()
 export class PaymentsController {
@@ -35,9 +35,9 @@ export class PaymentsController {
    * POST /payments
    * Create payment — requires X-Idempotency-Key header
    */
-  @Post('payments')
+  @Post("payments")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('STUDENT')
+  @Roles("STUDENT")
   @HttpCode(HttpStatus.CREATED)
   async createPayment(
     @Body() createDto: any,
@@ -53,12 +53,12 @@ export class PaymentsController {
    * POST /webhooks/payment/{gateway}
    * Webhook from payment gateway
    */
-  @Post('webhooks/payment/:gateway')
+  @Post("webhooks/payment/:gateway")
   @Public()
   @UseGuards(HmacSignatureGuard)
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
-    @Param('gateway') gateway: string,
+    @Param("gateway") gateway: string,
     @Body() webhookDto: any
   ) {
     // TODO: Validate with Zod (PaymentWebhookSchema)
@@ -68,9 +68,9 @@ export class PaymentsController {
   /**
    * GET /students/me/payments
    */
-  @Get('students/me/payments')
+  @Get("students/me/payments")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('STUDENT')
+  @Roles("STUDENT")
   async getMyPayments(@CurrentUser() user: any, @Query() query: any) {
     // TODO: Call paymentsService.getMyPayments(user.id, query)
   }
@@ -78,10 +78,10 @@ export class PaymentsController {
   /**
    * GET /students/me/payments/{id}
    */
-  @Get('students/me/payments/:id')
+  @Get("students/me/payments/:id")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('STUDENT')
-  async getMyPayment(@Param('id') id: string, @CurrentUser() user: any) {
+  @Roles("STUDENT")
+  async getMyPayment(@Param("id") id: string, @CurrentUser() user: any) {
     // TODO: Verify ownership
     // TODO: Call paymentsService.getPaymentDetail(user.id, id)
   }

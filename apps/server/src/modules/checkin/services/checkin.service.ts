@@ -8,7 +8,7 @@
  * danh sách 20 check-in gần nhất.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class CheckinService {

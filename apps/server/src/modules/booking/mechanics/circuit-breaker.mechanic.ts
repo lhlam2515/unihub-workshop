@@ -10,8 +10,8 @@
  * recordFailure(gateway): tăng count, >= 5 trong 60s → OPEN.
  */
 
-import { Injectable } from '@nestjs/common';
-import { RedisService } from '@shared/redis/redis.service';
+import { Injectable } from "@nestjs/common";
+import { RedisService } from "@shared/redis/redis.service";
 
 @Injectable()
 export class CircuitBreakerMechanic {

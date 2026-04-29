@@ -13,8 +13,8 @@
  * Sử dụng jsonwebtoken hoặc @nestjs/jwt.
  */
 
-import { Injectable } from '@nestjs/common';
-import { RedisService } from '@shared/redis/redis.service';
+import { Injectable } from "@nestjs/common";
+import { RedisService } from "@shared/redis/redis.service";
 
 @Injectable()
 export class TokenService {
@@ -30,10 +30,10 @@ export class TokenService {
    */
   async signAccessToken(
     payload: any,
-    platform: 'WEB' | 'MOBILE'
+    platform: "WEB" | "MOBILE"
   ): Promise<string> {
     // TODO: Implement
-    return '';
+    return "";
   }
 
   /**
@@ -43,7 +43,7 @@ export class TokenService {
    */
   async signRefreshToken(userId: string): Promise<string> {
     // TODO: Implement
-    return '';
+    return "";
   }
 
   /**

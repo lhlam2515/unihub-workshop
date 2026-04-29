@@ -26,7 +26,7 @@ export class LoginResponseBuilder {
   ): LoginResponseDto {
     // TODO: Implement factory method
     return {
-      access_token: '',
+      access_token: "",
       expires_in: 0,
       user: null,
     };

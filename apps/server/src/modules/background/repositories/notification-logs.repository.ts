@@ -3,9 +3,9 @@ import {
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from '@database';
-import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+} from "@database";
+import { Inject, Injectable } from "@nestjs/common";
+import { eq } from "drizzle-orm";
 
 /**
  * NotificationLogsRepository
@@ -55,7 +55,7 @@ export class NotificationLogsRepository {
   // TODO: Implement updateStatus
   async updateStatus(
     id: string,
-    status: 'PENDING' | 'SENT' | 'FAILED',
+    status: "PENDING" | "SENT" | "FAILED",
     sentAt?: Date,
     errorMessage?: string
   ): Promise<any> {

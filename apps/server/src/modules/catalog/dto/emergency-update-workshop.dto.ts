@@ -5,7 +5,7 @@
  * At least one field must be present
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const EmergencyUpdateWorkshopSchema = z
   .object({
@@ -14,7 +14,7 @@ export const EmergencyUpdateWorkshopSchema = z
     ends_at: z.date().optional(),
   })
   .refine((data) => Object.values(data).some((v) => v !== undefined), {
-    message: 'At least one field is required',
+    message: "At least one field is required",
   });
 
 export type EmergencyUpdateWorkshopDto = z.infer<

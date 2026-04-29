@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * SystemMonitorResponseDtos
@@ -25,7 +25,7 @@ export const PaymentTimeoutJobStatusSchema = z.object({
   timeout_count: z.number().int().nonnegative(),
   last_run: z.date(),
   next_run: z.date(),
-  job_status: z.enum(['RUNNING', 'IDLE', 'ERROR']),
+  job_status: z.enum(["RUNNING", "IDLE", "ERROR"]),
 });
 
 export type PaymentTimeoutJobStatusDto = z.infer<
@@ -74,8 +74,8 @@ export type ReconciliationJobStatusDto = z.infer<
  * }
  */
 export const CircuitBreakerStatusSchema = z.object({
-  gateway: z.enum(['VNPAY', 'MOMO', 'STRIPE']),
-  state: z.enum(['CLOSED', 'HALF_OPEN', 'OPEN']),
+  gateway: z.enum(["VNPAY", "MOMO", "STRIPE"]),
+  state: z.enum(["CLOSED", "HALF_OPEN", "OPEN"]),
   failure_count: z.number().int().nonnegative(),
   opened_at: z.date().optional(),
   last_attempt: z.date().optional(),

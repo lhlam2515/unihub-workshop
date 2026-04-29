@@ -9,10 +9,10 @@
  * Khi SUSPENDED, tự động gọi TokenService.blacklistToken()
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { TokenService } from './token.service';
-import { UsersRepository } from '../repositories/users.repository';
+import { TokenService } from "./token.service";
+import { UsersRepository } from "../repositories/users.repository";
 
 @Injectable()
 export class UsersService {
@@ -53,7 +53,7 @@ export class UsersService {
    *    - Blacklist all tokens in Redis
    * 3. Return updated UserResponseDto
    */
-  async updateUserStatus(id: string, status: 'ACTIVE' | 'SUSPENDED') {
+  async updateUserStatus(id: string, status: "ACTIVE" | "SUSPENDED") {
     // TODO: Implement
   }
 }

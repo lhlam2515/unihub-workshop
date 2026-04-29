@@ -9,8 +9,8 @@
  * Trả SEAT_LOCK_EXPIRED nếu TTL = 0 hoặc key không tồn tại.
  */
 
-import { Injectable } from '@nestjs/common';
-import { RedisService } from '@shared/redis/redis.service';
+import { Injectable } from "@nestjs/common";
+import { RedisService } from "@shared/redis/redis.service";
 
 @Injectable()
 export class SeatLockMechanic {

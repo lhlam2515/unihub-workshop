@@ -1,6 +1,6 @@
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
-import { UserRole } from '@database/types';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
+import { UserRole } from "@database/types";
 import {
   Controller,
   Post,
@@ -11,12 +11,12 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { Roles } from '@shared/decorators/roles.decorator';
-import { Result } from '@shared/response/result';
+} from "@nestjs/common";
+import { Roles } from "@shared/decorators/roles.decorator";
+import { Result } from "@shared/response/result";
 
-import { TriggerStudentSyncDto } from '../dto/trigger-student-sync.dto';
-import { StudentSyncService } from '../services/student-sync.service';
+import { TriggerStudentSyncDto } from "../dto/trigger-student-sync.dto";
+import { StudentSyncService } from "../services/student-sync.service";
 
 /**
  * StudentSyncAdminController
@@ -32,7 +32,7 @@ import { StudentSyncService } from '../services/student-sync.service';
  *
  * TODO: Implement all endpoints
  */
-@Controller('/admin/student-sync')
+@Controller("/admin/student-sync")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ORGANIZER)
 export class StudentSyncAdminController {
@@ -55,16 +55,16 @@ export class StudentSyncAdminController {
   }
 
   // TODO: Implement GET /admin/student-sync/{job_id}
-  @Get(':jobId')
-  async getJobStatus(@Param('jobId') jobId: string): Promise<Result<any>> {
+  @Get(":jobId")
+  async getJobStatus(@Param("jobId") jobId: string): Promise<Result<any>> {
     // Call studentSyncService.getJob(jobId)
     // Return full job status (total, processed, failed, current_row, error_count)
   }
 
   // TODO: Implement GET /admin/student-sync/{job_id}/errors
-  @Get(':jobId/errors')
+  @Get(":jobId/errors")
   async getJobErrors(
-    @Param('jobId') jobId: string,
+    @Param("jobId") jobId: string,
     @Query() query: any
   ): Promise<Result<any>> {
     // Call studentSyncService.getJobErrors(jobId, pagination)

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
 import {
   ExceptionFilter,
@@ -6,19 +6,19 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
-import { ZodValidationException } from 'nestjs-zod';
-import z, { type ZodError } from 'zod';
+} from "@nestjs/common";
+import { Request, Response } from "express";
+import { ZodValidationException } from "nestjs-zod";
+import z, { type ZodError } from "zod";
 
-import { winstonLogger } from '@/core/config/logger.config';
-import { errorResponse } from '@/shared/response/builder';
+import { winstonLogger } from "@/core/config/logger.config";
+import { errorResponse } from "@/shared/response/builder";
 import {
   categoryToStatus,
   systemErrors,
   validationError,
-} from '@/shared/response/errors';
-import type { AppError, FieldError } from '@/shared/response/types';
+} from "@/shared/response/errors";
+import type { AppError, FieldError } from "@/shared/response/types";
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -27,7 +27,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const requestId =
-      (request.headers['x-request-id'] as string) || randomUUID();
+      (request.headers["x-request-id"] as string) || randomUUID();
 
     let appError: AppError;
     let statusCode: number;
@@ -39,7 +39,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const issues: z.core.$ZodIssue[] = zodError.issues;
 
       const fieldErrors: FieldError[] = issues.map((err) => ({
-        field: err.path.join('.'),
+        field: err.path.join("."),
         rule: err.code,
         message: err.message,
       }));
@@ -49,9 +49,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const exceptionResponse = exception.getResponse();
 
       if (
-        typeof exceptionResponse === 'object' &&
+        typeof exceptionResponse === "object" &&
         exceptionResponse !== null &&
-        'category' in exceptionResponse
+        "category" in exceptionResponse
       ) {
         appError = exceptionResponse as AppError;
         statusCode = categoryToStatus(appError.category);

@@ -9,8 +9,8 @@
  * Chạy trước Token Bucket per-user trong luồng đăng ký.
  */
 
-import { Injectable } from '@nestjs/common';
-import { RedisService } from '@shared/redis/redis.service';
+import { Injectable } from "@nestjs/common";
+import { RedisService } from "@shared/redis/redis.service";
 
 @Injectable()
 export class GlobalRateLimitMechanic {

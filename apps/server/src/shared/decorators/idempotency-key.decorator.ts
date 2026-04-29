@@ -16,16 +16,16 @@ import {
   createParamDecorator,
   ExecutionContext,
   BadRequestException,
-} from '@nestjs/common';
-import { Request } from 'express';
+} from "@nestjs/common";
+import { Request } from "express";
 
 export const IdempotencyKey = createParamDecorator(
   (data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest<Request>();
-    const key = request.headers['x-idempotency-key'] as string;
+    const key = request.headers["x-idempotency-key"] as string;
 
     if (!key) {
-      throw new BadRequestException('Missing X-Idempotency-Key header');
+      throw new BadRequestException("Missing X-Idempotency-Key header");
     }
 
     return key;

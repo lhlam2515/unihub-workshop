@@ -4,7 +4,7 @@
  * Validate: { workshop_id: uuid }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const CreateRegistrationSchema = z.object({
   workshop_id: z.string().uuid(),

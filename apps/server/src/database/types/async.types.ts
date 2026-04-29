@@ -2,8 +2,8 @@ import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
-} from 'drizzle-zod';
-import { z } from 'zod';
+} from "drizzle-zod";
+import { z } from "zod";
 
 import {
   aiSummaries,
@@ -12,7 +12,7 @@ import {
   studentSyncErrors,
   studentSyncJobs,
   workshopDocuments,
-} from '@/database/schema';
+} from "@/database/schema";
 
 export const notificationChannelConfigsSelectSchema = createSelectSchema(
   notificationChannelConfigs

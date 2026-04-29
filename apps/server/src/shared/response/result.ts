@@ -1,4 +1,4 @@
-import type { AppError } from './types';
+import type { AppError } from "./types";
 
 /**
  * Model success and failure without throwing
@@ -132,7 +132,7 @@ export class OkResult<T> extends Result<T> {
    * @throws Error when accessed on a successful result
    */
   public get error(): AppError {
-    throw new Error('[OkResult] Cannot access .error on a successful result.');
+    throw new Error("[OkResult] Cannot access .error on a successful result.");
   }
 
   /**

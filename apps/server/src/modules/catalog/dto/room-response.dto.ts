@@ -18,8 +18,8 @@ export class RoomResponseBuilder {
   static from(room: any): RoomResponseDto {
     // TODO: Map to response shape
     return {
-      room_id: '',
-      name: '',
+      room_id: "",
+      name: "",
       capacity: 0,
     };
   }

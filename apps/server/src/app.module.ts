@@ -1,13 +1,13 @@
-import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
-import { ZodValidationPipe } from 'nestjs-zod';
+import { Module } from "@nestjs/common";
+import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { ZodValidationPipe } from "nestjs-zod";
 
-import { GlobalExceptionFilter } from '@/core/exceptions/global-exception.filter';
-import { ResponseInterceptor } from '@/core/interceptors/response.interceptor';
+import { GlobalExceptionFilter } from "@/core/exceptions/global-exception.filter";
+import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { DatabaseModule } from './database/database.module';
+import { AppController } from "./app.controller";
+import { AppService } from "./app.service";
+import { DatabaseModule } from "./database/database.module";
 
 @Module({
   imports: [DatabaseModule],

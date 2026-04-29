@@ -1,6 +1,6 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import type { StudentSyncJob, StudentSyncError } from '@database/types';
+import type { StudentSyncJob, StudentSyncError } from "@database/types";
 
 /**
  * StudentSyncJobDto
@@ -22,7 +22,7 @@ import type { StudentSyncJob, StudentSyncError } from '@database/types';
  */
 export const StudentSyncJobSchema = z.object({
   job_id: z.string().uuid(),
-  status: z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED']),
+  status: z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED"]),
   total_rows: z.number().int().nonnegative(),
   processed_rows: z.number().int().nonnegative(),
   failed_rows: z.number().int().nonnegative(),
@@ -39,7 +39,7 @@ export class StudentSyncJobResponse {
     // TODO: Map database entity to response DTO
     return {
       job_id: job.id,
-      status: job.status as 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      status: job.status as "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED",
       total_rows: job.total_rows,
       processed_rows: job.processed_rows,
       failed_rows: job.failed_rows,

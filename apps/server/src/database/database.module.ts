@@ -1,16 +1,16 @@
-import { neon } from '@neondatabase/serverless';
-import { Global, Module } from '@nestjs/common';
-import * as dotenv from 'dotenv';
-import { drizzle } from 'drizzle-orm/neon-http';
+import { neon } from "@neondatabase/serverless";
+import { Global, Module } from "@nestjs/common";
+import * as dotenv from "dotenv";
+import { drizzle } from "drizzle-orm/neon-http";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from './database.constants';
-import * as schema from './schema';
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "./database.constants";
+import * as schema from "./schema";
 
 dotenv.config();
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is not set');
+  throw new Error("DATABASE_URL environment variable is not set");
 }
 
 const db = drizzle({ client: neon(DATABASE_URL), schema });

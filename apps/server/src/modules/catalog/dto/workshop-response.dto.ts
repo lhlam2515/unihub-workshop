@@ -36,9 +36,9 @@ export class WorkshopResponseBuilder {
   static fromSummary(workshop: any): WorkshopSummaryDto {
     // TODO: Map to summary shape
     return {
-      workshop_id: '',
-      title: '',
-      speaker_name: '',
+      workshop_id: "",
+      title: "",
+      speaker_name: "",
       starts_at: new Date(),
       available_seats: 0,
       is_paid: false,
@@ -48,13 +48,13 @@ export class WorkshopResponseBuilder {
   static fromDetail(workshop: any): WorkshopDetailDto {
     // TODO: Map to detail shape
     return {
-      workshop_id: '',
-      title: '',
-      speaker_name: '',
+      workshop_id: "",
+      title: "",
+      speaker_name: "",
       starts_at: new Date(),
       available_seats: 0,
       is_paid: false,
-      room_name: '',
+      room_name: "",
       ends_at: new Date(),
     };
   }
@@ -62,18 +62,18 @@ export class WorkshopResponseBuilder {
   static fromAdminDetail(workshop: any): WorkshopAdminDetailDto {
     // TODO: Map to admin detail shape
     return {
-      workshop_id: '',
-      title: '',
-      speaker_name: '',
+      workshop_id: "",
+      title: "",
+      speaker_name: "",
       starts_at: new Date(),
       available_seats: 0,
       is_paid: false,
-      room_name: '',
+      room_name: "",
       ends_at: new Date(),
       confirmed_count: 0,
       locked_count: 0,
-      created_by: '',
-      status: '',
+      created_by: "",
+      status: "",
     };
   }
 }

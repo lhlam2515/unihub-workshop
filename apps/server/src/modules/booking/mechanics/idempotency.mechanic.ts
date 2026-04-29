@@ -8,8 +8,8 @@
  * setPaymentId(key, paymentId): update giá trị sau khi tạo payment thành công.
  */
 
-import { Injectable } from '@nestjs/common';
-import { RedisService } from '@shared/redis/redis.service';
+import { Injectable } from "@nestjs/common";
+import { RedisService } from "@shared/redis/redis.service";
 
 @Injectable()
 export class IdempotencyMechanic {

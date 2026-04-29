@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { NotificationDispatchService } from '../services/notification-dispatch.service';
+import { NotificationDispatchService } from "../services/notification-dispatch.service";
 
 /**
  * NotificationWorker

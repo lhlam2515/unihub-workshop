@@ -1,9 +1,9 @@
-import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
+import { CorsOptions } from "@nestjs/common/interfaces/external/cors-options.interface";
 
 export const getCorsConfig = (): CorsOptions => {
   const allowedWebOrigins = [
-    'http://localhost:5173', // Vite Dev Server
-    'http://localhost:4173', // Vite Preview
+    "http://localhost:5173", // Vite Dev Server
+    "http://localhost:4173", // Vite Preview
     process.env.FRONTEND_URL, // Production Web Portal
   ].filter(Boolean) as string[];
 
@@ -23,21 +23,21 @@ export const getCorsConfig = (): CorsOptions => {
 
       // TRƯỜNG HỢP 3: Bị chặn
       // Các trang web lạ cố tình gọi API sẽ bị từ chối
-      callback(new Error('Not allowed by CORS'), false);
+      callback(new Error("Not allowed by CORS"), false);
     },
 
     // Bắt buộc = true để trình duyệt cho phép gửi Cookie (dùng cho luồng Refresh Token)
     credentials: true,
 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
 
     allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-      'Origin',
-      'X-Idempotency-Key', // HEADER QUAN TRỌNG: Mở khóa cho cơ chế chống trừ tiền đúp
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "X-Idempotency-Key", // HEADER QUAN TRỌNG: Mở khóa cho cơ chế chống trừ tiền đúp
     ],
   };
 };

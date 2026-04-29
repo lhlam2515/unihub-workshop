@@ -23,16 +23,16 @@ export class AiSummaryResponseBuilder {
   static fromPublic(summary: any): AiSummaryPublicDto {
     // TODO: Map to public shape
     return {
-      status: '',
+      status: "",
     };
   }
 
   static fromAdmin(summary: any): AiSummaryAdminDto {
     // TODO: Map to admin shape
     return {
-      status: '',
-      summary_id: '',
-      document_id: '',
+      status: "",
+      summary_id: "",
+      document_id: "",
     };
   }
 }

@@ -11,7 +11,7 @@
  * preloadActiveTickets(workshopId): trả toàn bộ ACTIVE tickets cho workshop.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class TicketService {
