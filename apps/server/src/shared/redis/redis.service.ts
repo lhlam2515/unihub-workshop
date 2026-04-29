@@ -1,47 +1,23 @@
-/**
- * Redis Service
- *
- * Wrapper trên ioredis client. Expose các primitive cần thiết:
- * get, set, setNx, del, incr, decr, expire, hGet, hSet, hGetAll, ttl.
- * Xử lý serialization/deserialization JSON.
- *
- * Đây là layer duy nhất tương tác trực tiếp với Redis - các Mechanic/Service
- * sử dụng RedisService, không dùng ioredis trực tiếp.
- */
-
-import { Injectable, OnModuleInit } from "@nestjs/common";
-import * as Redis from "ioredis";
+import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import Redis from "ioredis";
 
 @Injectable()
-export class RedisService implements OnModuleInit {
-  private client: Redis.Redis;
+export class RedisService implements OnModuleInit, OnModuleDestroy {
+  private client!: Redis;
 
   onModuleInit() {
-    // TODO: Initialize Redis client from REDIS_URL config
-    // this.client = new Redis(process.env.REDIS_URL);
+    this.client = new Redis(process.env.REDIS_URL!);
   }
 
-  // TODO: Implement primitive Redis operations
-  // - get(key: string): Promise<string | null>
-  // - set(key: string, value: string, exSeconds?: number): Promise<'OK'>
-  // - setNx(key: string, value: string, exSeconds?: number): Promise<boolean>
-  // - del(key: string | string[]): Promise<number>
-  // - incr(key: string): Promise<number>
-  // - decr(key: string): Promise<number>
-  // - expire(key: string, seconds: number): Promise<boolean>
-  // - ttl(key: string): Promise<number>
-  // - hGet(key: string, field: string): Promise<string | null>
-  // - hSet(key: string, field: string, value: string): Promise<number>
-  // - hGetAll(key: string): Promise<Record<string, string>>
-
   async get(key: string): Promise<string | null> {
-    // TODO: Implement
-    return null;
+    return this.client.get(key);
   }
 
   async set(key: string, value: string, exSeconds?: number): Promise<"OK"> {
-    // TODO: Implement
-    return "OK";
+    if (exSeconds !== undefined) {
+      return this.client.set(key, value, "EX", exSeconds);
+    }
+    return this.client.set(key, value);
   }
 
   async setNx(
@@ -49,47 +25,67 @@ export class RedisService implements OnModuleInit {
     value: string,
     exSeconds?: number
   ): Promise<boolean> {
-    // TODO: Implement
-    return false;
+    if (exSeconds !== undefined) {
+      const result = await this.client.set(key, value, "EX", exSeconds, "NX");
+      return result === "OK";
+    }
+    const result = await this.client.setnx(key, value);
+    return result === 1;
   }
 
   async del(key: string | string[]): Promise<number> {
-    // TODO: Implement
-    return 0;
+    const keys = Array.isArray(key) ? key : [key];
+    return this.client.del(...keys);
   }
 
   async incr(key: string): Promise<number> {
-    // TODO: Implement
-    return 0;
+    return this.client.incr(key);
   }
 
   async decr(key: string): Promise<number> {
-    // TODO: Implement
-    return 0;
+    return this.client.decr(key);
   }
 
   async expire(key: string, seconds: number): Promise<boolean> {
-    // TODO: Implement
-    return false;
+    const result = await this.client.expire(key, seconds);
+    return result === 1;
   }
 
   async ttl(key: string): Promise<number> {
-    // TODO: Implement
-    return -2;
+    return this.client.ttl(key);
   }
 
   async hGet(key: string, field: string): Promise<string | null> {
-    // TODO: Implement
-    return null;
+    return this.client.hget(key, field);
   }
 
   async hSet(key: string, field: string, value: string): Promise<number> {
-    // TODO: Implement
-    return 0;
+    return this.client.hset(key, field, value);
   }
 
   async hGetAll(key: string): Promise<Record<string, string>> {
-    // TODO: Implement
-    return {};
+    return this.client.hgetall(key);
+  }
+
+  async jsonGet<T>(key: string): Promise<T | null> {
+    const raw = await this.client.get(key);
+    if (raw === null) return null;
+    return JSON.parse(raw) as T;
+  }
+
+  async jsonSet(
+    key: string,
+    value: unknown,
+    exSeconds?: number
+  ): Promise<"OK"> {
+    const serialized = JSON.stringify(value);
+    if (exSeconds !== undefined) {
+      return this.client.set(key, serialized, "EX", exSeconds);
+    }
+    return this.client.set(key, serialized);
+  }
+
+  async onModuleDestroy() {
+    await this.client.quit();
   }
 }
