@@ -9,18 +9,16 @@
  * - Redis seat counter integration
  */
 
-import { DatabaseModule } from "@database/database.module";
 import { Module } from "@nestjs/common";
-import { RedisModule } from "@shared/redis/redis.module";
 
-// Controllers
+import { DatabaseModule } from "@/database/database.module";
+import { RedisModule } from "@/shared/redis/redis.module";
+
 import { DocumentsAdminController } from "./controllers/documents-admin.controller";
 import { RoomsAdminController } from "./controllers/rooms-admin.controller";
 import { SpeakersAdminController } from "./controllers/speakers-admin.controller";
 import { WorkshopsAdminController } from "./controllers/workshops-admin.controller";
 import { WorkshopsPublicController } from "./controllers/workshops-public.controller";
-
-// Services
 import { AiSummariesRepository } from "./repositories/ai-summaries.repository";
 import { RoomsRepository } from "./repositories/rooms.repository";
 import { SpeakersRepository } from "./repositories/speakers.repository";
@@ -33,9 +31,6 @@ import { RoomsService } from "./services/rooms.service";
 import { SeatCounterService } from "./services/seat-counter.service";
 import { SpeakersService } from "./services/speakers.service";
 import { WorkshopsService } from "./services/workshops.service";
-
-// Repositories
-
 @Module({
   imports: [DatabaseModule, RedisModule],
   controllers: [

@@ -1,11 +1,12 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { eq } from "drizzle-orm";
+
 import {
   DATABASE_CONNECTION,
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from "@database";
-import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+} from "@/database";
 
 /**
  * NotificationChannelConfigsRepository
@@ -37,12 +38,14 @@ export class NotificationChannelConfigsRepository {
     // - is_active: boolean
     // - config_json: JSON with provider-specific settings
     // - updated_at: DateTime
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement findByChannelType
   async findByChannelType(channelType: string): Promise<any | null> {
     // Query notification_channel_configs WHERE channel_type = channelType
     // Return config or null
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement update
@@ -52,5 +55,6 @@ export class NotificationChannelConfigsRepository {
     //   - is_active: boolean
     //   - config_json?: object (provider-specific settings)
     // Return updated record
+    throw new Error("Not implemented");
   }
 }

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { Result } from "@shared/response/result";
+
+import { Result } from "@/shared/response/result";
 
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";
@@ -31,6 +32,7 @@ export class StudentSyncService {
     // 2. Create job record in student_sync_jobs with status='QUEUED'
     // 3. Push to background job queue (StudentSyncWorker will pick it up)
     // 4. Return immediately: { job_id, status: 'QUEUED', created_at }
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement processJob
@@ -59,6 +61,7 @@ export class StudentSyncService {
     //    - completed_at = NOW()
     //
     // 6. Return result with sync counts
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement getJob
@@ -69,6 +72,7 @@ export class StudentSyncService {
     //   job_id, status, total_rows, processed_rows, failed_rows,
     //   started_at, completed_at, error_count, created_at
     // }
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement getJobErrors
@@ -81,6 +85,7 @@ export class StudentSyncService {
     //     error_reason, error_detail, created_at
     //   }
     // ]
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement CSV parsing
@@ -89,6 +94,7 @@ export class StudentSyncService {
     // Parse using fast-csv or papaparse
     // Validate headers
     // Return rows or error
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement row validation
@@ -97,6 +103,7 @@ export class StudentSyncService {
     // Validate email format
     // Check student_code format
     // Return validation result
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement student upsert
@@ -105,5 +112,6 @@ export class StudentSyncService {
     // Call repository.upsert() or manual INSERT/UPDATE logic
     // Handle constraint violations
     // Return result
+    throw new Error("Not implemented");
   }
 }

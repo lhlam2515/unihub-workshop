@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
-import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
+import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
+
 import { AiSummaryService } from "../services/ai-summary.service";
 
 /**
@@ -59,6 +60,7 @@ export class AiSummaryWorker {
     //         * Move to failed queue
     //
     // 5. Return result or throw to mark job as failed
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement timeout wrapper
@@ -68,6 +70,7 @@ export class AiSummaryWorker {
   ): Promise<T> {
     // Implement timeout using Promise.race() or AbortController
     // Throw TimeoutError if exceeded
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement exponential backoff for retries

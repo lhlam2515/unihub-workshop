@@ -49,6 +49,7 @@ export class StudentSyncWorker {
     //       - Move to failed queue (no retry for data sync)
     //
     // 5. Always clean up lock on completion
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement distributed lock mechanism
@@ -61,11 +62,13 @@ export class StudentSyncWorker {
     // Value: random token
     // TTL: ttlSeconds
     // Return true if acquired, false if already locked
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement lock release
   private async releaseLock(jobId: string): Promise<void> {
     // Delete lock from Redis using Lua script or simple DEL
     // Ensures only lock owner can release
+    throw new Error("Not implemented");
   }
 }

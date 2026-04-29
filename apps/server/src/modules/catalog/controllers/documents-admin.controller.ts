@@ -11,8 +11,6 @@
  * Yêu cầu role: ORGANIZER
  */
 
-import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
-import { RolesGuard } from "@core/guards/roles.guard";
 import {
   Controller,
   Get,
@@ -25,8 +23,11 @@ import {
   UploadedFile,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { CurrentUser } from "@shared/decorators/current-user.decorator";
-import { Roles } from "@shared/decorators/roles.decorator";
+
+import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RolesGuard } from "@/core/guards/roles.guard";
+import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { Roles } from "@/shared/decorators/roles.decorator";
 
 @Controller("admin/workshops")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -42,12 +43,13 @@ export class DocumentsAdminController {
   @UseInterceptors(FileInterceptor("file"))
   async uploadDocument(
     @Param("id") workshopId: string,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
     @CurrentUser() user: any
   ) {
     // TODO: Validate file is PDF
     // TODO: Call documentsService.uploadDocument(workshopId, file, user.id)
     // TODO: Auto-queue AI summary job
+    throw new Error("Not implemented");
   }
 
   /**
@@ -56,6 +58,7 @@ export class DocumentsAdminController {
   @Get(":id/documents")
   async listDocuments(@Param("id") workshopId: string) {
     // TODO: Call documentsService.getDocuments(workshopId)
+    throw new Error("Not implemented");
   }
 
   /**
@@ -65,6 +68,7 @@ export class DocumentsAdminController {
   async deleteDocument(@Param("id") documentId: string) {
     // TODO: Call documentsService.deleteDocument(documentId)
     // TODO: Remove file from Object Storage
+    throw new Error("Not implemented");
   }
 
   /**
@@ -73,6 +77,7 @@ export class DocumentsAdminController {
   @Get("documents/:id/summary")
   async getAiSummaryStatus(@Param("id") documentId: string) {
     // TODO: Call documentsService.getAiSummaryStatus(documentId)
+    throw new Error("Not implemented");
   }
 
   /**
@@ -83,5 +88,6 @@ export class DocumentsAdminController {
   async retryAiSummary(@Param("id") documentId: string) {
     // TODO: Check current status is FAILED
     // TODO: Re-queue AI summary job
+    throw new Error("Not implemented");
   }
 }

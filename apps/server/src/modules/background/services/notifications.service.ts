@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { Result } from "@shared/response/result";
+
+import { Result } from "@/shared/response/result";
 
 import { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
 import { NotificationChannelConfigsRepository } from "../repositories/notification-channel-configs.repository";
@@ -33,12 +34,14 @@ export class NotificationsService {
     // Apply filters: status, channel_type, type, user_id, workshop_id, date_range
     // Return paginated list of notification logs
     // Use index idx_notif_status for PENDING queries
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement getLogById
   async getLogById(id: string): Promise<Result<any>> {
     // Query notificationLogsRepo.findById(id)
     // Return full log with payload and error details
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement listChannelConfigs
@@ -53,6 +56,7 @@ export class NotificationsService {
     //     updated_at: DateTime
     //   }
     // ]
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement updateChannelConfig
@@ -64,5 +68,6 @@ export class NotificationsService {
     // Call notificationChannelConfigsRepo.update(channelType, { is_active, config_json })
     // Clear cache if using memory cache
     // Return updated config
+    throw new Error("Not implemented");
   }
 }

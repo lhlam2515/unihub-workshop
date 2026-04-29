@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { RedisService } from "@shared/redis/redis.service";
-import { Result } from "@shared/response/result";
+
+import { RedisService } from "@/shared/redis/redis.service";
+import { Result } from "@/shared/response/result";
 
 /**
  * SystemMonitorService
@@ -39,6 +40,7 @@ export class SystemMonitorService {
     //   next_run: DateTime,
     //   job_status: 'RUNNING' | 'IDLE' | 'ERROR'
     // }
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement getReconciliationJobStatus
@@ -62,6 +64,7 @@ export class SystemMonitorService {
     //   next_run: DateTime,
     //   last_alert?: string
     // }
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement getCircuitBreakerStatus
@@ -84,6 +87,7 @@ export class SystemMonitorService {
     //     recovery_deadline?: DateTime
     //   }
     // ]
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement resetCircuitBreaker
@@ -99,5 +103,6 @@ export class SystemMonitorService {
     // 3. Log reset event for audit
     //
     // 4. Return updated circuit breaker state
+    throw new Error("Not implemented");
   }
 }

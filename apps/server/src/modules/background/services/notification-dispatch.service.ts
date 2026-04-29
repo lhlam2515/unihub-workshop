@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { Result } from "@shared/response/result";
+
+import { Result } from "@/shared/response/result";
 
 import { NotificationChannelConfigsRepository } from "../repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "../repositories/notification-logs.repository";
@@ -46,6 +47,7 @@ export class NotificationDispatchService {
     // 5. Return result with sent confirmation or error
     //
     // Retry logic is handled by NotificationWorker (exponential backoff)
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement email provider adapter
@@ -58,6 +60,7 @@ export class NotificationDispatchService {
     // Use nodemailer or similar SMTP library
     // Apply template if needed
     // Return success/failure
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement Telegram provider adapter
@@ -69,5 +72,6 @@ export class NotificationDispatchService {
     // Use axios or similar to call Telegram Bot API
     // Handle API response codes
     // Return success/failure
+    throw new Error("Not implemented");
   }
 }

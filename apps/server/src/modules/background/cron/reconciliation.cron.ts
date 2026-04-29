@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { RedisService } from "@shared/redis/redis.service";
+
+import { RedisService } from "@/shared/redis/redis.service";
 
 /**
  * ReconciliationCron
@@ -50,6 +51,7 @@ export class ReconciliationCron {
     //
     // Note: This cron DOES NOT fix discrepancies — that must be done manually
     // through SystemAdminController endpoints or administrative action.
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement helper methods
@@ -62,6 +64,7 @@ export class ReconciliationCron {
     // Get DB values
     // Calculate difference
     // Return details
+    throw new Error("Not implemented");
   }
 
   private async sendAlert(
@@ -70,5 +73,6 @@ export class ReconciliationCron {
   ): Promise<void> {
     // Send alert to administrators
     // Can use notification system or email
+    throw new Error("Not implemented");
   }
 }

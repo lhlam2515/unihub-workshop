@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { Result } from "@shared/response/result";
 
-import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
+import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
+import { Result } from "@/shared/response/result";
 
 /**
  * AiSummaryService
@@ -60,6 +60,7 @@ export class AiSummaryService {
     // - LLM timeout → FAILED + "LLM_TIMEOUT"
     // - LLM error → FAILED + error_message
     // - Database error → FAILED + error_message
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement PDF text extraction
@@ -67,6 +68,7 @@ export class AiSummaryService {
     // Fetch PDF from Object Storage
     // Parse using pdf-parse or pdfjs-dist
     // Return extracted text or error
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement text cleaning
@@ -76,6 +78,7 @@ export class AiSummaryService {
     // Remove special characters
     // Truncate to max length
     // Return cleaned text
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement Claude API integration
@@ -84,5 +87,6 @@ export class AiSummaryService {
     // Call Anthropic SDK or REST API
     // Handle rate limiting and timeout
     // Return summary or error
+    throw new Error("Not implemented");
   }
 }

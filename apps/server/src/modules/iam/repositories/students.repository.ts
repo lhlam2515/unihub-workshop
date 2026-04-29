@@ -8,10 +8,10 @@
  * - Hỗ trợ JOIN với users để compose response
  */
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@database";
 import { Injectable, Inject } from "@nestjs/common";
 
-import type { DatabaseClient, DatabaseSchema } from "@database";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+import type { DatabaseClient, DatabaseSchema } from "@/database";
 
 @Injectable()
 export class StudentsRepository {

@@ -10,8 +10,6 @@
  * IDOR: tất cả student endpoints dùng @CurrentUser() thay vì path param
  */
 
-import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
-import { RolesGuard } from "@core/guards/roles.guard";
 import {
   Controller,
   Get,
@@ -24,8 +22,11 @@ import {
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
-import { CurrentUser } from "@shared/decorators/current-user.decorator";
-import { Roles } from "@shared/decorators/roles.decorator";
+
+import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RolesGuard } from "@/core/guards/roles.guard";
+import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { RegistrationsService } from "../services/registrations.service";
 
