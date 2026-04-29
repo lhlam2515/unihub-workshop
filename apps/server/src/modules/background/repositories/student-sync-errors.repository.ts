@@ -1,11 +1,12 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { eq } from "drizzle-orm";
+
 import {
   DATABASE_CONNECTION,
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from "@database";
-import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+} from "@/database";
 
 /**
  * StudentSyncErrorsRepository
@@ -37,6 +38,7 @@ export class StudentSyncErrorsRepository {
     //   - error_detail: string (specific error message)
     //   - created_at
     // Return inserted records
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement findByJobId
@@ -51,5 +53,6 @@ export class StudentSyncErrorsRepository {
     //     error_reason, error_detail, created_at
     //   }
     // ]
+    throw new Error("Not implemented");
   }
 }

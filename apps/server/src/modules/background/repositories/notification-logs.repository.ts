@@ -1,11 +1,12 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { eq } from "drizzle-orm";
+
 import {
   DATABASE_CONNECTION,
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from "@database";
-import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+} from "@/database";
 
 /**
  * NotificationLogsRepository
@@ -35,6 +36,7 @@ export class NotificationLogsRepository {
     // Use index: idx_notif_status for PENDING queries
     // Apply pagination: limit, offset
     // Return logs with user and workshop details joined
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement findById
@@ -42,6 +44,7 @@ export class NotificationLogsRepository {
     // Query notification_logs WHERE id = id
     // Join with users, workshops if needed
     // Return full log or null
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement create
@@ -50,6 +53,7 @@ export class NotificationLogsRepository {
     // Fields: user_id, workshop_id?, notification_type, channel,
     //         status: 'PENDING', payload, created_at
     // Return inserted record
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement updateStatus
@@ -61,5 +65,6 @@ export class NotificationLogsRepository {
   ): Promise<any> {
     // Update notification_logs SET status, sent_at?, error_message?, updated_at
     // Return updated record
+    throw new Error("Not implemented");
   }
 }

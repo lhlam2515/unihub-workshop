@@ -1,11 +1,12 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { eq } from "drizzle-orm";
+
 import {
   DATABASE_CONNECTION,
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from "@database";
-import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+} from "@/database";
 
 /**
  * StudentSyncJobsRepository
@@ -34,6 +35,7 @@ export class StudentSyncJobsRepository {
     // Fields: source_file_name, status: 'QUEUED', total_rows, processed_rows,
     //         failed_rows, error_count, created_at
     // Return inserted job record
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement updateStatus
@@ -50,12 +52,14 @@ export class StudentSyncJobsRepository {
     // Update student_sync_jobs SET status, (optional) counts, updated_at
     // If status = 'COMPLETED': set completed_at = NOW()
     // Return updated record
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement findById
   async findById(id: string): Promise<any | null> {
     // Query student_sync_jobs WHERE id = id
     // Return full job record or null
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement findMany
@@ -63,5 +67,6 @@ export class StudentSyncJobsRepository {
     // Query student_sync_jobs with pagination
     // Order by created_at DESC (most recent first)
     // Return list of job records
+    throw new Error("Not implemented");
   }
 }
