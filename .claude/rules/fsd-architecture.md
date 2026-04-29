@@ -1,1 +1,0 @@
-/home/sojdev/Workspace/Active/unihub-workshop/.agents/rules/fsd-architecture.md
