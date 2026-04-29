@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { Result } from '@shared/response/result';
+import { Injectable } from "@nestjs/common";
+import { Result } from "@shared/response/result";
 
-import { UpdateChannelConfigDto } from '../dto/update-channel-config.dto';
-import { NotificationChannelConfigsRepository } from '../repositories/notification-channel-configs.repository';
-import { NotificationLogsRepository } from '../repositories/notification-logs.repository';
+import { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
+import { NotificationChannelConfigsRepository } from "../repositories/notification-channel-configs.repository";
+import { NotificationLogsRepository } from "../repositories/notification-logs.repository";
 
 /**
  * NotificationsService

@@ -5,9 +5,9 @@
  * - createRoom(dto)
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { RoomsRepository } from '../repositories/rooms.repository';
+import { RoomsRepository } from "../repositories/rooms.repository";
 
 @Injectable()
 export class RoomsService {

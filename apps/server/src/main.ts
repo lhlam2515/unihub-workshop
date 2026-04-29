@@ -1,12 +1,12 @@
-import { NestFactory } from '@nestjs/core';
-import cookieParser from 'cookie-parser';
-import helmet from 'helmet';
-import morgan from 'morgan';
+import { NestFactory } from "@nestjs/core";
+import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import morgan from "morgan";
 
-import { getCorsConfig } from '@/core/config/cors.config';
-import { winstonLogger } from '@/core/config/logger.config';
+import { getCorsConfig } from "@/core/config/cors.config";
+import { winstonLogger } from "@/core/config/logger.config";
 
-import { AppModule } from './app.module';
+import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -22,7 +22,7 @@ async function bootstrap() {
       {
         stream: {
           write: (message: string) => {
-            winstonLogger.log(message.trim(), 'HTTP');
+            winstonLogger.log(message.trim(), "HTTP");
           },
         },
       }
@@ -34,7 +34,7 @@ async function bootstrap() {
 
   winstonLogger.log(
     `Server is listening on http://localhost:${port}`,
-    'Bootstrap'
+    "Bootstrap"
   );
 }
 bootstrap();

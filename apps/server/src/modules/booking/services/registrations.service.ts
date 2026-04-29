@@ -12,9 +12,9 @@
  * Gọi: RateLimiterMechanic, GlobalRateLimitMechanic, SeatCounterService, RegistrationsRepository
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { RegistrationsRepository } from '../repositories/registrations.repository';
+import { RegistrationsRepository } from "../repositories/registrations.repository";
 
 @Injectable()
 export class RegistrationsService {

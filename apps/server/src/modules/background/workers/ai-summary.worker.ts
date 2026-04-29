@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { AiSummariesRepository } from '../repositories/ai-summaries.repository';
-import { AiSummaryService } from '../services/ai-summary.service';
+import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
+import { AiSummaryService } from "../services/ai-summary.service";
 
 /**
  * AiSummaryWorker

@@ -8,14 +8,14 @@
  * Yêu cầu role: ORGANIZER
  */
 
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
-import { Roles } from '@shared/decorators/roles.decorator';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
+import { Controller, Get, Post, Body, UseGuards } from "@nestjs/common";
+import { Roles } from "@shared/decorators/roles.decorator";
 
-@Controller('admin/rooms')
+@Controller("admin/rooms")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ORGANIZER')
+@Roles("ORGANIZER")
 export class RoomsAdminController {
   constructor(private readonly roomsService: any) {}
 

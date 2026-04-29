@@ -26,11 +26,11 @@ export class PaymentResponseBuilder {
   static from(payment: any): PaymentResponseDto {
     // TODO: Implement factory
     return {
-      payment_id: '',
-      registration_id: '',
+      payment_id: "",
+      registration_id: "",
       amount: 0,
-      status: '',
-      gateway: '',
+      status: "",
+      gateway: "",
       created_at: new Date(),
     };
   }
@@ -42,7 +42,7 @@ export class PaymentResponseBuilder {
   ): CreatePaymentResponseDto {
     // TODO: Implement factory
     return {
-      payment_id: '',
+      payment_id: "",
       redirect_url: redirectUrl,
       payment_deadline: deadline,
     };

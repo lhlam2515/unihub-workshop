@@ -16,8 +16,8 @@ export class SpeakerResponseBuilder {
   static from(speaker: any): SpeakerResponseDto {
     // TODO: Map to response shape
     return {
-      speaker_id: '',
-      full_name: '',
+      speaker_id: "",
+      full_name: "",
     };
   }
 }

@@ -1,28 +1,28 @@
-import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
+import { Module } from "@nestjs/common";
+import { ScheduleModule } from "@nestjs/schedule";
 
 // Controllers
-import { NotificationsAdminController } from './controllers/notifications-admin.controller';
-import { StudentSyncAdminController } from './controllers/student-sync-admin.controller';
-import { SystemAdminController } from './controllers/system-admin.controller';
+import { NotificationsAdminController } from "./controllers/notifications-admin.controller";
+import { StudentSyncAdminController } from "./controllers/student-sync-admin.controller";
+import { SystemAdminController } from "./controllers/system-admin.controller";
 
 // Services
-import { PaymentTimeoutCron } from './cron/payment-timeout.cron';
-import { ReconciliationCron } from './cron/reconciliation.cron';
-import { NotificationChannelConfigsRepository } from './repositories/notification-channel-configs.repository';
-import { NotificationLogsRepository } from './repositories/notification-logs.repository';
-import { StudentSyncErrorsRepository } from './repositories/student-sync-errors.repository';
-import { StudentSyncJobsRepository } from './repositories/student-sync-jobs.repository';
-import { AiSummaryService } from './services/ai-summary.service';
-import { NotificationDispatchService } from './services/notification-dispatch.service';
-import { NotificationsService } from './services/notifications.service';
-import { StudentSyncService } from './services/student-sync.service';
-import { SystemMonitorService } from './services/system-monitor.service';
+import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
+import { ReconciliationCron } from "./cron/reconciliation.cron";
+import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
+import { NotificationLogsRepository } from "./repositories/notification-logs.repository";
+import { StudentSyncErrorsRepository } from "./repositories/student-sync-errors.repository";
+import { StudentSyncJobsRepository } from "./repositories/student-sync-jobs.repository";
+import { AiSummaryService } from "./services/ai-summary.service";
+import { NotificationDispatchService } from "./services/notification-dispatch.service";
+import { NotificationsService } from "./services/notifications.service";
+import { StudentSyncService } from "./services/student-sync.service";
+import { SystemMonitorService } from "./services/system-monitor.service";
 
 // Workers (Queue Consumers)
-import { AiSummaryWorker } from './workers/ai-summary.worker';
-import { NotificationWorker } from './workers/notification.worker';
-import { StudentSyncWorker } from './workers/student-sync.worker';
+import { AiSummaryWorker } from "./workers/ai-summary.worker";
+import { NotificationWorker } from "./workers/notification.worker";
+import { StudentSyncWorker } from "./workers/student-sync.worker";
 
 // Cron Jobs
 

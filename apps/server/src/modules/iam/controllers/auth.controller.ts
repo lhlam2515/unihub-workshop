@@ -8,7 +8,7 @@
  * - GET /auth/me (JWT required, ANY role)
  */
 
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
 import {
   Controller,
   Post,
@@ -17,13 +17,13 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
-import { Public } from '@shared/decorators/public.decorator';
+} from "@nestjs/common";
+import { CurrentUser } from "@shared/decorators/current-user.decorator";
+import { Public } from "@shared/decorators/public.decorator";
 
-import { AuthService } from '../services/auth.service';
+import { AuthService } from "../services/auth.service";
 
-@Controller('auth')
+@Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -32,7 +32,7 @@ export class AuthController {
    * @param loginDto { email, password, platform }
    * @returns { access_token, refresh_token?, expires_in, user }
    */
-  @Post('login')
+  @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: any) {
@@ -46,7 +46,7 @@ export class AuthController {
    * @param refreshTokenDto { refresh_token? }
    * @returns { access_token, refresh_token?, expires_in }
    */
-  @Post('refresh')
+  @Post("refresh")
   @Public()
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() refreshTokenDto: any) {
@@ -59,7 +59,7 @@ export class AuthController {
    * POST /auth/logout
    * Requires valid JWT
    */
-  @Post('logout')
+  @Post("logout")
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async logout(@CurrentUser() user: any) {
@@ -72,7 +72,7 @@ export class AuthController {
    * Requires valid JWT
    * Returns user info based on role
    */
-  @Get('me')
+  @Get("me")
   @UseGuards(JwtAuthGuard)
   async getMe(@CurrentUser() user: any) {
     // TODO: Call authService.getMe(user.id)

@@ -9,9 +9,9 @@
  * Trả WORKSHOP_TIME_CONFLICT nếu bị trùng.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { WorkshopsRepository } from '../repositories/workshops.repository';
+import { WorkshopsRepository } from "../repositories/workshops.repository";
 
 @Injectable()
 export class RoomConflictService {

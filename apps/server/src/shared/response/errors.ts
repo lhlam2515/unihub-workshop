@@ -1,4 +1,4 @@
-import type { AppError, ErrorCategory, ErrorCode, FieldError } from './types';
+import type { AppError, ErrorCategory, ErrorCode, FieldError } from "./types";
 
 /**
  * Define HTTP status mapping for error categories
@@ -83,9 +83,9 @@ export const authErrors = {
    */
   tokenInvalid: (cause?: unknown): AppError =>
     createError({
-      category: 'AUTH',
-      code: 'TOKEN_INVALID',
-      message: 'JWT signature is invalid or malformed.',
+      category: "AUTH",
+      code: "TOKEN_INVALID",
+      message: "JWT signature is invalid or malformed.",
       cause,
     }),
   /**
@@ -96,9 +96,9 @@ export const authErrors = {
    */
   tokenExpired: (): AppError =>
     createError({
-      category: 'AUTH',
-      code: 'TOKEN_EXPIRED',
-      message: 'Access token has expired. Please refresh.',
+      category: "AUTH",
+      code: "TOKEN_EXPIRED",
+      message: "Access token has expired. Please refresh.",
     }),
   /**
    * Create an error for revoked tokens
@@ -109,9 +109,9 @@ export const authErrors = {
    */
   tokenRevoked: (jti: string): AppError =>
     createError({
-      category: 'AUTH',
-      code: 'TOKEN_REVOKED',
-      message: 'Token has been revoked.',
+      category: "AUTH",
+      code: "TOKEN_REVOKED",
+      message: "Token has been revoked.",
       context: { jti },
     }),
   /**
@@ -123,9 +123,9 @@ export const authErrors = {
    */
   refreshTokenInvalid: (cause?: unknown): AppError =>
     createError({
-      category: 'AUTH',
-      code: 'REFRESH_TOKEN_INVALID',
-      message: 'Refresh token is invalid or expired.',
+      category: "AUTH",
+      code: "REFRESH_TOKEN_INVALID",
+      message: "Refresh token is invalid or expired.",
       cause,
     }),
   /**
@@ -136,9 +136,9 @@ export const authErrors = {
    */
   invalidCredentials: (): AppError =>
     createError({
-      category: 'AUTH',
-      code: 'INVALID_CREDENTIALS',
-      message: 'Email or password is incorrect.',
+      category: "AUTH",
+      code: "INVALID_CREDENTIALS",
+      message: "Email or password is incorrect.",
     }),
   /**
    * Create an error for suspended accounts
@@ -149,9 +149,9 @@ export const authErrors = {
    */
   userSuspended: (userId: string): AppError =>
     createError({
-      category: 'FORBIDDEN',
-      code: 'USER_SUSPENDED',
-      message: 'Account has been suspended.',
+      category: "FORBIDDEN",
+      code: "USER_SUSPENDED",
+      message: "Account has been suspended.",
       context: { userId },
     }),
   /**
@@ -163,8 +163,8 @@ export const authErrors = {
    */
   checkinScopeDenied: (workshopId: string): AppError =>
     createError({
-      category: 'FORBIDDEN',
-      code: 'CHECKIN_SCOPE_DENIED',
+      category: "FORBIDDEN",
+      code: "CHECKIN_SCOPE_DENIED",
       message: `Staff is not authorized to check in for workshop ${workshopId}.`,
       context: { workshopId },
     }),
@@ -184,9 +184,9 @@ export const seatErrors = {
    */
   unavailable: (workshopId: string, decrementedTo?: number): AppError =>
     createError({
-      category: 'BUSINESS',
-      code: 'SEAT_UNAVAILABLE',
-      message: 'No seats available for this workshop.',
+      category: "BUSINESS",
+      code: "SEAT_UNAVAILABLE",
+      message: "No seats available for this workshop.",
       context: { workshopId, decrementedTo },
     }),
   /**
@@ -199,10 +199,10 @@ export const seatErrors = {
    */
   lockExpired: (workshopId: string, registrationId: string): AppError =>
     createError({
-      category: 'GONE',
-      code: 'SEAT_LOCK_EXPIRED',
+      category: "GONE",
+      code: "SEAT_LOCK_EXPIRED",
       message:
-        'Your seat hold has expired (15-minute limit). Please register again.',
+        "Your seat hold has expired (15-minute limit). Please register again.",
       context: { workshopId, registrationId },
     }),
 } as const;
@@ -221,9 +221,9 @@ export const registrationErrors = {
    */
   duplicate: (studentId: string, workshopId: string): AppError =>
     createError({
-      category: 'CONFLICT',
-      code: 'REGISTRATION_DUPLICATE',
-      message: 'You have already registered for this workshop.',
+      category: "CONFLICT",
+      code: "REGISTRATION_DUPLICATE",
+      message: "You have already registered for this workshop.",
       context: { studentId, workshopId },
     }),
   /**
@@ -235,8 +235,8 @@ export const registrationErrors = {
    */
   notFound: (registrationId: string): AppError =>
     createError({
-      category: 'NOT_FOUND',
-      code: 'REGISTRATION_NOT_FOUND',
+      category: "NOT_FOUND",
+      code: "REGISTRATION_NOT_FOUND",
       message: `Registration ${registrationId} not found.`,
       context: { registrationId },
     }),
@@ -249,9 +249,9 @@ export const registrationErrors = {
    */
   alreadyCancelled: (registrationId: string): AppError =>
     createError({
-      category: 'CONFLICT',
-      code: 'REGISTRATION_CANCELLED',
-      message: 'This registration has already been cancelled.',
+      category: "CONFLICT",
+      code: "REGISTRATION_CANCELLED",
+      message: "This registration has already been cancelled.",
       context: { registrationId },
     }),
 } as const;
@@ -270,9 +270,9 @@ export const paymentErrors = {
    */
   duplicate: (idempotencyKey: string, existingPaymentId: string): AppError =>
     createError({
-      category: 'CONFLICT',
-      code: 'PAYMENT_DUPLICATE',
-      message: 'A payment with this idempotency key already exists.',
+      category: "CONFLICT",
+      code: "PAYMENT_DUPLICATE",
+      message: "A payment with this idempotency key already exists.",
       context: { idempotencyKey, existingPaymentId },
     }),
   /**
@@ -284,9 +284,9 @@ export const paymentErrors = {
    */
   alreadySuccess: (paymentId: string): AppError =>
     createError({
-      category: 'CONFLICT',
-      code: 'PAYMENT_ALREADY_SUCCESS',
-      message: 'Payment has already been successfully completed.',
+      category: "CONFLICT",
+      code: "PAYMENT_ALREADY_SUCCESS",
+      message: "Payment has already been successfully completed.",
       context: { paymentId },
     }),
   /**
@@ -299,10 +299,10 @@ export const paymentErrors = {
    */
   gatewayOpen: (gateway: string, openedAt: string): AppError =>
     createError({
-      category: 'OVERLOADED',
-      code: 'PAYMENT_GATEWAY_OPEN',
+      category: "OVERLOADED",
+      code: "PAYMENT_GATEWAY_OPEN",
       message:
-        'Payment service is temporarily unavailable. Your booking is saved - please try again in a few minutes.',
+        "Payment service is temporarily unavailable. Your booking is saved - please try again in a few minutes.",
       context: { gateway, openedAt },
     }),
   /**
@@ -315,9 +315,9 @@ export const paymentErrors = {
    */
   gatewayError: (gateway: string, cause?: unknown): AppError =>
     createError({
-      category: 'EXTERNAL',
-      code: 'PAYMENT_GATEWAY_ERROR',
-      message: 'Payment gateway returned an error. Please try again.',
+      category: "EXTERNAL",
+      code: "PAYMENT_GATEWAY_ERROR",
+      message: "Payment gateway returned an error. Please try again.",
       context: { gateway },
       cause,
     }),
@@ -331,10 +331,10 @@ export const paymentErrors = {
    */
   timeout: (gateway: string, paymentId: string): AppError =>
     createError({
-      category: 'EXTERNAL',
-      code: 'PAYMENT_TIMEOUT',
+      category: "EXTERNAL",
+      code: "PAYMENT_TIMEOUT",
       message:
-        'Payment gateway did not respond in time. Your payment status will be confirmed shortly.',
+        "Payment gateway did not respond in time. Your payment status will be confirmed shortly.",
       context: { gateway, paymentId },
     }),
   /**
@@ -346,8 +346,8 @@ export const paymentErrors = {
    */
   notFound: (paymentId: string): AppError =>
     createError({
-      category: 'NOT_FOUND',
-      code: 'PAYMENT_NOT_FOUND',
+      category: "NOT_FOUND",
+      code: "PAYMENT_NOT_FOUND",
       message: `Payment ${paymentId} not found.`,
       context: { paymentId },
     }),
@@ -366,8 +366,8 @@ export const workshopErrors = {
    */
   notFound: (workshopId: string): AppError =>
     createError({
-      category: 'NOT_FOUND',
-      code: 'WORKSHOP_NOT_FOUND',
+      category: "NOT_FOUND",
+      code: "WORKSHOP_NOT_FOUND",
       message: `Workshop ${workshopId} not found.`,
       context: { workshopId },
     }),
@@ -381,9 +381,9 @@ export const workshopErrors = {
    */
   notPublished: (workshopId: string, status: string): AppError =>
     createError({
-      category: 'BUSINESS',
-      code: 'WORKSHOP_NOT_PUBLISHED',
-      message: 'This workshop is not available for registration.',
+      category: "BUSINESS",
+      code: "WORKSHOP_NOT_PUBLISHED",
+      message: "This workshop is not available for registration.",
       context: { workshopId, status },
     }),
   /**
@@ -395,9 +395,9 @@ export const workshopErrors = {
    */
   cancelled: (workshopId: string): AppError =>
     createError({
-      category: 'BUSINESS',
-      code: 'WORKSHOP_CANCELLED',
-      message: 'This workshop has been cancelled.',
+      category: "BUSINESS",
+      code: "WORKSHOP_CANCELLED",
+      message: "This workshop has been cancelled.",
       context: { workshopId },
     }),
   /**
@@ -409,9 +409,9 @@ export const workshopErrors = {
    */
   full: (workshopId: string): AppError =>
     createError({
-      category: 'BUSINESS',
-      code: 'WORKSHOP_FULL',
-      message: 'This workshop is fully booked.',
+      category: "BUSINESS",
+      code: "WORKSHOP_FULL",
+      message: "This workshop is fully booked.",
       context: { workshopId },
     }),
   /**
@@ -425,9 +425,9 @@ export const workshopErrors = {
    */
   roomConflict: (roomId: string, startsAt: string, endsAt: string): AppError =>
     createError({
-      category: 'CONFLICT',
-      code: 'WORKSHOP_TIME_CONFLICT',
-      message: 'The room is already booked for the selected time slot.',
+      category: "CONFLICT",
+      code: "WORKSHOP_TIME_CONFLICT",
+      message: "The room is already booked for the selected time slot.",
       context: { roomId, startsAt, endsAt },
     }),
 } as const;
@@ -445,9 +445,9 @@ export const ticketErrors = {
    */
   notFound: (qrToken: string): AppError =>
     createError({
-      category: 'NOT_FOUND',
-      code: 'TICKET_NOT_FOUND',
-      message: 'QR code does not match any ticket.',
+      category: "NOT_FOUND",
+      code: "TICKET_NOT_FOUND",
+      message: "QR code does not match any ticket.",
       context: { qrToken },
     }),
   /**
@@ -459,9 +459,9 @@ export const ticketErrors = {
    */
   void: (ticketId: string): AppError =>
     createError({
-      category: 'BUSINESS',
-      code: 'TICKET_VOID',
-      message: 'This ticket has been voided and is no longer valid.',
+      category: "BUSINESS",
+      code: "TICKET_VOID",
+      message: "This ticket has been voided and is no longer valid.",
       context: { ticketId },
     }),
   /**
@@ -474,9 +474,9 @@ export const ticketErrors = {
    */
   alreadyCheckedIn: (ticketId: string, workshopId: string): AppError =>
     createError({
-      category: 'CONFLICT',
-      code: 'TICKET_ALREADY_CHECKEDIN',
-      message: 'This ticket has already been used for check-in.',
+      category: "CONFLICT",
+      code: "TICKET_ALREADY_CHECKEDIN",
+      message: "This ticket has already been used for check-in.",
       context: { ticketId, workshopId },
     }),
 } as const;
@@ -490,9 +490,9 @@ export const ticketErrors = {
  */
 export const validationError = (fieldErrors: FieldError[]): AppError =>
   createError({
-    category: 'VALIDATION',
-    code: 'VALIDATION_FAILED',
-    message: 'Validation failed.',
+    category: "VALIDATION",
+    code: "VALIDATION_FAILED",
+    message: "Validation failed.",
     fieldErrors,
   });
 
@@ -509,9 +509,9 @@ export const rateLimitError = (
   retryAfterSeconds: number
 ): AppError =>
   createError({
-    category: 'RATE_LIMIT',
-    code: 'RATE_LIMIT_EXCEEDED',
-    message: 'Too many requests. Please try again later.',
+    category: "RATE_LIMIT",
+    code: "RATE_LIMIT_EXCEEDED",
+    message: "Too many requests. Please try again later.",
     context: { limit, retryAfterSeconds },
   });
 
@@ -528,9 +528,9 @@ export const systemErrors = {
    */
   internal: (cause?: unknown): AppError =>
     createError({
-      category: 'INTERNAL',
-      code: 'INTERNAL_ERROR',
-      message: 'An unexpected internal error occurred.',
+      category: "INTERNAL",
+      code: "INTERNAL_ERROR",
+      message: "An unexpected internal error occurred.",
       cause,
     }),
   /**
@@ -543,9 +543,9 @@ export const systemErrors = {
    */
   dbLockTimeout: (resource: string, timeoutMs: number): AppError =>
     createError({
-      category: 'OVERLOADED',
-      code: 'DB_LOCK_TIMEOUT',
-      message: 'The system is temporarily overloaded. Please try again.',
+      category: "OVERLOADED",
+      code: "DB_LOCK_TIMEOUT",
+      message: "The system is temporarily overloaded. Please try again.",
       context: { resource, timeoutMs },
     }),
 } as const;

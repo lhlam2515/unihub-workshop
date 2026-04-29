@@ -14,8 +14,8 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
-} from '@nestjs/common';
-import { Request } from 'express';
+} from "@nestjs/common";
+import { Request } from "express";
 
 @Injectable()
 export class WorkshopScopeGuard implements CanActivate {

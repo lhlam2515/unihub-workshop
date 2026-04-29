@@ -21,10 +21,10 @@ export class UserResponseBuilder {
     // TODO: Implement factory method
     // Map user entity to response DTO, exclude password_hash
     return {
-      user_id: '',
-      email: '',
-      role: '',
-      status: '',
+      user_id: "",
+      email: "",
+      role: "",
+      status: "",
       created_at: new Date(),
     };
   }

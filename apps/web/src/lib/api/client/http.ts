@@ -13,7 +13,6 @@ import { acquireFreshToken } from "./auth-session";
 import { API_BASE_URL } from "./config";
 import { tokenStore } from "./token-store";
 
-
 // ---------------------------------------------------------------------------
 // URL builder
 // ---------------------------------------------------------------------------

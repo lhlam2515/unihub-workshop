@@ -9,7 +9,7 @@
  * Mỗi gateway implement riêng phía sau adapter.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class PaymentGatewayService {
@@ -22,8 +22,8 @@ export class PaymentGatewayService {
   async initiatePayment(gateway: string, amount: number, metadata: any) {
     // TODO: Implement gateway adapter delegation
     return {
-      redirect_url: '',
-      gateway_txn_id: '',
+      redirect_url: "",
+      gateway_txn_id: "",
     };
   }
 

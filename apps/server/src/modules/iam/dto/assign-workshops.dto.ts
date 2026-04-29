@@ -5,7 +5,7 @@
  * Validate: { workshop_ids: string[] (UUIDs) }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const AssignWorkshopsSchema = z.object({
   workshop_ids: z.array(z.string().uuid()),

@@ -25,10 +25,10 @@ export class RegistrationResponseBuilder {
   static from(registration: any): RegistrationDto {
     // TODO: Implement factory
     return {
-      registration_id: '',
-      student_id: '',
-      workshop_id: '',
-      status: '',
+      registration_id: "",
+      student_id: "",
+      workshop_id: "",
+      status: "",
       created_at: new Date(),
     };
   }
@@ -41,10 +41,10 @@ export class RegistrationResponseBuilder {
   ): RegistrationWithDetailsDto {
     // TODO: Implement factory
     return {
-      registration_id: '',
-      student_id: '',
-      workshop_id: '',
-      status: '',
+      registration_id: "",
+      student_id: "",
+      workshop_id: "",
+      status: "",
       created_at: new Date(),
       workshop,
       ticket,

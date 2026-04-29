@@ -17,10 +17,10 @@ export class TicketResponseBuilder {
   static from(ticket: any, workshop?: any): TicketResponseDto {
     // TODO: Map to response shape
     return {
-      ticket_id: '',
-      registration_id: '',
-      qr_token: '',
-      status: '',
+      ticket_id: "",
+      registration_id: "",
+      qr_token: "",
+      status: "",
       workshop,
       created_at: new Date(),
     };

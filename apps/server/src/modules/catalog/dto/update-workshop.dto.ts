@@ -6,7 +6,7 @@
  * Refinement similar to CreateWorkshopDto
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const UpdateWorkshopSchema = z
   .object({

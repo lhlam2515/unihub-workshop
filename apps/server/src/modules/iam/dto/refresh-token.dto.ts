@@ -7,7 +7,7 @@
  * Note: Mobile requires refresh_token in body, Web uses cookies/headers
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const RefreshTokenSchema = z.object({
   refresh_token: z.string().optional(),

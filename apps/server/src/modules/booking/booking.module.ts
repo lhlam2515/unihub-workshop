@@ -10,31 +10,31 @@
  * Imports: DatabaseModule, RedisModule, CatalogModule (SeatCounterService)
  */
 
-import { DatabaseModule } from '@database/database.module';
-import { Module } from '@nestjs/common';
-import { RedisModule } from '@shared/redis/redis.module';
+import { DatabaseModule } from "@database/database.module";
+import { Module } from "@nestjs/common";
+import { RedisModule } from "@shared/redis/redis.module";
 
-import { CatalogModule } from '../catalog/catalog.module';
+import { CatalogModule } from "../catalog/catalog.module";
 
 // Controllers
-import { PaymentsController } from './controllers/payments.controller';
-import { RegistrationsController } from './controllers/registrations.controller';
+import { PaymentsController } from "./controllers/payments.controller";
+import { RegistrationsController } from "./controllers/registrations.controller";
 
 // Services
 
 // Mechanics
-import { CircuitBreakerMechanic } from './mechanics/circuit-breaker.mechanic';
-import { GlobalRateLimitMechanic } from './mechanics/global-rate-limit.mechanic';
-import { IdempotencyMechanic } from './mechanics/idempotency.mechanic';
-import { RateLimiterMechanic } from './mechanics/rate-limiter.mechanic';
-import { SeatLockMechanic } from './mechanics/seat-lock.mechanic';
+import { CircuitBreakerMechanic } from "./mechanics/circuit-breaker.mechanic";
+import { GlobalRateLimitMechanic } from "./mechanics/global-rate-limit.mechanic";
+import { IdempotencyMechanic } from "./mechanics/idempotency.mechanic";
+import { RateLimiterMechanic } from "./mechanics/rate-limiter.mechanic";
+import { SeatLockMechanic } from "./mechanics/seat-lock.mechanic";
 
 // Repositories
-import { PaymentsRepository } from './repositories/payments.repository';
-import { RegistrationsRepository } from './repositories/registrations.repository';
-import { PaymentGatewayService } from './services/payment-gateway.service';
-import { PaymentsService } from './services/payments.service';
-import { RegistrationsService } from './services/registrations.service';
+import { PaymentsRepository } from "./repositories/payments.repository";
+import { RegistrationsRepository } from "./repositories/registrations.repository";
+import { PaymentGatewayService } from "./services/payment-gateway.service";
+import { PaymentsService } from "./services/payments.service";
+import { RegistrationsService } from "./services/registrations.service";
 
 @Module({
   imports: [DatabaseModule, RedisModule, CatalogModule],

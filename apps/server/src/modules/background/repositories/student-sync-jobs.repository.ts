@@ -3,9 +3,9 @@ import {
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from '@database';
-import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+} from "@database";
+import { Inject, Injectable } from "@nestjs/common";
+import { eq } from "drizzle-orm";
 
 /**
  * StudentSyncJobsRepository
@@ -39,7 +39,7 @@ export class StudentSyncJobsRepository {
   // TODO: Implement updateStatus
   async updateStatus(
     id: string,
-    status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+    status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED",
     counts?: {
       totalRows?: number;
       processedRows?: number;

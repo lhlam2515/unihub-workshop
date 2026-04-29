@@ -5,9 +5,9 @@
  * - createSpeaker(dto)
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { SpeakersRepository } from '../repositories/speakers.repository';
+import { SpeakersRepository } from "../repositories/speakers.repository";
 
 @Injectable()
 export class SpeakersService {

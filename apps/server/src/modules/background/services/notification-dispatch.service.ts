@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { Result } from '@shared/response/result';
+import { Injectable } from "@nestjs/common";
+import { Result } from "@shared/response/result";
 
-import { NotificationChannelConfigsRepository } from '../repositories/notification-channel-configs.repository';
-import { NotificationLogsRepository } from '../repositories/notification-logs.repository';
+import { NotificationChannelConfigsRepository } from "../repositories/notification-channel-configs.repository";
+import { NotificationLogsRepository } from "../repositories/notification-logs.repository";
 
 /**
  * NotificationDispatchService

@@ -2,8 +2,8 @@ import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
-} from 'drizzle-zod';
-import { z } from 'zod';
+} from "drizzle-zod";
+import { z } from "zod";
 
 import {
   checkinRecords,
@@ -11,12 +11,12 @@ import {
   payments,
   registrations,
   tickets,
-} from '@/database/schema';
+} from "@/database/schema";
 
 const offlineCheckinSyncStatusSchema = z.enum([
-  'PENDING',
-  'SYNCED',
-  'CONFLICT',
+  "PENDING",
+  "SYNCED",
+  "CONFLICT",
 ]);
 
 export const registrationsSelectSchema = createSelectSchema(registrations);

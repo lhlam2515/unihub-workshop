@@ -3,9 +3,9 @@ import {
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from '@database';
-import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+} from "@database";
+import { Inject, Injectable } from "@nestjs/common";
+import { eq } from "drizzle-orm";
 
 /**
  * StudentSyncErrorsRepository

@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Result } from '@shared/response/result';
+import { Injectable } from "@nestjs/common";
+import { Result } from "@shared/response/result";
 
-import { AiSummariesRepository } from '../repositories/ai-summaries.repository';
+import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 
 /**
  * AiSummaryService

@@ -6,9 +6,9 @@
  * dùng không cần import lại.
  */
 
-import { Global, Module } from '@nestjs/common';
+import { Global, Module } from "@nestjs/common";
 
-import { RedisService } from './redis.service';
+import { RedisService } from "./redis.service";
 
 @Global()
 @Module({

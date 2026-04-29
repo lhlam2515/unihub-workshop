@@ -7,9 +7,9 @@
  * - retryAiSummary(documentId) — only when status = FAILED
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { WorkshopDocumentsRepository } from '../repositories/workshop-documents.repository';
+import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
 
 @Injectable()
 export class DocumentsService {

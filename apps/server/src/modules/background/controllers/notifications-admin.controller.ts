@@ -1,6 +1,6 @@
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
-import { UserRole } from '@database/types';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
+import { UserRole } from "@database/types";
 import {
   Controller,
   Get,
@@ -11,12 +11,12 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { Roles } from '@shared/decorators/roles.decorator';
-import { Result } from '@shared/response/result';
+} from "@nestjs/common";
+import { Roles } from "@shared/decorators/roles.decorator";
+import { Result } from "@shared/response/result";
 
-import { UpdateChannelConfigDto } from '../dto/update-channel-config.dto';
-import { NotificationsService } from '../services/notifications.service';
+import { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
+import { NotificationsService } from "../services/notifications.service";
 
 /**
  * NotificationsAdminController
@@ -32,38 +32,38 @@ import { NotificationsService } from '../services/notifications.service';
  *
  * TODO: Implement all endpoints
  */
-@Controller('/admin/notifications')
+@Controller("/admin/notifications")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ORGANIZER)
 export class NotificationsAdminController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   // TODO: Implement GET /logs
-  @Get('logs')
+  @Get("logs")
   async listLogs(@Query() query: any): Promise<Result<any>> {
     // Call notificationsService.listLogs(filters, pagination)
     // Return paginated list of notification logs
   }
 
   // TODO: Implement GET /logs/{id}
-  @Get('logs/:id')
-  async getLogById(@Param('id') id: string): Promise<Result<any>> {
+  @Get("logs/:id")
+  async getLogById(@Param("id") id: string): Promise<Result<any>> {
     // Call notificationsService.getLogById(id)
     // Return single notification log with full details
   }
 
   // TODO: Implement GET /channels
-  @Get('channels')
+  @Get("channels")
   async listChannelConfigs(): Promise<Result<any>> {
     // Call notificationsService.listChannelConfigs()
     // Return list of notification channel configurations
   }
 
   // TODO: Implement PATCH /channels/{channel_type}
-  @Patch('channels/:channelType')
+  @Patch("channels/:channelType")
   @HttpCode(HttpStatus.OK)
   async updateChannelConfig(
-    @Param('channelType') channelType: string,
+    @Param("channelType") channelType: string,
     @Body() dto: UpdateChannelConfigDto
   ): Promise<Result<any>> {
     // Call notificationsService.updateChannelConfig(channelType, dto)

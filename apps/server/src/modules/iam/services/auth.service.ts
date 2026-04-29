@@ -15,10 +15,10 @@
  * @see UsersRepository
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { TokenService } from './token.service';
-import { UsersRepository } from '../repositories/users.repository';
+import { TokenService } from "./token.service";
+import { UsersRepository } from "../repositories/users.repository";
 
 @Injectable()
 export class AuthService {
@@ -39,7 +39,7 @@ export class AuthService {
    * 6. Generate Refresh token
    * 7. Return Ok({ access_token, refresh_token?, user })
    */
-  async login(email: string, password: string, platform: 'WEB' | 'MOBILE') {
+  async login(email: string, password: string, platform: "WEB" | "MOBILE") {
     // TODO: Implement
   }
 

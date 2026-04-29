@@ -11,8 +11,8 @@
  * Yêu cầu role: ORGANIZER
  */
 
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
 import {
   Controller,
   Get,
@@ -23,14 +23,14 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
-import { Roles } from '@shared/decorators/roles.decorator';
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { CurrentUser } from "@shared/decorators/current-user.decorator";
+import { Roles } from "@shared/decorators/roles.decorator";
 
-@Controller('admin/workshops')
+@Controller("admin/workshops")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ORGANIZER')
+@Roles("ORGANIZER")
 export class DocumentsAdminController {
   constructor(private readonly documentsService: any) {}
 
@@ -38,10 +38,10 @@ export class DocumentsAdminController {
    * POST /admin/workshops/{id}/documents
    * Upload PDF and auto-queue AI summary
    */
-  @Post(':id/documents')
-  @UseInterceptors(FileInterceptor('file'))
+  @Post(":id/documents")
+  @UseInterceptors(FileInterceptor("file"))
   async uploadDocument(
-    @Param('id') workshopId: string,
+    @Param("id") workshopId: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: any
   ) {
@@ -53,16 +53,16 @@ export class DocumentsAdminController {
   /**
    * GET /admin/workshops/{id}/documents
    */
-  @Get(':id/documents')
-  async listDocuments(@Param('id') workshopId: string) {
+  @Get(":id/documents")
+  async listDocuments(@Param("id") workshopId: string) {
     // TODO: Call documentsService.getDocuments(workshopId)
   }
 
   /**
    * DELETE /admin/documents/{id}
    */
-  @Delete('documents/:id')
-  async deleteDocument(@Param('id') documentId: string) {
+  @Delete("documents/:id")
+  async deleteDocument(@Param("id") documentId: string) {
     // TODO: Call documentsService.deleteDocument(documentId)
     // TODO: Remove file from Object Storage
   }
@@ -70,8 +70,8 @@ export class DocumentsAdminController {
   /**
    * GET /admin/documents/{id}/summary
    */
-  @Get('documents/:id/summary')
-  async getAiSummaryStatus(@Param('id') documentId: string) {
+  @Get("documents/:id/summary")
+  async getAiSummaryStatus(@Param("id") documentId: string) {
     // TODO: Call documentsService.getAiSummaryStatus(documentId)
   }
 
@@ -79,8 +79,8 @@ export class DocumentsAdminController {
    * POST /admin/documents/{id}/ai-retry
    * Retry AI summary for failed documents
    */
-  @Post('documents/:id/ai-retry')
-  async retryAiSummary(@Param('id') documentId: string) {
+  @Post("documents/:id/ai-retry")
+  async retryAiSummary(@Param("id") documentId: string) {
     // TODO: Check current status is FAILED
     // TODO: Re-queue AI summary job
   }

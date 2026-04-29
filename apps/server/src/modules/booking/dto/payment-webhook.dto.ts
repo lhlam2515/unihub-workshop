@@ -5,11 +5,11 @@
  * { gateway_txn_id, status: 'SUCCESS' | 'FAILED', idempotency_key, raw_response? }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const PaymentWebhookSchema = z.object({
   gateway_txn_id: z.string(),
-  status: z.enum(['SUCCESS', 'FAILED']),
+  status: z.enum(["SUCCESS", "FAILED"]),
   idempotency_key: z.string().uuid(),
   raw_response: z.any().optional(),
 });

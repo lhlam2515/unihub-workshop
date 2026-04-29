@@ -11,8 +11,8 @@
  * Trả RATE_LIMIT_EXCEEDED nếu bucket rỗng.
  */
 
-import { Injectable } from '@nestjs/common';
-import { RedisService } from '@shared/redis/redis.service';
+import { Injectable } from "@nestjs/common";
+import { RedisService } from "@shared/redis/redis.service";
 
 @Injectable()
 export class RateLimiterMechanic {

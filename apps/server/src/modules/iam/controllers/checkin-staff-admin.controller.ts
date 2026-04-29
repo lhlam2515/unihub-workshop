@@ -10,14 +10,14 @@
  * Note: Eventual Consistency warning về phân công workshop
  */
 
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
-import { Roles } from '@shared/decorators/roles.decorator';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
+import { Controller, Get, Post, Body, Param, UseGuards } from "@nestjs/common";
+import { Roles } from "@shared/decorators/roles.decorator";
 
-@Controller('admin/checkin-staff')
+@Controller("admin/checkin-staff")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ORGANIZER')
+@Roles("ORGANIZER")
 export class CheckinStaffAdminController {
   constructor(private readonly checkinStaffAssignmentService: any) {}
 
@@ -28,9 +28,9 @@ export class CheckinStaffAdminController {
    * Assigns workshops to a CHECKIN_STAFF user
    * Response includes eventual consistency warning
    */
-  @Post(':user_id/assign-workshops')
+  @Post(":user_id/assign-workshops")
   async assignWorkshops(
-    @Param('user_id') userId: string,
+    @Param("user_id") userId: string,
     @Body() assignDto: any
   ) {
     // TODO: Validate with Zod (AssignWorkshopsSchema)
@@ -43,8 +43,8 @@ export class CheckinStaffAdminController {
    *
    * Returns list of workshops assigned to this CHECKIN_STAFF
    */
-  @Get(':user_id/workshops')
-  async getAssignedWorkshops(@Param('user_id') userId: string) {
+  @Get(":user_id/workshops")
+  async getAssignedWorkshops(@Param("user_id") userId: string) {
     // TODO: Call checkinStaffAssignmentService.getAssignedWorkshops(userId)
     // TODO: Return list of WorkshopSummaryDto
   }

@@ -24,9 +24,9 @@ export class AuthMeResponseBuilder {
     // - Include student_code, full_name, faculty only for STUDENT role
     // - Include allowed_workshop_ids only for CHECKIN_STAFF role
     return {
-      user_id: '',
-      email: '',
-      role: '',
+      user_id: "",
+      email: "",
+      role: "",
     };
   }
 }

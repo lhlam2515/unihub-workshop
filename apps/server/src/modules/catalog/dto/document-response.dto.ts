@@ -19,12 +19,12 @@ export class DocumentResponseBuilder {
   static from(document: any): WorkshopDocumentResponseDto {
     // TODO: Map to response shape
     return {
-      document_id: '',
-      workshop_id: '',
-      file_url: '',
-      original_name: '',
+      document_id: "",
+      workshop_id: "",
+      file_url: "",
+      original_name: "",
       file_size_bytes: 0,
-      upload_status: '',
+      upload_status: "",
       uploaded_at: new Date(),
     };
   }

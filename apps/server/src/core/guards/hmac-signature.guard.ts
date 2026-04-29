@@ -13,8 +13,8 @@ import {
   ExecutionContext,
   UnauthorizedException,
   Injectable,
-} from '@nestjs/common';
-import { Request } from 'express';
+} from "@nestjs/common";
+import { Request } from "express";
 
 @Injectable()
 export class HmacSignatureGuard implements CanActivate {
@@ -28,11 +28,11 @@ export class HmacSignatureGuard implements CanActivate {
     // 6. Throw UnauthorizedException if signatures don't match
 
     const request = context.switchToHttp().getRequest<Request>();
-    const signature = request.headers['x-gateway-signature'] as string;
+    const signature = request.headers["x-gateway-signature"] as string;
     const gateway = request.params.gateway;
 
     if (!signature) {
-      throw new UnauthorizedException('Missing signature header');
+      throw new UnauthorizedException("Missing signature header");
     }
 
     // TODO: Verify signature against gateway secret

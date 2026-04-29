@@ -9,7 +9,7 @@
  * Đính kèm Eventual Consistency warning trong result.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class CheckinStaffAssignmentService {

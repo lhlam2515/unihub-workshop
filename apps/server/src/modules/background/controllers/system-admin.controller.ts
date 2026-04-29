@@ -1,6 +1,6 @@
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
-import { UserRole } from '@database/types';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
+import { UserRole } from "@database/types";
 import {
   Controller,
   Get,
@@ -9,11 +9,11 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { Roles } from '@shared/decorators/roles.decorator';
-import { Result } from '@shared/response/result';
+} from "@nestjs/common";
+import { Roles } from "@shared/decorators/roles.decorator";
+import { Result } from "@shared/response/result";
 
-import { SystemMonitorService } from '../services/system-monitor.service';
+import { SystemMonitorService } from "../services/system-monitor.service";
 
 /**
  * SystemAdminController
@@ -29,14 +29,14 @@ import { SystemMonitorService } from '../services/system-monitor.service';
  *
  * TODO: Implement all endpoints
  */
-@Controller('/admin/system')
+@Controller("/admin/system")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ORGANIZER)
 export class SystemAdminController {
   constructor(private readonly systemMonitorService: SystemMonitorService) {}
 
   // TODO: Implement GET /admin/system/jobs/payment-timeout
-  @Get('jobs/payment-timeout')
+  @Get("jobs/payment-timeout")
   async getPaymentTimeoutJobStatus(): Promise<Result<any>> {
     // Call systemMonitorService.getPaymentTimeoutJobStatus()
     // Return: {
@@ -49,7 +49,7 @@ export class SystemAdminController {
   }
 
   // TODO: Implement GET /admin/system/jobs/reconciliation
-  @Get('jobs/reconciliation')
+  @Get("jobs/reconciliation")
   async getReconciliationJobStatus(): Promise<Result<any>> {
     // Call systemMonitorService.getReconciliationJobStatus()
     // Return: {
@@ -62,7 +62,7 @@ export class SystemAdminController {
   }
 
   // TODO: Implement GET /admin/system/circuit-breaker
-  @Get('circuit-breaker')
+  @Get("circuit-breaker")
   async getCircuitBreakerStatus(): Promise<Result<any>> {
     // Call systemMonitorService.getCircuitBreakerStatus()
     // Return array of circuit breaker statuses:
@@ -79,10 +79,10 @@ export class SystemAdminController {
   }
 
   // TODO: Implement POST /admin/system/circuit-breaker/{gateway}/reset
-  @Post('circuit-breaker/:gateway/reset')
+  @Post("circuit-breaker/:gateway/reset")
   @HttpCode(HttpStatus.OK)
   async resetCircuitBreaker(
-    @Param('gateway') gateway: string
+    @Param("gateway") gateway: string
   ): Promise<Result<any>> {
     // Call systemMonitorService.resetCircuitBreaker(gateway)
     // Force reset circuit breaker state to CLOSED

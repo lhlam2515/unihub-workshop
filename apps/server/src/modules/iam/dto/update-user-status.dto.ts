@@ -5,10 +5,10 @@
  * Validate: { status: 'ACTIVE' | 'SUSPENDED' }
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const UpdateUserStatusSchema = z.object({
-  status: z.enum(['ACTIVE', 'SUSPENDED']),
+  status: z.enum(["ACTIVE", "SUSPENDED"]),
 });
 
 export type UpdateUserStatusDto = z.infer<typeof UpdateUserStatusSchema>;

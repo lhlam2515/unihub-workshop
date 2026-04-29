@@ -3,18 +3,18 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
-} from '@nestjs/common';
-import { map, Observable } from 'rxjs';
+} from "@nestjs/common";
+import { map, Observable } from "rxjs";
 
-import { resultToHttpResponse } from '@/shared/response/builder';
-import { Result } from '@/shared/response/result';
+import { resultToHttpResponse } from "@/shared/response/builder";
+import { Result } from "@/shared/response/result";
 
-import type { Request, Response } from 'express';
+import type { Request, Response } from "express";
 
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    if (context.getType() !== 'http') {
+    if (context.getType() !== "http") {
       return next.handle();
     }
 
@@ -29,7 +29,7 @@ export class ResponseInterceptor implements NestInterceptor {
           return value;
         }
 
-        const requestIdHeader = request.headers['x-request-id'];
+        const requestIdHeader = request.headers["x-request-id"];
         const requestId = Array.isArray(requestIdHeader)
           ? requestIdHeader[0]
           : requestIdHeader;

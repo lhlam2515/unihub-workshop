@@ -12,9 +12,9 @@
  * trong ACID transaction.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
-import { PaymentsRepository } from '../repositories/payments.repository';
+import { PaymentsRepository } from "../repositories/payments.repository";
 
 @Injectable()
 export class PaymentsService {

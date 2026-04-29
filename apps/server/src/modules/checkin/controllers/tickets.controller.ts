@@ -9,15 +9,15 @@
  * IDOR protected bằng @CurrentUser()
  */
 
-import { JwtAuthGuard } from '@core/guards/jwt-auth.guard';
-import { RolesGuard } from '@core/guards/roles.guard';
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
-import { Roles } from '@shared/decorators/roles.decorator';
+import { JwtAuthGuard } from "@core/guards/jwt-auth.guard";
+import { RolesGuard } from "@core/guards/roles.guard";
+import { Controller, Get, Param, UseGuards } from "@nestjs/common";
+import { CurrentUser } from "@shared/decorators/current-user.decorator";
+import { Roles } from "@shared/decorators/roles.decorator";
 
-@Controller('students/me/tickets')
+@Controller("students/me/tickets")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STUDENT')
+@Roles("STUDENT")
 export class TicketsController {
   constructor(private readonly ticketService: any) {}
 
@@ -35,8 +35,8 @@ export class TicketsController {
    * GET /students/me/tickets/{id}
    * Get single ticket detail
    */
-  @Get(':id')
-  async getMyTicket(@Param('id') ticketId: string, @CurrentUser() user: any) {
+  @Get(":id")
+  async getMyTicket(@Param("id") ticketId: string, @CurrentUser() user: any) {
     // TODO: Verify ownership (IDOR protection)
     // TODO: Call ticketService.getTicketDetail(user.id, ticketId)
   }
