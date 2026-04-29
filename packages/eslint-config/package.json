@@ -1,0 +1,16 @@
+{
+  "name": "@repo/eslint-config",
+  "private": true,
+  "version": "0.0.0",
+  "main": "./index.cjs",
+  "exports": {
+    ".": "./index.cjs"
+  },
+  "dependencies": {
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-boundaries": "^6.0.2",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.5",
+    "globals": "^16.0.0"
+  }
+}
