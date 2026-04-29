@@ -19,7 +19,7 @@ import { z } from "zod";
  */
 export const UpdateChannelConfigSchema = z.object({
   is_active: z.boolean(),
-  config_json: z.record(z.any()).optional(),
+  config_json: z.record(z.string(), z.any()).optional(),
 });
 
 export type UpdateChannelConfigDto = z.infer<typeof UpdateChannelConfigSchema>;

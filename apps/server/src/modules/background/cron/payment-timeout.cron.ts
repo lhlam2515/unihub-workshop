@@ -48,12 +48,14 @@ export class PaymentTimeoutCron {
     // 4. Error handling:
     //    - Wrap in try/catch to prevent cron from crashing
     //    - Log any database or Redis errors
+    throw new Error("Not implemented");
   }
 
   // TODO: Implement helper methods
   private async expirePayments(): Promise<number> {
     // Fetch and expire payments
     // Return count of processed payments
+    throw new Error("Not implemented");
   }
 
   private async releaseSeats(
@@ -62,5 +64,6 @@ export class PaymentTimeoutCron {
   ): Promise<void> {
     // INCR Redis counter
     // Delete seat lock
+    throw new Error("Not implemented");
   }
 }
