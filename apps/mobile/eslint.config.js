@@ -55,7 +55,6 @@ module.exports = defineConfig([
             "src/hooks/**/*",
             "src/lib/**/*",
             "src/types/**/*",
-            "src/assets/**/*",
           ],
         },
         {
@@ -85,33 +84,44 @@ module.exports = defineConfig([
     rules: {
       "boundaries/no-unknown": ["error"],
       "boundaries/no-unknown-files": ["error"],
-      "boundaries/element-types": [
+      "boundaries/dependencies": [
         "error",
         {
           default: "disallow",
           rules: [
             {
-              from: ["shared"],
-              allow: ["shared"],
+              from: { type: "shared" },
+              allow: [{ to: { type: "shared" } }],
             },
             {
-              from: ["feature"],
+              from: { type: "feature" },
               allow: [
-                "shared",
-                ["feature", { featureName: "${from.featureName}" }],
+                { to: { type: "shared" } },
+                {
+                  to: {
+                    type: "feature",
+                    captured: {
+                      featureName: "{{ from.captured.featureName }}",
+                    },
+                  },
+                },
               ],
             },
             {
-              from: ["widget"],
-              allow: ["shared", "feature"],
+              from: { type: "widget" },
+              allow: [{ to: { type: "shared" } }, { to: { type: "feature" } }],
             },
             {
-              from: ["app", "neverImport"],
-              allow: ["shared", "feature", "widget"],
+              from: [{ type: "app" }, { type: "neverImport" }],
+              allow: [
+                { to: { type: "shared" } },
+                { to: { type: "feature" } },
+                { to: { type: "widget" } },
+              ],
             },
             {
-              from: ["app"],
-              allow: [["app", { fileName: "${*.css}" }]],
+              from: { type: "app" },
+              allow: [{ to: { type: "app", internalPath: "*.css" } }],
             },
           ],
         },
