@@ -1,15 +1,29 @@
 /**
  * JWT Authentication Guard
  *
- * Middleware xác thực chính. Giải mã JWT từ Authorization: Bearer header,
- * kiểm tra chữ ký và exp. Tra cứu jti trong Redis Blacklist - nếu tồn tại
- * trả 401 TOKEN_REVOKED. Bỏ qua (skip) nếu route được đánh dấu @Public().
- * Gắn JwtPayload vào request.user để các component sau sử dụng.
+ * Primary inbound security gate. Runs first in the request lifecycle and
+ * enforces authentication for every route unless explicitly skipped via
+ * the `@Public()` decorator.
  *
- * @see JwtPayload từ @database/types
- * @see @Public() decorator để bỏ qua xác thực
+ * Lifecycle position: Stage 1 — Inbound Security (before ZodValidationPipe).
+ * Depends on: JwtAuthGuard
+ *
+ * Verification flow:
+ * 1. Skip if the route is decorated with `@Public()`.
+ * 2. Extract the Bearer token from the `Authorization` header.
+ * 3. Verify the JWT signature and expiration using `jsonwebtoken`.
+ * 4. Check the token's `jti` against the Redis blacklist (`token:blacklist:{jti}`).
+ * 5. Attach the decoded `JwtPayload` to `request.user` for downstream guards and decorators.
+ *
+ * Error mapping (caught by GlobalExceptionFilter):
+ * - Missing Authorization header → 401 "Missing authorization token"
+ * - Invalid or expired JWT → 401 "Invalid token"
+ * - Blacklisted token → 401 "Token has been revoked"
+ *
+ * @see {@link Public} decorator for skipping authentication
+ * @see {@link JwtPayload} for the shape attached to request.user
+ * @see {@link RolesGuard} for the next stage in the guard chain
  */
-
 import {
   CanActivate,
   ExecutionContext,
@@ -18,19 +32,43 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Request } from "express";
+import jwt from "jsonwebtoken";
+
+import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
+import { RedisService } from "@/shared/redis/redis.service";
+import type { JwtPayload } from "@/types/jwt-payload";
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly redisService: RedisService
+  ) {}
 
+  /**
+   * Authenticates the request by validating the Bearer JWT token.
+   *
+   * Business rules:
+   * - Routes marked with `@Public()` bypass authentication entirely.
+   * - The token must be present in the `Authorization: Bearer <token>` header.
+   * - The JWT signature and expiration are verified with `JWT_SECRET`.
+   * - If the token's `jti` is found in the Redis blacklist, the request is rejected
+   *   even if the JWT is structurally valid.
+   *
+   * Side effects:
+   * - Reads from `token:blacklist:{jti}` in Redis for revocation check.
+   * - Attaches the decoded `JwtPayload` to `request.user`.
+   *
+   * @param context - NestJS execution context providing access to the HTTP request.
+   * @returns `true` if the token is valid and not blacklisted.
+   * @throws UnauthorizedException if the token is missing, invalid, expired, or revoked.
+   */
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // TODO: Implement JWT validation logic
-    // 1. Check @Public() decorator - if present, skip authentication
-    // 2. Extract token from Authorization: Bearer header
-    // 3. Verify JWT signature and expiration
-    // 4. Check token blacklist in Redis (token:blacklist:{jti})
-    // 5. Attach JwtPayload to request.user
-    // 6. Throw UnauthorizedException on invalid token
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<Request>();
     const token = this.extractTokenFromHeader(request);
@@ -39,20 +77,30 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing authorization token");
     }
 
+    let payload: JwtPayload;
     try {
-      // TODO: Decode and verify JWT
-      // const payload = this.tokenService.verifyAccessToken(token);
-      // TODO: Check blacklist
-      // const isBlacklisted = await this.tokenService.isBlacklisted(payload.jti);
-      // if (isBlacklisted) throw error with TOKEN_REVOKED
-      // request.user = payload;
-    } catch (err) {
+      payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    } catch {
       throw new UnauthorizedException("Invalid token");
     }
 
+    const isBlacklisted = await this.redisService.get(
+      `token:blacklist:${payload.jti}`
+    );
+    if (isBlacklisted !== null) {
+      throw new UnauthorizedException("Token has been revoked");
+    }
+
+    request.user = payload;
     return true;
   }
 
+  /**
+   * Extracts the Bearer token from the Authorization header.
+   *
+   * @param request - Incoming HTTP request.
+   * @returns The raw JWT string if the header is present and uses the Bearer scheme, `undefined` otherwise.
+   */
   private extractTokenFromHeader(request: Request): string | undefined {
     const [type, token] = request.headers.authorization?.split(" ") ?? [];
     return type === "Bearer" ? token : undefined;

@@ -1,20 +1,15 @@
 /**
  * Public Decorator
  *
- * SetMetadata decorator đánh dấu một route là PUBLIC (không cần JWT).
- * JwtAuthGuard đọc metadata IS_PUBLIC_KEY để skip xác thực.
+ * Marks a route as publicly accessible — JwtAuthGuard reads this metadata
+ * to skip authentication for the decorated handler or controller.
  *
- * Dùng cho:
+ * Used for:
  * - POST /auth/login
  * - POST /auth/refresh
  * - GET /workshops
- * - GET /workshops/{id}
- *
- * @example
- * @Public()
- * @Get('/public-endpoint')
+ * - GET /workshops/:id
  */
-
 import { SetMetadata } from "@nestjs/common";
 
 export const IS_PUBLIC_KEY = "isPublic";
