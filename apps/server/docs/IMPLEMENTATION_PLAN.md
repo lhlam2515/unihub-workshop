@@ -97,17 +97,17 @@ Module Background (24 files)      ← NEW!
 
 **1.1 Core Infrastructure**
 
-- [ ] Setup Redis Module
-- [ ] Implement Guards (JwtAuth, Roles, WorkshopScope, HmacSignature)
-- [ ] Setup GlobalExceptionFilter & ResponseInterceptor
-- [ ] Create Drizzle schema and migrations
-- [ ] Create database indexes
+- [x] Setup Redis Module
+- [x] Implement Guards (JwtAuth, Roles, WorkshopScope, HmacSignature)
+- [x] Setup GlobalExceptionFilter & ResponseInterceptor
+- [x] Create Drizzle schema and migrations
+- [x] Create database indexes
 
 **1.2 Database Setup**
 
-- [ ] Create all tables (identity, transaction, event-core, async)
-- [ ] Setup relationships and constraints
-- [ ] Create indexes for critical queries
+- [x] Create all tables (identity, transaction, event-core, async)
+- [x] Setup relationships and constraints
+- [x] Create indexes for critical queries
 
 ---
 
@@ -154,7 +154,7 @@ Module Background (24 files)      ← NEW!
 
 ---
 
-### Phase 6: Module Background (2-3 tuần) — NEW!
+### Phase 6: Module Background (2-3 tuần) — NEW
 
 - [ ] Queue setup (Bull/BullMQ or EventEmitter2)
 - [ ] Notification system (email, Telegram, retries)
