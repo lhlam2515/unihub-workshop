@@ -60,6 +60,22 @@ Leverages OpenSpec change artifacts (specs, design) for business context so ever
 
    Filter out test files (`*.spec.ts`, `*.e2e-spec.ts`, `*.test.ts`), migration files, and config files.
 
+3b. **Pre-scan for JSDoc gaps**
+
+   Before sending files to the documentation agent, run a gap analysis:
+
+   ```bash
+   for f in <target-files>; do
+     # Find method definitions (async, static, or regular) not preceded by /**
+     awk 'NR>1 && /^\s+(async |static )?[a-zA-Z_][a-zA-Z0-9_]*\s*\(/ && !/^\s+constructor\(/ {
+       if (prev !~ /\/\*\*/) print FILENAME":"NR": "$0
+     } { prev=$0 }' "$f"
+   done
+   ```
+
+   Only send files WITH missing JSDoc to the agent. Skip files that already
+   meet the Contract-Oriented standard. This typically cuts agent input by 40-60%.
+
 4. **Classify files by architectural layer**
 
    | Layer | Pattern | Documentation Focus |
@@ -95,9 +111,10 @@ Leverages OpenSpec change artifacts (specs, design) for business context so ever
     * Side effects:
     * - [Each DB write, Redis mutation, external API call, or event emission]
     *
-    * @param [name] - [Semantic meaning and constraints]
+    * @param name - [Semantic meaning and constraints]
     * @returns OkResult containing [type], or FailResult with codes:
     *   - [ERROR_CODE]: [When this error occurs]
+    * @throws [Only for unhandled exceptions — rare in Service layer]
     */
    ```
 
@@ -108,8 +125,10 @@ Leverages OpenSpec change artifacts (specs, design) for business context so ever
     *
     * Security: [Guard/Role requirements]
     *
-    * @param [name] - [Semantic meaning, source, and constraints]
-    * @returns [Response structure on success, or error codes]
+    * @param name - [Semantic meaning, source, and constraints]
+    * @returns OkResult containing [response DTO], or FailResult with codes:
+    *   - [ERROR_CODE]: [When this error occurs]
+    * @throws [Only for unhandled exceptions — ZodValidationException from pipes]
     */
    ```
 
@@ -120,8 +139,10 @@ Leverages OpenSpec change artifacts (specs, design) for business context so ever
     *
     * Database: [Specific Drizzle operation, indexes used, locking strategy]
     *
-    * @param [name] - [Semantic meaning]
-    * @returns OkResult containing [type], or FailResult wrapping system error
+    * @param name - [Semantic meaning]
+    * @returns OkResult containing [type], or FailResult with codes:
+    *   - SYSTEM_ERROR: Database or connection failure
+    * @throws [Only for unhandled exceptions — fatal database errors]
     */
    ```
 
@@ -133,7 +154,7 @@ Leverages OpenSpec change artifacts (specs, design) for business context so ever
     * Transformation rules:
     * - [Each field mapping, exclusion, or coercion]
     *
-    * @param [entities] - [Source domain entities]
+    * @param entities - [Source domain entities]
     * @returns [The constructed DTO]
     */
    ```
@@ -187,6 +208,6 @@ Leverages OpenSpec change artifacts (specs, design) for business context so ever
 **Quality Checks**
 - No `@param` describing TypeScript types (redundant)
 - No `This function...` or `Handles...` in summary lines
-- Every `@returns` for services explicitly lists error codes
+- Every `@returns` explicitly lists ErrorCode strings for all `Result.fail()` paths
 - Business rules are specific domain invariants, not generic descriptions
 - Side effects are concrete state mutations

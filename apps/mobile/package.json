@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "lint:fix": "expo lint --fix",
+    "check-types": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
