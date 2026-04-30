@@ -2,6 +2,34 @@ import { index, pgTable, unique } from "drizzle-orm/pg-core";
 
 import { userRoleEnum, userStatusEnum } from "./enums.schema";
 
+export const checkinStaffAssignments = pgTable(
+  "checkin_staff_assignments",
+  (t) => ({
+    assignmentId: t.uuid("assignment_id").primaryKey().defaultRandom(),
+    userId: t
+      .uuid("user_id")
+      .notNull()
+      .references(() => users.userId, { onDelete: "cascade" }),
+    workshopIds: t
+      .jsonb("workshop_ids")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    createdAt: t
+      .timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: t
+      .timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  }),
+  (table) => [
+    unique("uq_checkin_staff_assignments_user").on(table.userId),
+    index("idx_checkin_staff_assignments_user").on(table.userId),
+  ]
+);
+
 export const users = pgTable(
   "users",
   (t) => ({
