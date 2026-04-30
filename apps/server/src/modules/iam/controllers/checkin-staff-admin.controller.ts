@@ -1,52 +1,56 @@
-/**
- * Checkin Staff Admin Controller
- *
- * Xử lý quản lý phân công workshop cho nhân sự check-in:
- * - POST /admin/checkin-staff/{user_id}/assign-workshops
- * - GET /admin/checkin-staff/{user_id}/workshops
- *
- * Yêu cầu role: ORGANIZER
- *
- * Note: Eventual Consistency warning về phân công workshop
- */
-
-import { Controller, Get, Post, Body, Param, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
+import { AssignWorkshopsSchema } from "../dto/assign-workshops.dto";
+import { CheckinStaffAssignmentService } from "../services/checkin-staff-assignment.service";
+
+import type { AssignWorkshopsDto } from "../dto/assign-workshops.dto";
+
 @Controller("admin/checkin-staff")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("ORGANIZER")
 export class CheckinStaffAdminController {
-  constructor(private readonly checkinStaffAssignmentService: any) {}
+  constructor(
+    private readonly checkinStaffAssignmentService: CheckinStaffAssignmentService
+  ) {}
 
   /**
    * POST /admin/checkin-staff/{user_id}/assign-workshops
-   * @body { workshop_ids: string[] }
    *
-   * Assigns workshops to a CHECKIN_STAFF user
-   * Response includes eventual consistency warning
+   * Assigns workshops to a CHECKIN_STAFF user. The assignment replaces any
+   * previous workshop list. Changes take effect on the staff member's next
+   * login (eventual consistency — JWT is immutable).
+   *
+   * Response includes an eventual consistency warning.
+   *
+   * @param userId - The CHECKIN_STAFF user's UUID.
+   * @param assignDto - Validated { workshop_ids: string[] }.
    */
   @Post(":user_id/assign-workshops")
   async assignWorkshops(
     @Param("user_id") userId: string,
-    @Body() assignDto: any
+    @Body() assignDto: AssignWorkshopsDto
   ) {
-    // TODO: Validate with Zod (AssignWorkshopsSchema)
-    // TODO: Call checkinStaffAssignmentService.assignWorkshops(userId, assignDto.workshop_ids)
-    // TODO: Include eventual consistency warning in response
+    const parsed = AssignWorkshopsSchema.parse(assignDto);
+    return this.checkinStaffAssignmentService.assignWorkshops(
+      userId,
+      parsed.workshop_ids
+    );
   }
 
   /**
    * GET /admin/checkin-staff/{user_id}/workshops
    *
-   * Returns list of workshops assigned to this CHECKIN_STAFF
+   * Returns the list of workshop IDs currently assigned to a CHECKIN_STAFF user.
+   * Returns an empty array if no assignments exist.
+   *
+   * @param userId - The CHECKIN_STAFF user's UUID.
    */
   @Get(":user_id/workshops")
   async getAssignedWorkshops(@Param("user_id") userId: string) {
-    // TODO: Call checkinStaffAssignmentService.getAssignedWorkshops(userId)
-    // TODO: Return list of WorkshopSummaryDto
+    return this.checkinStaffAssignmentService.getAssignedWorkshops(userId);
   }
 }
