@@ -53,6 +53,8 @@ export type ErrorCode =
   | "UPLOAD_FAILED"
   | "DELETE_FAILED"
   | "DB_LOCK_TIMEOUT"
+  | "ROOM_NOT_FOUND"
+  | "SPEAKER_NOT_FOUND"
   | "VALIDATION_FAILED"
   | "INTERNAL_ERROR";
 

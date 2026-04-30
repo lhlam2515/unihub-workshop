@@ -550,6 +550,46 @@ export const storageErrors = {
 } as const;
 
 /**
+ * Group room error factories
+ */
+export const roomErrors = {
+  /**
+   * Create an error when a room is missing
+   *
+   * @param roomId - Room identifier used for audit logging
+   * @returns Room not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  notFound: (roomId: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "ROOM_NOT_FOUND",
+      message: `Room ${roomId} not found.`,
+      context: { roomId },
+    }),
+} as const;
+
+/**
+ * Group speaker error factories
+ */
+export const speakerErrors = {
+  /**
+   * Create an error when a speaker is missing
+   *
+   * @param speakerId - Speaker identifier used for audit logging
+   * @returns Speaker not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  notFound: (speakerId: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "SPEAKER_NOT_FOUND",
+      message: `Speaker ${speakerId} not found.`,
+      context: { speakerId },
+    }),
+} as const;
+
+/**
  * Group system-level error factories
  */
 export const systemErrors = {
