@@ -25,6 +25,7 @@ import { RateLimiterMechanic } from "./mechanics/rate-limiter.mechanic";
 import { SeatLockMechanic } from "./mechanics/seat-lock.mechanic";
 import { PaymentsRepository } from "./repositories/payments.repository";
 import { RegistrationsRepository } from "./repositories/registrations.repository";
+import { TicketsRepository } from "./repositories/tickets.repository";
 import { PaymentGatewayService } from "./services/payment-gateway.service";
 import { PaymentsService } from "./services/payments.service";
 import { RegistrationsService } from "./services/registrations.service";
@@ -45,6 +46,7 @@ import { RegistrationsService } from "./services/registrations.service";
     GlobalRateLimitMechanic,
     // Repositories
     RegistrationsRepository,
+    TicketsRepository,
     PaymentsRepository,
   ],
   exports: [RegistrationsService, PaymentsService],

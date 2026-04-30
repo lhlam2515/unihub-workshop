@@ -1,15 +1,3 @@
-/**
- * Registrations Controller
- *
- * Xử lý:
- * - POST /registrations (STUDENT — critical path)
- * - DELETE /registrations/{id} (STUDENT — IDOR protected)
- * - GET /students/me/registrations (STUDENT)
- * - GET /students/me/registrations/{id} (STUDENT)
- *
- * IDOR: tất cả student endpoints dùng @CurrentUser() thay vì path param
- */
-
 import {
   Controller,
   Get,
@@ -28,49 +16,101 @@ import { RolesGuard } from "@/core/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
+import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { RegistrationsService } from "../services/registrations.service";
 
-@Controller("registrations")
+@Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("STUDENT")
 export class RegistrationsController {
   constructor(private readonly registrationsService: RegistrationsService) {}
 
   /**
-   * POST /registrations
-   * Critical path - register for workshop
+   * Creates a new workshop registration.
+   *
+   * @param dto - Zod-validated body containing the target workshop_id (UUID).
+   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
+   * @returns HTTP 201 with RegistrationDto on success, or error response with codes:
+   * - RATE_LIMIT_EXCEEDED (429)
+   * - SEAT_UNAVAILABLE (409)
+   * - REGISTRATION_DUPLICATE (409)
+   * - WORKSHOP_NOT_FOUND (404)
+   * - WORKSHOP_NOT_PUBLISHED (422)
+   *
+   * Security: Requires valid JWT with STUDENT role.
    */
-  @Post()
+  @Post("registrations")
   @HttpCode(HttpStatus.CREATED)
-  async createRegistration(@Body() createDto: any, @CurrentUser() user: any) {
-    // TODO: Validate with Zod (CreateRegistrationSchema)
-    // TODO: Call registrationsService.register(user.id, createDto)
+  async createRegistration(
+    @Body() dto: CreateRegistrationDto,
+    @CurrentUser() user: { userId: string }
+  ) {
+    return this.registrationsService.register(user.userId, dto);
   }
 
   /**
-   * GET /students/me/registrations
+   * Lists the authenticated student's registration history.
+   *
+   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
+   * @param status - Optional status filter (CONFIRMED, PENDING_PAYMENT, CANCELLED).
+   * @param page - Page number for pagination (default 1).
+   * @param limit - Items per page (default 20).
+   * @returns HTTP 200 with paginated list of RegistrationDto items.
+   *
+   * Security: Requires valid JWT with STUDENT role. IDOR-enforced — only own records returned.
    */
   @Get("students/me/registrations")
-  async getMyRegistrations(@CurrentUser() user: any, @Query() query: any) {
-    // TODO: Call registrationsService.getMyRegistrations(user.id, query)
+  async getMyRegistrations(
+    @CurrentUser() user: { userId: string },
+    @Query("status") status?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string
+  ) {
+    return this.registrationsService.getMyRegistrations(user.userId, {
+      status,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   /**
-   * GET /students/me/registrations/{id}
+   * Retrieves a single registration by ID with IDOR enforcement.
+   *
+   * @param id - Registration UUID from the URL path.
+   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
+   * @returns HTTP 200 with RegistrationDto, or 404 if not found or not owned.
+   *
+   * Security: Requires valid JWT with STUDENT role. Returns 404 for both missing
+   * and non-owned registrations to prevent information leakage.
    */
   @Get("students/me/registrations/:id")
-  async getMyRegistration(@Param("id") id: string, @CurrentUser() user: any) {
-    // TODO: Verify ownership (IDOR protection)
-    // TODO: Call registrationsService.getRegistrationDetail(user.id, id)
+  async getMyRegistration(
+    @Param("id") id: string,
+    @CurrentUser() user: { userId: string }
+  ) {
+    return this.registrationsService.getRegistrationDetail(user.userId, id);
   }
 
   /**
-   * DELETE /registrations/{id}
-   * Cancel registration
+   * Cancels the authenticated student's own registration.
+   *
+   * Releases the reserved seat, voids any associated ticket, and releases the
+   * seat lock if the workshop was paid.
+   *
+   * @param id - Registration UUID from the URL path.
+   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
+   * @returns HTTP 200 with cancelled RegistrationDto, or error response with codes:
+   * - REGISTRATION_NOT_FOUND (404)
+   * - REGISTRATION_CANCELLED (409)
+   *
+   * Security: Requires valid JWT with STUDENT role. IDOR-enforced.
    */
-  @Delete(":id")
-  async cancelRegistration(@Param("id") id: string, @CurrentUser() user: any) {
-    // TODO: Verify ownership
-    // TODO: Call registrationsService.cancelRegistration(user.id, id)
+  @Delete("registrations/:id")
+  @HttpCode(HttpStatus.OK)
+  async cancelRegistration(
+    @Param("id") id: string,
+    @CurrentUser() user: { userId: string }
+  ) {
+    return this.registrationsService.cancelRegistration(user.userId, id);
   }
 }
