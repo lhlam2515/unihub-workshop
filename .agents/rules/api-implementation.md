@@ -87,7 +87,7 @@ async register(dto: CreateRegDto, studentId: string): Promise<Result<RegResponse
 
   // 2. Data Persistence
   const dbResult = await this.repository.create({ ...dto, studentId });
-  if (dbResult.isFailure) return dbResult.propagate();
+  if (dbResult.isFailure) return Result.fail(dbResult.error);
 
   // 3. Map to Response DTO
   return Result.ok(RegResponseDto.from(dbResult.data));
