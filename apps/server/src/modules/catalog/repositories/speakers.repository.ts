@@ -80,4 +80,31 @@ export class SpeakersRepository {
       (err) => systemErrors.internal(err)
     );
   }
+
+  /**
+   * Updates a speaker record with partial data.
+   *
+   * Side effects:
+   * - Executes UPDATE on the speakers table for the given ID.
+   *
+   * @param id - The UUID of the speaker to update.
+   * @param data - The partial speaker attributes to apply.
+   * @returns OkResult containing the updated Speaker record, or FailResult (INTERNAL_ERROR).
+   */
+  async update(
+    id: string,
+    data: Partial<NewSpeaker>
+  ): Promise<Result<Speaker>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .update(this.schema.speakers)
+          .set(data)
+          .where(eq(this.schema.speakers.speakerId, id))
+          .returning();
+        return result;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
 }

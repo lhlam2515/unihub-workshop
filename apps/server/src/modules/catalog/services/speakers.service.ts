@@ -8,6 +8,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { NewSpeaker } from "@/database/types/event-core.types";
+import { speakerErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { SpeakerResponseBuilder } from "../dto/speaker-response.dto";
@@ -15,6 +16,7 @@ import { SpeakersRepository } from "../repositories/speakers.repository";
 
 import type { CreateSpeakerDto } from "../dto/create-speaker.dto";
 import type { SpeakerResponseDto } from "../dto/speaker-response.dto";
+import type { UpdateSpeakerDto } from "../dto/update-speaker.dto";
 
 @Injectable()
 export class SpeakersService {
@@ -53,6 +55,40 @@ export class SpeakersService {
       avatarUrl: dto.avatar_url ?? null,
     };
     const result = await this.speakersRepo.create(data);
+    if (result.isFailure) return Result.fail(result.error);
+    return Result.ok(SpeakerResponseBuilder.from(result.data));
+  }
+
+  /**
+   * Updates an existing speaker's profile attributes.
+   *
+   * Business rules:
+   * - All fields are optional — only provided fields are updated.
+   *
+   * Side effects:
+   * - Executes UPDATE on the speakers table for the given ID.
+   *
+   * @param id - The UUID of the speaker to update.
+   * @param dto - Partial speaker update payload with snake_case fields from API.
+   * @returns OkResult containing the updated speaker DTO, or FailResult (SPEAKER_NOT_FOUND, INTERNAL_ERROR).
+   */
+  async updateSpeaker(
+    id: string,
+    dto: UpdateSpeakerDto
+  ): Promise<Result<SpeakerResponseDto>> {
+    // Verify speaker exists
+    const existing = await this.speakersRepo.findById(id);
+    if (existing.isFailure) return Result.fail(existing.error);
+    if (!existing.data) return Result.fail(speakerErrors.notFound(id));
+
+    // Build update payload from provided fields
+    const data: Partial<NewSpeaker> = {};
+    if (dto.full_name !== undefined) data.fullName = dto.full_name;
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.bio !== undefined) data.bio = dto.bio;
+    if (dto.avatar_url !== undefined) data.avatarUrl = dto.avatar_url;
+
+    const result = await this.speakersRepo.update(id, data);
     if (result.isFailure) return Result.fail(result.error);
     return Result.ok(SpeakerResponseBuilder.from(result.data));
   }
