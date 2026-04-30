@@ -6,6 +6,8 @@
  * - AiSummaryAdminDto: extends with summary_id, document_id, error_message
  */
 
+import type { AiSummary } from "@/database/types/async.types";
+
 export interface AiSummaryPublicDto {
   status: string;
   summary_text?: string;
@@ -20,19 +22,66 @@ export interface AiSummaryAdminDto extends AiSummaryPublicDto {
 }
 
 export class AiSummaryResponseBuilder {
-  static fromPublic(summary: any): AiSummaryPublicDto {
-    // TODO: Map to public shape
+  /**
+   * Builds a public AI summary DTO with conditional field exposure.
+   *
+   * Business rules:
+   * - summary_text is only included when status === 'DONE' to avoid exposing
+   *   partial or failed content to public users. Other statuses omit the field entirely.
+   *
+   * Field mapping (camelCase DB -> snake_case API):
+   * - summaryText -> summary_text (only when status === 'DONE')
+   * - modelUsed -> model_used
+   * - generatedAt -> generated_at
+   * - Nullish optional fields -> undefined (omitted in JSON serialization)
+   *
+   * Internal fields excluded:
+   * - summaryId, documentId, errorMessage — not exposed to public users
+   *
+   * @param summary - Raw AI summary entity from the database.
+   * @returns AiSummaryPublicDto with consumer-safe fields.
+   */
+  static fromPublic(summary: AiSummary): AiSummaryPublicDto {
     return {
-      status: "",
+      status: summary.status,
+      ...(summary.status === "DONE"
+        ? { summary_text: summary.summaryText ?? undefined }
+        : {}),
+      model_used: summary.modelUsed ?? undefined,
+      generated_at: summary.generatedAt ?? undefined,
     };
   }
 
-  static fromAdmin(summary: any): AiSummaryAdminDto {
-    // TODO: Map to admin shape
+  /**
+   * Builds an admin AI summary DTO with full field visibility.
+   *
+   * Always includes all fields regardless of status, including error_message
+   * for debugging failed summarization jobs.
+   *
+   * Field mapping (camelCase DB -> snake_case API):
+   * - summaryId -> summary_id
+   * - documentId -> document_id
+   * - summaryText -> summary_text
+   * - modelUsed -> model_used
+   * - generatedAt -> generated_at
+   * - errorMessage -> error_message
+   *
+   * Extra fields vs fromPublic:
+   * - summary_id and document_id for database record identification
+   * - error_message included regardless of status (null if no error)
+   *
+   * @param summary - Raw AI summary entity from the database.
+   * @returns AiSummaryAdminDto with full field exposure.
+   */
+  static fromAdmin(summary: AiSummary): AiSummaryAdminDto {
     return {
-      status: "",
-      summary_id: "",
-      document_id: "",
+      summary_id: summary.summaryId,
+      document_id: summary.documentId,
+      status: summary.status,
+      summary_text: summary.summaryText ?? undefined,
+      model_used: summary.modelUsed ?? undefined,
+      generated_at: summary.generatedAt ?? undefined,
+      error_message: summary.errorMessage ?? undefined,
     };
   }
 }

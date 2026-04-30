@@ -9,6 +9,8 @@
  * Each class has static from() factory
  */
 
+import type { Workshop } from "@/database/types/event-core.types";
+
 export interface WorkshopSummaryDto {
   workshop_id: string;
   title: string;
@@ -33,47 +35,106 @@ export interface WorkshopAdminDetailDto extends WorkshopDetailDto {
 }
 
 export class WorkshopResponseBuilder {
-  static fromSummary(workshop: any): WorkshopSummaryDto {
-    // TODO: Map to summary shape
+  /**
+   * Builds a summary DTO for public listing.
+   *
+   * Field mapping (camelCase DB -> snake_case API):
+   * - workshopId -> workshop_id
+   * - startsAt -> starts_at
+   * - isPaid -> is_paid
+   * - price: converted from string (decimal) to number; excluded when null (free workshop)
+   *
+   * Speaker name and available seats are resolved by the service layer and passed in,
+   * not read from the DB entity.
+   *
+   * @param workshop - Raw workshop entity from the database.
+   * @param speakerName - Resolved speaker display name (falls back to "Unknown").
+   * @param availableSeats - Real-time available seat count from Redis.
+   * @returns WorkshopSummaryDto with public-safe fields.
+   */
+  static fromSummary(
+    workshop: Workshop,
+    speakerName: string,
+    availableSeats: number
+  ): WorkshopSummaryDto {
     return {
-      workshop_id: "",
-      title: "",
-      speaker_name: "",
-      starts_at: new Date(),
-      available_seats: 0,
-      is_paid: false,
+      workshop_id: workshop.workshopId,
+      title: workshop.title,
+      speaker_name: speakerName,
+      starts_at: workshop.startsAt,
+      available_seats: availableSeats,
+      is_paid: workshop.isPaid,
+      price: workshop.price ? Number(workshop.price) : undefined,
     };
   }
 
-  static fromDetail(workshop: any): WorkshopDetailDto {
-    // TODO: Map to detail shape
+  /**
+   * Builds a detail DTO for public single-workshop view.
+   *
+   * Extends fromSummary with:
+   * - room_name (resolved from Room entity)
+   * - ends_at (from workshop.endsAt)
+   * - description (null -> undefined for clean JSON)
+   *
+   * @param workshop - Raw workshop entity from the database.
+   * @param speakerName - Resolved speaker display name.
+   * @param roomName - Resolved room display name.
+   * @param availableSeats - Real-time available seat count from Redis.
+   * @param _aiSummary - Optional AI summary entity (reserved for future public display).
+   * @returns WorkshopDetailDto with extended public fields.
+   */
+  static fromDetail(
+    workshop: Workshop,
+    speakerName: string,
+    roomName: string,
+    availableSeats: number,
+    _aiSummary?: any
+  ): WorkshopDetailDto {
+    const summary = this.fromSummary(workshop, speakerName, availableSeats);
     return {
-      workshop_id: "",
-      title: "",
-      speaker_name: "",
-      starts_at: new Date(),
-      available_seats: 0,
-      is_paid: false,
-      room_name: "",
-      ends_at: new Date(),
+      ...summary,
+      description: workshop.description ?? undefined,
+      room_name: roomName,
+      ends_at: workshop.endsAt,
     };
   }
 
-  static fromAdminDetail(workshop: any): WorkshopAdminDetailDto {
-    // TODO: Map to admin detail shape
+  /**
+   * Builds an admin detail DTO for internal management.
+   *
+   * Extends fromDetail with:
+   * - confirmed_count / locked_count (from WorkshopSlot entity, defaults to 0 if slot is null)
+   * - created_by (from workshop.createdBy, UUID of the ORGANIZER who created it)
+   * - status (workflow status: DRAFT | PUBLISHED | CANCELLED)
+   *
+   * Nullish handling: null slot produces 0 for both counters rather than undefined.
+   *
+   * @param workshop - Raw workshop entity from the database.
+   * @param slot - Workshop slot entity containing confirmedCount/lockedCount (nullable).
+   * @param speakerName - Resolved speaker display name.
+   * @param roomName - Resolved room display name.
+   * @param availableSeats - Real-time available seat count from Redis.
+   * @returns WorkshopAdminDetailDto with admin-specific internal fields.
+   */
+  static fromAdminDetail(
+    workshop: Workshop,
+    slot: any,
+    speakerName: string,
+    roomName: string,
+    availableSeats: number
+  ): WorkshopAdminDetailDto {
+    const detail = this.fromDetail(
+      workshop,
+      speakerName,
+      roomName,
+      availableSeats
+    );
     return {
-      workshop_id: "",
-      title: "",
-      speaker_name: "",
-      starts_at: new Date(),
-      available_seats: 0,
-      is_paid: false,
-      room_name: "",
-      ends_at: new Date(),
-      confirmed_count: 0,
-      locked_count: 0,
-      created_by: "",
-      status: "",
+      ...detail,
+      confirmed_count: slot?.confirmedCount ?? 0,
+      locked_count: slot?.lockedCount ?? 0,
+      created_by: workshop.createdBy,
+      status: workshop.status,
     };
   }
 }

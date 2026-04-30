@@ -4,6 +4,8 @@
  * Shape: full speaker entity
  */
 
+import type { Speaker } from "@/database/types/event-core.types";
+
 export interface SpeakerResponseDto {
   speaker_id: string;
   full_name: string;
@@ -13,11 +15,24 @@ export interface SpeakerResponseDto {
 }
 
 export class SpeakerResponseBuilder {
-  static from(speaker: any): SpeakerResponseDto {
-    // TODO: Map to response shape
+  /**
+   * Builds a speaker response DTO from a database entity.
+   *
+   * Field mapping (camelCase DB -> snake_case API):
+   * - speakerId -> speaker_id
+   * - fullName -> full_name
+   * - title/bio/avatarUrl: stored as nullable DB columns; null -> undefined for clean JSON
+   *
+   * @param speaker - Raw speaker entity from the database.
+   * @returns SpeakerResponseDto with API-safe fields.
+   */
+  static from(speaker: Speaker): SpeakerResponseDto {
     return {
-      speaker_id: "",
-      full_name: "",
+      speaker_id: speaker.speakerId,
+      full_name: speaker.fullName,
+      title: speaker.title ?? undefined,
+      bio: speaker.bio ?? undefined,
+      avatar_url: speaker.avatarUrl ?? undefined,
     };
   }
 }
