@@ -550,7 +550,9 @@ export class WorkshopsService {
    * @param query - Query parameters for filtering (status?, page?, limit?).
    * @returns OkResult containing an array of admin detail DTOs with slot, speaker, and room data, or FailResult (INTERNAL_ERROR).
    */
-  async listAdmin(query: any): Promise<Result<WorkshopAdminDetailDto[]>> {
+  async listAdmin(
+    query: ListWorkshopsQueryDto
+  ): Promise<Result<WorkshopAdminDetailDto[]>> {
     const result = await this.workshopsRepo.listAdmin(query);
     if (result.isFailure) return Result.fail(result.error);
 

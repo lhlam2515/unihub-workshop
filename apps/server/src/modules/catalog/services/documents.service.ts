@@ -28,6 +28,14 @@ import { WorkshopsRepository } from "../repositories/workshops.repository";
 import type { AiSummaryPublicDto } from "../dto/ai-summary-response.dto";
 import type { WorkshopDocumentResponseDto } from "../dto/document-response.dto";
 
+/**
+ * Represents an uploaded file object from Express/Multer.
+ */
+interface UploadedFile {
+  originalname: string;
+  size: number;
+}
+
 @Injectable()
 export class DocumentsService {
   constructor(
@@ -55,13 +63,13 @@ export class DocumentsService {
    */
   async uploadDocument(
     workshopId: string,
-    file: any,
+    file: UploadedFile,
     uploadedBy: string
   ): Promise<Result<WorkshopDocumentResponseDto>> {
     const workshopResult = await this.workshopsRepo.findById(workshopId);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
 
-    const fileName = file?.originalname ?? `document-${Date.now()}`;
+    const fileName = file.originalname ?? `document-${Date.now()}`;
 
     // TODO: Replace with actual object storage URL. Currently using placeholder.
     const fileUrl = `placeholder://workshops/${workshopId}/${fileName}`;
@@ -70,7 +78,7 @@ export class DocumentsService {
       workshopId,
       fileUrl,
       originalName: fileName,
-      fileSizeBytes: file?.size ?? 0,
+      fileSizeBytes: file.size ?? 0,
       uploadStatus: "UPLOADED",
       uploadedBy,
     };

@@ -9,7 +9,7 @@
  * Each class has static from() factory
  */
 
-import type { Workshop } from "@/database/types/event-core.types";
+import type { Workshop, WorkshopSlot } from "@/database/types/event-core.types";
 
 export interface WorkshopSummaryDto {
   workshop_id: string;
@@ -80,7 +80,7 @@ export class WorkshopResponseBuilder {
    * @param speakerName - Resolved speaker display name.
    * @param roomName - Resolved room display name.
    * @param availableSeats - Real-time available seat count from Redis.
-   * @param _aiSummary - Optional AI summary entity (reserved for future public display).
+   * @param aiSummary - Optional AI summary entity (reserved for future public display).
    * @returns WorkshopDetailDto with extended public fields.
    */
   static fromDetail(
@@ -88,7 +88,8 @@ export class WorkshopResponseBuilder {
     speakerName: string,
     roomName: string,
     availableSeats: number,
-    _aiSummary?: any
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    aiSummary?: any
   ): WorkshopDetailDto {
     const summary = this.fromSummary(workshop, speakerName, availableSeats);
     return {
@@ -118,7 +119,7 @@ export class WorkshopResponseBuilder {
    */
   static fromAdminDetail(
     workshop: Workshop,
-    slot: any,
+    slot: WorkshopSlot | null,
     speakerName: string,
     roomName: string,
     availableSeats: number

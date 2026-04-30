@@ -204,7 +204,7 @@ export class WorkshopsRepository {
   }): Promise<Result<{ items: any[]; total: number }>> {
     return tryCatch(
       async () => {
-        const conditions: any[] = [];
+        const conditions: ReturnType<typeof eq>[] = [];
         if (filters.status) {
           conditions.push(eq(this.schema.workshops.status, filters.status));
         }
