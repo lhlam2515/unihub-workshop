@@ -1,13 +1,14 @@
-/**
- * Create Registration DTO
- *
- * Validate: { workshop_id: uuid }
- */
-
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const CreateRegistrationSchema = z.object({
   workshop_id: z.string().uuid(),
 });
 
-export type CreateRegistrationDto = z.infer<typeof CreateRegistrationSchema>;
+export class CreateRegistrationDto extends createZodDto(
+  CreateRegistrationSchema
+) {}
+
+export type CreateRegistrationDtoType = z.infer<
+  typeof CreateRegistrationSchema
+>;
