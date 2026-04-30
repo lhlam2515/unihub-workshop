@@ -8,16 +8,40 @@
 Spec-Driven Development inverts the traditional "code first, document later" cycle. Before writing a single line of code, you define **what** to build (`proposal`), **how** to build it (`design`), the **acceptance criteria** (`specs`), and the **step-by-step plan** (`tasks`). Only then do you implement and close the cycle.
 
 ```
-Exploration     Specification         Implementation           Closure
-───────────     ─────────────         ──────────────           ───────
-/explore   →    /propose         →    /apply              →   /archive
-                                       ↓        ↕               ↓
-                                      /verify               /docs
-                                       ↓                       ↓
-                                      /commit              → /pr
+Exploration     Specification         Implementation              Closure
+───────────     ─────────────         ──────────────              ───────
+/explore   →    /propose         →    /branch             →     /archive
+                                       ↓                           ↓
+                                  /apply — ↕ — /verify         /docs
+                                       ↓                           ↓
+                                      /commit                  → /pr
 ```
 
 The workflow is iterative: during `/apply`, you may loop back to `/verify` to catch issues early, then continue applying.
+
+### Branching Strategy
+
+Every change MUST be implemented on its own branch, created before any code is written. The branch name follows the Conventional Commits prefix convention:
+
+```
+{feat,fix,chore,hotfix,refactor}/<change-name-kebab-case>
+```
+
+| Prefix | When |
+|--------|------|
+| `feat/` | New feature or capability |
+| `fix/` | Bug fix |
+| `chore/` | Maintenance, tooling, documentation |
+| `hotfix/` | Urgent production fix (branched from release tag, not main) |
+| `refactor/` | Code restructuring with no behavior change |
+
+Examples:
+- `feat/implement-iam-module`
+- `fix/registration-race-condition`
+- `chore/update-spec-driven-workflow`
+- `refactor/consolidate-auth-guards`
+
+The branch is created right after `/opsx:propose` and before `/opsx:apply`. This keeps the main branch clean and allows multiple in-progress changes to coexist.
 
 ## 2. Directory Layout
 
@@ -144,7 +168,7 @@ Rules:
 5. Dependencies are read for context; template is filled in
 6. Stops when all `applyRequires` artifacts are `done`
 
-**Output:** Change directory with all 4 artifacts, ready for `/opsx:apply`.
+**Output:** Change directory with all 4 artifacts, ready for `/opsx:branch`.
 
 **Example:**
 
@@ -152,9 +176,52 @@ Rules:
 /opsx:propose implement-iam-module
 ```
 
+### `/opsx:branch` — Create Implementation Branch
+
+**When:** Artifacts are complete, before writing any code.
+
+**Input:** Change name (kebab-case) or explicit branch name.
+
+**What happens:**
+
+1. Derives branch name from the change name using the Conventional Commits prefix convention:
+
+   ```bash
+   # From proposal scope, determine the prefix:
+   #   feat/  — new capability
+   #   fix/   — bug fix
+   #   chore/ — maintenance, tooling, docs
+   #   hotfix/ — urgent production fix
+   #   refactor/ — restructuring with no behavior change
+
+   git checkout -b <prefix>/<change-name>
+   ```
+
+2. If the change name doesn't clearly map to a prefix (e.g., `implement-iam-module` → `feat/`), infer from the proposal's content.
+
+3. If a branch with that name already exists, prompt user: checkout existing, rename, or create with a date suffix.
+
+**Validation:**
+
+- Branch is NOT `main` — all implementation work happens on feature branches
+- Branch name matches `{feat,fix,chore,hotfix,refactor}/<kebab-case-name>`
+- `git status` is clean before branching (stash or commit pending changes)
+
+**Output:** A new local branch, switched and ready for `/opsx:apply`.
+
+**Examples:**
+
+```
+/opsx:branch implement-iam-module
+→ git checkout -b feat/implement-iam-module
+
+/opsx:branch fix-registration-race-condition
+→ git checkout -b fix/registration-race-condition
+```
+
 ### `/opsx:apply` — Implement Tasks
 
-**When:** Artifacts are ready; you want to execute the implementation.
+**When:** Branch is created, artifacts are ready; you want to execute the implementation.
 
 **Input:** Change name (optional — inferred from context if only one active).
 
@@ -349,7 +416,14 @@ Created proposal.md → design.md → specs/ → tasks.md
   - user-management (8 requirements, 25 scenarios)
   - staff-assignment (6 requirements, 14 scenarios)
 
-## 3. /opsx:apply implement-iam-module
+## 3. /opsx:branch implement-iam-module
+
+$ git checkout -b feat/implement-iam-module
+  Switched to a new branch 'feat/implement-iam-module'
+
+Branch created from main. Ready for implementation.
+
+## 4. /opsx:apply implement-iam-module
 
 33 tasks, 0 complete
 
@@ -393,7 +467,7 @@ $ pnpm lint --filter=server    → PASS (0 IAM warnings)
 
 33/33 tasks complete.
 
-## 4. /opsx:verify implement-iam-module
+## 5. /opsx:verify implement-iam-module
 
 ### Summary
 | Dimension    | Status                    |
@@ -410,7 +484,7 @@ $ pnpm lint --filter=server    → PASS (0 IAM warnings)
 
 Final assessment: All critical issues resolved. Ready for archive.
 
-## 5. /opsx:archive implement-iam-module
+## 6. /opsx:archive implement-iam-module
 
 4 delta specs to sync:
   - token-lifecycle → openspec/specs/token-lifecycle/spec.md
@@ -424,7 +498,7 @@ $ mv openspec/changes/implement-iam-module → archive/2026-04-30-implement-iam-
 
 Archived. 4 specs synced.
 
-## 6. /opsx:docs implement-iam-module
+## 7. /opsx:docs implement-iam-module
 
 ### Documented Files
 | File | Methods | Rules | Errors | Effects |
@@ -439,7 +513,7 @@ Archived. 4 specs synced.
 
 All JSDoc follows Contract-Oriented standard (.agents/rules/documentation.md).
 
-## 7. /opsx:commit
+## 8. /opsx:commit
 
 7 commits, ordered by task dependency:
 
@@ -451,7 +525,7 @@ All JSDoc follows Contract-Oriented standard (.agents/rules/documentation.md).
 ✓ u6v7w8x feat(controllers): wire auth and admin HTTP endpoints
 ✓ y9z0a1b chore(openspec): sync 4 delta specs and archive IAM change
 
-## 8. /opsx:pr
+## 9. /opsx:pr
 
 $ gh pr create --title "feat(iam): implement IAM module with full auth lifecycle"
   --body "..."
@@ -476,6 +550,7 @@ Before archiving any change, verify:
 Before code:
   ☐ /opsx:explore       — Requirements clarified from spec docs
   ☐ /opsx:propose        — All 4 artifacts created (proposal, design, specs, tasks)
+  ☐ /opsx:branch         — Feature branch created from main ({feat,fix,chore}/<name>)
 
 Implementation:
   ☐ /opsx:apply          — Tasks implemented, build + lint pass
