@@ -529,6 +529,32 @@ export class WorkshopsService {
     );
   }
 
+  /**
+   * Retrieves a published workshop by ID for cross-module use (Booking).
+   *
+   * Business rules:
+   * - The workshop must exist and be in PUBLISHED status.
+   * - Returns WORKSHOP_NOT_FOUND if the workshop does not exist.
+   * - Returns WORKSHOP_NOT_PUBLISHED if the workshop exists but is not published.
+   *
+   * @param id - The UUID of the workshop.
+   * @returns OkResult containing the Workshop entity, or FailResult (WORKSHOP_NOT_FOUND, WORKSHOP_NOT_PUBLISHED, INTERNAL_ERROR).
+   */
+  async getPublishedById(id: string): Promise<Result<Workshop>> {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    if (!workshopResult.data) {
+      return Result.fail(workshopErrors.notFound(id));
+    }
+
+    const workshop = workshopResult.data.workshops;
+    if (workshop.status !== "PUBLISHED") {
+      return Result.fail(workshopErrors.notPublished(id, workshop.status));
+    }
+
+    return Result.ok(workshop);
+  }
+
   // ---------------------------------------------------------------------------
   // Admin Queries
   // ---------------------------------------------------------------------------
