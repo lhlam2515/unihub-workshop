@@ -5,6 +5,7 @@
  * At least one field must be present
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const EmergencyUpdateWorkshopSchema = z
@@ -17,6 +18,6 @@ export const EmergencyUpdateWorkshopSchema = z
     message: "At least one field is required",
   });
 
-export type EmergencyUpdateWorkshopDto = z.infer<
-  typeof EmergencyUpdateWorkshopSchema
->;
+export class EmergencyUpdateWorkshopDto extends createZodDto(
+  EmergencyUpdateWorkshopSchema
+) {}

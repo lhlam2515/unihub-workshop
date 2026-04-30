@@ -4,6 +4,7 @@
  * Validate: { name, building?, floor?, capacity, floor_plan_url?, facilities? }
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const CreateRoomSchema = z.object({
@@ -15,4 +16,4 @@ export const CreateRoomSchema = z.object({
   facilities: z.array(z.string()).optional(),
 });
 
-export type CreateRoomDto = z.infer<typeof CreateRoomSchema>;
+export class CreateRoomDto extends createZodDto(CreateRoomSchema) {}
