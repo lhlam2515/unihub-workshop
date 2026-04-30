@@ -516,6 +516,40 @@ export const rateLimitError = (
   });
 
 /**
+ * Group storage error factories for S3-compatible object storage operations
+ */
+export const storageErrors = {
+  /**
+   * Create an error when file upload to object storage fails
+   *
+   * @param cause - Original S3 error for internal diagnostics
+   * @returns External dependency error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  uploadFailed: (cause?: unknown): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "UPLOAD_FAILED",
+      message: "File upload to storage service failed.",
+      cause,
+    }),
+  /**
+   * Create an error when file deletion from object storage fails
+   *
+   * @param cause - Original S3 error for internal diagnostics
+   * @returns External dependency error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  deleteFailed: (cause?: unknown): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "DELETE_FAILED",
+      message: "File deletion from storage service failed.",
+      cause,
+    }),
+} as const;
+
+/**
  * Group system-level error factories
  */
 export const systemErrors = {
