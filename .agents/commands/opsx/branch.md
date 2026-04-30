@@ -3,6 +3,8 @@ name: "OPSX: Branch"
 description: Create a feature branch for the current change following Conventional Commits convention
 category: Workflow
 tags: [workflow, git, branch]
+model: haiku
+effort: low
 ---
 
 Create a git branch for the current change, named after the change with a Conventional Commits prefix.

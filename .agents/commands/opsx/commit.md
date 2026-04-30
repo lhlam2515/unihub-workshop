@@ -3,6 +3,8 @@ name: "OPSX: Commit"
 description: Generate git commits from completed OpenSpec tasks
 category: Workflow
 tags: [workflow, git, experimental]
+model: sonnet
+effort: medium
 ---
 
 Generate staged git commits from completed OpenSpec tasks.

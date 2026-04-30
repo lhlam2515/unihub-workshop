@@ -15,6 +15,23 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
 
 ---
 
+## Configuration Strategy
+
+The pipeline auto-applies optimal model and effort settings per phase. Commands with frontmatter overrides (branch, archive, commit, pr, verify) run with their own config automatically. The rest inherit from your session default (`opusplan` + `xhigh` recommended).
+
+| Source | Phase | Model | Effort |
+|--------|-------|-------|--------|
+| Session default | explore, propose, apply, docs | `opusplan` | `xhigh` |
+| Frontmatter | branch | `haiku` | `low` |
+| Frontmatter | verify | `sonnet` | `high` |
+| Frontmatter | archive | `haiku` | `low` |
+| Frontmatter | commit | `sonnet` | `medium` |
+| Frontmatter | pr | `sonnet` | `medium` |
+
+For heavy phases (propose, schema/service implementation, docs), consider adding **ultrathink** to your prompt for one-off deep reasoning.
+
+See `docs/guides/claude-code-config.md` for full details.
+
 **Steps**
 
 1. **Parse input and initialize state**
@@ -55,12 +72,14 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
    For each phase from current to completion:
 
    **explore phase** — `/opsx:explore <name>`
+   - **Config:** session default (`opusplan` + `xhigh`)
    - Read spec docs from `docs/` and `docs/blueprint/`
    - Ask: "What do you want to build or investigate?"
    - Present findings and offer to proceed to propose
    - **Checkpoint: pause after findings, wait for your confirmation**
 
    **propose phase** — `/opsx:propose <name>`
+   - **Config:** session default (`opusplan` + `xhigh`). Add **ultrathink** to prompt for deep artifact reasoning
    - Create change: `openspec new change "<name>"`
    - Loop through artifacts in dependency order:
      - Read deps, generate artifact, mark done
@@ -69,12 +88,14 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
    - **Checkpoint: pause with artifact summary, wait for your confirmation**
 
    **branch phase** — `/opsx:branch <name>`
+   - **Config:** auto — `haiku` + `low` (from frontmatter)
    - Infer prefix from proposal scope
    - Create branch: `git checkout -b <prefix>/<name>`
    - Verify branch is not main
    - **Checkpoint: show branch name, wait for your confirmation**
 
    **apply phase** — `/opsx:apply <name>`
+   - **Config:** session default (`opusplan` + `xhigh`). For schema + service tasks, add **ultrathink**. For build debugging, switch to `/model opus` + `/effort max`
    - Read tasks.md, identify independent task groups
    - **Ask: "Run parallel subagents for independent groups?"**
    - If yes: distribute to parallel worktrees, merge after completion
@@ -86,6 +107,7 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
    - Loop until all tasks `[x]`, build passes, lint clean
 
    **verify phase** — `/opsx:verify <name>`
+   - **Config:** auto — `sonnet` + `high` (from frontmatter)
    - Run TypeScript check, lint
    - Cross-reference implementation against spec scenarios
    - Report three dimensions: Completeness, Correctness, Coherence
@@ -94,6 +116,7 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
    - If issues found: offer to return to apply phase
 
    **archive phase** — `/opsx:archive <name>`
+   - **Config:** auto — `haiku` + `low` (from frontmatter)
    - Check artifact + task completion
    - Assess delta specs
    - **Checkpoint: "Sync now or skip?"**
@@ -101,6 +124,7 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
    - Archive change to `openspec/changes/archive/YYYY-MM-DD-<name>/`
 
    **docs phase** — `/opsx:docs <name>`
+   - **Config:** session default (`opusplan` + `xhigh`). Add **ultrathink** to prompt for context-aware JSDoc
    - Read spec artifacts for business context
    - Read documentation rules (`.agents/rules/documentation.md`)
    - Collect target files from tasks.md + git diff
@@ -108,6 +132,7 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
    - **Auto-run (no checkpoint needed)** — documentation is mechanical
 
    **commit phase** — `/opsx:commit <name>`
+   - **Config:** auto — `sonnet` + `medium` (from frontmatter)
    - Read completed tasks, check git status
    - Group files by task dependency order
    - Draft commit plan with messages
@@ -115,6 +140,7 @@ Run the complete spec-driven development workflow as a guided pipeline. Chains a
    - Stage and commit each group in dependency order
 
    **pr phase** — `/opsx:pr`
+   - **Config:** auto — `sonnet` + `medium` (from frontmatter)
    - Gather commit history + OpenSpec context
    - Draft PR title and structured body
    - **Checkpoint: show draft, ask "Create PR?"**
