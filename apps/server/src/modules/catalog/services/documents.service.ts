@@ -18,6 +18,7 @@ import { Injectable } from "@nestjs/common";
 import type { NewWorkshopDocument } from "@/database/types/async.types";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+import { StorageService } from "@/shared/storage/storage.service";
 
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
 import { DocumentResponseBuilder } from "../dto/document-response.dto";
@@ -28,20 +29,13 @@ import { WorkshopsRepository } from "../repositories/workshops.repository";
 import type { AiSummaryPublicDto } from "../dto/ai-summary-response.dto";
 import type { WorkshopDocumentResponseDto } from "../dto/document-response.dto";
 
-/**
- * Represents an uploaded file object from Express/Multer.
- */
-interface UploadedFile {
-  originalname: string;
-  size: number;
-}
-
 @Injectable()
 export class DocumentsService {
   constructor(
     private readonly documentsRepo: WorkshopDocumentsRepository,
     private readonly workshopsRepo: WorkshopsRepository,
-    private readonly aiSummariesRepo: AiSummariesRepository
+    private readonly aiSummariesRepo: AiSummariesRepository,
+    private readonly storageService: StorageService
   ) {}
 
   /**
@@ -49,36 +43,37 @@ export class DocumentsService {
    *
    * Business rules:
    * - The workshop must exist in the database.
-   * - The file URL is a placeholder until object storage is integrated.
+   * - The file is uploaded to S3-compatible object storage (Cloudflare R2)
+   *   before the database record is created.
    * - An AI summary record is upserted with PENDING status for background processing.
    *
    * Side effects:
+   * - Uploads the file buffer to object storage (S3 PutObject).
    * - Inserts a record into workshop_documents table.
    * - Upserts a record into ai_summaries table with PENDING status (triggers Background module).
    *
    * @param workshopId - The UUID of the parent workshop.
-   * @param file - Uploaded file object (Express.Multer.File shape).
+   * @param file - Express Multer file object with buffer and metadata.
    * @param uploadedBy - The UUID of the uploading user.
-   * @returns OkResult containing the created document DTO, or FailResult with WORKSHOP_NOT_FOUND, INTERNAL_ERROR.
+   * @returns OkResult containing the created document DTO, or FailResult with WORKSHOP_NOT_FOUND, UPLOAD_FAILED, INTERNAL_ERROR.
    */
   async uploadDocument(
     workshopId: string,
-    file: UploadedFile,
+    file: Express.Multer.File,
     uploadedBy: string
   ): Promise<Result<WorkshopDocumentResponseDto>> {
     const workshopResult = await this.workshopsRepo.findById(workshopId);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
 
-    const fileName = file.originalname ?? `document-${Date.now()}`;
-
-    // TODO: Replace with actual object storage URL. Currently using placeholder.
-    const fileUrl = `placeholder://workshops/${workshopId}/${fileName}`;
+    // Upload to S3-compatible object storage first
+    const uploadResult = await this.storageService.uploadFile(file, workshopId);
+    if (uploadResult.isFailure) return Result.fail(uploadResult.error);
 
     const documentData: NewWorkshopDocument = {
       workshopId,
-      fileUrl,
-      originalName: fileName,
-      fileSizeBytes: file.size ?? 0,
+      fileUrl: uploadResult.data,
+      originalName: file.originalname,
+      fileSizeBytes: file.size,
       uploadStatus: "UPLOADED",
       uploadedBy,
     };
@@ -112,10 +107,14 @@ export class DocumentsService {
    * Business rules:
    * - Verifies the document exists and belongs to the specified workshop.
    * - Deleting a document cascades to remove its associated AI summary.
+   * - The underlying storage object is deleted fire-and-forget — a storage
+   *   error does NOT block the database deletion or propagate to the caller.
    *
    * Side effects:
    * - Removes the record from workshop_documents table.
    * - Cascading delete removes the associated ai_summaries record.
+   * - Attempts to delete the file from S3-compatible object storage
+   *   (fire-and-forget; failures are logged by the storage service).
    *
    * @param workshopId - The UUID of the parent workshop.
    * @param documentId - The UUID of the document to delete.
@@ -133,6 +132,9 @@ export class DocumentsService {
     if (docResult.data.workshopId !== workshopId) {
       return Result.fail(workshopErrors.notFound(documentId));
     }
+
+    // Fire-and-forget: delete from object storage, don't block on failure
+    void this.storageService.deleteFile(docResult.data.fileUrl);
 
     const deleteResult = await this.documentsRepo.delete(documentId);
     if (deleteResult.isFailure) return Result.fail(deleteResult.error);

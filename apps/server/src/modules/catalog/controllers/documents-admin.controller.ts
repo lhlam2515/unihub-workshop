@@ -17,10 +17,15 @@ import {
   Get,
   Post,
   Delete,
-  Body,
   Param,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
@@ -29,6 +34,12 @@ import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { DocumentsService } from "../services/documents.service";
+
+/** Maximum allowed file size: 50 MB. */
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+/** Only PDF files are accepted. */
+const ALLOWED_MIME_TYPE = "application/pdf";
 
 @Controller("admin/workshops/:workshopId/documents")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -41,21 +52,32 @@ export class DocumentsAdminController {
    *
    * Route: POST /admin/workshops/:workshopId/documents
    * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
-   * Stores the document metadata and upserts an AI summary record with
-   * PENDING status for background processing.
+   * Expects a multipart/form-data request with a `file` field containing
+   * a PDF document. The file is validated (PDF MIME type, max 50 MB) and
+   * uploaded to S3-compatible object storage. A metadata record is created
+   * in the database and an AI summary job is queued with PENDING status.
    *
    * @param workshopId - The UUID of the parent workshop.
-   * @param body - Document upload payload (file metadata, original name, size).
+   * @param file - Uploaded PDF file (validated by ParseFilePipe).
    * @param user - Authenticated user JWT payload identifying the uploader.
    * @returns The uploaded document DTO.
    */
   @Post()
+  @UseInterceptors(FileInterceptor("file"))
   async uploadDocument(
     @Param("workshopId") workshopId: string,
-    @Body() body: any,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: MAX_FILE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_MIME_TYPE }),
+        ],
+      })
+    )
+    file: Express.Multer.File,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.documentsService.uploadDocument(workshopId, body, user.sub);
+    return this.documentsService.uploadDocument(workshopId, file, user.sub);
   }
 
   /**
