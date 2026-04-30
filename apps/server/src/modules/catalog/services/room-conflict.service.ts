@@ -43,18 +43,12 @@ export class RoomConflictService {
     const result = await this.roomsRepo.findConflicting(
       roomId,
       startsAt,
-      endsAt
+      endsAt,
+      excludeWorkshopId
     );
     if (result.isFailure) return Result.fail(result.error);
 
-    const conflicts = result.data;
-
-    // Filter out the excluded workshop for self-conflict prevention during updates
-    const filteredConflicts = excludeWorkshopId
-      ? conflicts.filter((w) => w.workshopId !== excludeWorkshopId)
-      : conflicts;
-
-    if (filteredConflicts && filteredConflicts.length > 0) {
+    if (result.data.length > 0) {
       return Result.fail(
         workshopErrors.roomConflict(
           roomId,

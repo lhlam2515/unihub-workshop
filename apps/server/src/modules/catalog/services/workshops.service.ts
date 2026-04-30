@@ -21,6 +21,10 @@ import { Injectable } from "@nestjs/common";
 import type {
   NewWorkshop,
   WorkshopUpdate,
+  Workshop,
+  Speaker,
+  Room,
+  WorkshopSlot,
 } from "@/database/types/event-core.types";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -44,6 +48,17 @@ import type {
   WorkshopDetailDto,
   WorkshopAdminDetailDto,
 } from "../dto/workshop-response.dto";
+
+type WorkshopWithSpeakerRoom = Workshop & {
+  speakers: Speaker | null;
+  rooms: Room | null;
+};
+
+type WorkshopWithRelations = Workshop & {
+  workshopSlots: WorkshopSlot;
+  speakers: Speaker | null;
+  rooms: Room | null;
+};
 
 @Injectable()
 export class WorkshopsService {
@@ -80,16 +95,13 @@ export class WorkshopsService {
 
     const { items } = result.data;
     const mapped = await Promise.all(
-      items.map(async (workshop: any) => {
-        const [availableSeats, speakerResult] = await Promise.all([
-          this.seatCounterService.getAvailable(workshop.workshopId),
-          this.speakersRepo.findById(workshop.speakerId),
-        ]);
+      items.map(async (workshop: WorkshopWithSpeakerRoom) => {
+        const availableSeats = await this.seatCounterService.getAvailable(
+          workshop.workshopId
+        );
         return WorkshopResponseBuilder.fromSummary(
           workshop,
-          speakerResult.isSuccess && speakerResult.data
-            ? speakerResult.data.fullName
-            : "Unknown",
+          workshop.speakers?.fullName ?? "Unknown",
           availableSeats
         );
       })
@@ -119,23 +131,16 @@ export class WorkshopsService {
       return Result.fail(workshopErrors.notPublished(id, workshop.status));
     }
 
-    const [speakerResult, roomResult, availableSeats, summaryResult] =
-      await Promise.all([
-        this.speakersRepo.findById(workshop.speakerId),
-        this.roomsRepo.findById(workshop.roomId),
-        this.seatCounterService.getAvailable(id),
-        this.aiSummariesRepo.findByWorkshopId(id),
-      ]);
+    const [availableSeats, summaryResult] = await Promise.all([
+      this.seatCounterService.getAvailable(id),
+      this.aiSummariesRepo.findByWorkshopId(id),
+    ]);
 
     return Result.ok(
       WorkshopResponseBuilder.fromDetail(
         workshop,
-        speakerResult.isSuccess && speakerResult.data
-          ? speakerResult.data.fullName
-          : "Unknown",
-        roomResult.isSuccess && roomResult.data
-          ? roomResult.data.name
-          : "Unknown",
+        workshopRow.speakers?.fullName ?? "Unknown",
+        workshopRow.rooms?.name ?? "Unknown",
         availableSeats,
         summaryResult.isSuccess ? summaryResult.data : undefined
       )
@@ -348,18 +353,13 @@ export class WorkshopsService {
     await this.seatCounterService.initialize(id, workshop.capacity);
 
     // Resolve related data for response
-    const [speakerResult, roomResult] = await Promise.all([
-      this.speakersRepo.findById(workshop.speakerId),
-      this.roomsRepo.findById(workshop.roomId),
-    ]);
+    const roomResult = await this.roomsRepo.findById(workshop.roomId);
 
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         updateResult.data,
         slotResult.data,
-        speakerResult.isSuccess && speakerResult.data
-          ? speakerResult.data.fullName
-          : "Unknown",
+        workshopRow.speakers?.fullName ?? "Unknown",
         roomResult.isSuccess && roomResult.data
           ? roomResult.data.name
           : "Unknown",
@@ -426,9 +426,8 @@ export class WorkshopsService {
     if (updateResult.isFailure) return Result.fail(updateResult.error);
 
     // Resolve related data for response
-    const [slotResult, speakerResult, roomResult] = await Promise.all([
+    const [slotResult, roomResult] = await Promise.all([
       this.workshopSlotsRepo.findByWorkshopId(id),
-      this.speakersRepo.findById(workshop.speakerId),
       this.roomsRepo.findById(workshop.roomId),
     ]);
 
@@ -436,9 +435,7 @@ export class WorkshopsService {
       WorkshopResponseBuilder.fromAdminDetail(
         updateResult.data,
         slotResult.isSuccess && slotResult.data ? slotResult.data : null,
-        speakerResult.isSuccess && speakerResult.data
-          ? speakerResult.data.fullName
-          : "Unknown",
+        workshopRow.speakers?.fullName ?? "Unknown",
         roomResult.isSuccess && roomResult.data
           ? roomResult.data.name
           : "Unknown",
@@ -492,9 +489,8 @@ export class WorkshopsService {
     }
 
     // Resolve related data for response
-    const [slotResult, speakerResult, roomResult] = await Promise.all([
+    const [slotResult, roomResult] = await Promise.all([
       this.workshopSlotsRepo.findByWorkshopId(id),
-      this.speakersRepo.findById(workshop.speakerId),
       this.roomsRepo.findById(workshop.roomId),
     ]);
 
@@ -502,9 +498,7 @@ export class WorkshopsService {
       WorkshopResponseBuilder.fromAdminDetail(
         updateResult.data,
         slotResult.isSuccess && slotResult.data ? slotResult.data : null,
-        speakerResult.isSuccess && speakerResult.data
-          ? speakerResult.data.fullName
-          : "Unknown",
+        workshopRow.speakers?.fullName ?? "Unknown",
         roomResult.isSuccess && roomResult.data
           ? roomResult.data.name
           : "Unknown",
@@ -532,22 +526,14 @@ export class WorkshopsService {
     const workshopRow = workshopResult.data!;
     const workshop = workshopRow.workshops;
 
-    const [slotResult, speakerResult, roomResult] = await Promise.all([
-      this.workshopSlotsRepo.findByWorkshopId(id),
-      this.speakersRepo.findById(workshop.speakerId),
-      this.roomsRepo.findById(workshop.roomId),
-    ]);
+    const slotResult = await this.workshopSlotsRepo.findByWorkshopId(id);
 
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         workshop,
         slotResult.isSuccess && slotResult.data ? slotResult.data : null,
-        speakerResult.isSuccess && speakerResult.data
-          ? speakerResult.data.fullName
-          : "Unknown",
-        roomResult.isSuccess && roomResult.data
-          ? roomResult.data.name
-          : "Unknown",
+        workshopRow.speakers?.fullName ?? "Unknown",
+        workshopRow.rooms?.name ?? "Unknown",
         workshop.capacity
       )
     );
@@ -569,26 +555,14 @@ export class WorkshopsService {
     if (result.isFailure) return Result.fail(result.error);
 
     const { items } = result.data;
-    const mapped = await Promise.all(
-      items.map(async (workshop: any) => {
-        const [slotResult, speakerResult, roomResult] = await Promise.all([
-          this.workshopSlotsRepo.findByWorkshopId(workshop.workshopId),
-          this.speakersRepo.findById(workshop.speakerId),
-          this.roomsRepo.findById(workshop.roomId),
-        ]);
-
-        return WorkshopResponseBuilder.fromAdminDetail(
-          workshop,
-          slotResult.isSuccess && slotResult.data ? slotResult.data : null,
-          speakerResult.isSuccess && speakerResult.data
-            ? speakerResult.data.fullName
-            : "Unknown",
-          roomResult.isSuccess && roomResult.data
-            ? roomResult.data.name
-            : "Unknown",
-          workshop.capacity
-        );
-      })
+    const mapped = items.map((workshop: WorkshopWithRelations) =>
+      WorkshopResponseBuilder.fromAdminDetail(
+        workshop,
+        workshop.workshopSlots,
+        workshop.speakers?.fullName ?? "Unknown",
+        workshop.rooms?.name ?? "Unknown",
+        workshop.capacity
+      )
     );
 
     return Result.ok(mapped);
