@@ -27,17 +27,6 @@
           }
         ]
       }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); status=$(git status --short 2>/dev/null | head -20); [ -z \"$status\" ] && status=\"(clean)\"; files=$(git diff --name-only 2>/dev/null | head -10); context=$(printf '### Session State\\n- Branch: %s\\n\\n#### Changed Files\\n%s\\n\\n#### Uncommitted Changes\\n%s' \"$branch\" \"$files\" \"$status\"); jq -n --arg ctx \"$context\" '{\"hookSpecificOutput\": {\"hookEventName\": \"PreCompact\", \"additionalContext\": $ctx}}'",
-            "timeout": 5
-          }
-        ]
-      }
     ]
   }
 }
