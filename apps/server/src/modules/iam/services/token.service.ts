@@ -1,96 +1,142 @@
-/**
- * Token Service
- *
- * Toàn bộ lifecycle của JWT:
- * - signAccessToken(payload, platform)
- * - signRefreshToken()
- * - verifyAccessToken(token)
- * - verifyRefreshToken(token)
- * - blacklistToken(jti, remainingTtl)
- * - isBlacklisted(jti)
- *
- * Sử dụng RedisService để lưu/tra cứu Blacklist (token:blacklist:{jti}).
- * Sử dụng jsonwebtoken hoặc @nestjs/jwt.
- */
+import { randomUUID } from "crypto";
 
 import { Injectable } from "@nestjs/common";
+import jwt from "jsonwebtoken";
 
 import { RedisService } from "@/shared/redis/redis.service";
+import { authErrors } from "@/shared/response/errors";
+import { Result, tryCatch } from "@/shared/response/result";
+import type { JwtPayload, UserRole } from "@/types/jwt-payload";
+
+const ACCESS_EXPIRY = { WEB: 900, MOBILE: 28800 } as const;
+const REFRESH_EXPIRY_SECONDS = 604_800;
+
+const JWT_SECRET = () => process.env.JWT_SECRET!;
+const REFRESH_SECRET = () => process.env.JWT_REFRESH_SECRET!;
 
 @Injectable()
 export class TokenService {
   constructor(private readonly redisService: RedisService) {}
 
   /**
-   * signAccessToken(payload: any, platform: 'WEB' | 'MOBILE'): Promise<string>
+   * Signs a JWT access token with platform-specific expiry.
    *
-   * TODO: Generate JWT access token with platform-specific expiry
-   * - WEB: 15 minutes
-   * - MOBILE: 8 hours
-   * - Include user.id, user.role, jti (unique token ID)
+   * Business rules:
+   * - WEB tokens expire in 15 minutes; MOBILE tokens expire in 8 hours.
+   * - CHECKIN_STAFF tokens include the staff's assigned workshop IDs.
+   * - Each token carries a unique `jti` for blacklist-based revocation.
+   *
+   * @param payload.userId - The user's system ID embedded as `sub`.
+   * @param payload.role - RBAC role used by RolesGuard for authorization.
+   * @param payload.allowedWorkshopIds - Workshop IDs attached only for CHECKIN_STAFF.
+   * @param platform - Determines the token's `exp` claim (WEB 900s, MOBILE 28800s).
+   * @returns The signed JWT string.
    */
-  async signAccessToken(
-    payload: any,
+  signAccessToken(
+    payload: {
+      userId: string;
+      role: UserRole;
+      allowedWorkshopIds?: string[];
+    },
     platform: "WEB" | "MOBILE"
   ): Promise<string> {
-    // TODO: Implement
-    return "";
+    const jti = randomUUID();
+    return Promise.resolve(
+      jwt.sign(
+        {
+          sub: payload.userId,
+          role: payload.role,
+          jti,
+          allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
+        },
+        JWT_SECRET(),
+        { expiresIn: ACCESS_EXPIRY[platform] }
+      )
+    );
   }
 
   /**
-   * signRefreshToken(userId: string): Promise<string>
+   * Signs a JWT refresh token with a 7-day expiry.
    *
-   * TODO: Generate JWT refresh token with long expiry (7 days)
+   * Business rules:
+   * - Signed with a separate `JWT_REFRESH_SECRET` to limit blast radius.
+   * - Consumed refresh tokens are blacklisted in Redis (rotation).
+   *
+   * @param userId - The user's system ID embedded as `sub`.
+   * @returns The signed JWT string.
    */
-  async signRefreshToken(userId: string): Promise<string> {
-    // TODO: Implement
-    return "";
+  signRefreshToken(userId: string): Promise<string> {
+    const jti = randomUUID();
+    return Promise.resolve(
+      jwt.sign({ sub: userId, jti }, REFRESH_SECRET(), {
+        expiresIn: REFRESH_EXPIRY_SECONDS,
+      })
+    );
   }
 
   /**
-   * verifyAccessToken(token: string): Promise<any>
+   * Verifies a JWT access token's signature and expiration.
    *
-   * TODO: Verify and decode access token
-   * - Check signature
-   * - Check expiration
-   * - Return decoded payload
-   * - Throw if invalid
+   * @param token - The raw JWT string from the Authorization header.
+   * @returns OkResult containing the decoded JwtPayload, or FailResult with:
+   *   - TOKEN_EXPIRED: The token's `exp` claim is in the past.
+   *   - TOKEN_INVALID: Malformed token, bad signature, or other JWT error.
    */
-  async verifyAccessToken(token: string): Promise<any> {
-    // TODO: Implement
-    return null;
+  verifyAccessToken(token: string): Promise<Result<JwtPayload>> {
+    return tryCatch(
+      () => Promise.resolve(jwt.verify(token, JWT_SECRET()) as JwtPayload),
+      (err) => {
+        if (err instanceof jwt.TokenExpiredError) {
+          return authErrors.tokenExpired();
+        }
+        return authErrors.tokenInvalid(err);
+      }
+    );
   }
 
   /**
-   * verifyRefreshToken(token: string): Promise<any>
+   * Verifies a JWT refresh token's signature and expiration.
    *
-   * TODO: Verify and decode refresh token
+   * @param token - The raw JWT string from the refresh request.
+   * @returns OkResult containing `{ sub, jti }`, or FailResult with REFRESH_TOKEN_INVALID.
    */
-  async verifyRefreshToken(token: string): Promise<any> {
-    // TODO: Implement
-    return null;
+  verifyRefreshToken(
+    token: string
+  ): Promise<Result<{ sub: string; jti: string }>> {
+    return tryCatch(
+      () =>
+        Promise.resolve(
+          jwt.verify(token, REFRESH_SECRET()) as { sub: string; jti: string }
+        ),
+      (err) => authErrors.refreshTokenInvalid(err)
+    );
   }
 
   /**
-   * blacklistToken(jti: string, remainingTtl: number): Promise<void>
+   * Adds a token identifier to the Redis blacklist.
    *
-   * TODO: Add token to blacklist in Redis
-   * - Store in token:blacklist:{jti}
-   * - Set expiry = remainingTtl (seconds until token natural expiry)
+   * Side effects: Writes to Redis key `token:blacklist:{jti}` with the specified TTL.
+   * Idempotent: Calling multiple times with the same jti overwrites the previous entry.
+   *
+   * @param jti - The unique token identifier to revoke.
+   * @param remainingTtl - TTL in seconds, matching the token's remaining lifetime.
    */
   async blacklistToken(jti: string, remainingTtl: number): Promise<void> {
-    // TODO: Implement
+    await this.redisService.set(
+      `token:blacklist:${jti}`,
+      "revoked",
+      remainingTtl
+    );
   }
 
   /**
-   * isBlacklisted(jti: string): Promise<boolean>
+   * Checks whether a token identifier has been blacklisted.
    *
-   * TODO: Check if token is in blacklist
-   * - Query token:blacklist:{jti} from Redis
-   * - Return true if exists, false otherwise
+   * @param jti - The unique token identifier to look up.
+   * @returns `true` if the jti exists in the Redis blacklist, `false` otherwise.
    */
   async isBlacklisted(jti: string): Promise<boolean> {
-    // TODO: Implement
-    return false;
+    const result = await this.redisService.get(`token:blacklist:${jti}`);
+    return result !== null;
   }
 }
