@@ -17,6 +17,8 @@
  * - **Startup:** S3Client is created in the constructor — lightweight, no
  *   persistent connection. The SDK handles connection pooling internally.
  */
+import { randomUUID } from "node:crypto";
+
 import {
   S3Client,
   PutObjectCommand,
@@ -70,7 +72,6 @@ export class StorageService {
     file: Express.Multer.File,
     workshopId: string
   ): Promise<Result<string>> {
-    const { randomUUID } = await import("node:crypto");
     const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
     const key = `workshops/${workshopId}/${randomUUID()}-${safeName}`;
 

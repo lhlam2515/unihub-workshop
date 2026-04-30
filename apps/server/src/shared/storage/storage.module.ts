@@ -36,16 +36,19 @@ export class StorageModule {
    * @returns A dynamic module with StorageService registered as a provider.
    */
   static forRoot(config: StorageConfig): DynamicModule {
+    const resolvedConfig = {
+      ...config,
+      region: config.region ?? "auto",
+      maxFileSizeBytes: config.maxFileSizeBytes ?? 52_428_800,
+    };
+
     const missingFields: string[] = [];
 
-    if (!config.endpoint) missingFields.push("endpoint");
-    if (!config.accessKeyId) missingFields.push("accessKeyId");
-    if (!config.secretAccessKey) missingFields.push("secretAccessKey");
-    if (!config.bucketName) missingFields.push("bucketName");
-    if (!config.publicUrl) missingFields.push("publicUrl");
-
-    config.region = config.region ?? "auto";
-    config.maxFileSizeBytes = config.maxFileSizeBytes ?? 52_428_800;
+    if (!resolvedConfig.endpoint) missingFields.push("endpoint");
+    if (!resolvedConfig.accessKeyId) missingFields.push("accessKeyId");
+    if (!resolvedConfig.secretAccessKey) missingFields.push("secretAccessKey");
+    if (!resolvedConfig.bucketName) missingFields.push("bucketName");
+    if (!resolvedConfig.publicUrl) missingFields.push("publicUrl");
 
     if (missingFields.length > 0) {
       throw new Error(
@@ -58,7 +61,7 @@ export class StorageModule {
     return {
       module: StorageModule,
       providers: [
-        { provide: STORAGE_CONFIG, useValue: config },
+        { provide: STORAGE_CONFIG, useValue: resolvedConfig },
         StorageService,
       ],
       exports: [StorageService],
