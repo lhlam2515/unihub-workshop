@@ -33,6 +33,8 @@ pnpm db:push           # drizzle-kit push (prototyping)
 
 **Mobile-specific:** `cd apps/mobile && pnpm dev` (Expo), `pnpm android`, `pnpm ios`
 
+**Agent config sync:** `pnpm agent-config:sync` — syncs `.agents/` (canonical) to `.claude/` and `.github/`. Run after editing any file under `.agents/commands/`, `.agents/skills/`, or `.agents/rules/`.
+
 Package manager is `pnpm@9.0.0`. Node >= 18.
 
 ## Repository Architecture
@@ -44,14 +46,48 @@ unihub-workshop/
 │   ├── web/        # Next.js 16 App Router (Pragmatic FSD)
 │   └── mobile/     # Expo Router + React Native (Offline-First)
 ├── packages/
-│   └── eslint-config/   # Shared ESLint config (CJS, eslint-plugin-boundaries)
+│   ├── eslint-config/   # Shared ESLint config (CJS, eslint-plugin-boundaries)
+│   └── agent-config/    # Tool that syncs .agents/ to .claude/ and .github/
 ├── docs/
 │   ├── srs.md           # Full system spec: 50 FRs, 40 BRs, traceability matrix
-│   └── screens.md       # 39-screen UI spec (31 web, 8 mobile)
-└── .agents/rules/       # Agent rules (symlinked into .claude/rules/)
+│   ├── screens.md       # 39-screen UI spec (31 web, 8 mobile)
+│   └── guides/          # Workflow guides (spec-driven-workflow, claude-code-config)
+├── .agents/             # Canonical source for commands, skills, rules
+│   ├── commands/opsx/   # OPSX slash commands
+│   ├── skills/          # Reusable skill definitions
+│   └── rules/           # Architecture, naming, documentation rules
+├── openspec/
+│   ├── specs/           # Synced capability specs (source of truth)
+│   └── changes/archive/ # Completed change proposals
+└── CLAUDE.md            # This file
 ```
 
 This is a **university workshop management system** handling the full lifecycle: workshop creation, student registration, payment processing, QR ticket check-in (online + offline), and student data sync.
+
+## Spec-Driven Workflow
+
+All changes follow the spec-driven development pipeline documented in `docs/guides/spec-driven-workflow.md`:
+
+```
+/explore → /propose → /branch → /apply ⇄ /verify → /archive → /docs → /commit → /pr
+```
+
+Available OPSX commands (`.agents/commands/opsx/`):
+
+| Command | Purpose |
+|---------|---------|
+| `/opsx:explore` | Investigate requirements from spec docs before committing |
+| `/opsx:propose` | Create change artifacts (proposal, design, specs, tasks) |
+| `/opsx:branch` | Create feature branch from change name |
+| `/opsx:apply` | Implement tasks from the change |
+| `/opsx:verify` | Cross-reference implementation against specs |
+| `/opsx:archive` | Archive change and sync delta specs |
+| `/opsx:docs` | Generate Contract-Oriented JSDoc |
+| `/opsx:commit` | Generate git commits grouped by task dependency |
+| `/opsx:pr` | Create structured PR from commit + spec history |
+| `/opsx:e2e` | Run the full pipeline with checkpoint-guided flow |
+
+See `docs/guides/claude-code-config.md` for recommended `/model` and `/effort` settings per phase.
 
 ## Backend: Modular Monolith (apps/server)
 
@@ -114,21 +150,15 @@ Used **exclusively by Check-in Staff** for QR scanning at workshop venues. Must 
 ## Shared Packages
 
 - `@repo/eslint-config` — CJS-based shared config with `eslint-plugin-boundaries` enforcing layer import rules for both frontend and backend
+- `@repo/agent-config` — CLI tool (`pnpm agent-config:sync`) that syncs `.agents/` → `.claude/` + `.github/`
 
-## Naming Conventions
+## Coding Conventions
 
-All code follows strict naming rules (documented in `.agents/rules/naming-convention.md`):
+All code follows rules in `.agents/rules/`:
 
-- **Directories/files:** `kebab-case` (except React components)
-- **Backend files:** `[resource].[layer].ts` (e.g., `catalog.service.ts`)
-- **React components:** `PascalCase` matching filename (e.g., `QuestionCard.tsx`)
-- **NestJS classes:** `PascalCase` with role suffix (`WorkshopsAdminController`, `CatalogService`, `RegistrationsRepository`)
-- **Frontend widgets:** `[Domain][Context]Widget` (never use verbs)
-- **DTOs:** `[Action][Resource]Dto` (request), `[Resource]ResponseDto` (response)
-- **Zod schemas:** `[Action][Resource]Schema`
-- **Functions:** `camelCase`, CQS prefix (`get`, `find`, `list` for queries; `create`, `update`, `cancel` for commands)
-- **Booleans:** `is`, `has`, `should`, `can` prefix
-- **Constants:** `UPPER_SNAKE_CASE`
+- **Naming** (`naming-convention.md`): Directories `kebab-case`, backend files `[resource].[layer].ts`, NestJS classes `PascalCase` with role suffix, DTOs `[Action][Resource]Dto` / `[Resource]ResponseDto`, functions `camelCase` with CQS prefix, booleans `is/has/should/can`, constants `UPPER_SNAKE_CASE`
+- **Documentation** (`documentation.md`): Contract-Oriented JSDoc — active-verb summary, domain-meaning `@param`, explicit error codes in `@returns`, business rules + side effects sections for services. All JSDoc in English.
+- **Layered architecture** (`layered-architecture.md`): Strict dependency direction (controllers → services → repositories), no circular imports, `eslint-plugin-boundaries` enforces cross-layer access rules
 
 ## Key Design Decisions
 
