@@ -404,6 +404,70 @@ Ultrathink is an in-context hint, not a guaranteed behavior. If the model isn't 
 
 ---
 
+## 8. Prompt Caching & Model Switching
+
+### 8.1 How Switching Models Affects Cache
+
+When you change models mid-session via `/model`, the **prompt cache is invalidated**. The docs confirm:
+
+> *"The picker asks for confirmation when the conversation has prior output, since the next response re-reads the full history without cached context."*
+
+```
+Turn 1 (opus, cached)   → cache hit, fast, cheap
+/model sonnet            → ⚠️ cache cleared
+Turn 2 (sonnet, cold)    → cache miss, slow, costly rebuild
+Turn 3 (sonnet, cached)  → cache hit again
+```
+
+**Context is preserved** — the full conversation history remains intact. Only the cache is lost; the next turn must re-send the entire context to the server.
+
+### 8.2 Cache TTL
+
+Anthropic prompt cache has a **5-minute TTL**. If you pause between phases for longer than 5 minutes, the cache is already cold anyway — switching models at that point adds no extra cost.
+
+### 8.3 `opusplan` — Internal Switching
+
+`opusplan` is a special alias: it uses Opus in plan mode and Sonnet in execution mode. This is **internal switching**, not routed through `/model`, so it **does not invalidate the cache**. There is no penalty for using `opusplan`.
+
+### 8.4 Impact on the Hybrid Workflow
+
+| Pattern | Cache Impact | Verdict |
+|---------|-------------|---------|
+| Session default `opusplan` | None (internal switch) | ✅ Optimal |
+| Frontmatter commands (branch, archive, commit, pr, verify) | 1 cold turn per command | ✅ Acceptable — each is 1-2 turns |
+| Switch to Opus mid-apply for build debugging | 1 cold turn | ✅ Worth it — fixing 12 errors > 1 cold turn |
+| /model opus → /model sonnet → /model opus repeatedly | 2 cold turns | ❌ Wasteful — avoid flip-flopping |
+
+**Rule of thumb:** Keep the same model throughout a long phase. Only switch at phase boundaries or when genuinely stuck (debugging, schema design).
+
+### 8.5 Cost-Benefit for the Spec-Driven Workflow
+
+```
+Phase             Turns  Cache hit rate    Switch cost    Net benefit
+──────────────────────────────────────────────────────────────────────
+archive             1-2   0% (short)       1 cold turn    ✅ (haiku cheaper)
+branch              1     0%               1 cold turn    ✅ (haiku cheaper)
+commit              2-3   50%              1 cold turn    ✅ (sonnet sufficient)
+pr                  1-2   0%               1 cold turn    ✅ (sonnet sufficient)
+verify              3-5   60%              1 cold turn    Maybe (sonnet vs opusplan)
+propose            10-20  >80%             1 cold turn    ❌ Keep opusplan
+apply (schema)      5-10  >70%             1 cold turn    Maybe (if very hard)
+apply (services)   10-20  >80%             1 cold turn    ❌ Keep opusplan
+docs               8-15   >75%             1 cold turn    Maybe (if deep context needed)
+```
+
+**Bottom line:** The current frontmatter setup (branch, archive with haiku; commit, pr with sonnet; verify with sonnet) is sound. Do **not** add frontmatter for propose, apply, or docs — these are long phases with high cache hit rates; switching would lose more than it gains.
+
+### 8.6 Best Practices
+
+- **Use `ultrathink` instead of switching models** when you need deep reasoning for 1-2 turns — no cache invalidation
+- **Use `/effort max` instead of `/model opus`** if the current model is already Opus — cache stays, only thinking budget increases
+- **Switch models at phase boundaries** — finish the old phase, start the new one (cache rebuilds naturally during the new phase)
+- **Prefer `opusplan`** — gets Opus for planning, Sonnet for execution, with zero cache penalty
+- **Avoid toggling** between two models within the same phase — doubles the cache miss cost
+
+---
+
 ## References
 
 - [Claude Code model configuration](https://code.claude.com/docs/en/model-config)
