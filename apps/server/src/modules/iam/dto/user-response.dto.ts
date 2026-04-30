@@ -1,13 +1,8 @@
 /**
- * User Response DTO
+ * Public user representation returned by admin user endpoints.
  *
- * Response: Used in list/detail endpoints
- * Shape: { user_id, email, role, status, created_at }
- *
- * Factory: from(user)
- * Loại bỏ password_hash và sensitive fields
+ * Excludes sensitive fields such as `password_hash`.
  */
-
 export interface UserResponseDto {
   user_id: string;
   email: string;
@@ -16,16 +11,23 @@ export interface UserResponseDto {
   created_at: Date;
 }
 
+/**
+ * Builds a UserResponseDto from a raw user entity, excluding sensitive fields.
+ */
 export class UserResponseBuilder {
-  static from(user: any): UserResponseDto {
-    // TODO: Implement factory method
-    // Map user entity to response DTO, exclude password_hash
+  static from(user: {
+    userId: string;
+    email: string;
+    role: string;
+    status: string;
+    createdAt: Date;
+  }): UserResponseDto {
     return {
-      user_id: "",
-      email: "",
-      role: "",
-      status: "",
-      created_at: new Date(),
+      user_id: user.userId,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      created_at: user.createdAt,
     };
   }
 }

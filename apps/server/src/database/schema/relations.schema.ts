@@ -8,7 +8,7 @@ import {
   workshopDocuments,
 } from "./async.schema";
 import { rooms, speakers, workshops, workshopSlots } from "./event-core.schema";
-import { students, users } from "./identity.schema";
+import { checkinStaffAssignments, students, users } from "./identity.schema";
 import {
   checkinRecords,
   payments,
@@ -24,7 +24,18 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   uploadedDocuments: many(workshopDocuments, {
     relationName: "document_uploader",
   }),
+  staffAssignments: one(checkinStaffAssignments),
 }));
+
+export const checkinStaffAssignmentsRelations = relations(
+  checkinStaffAssignments,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [checkinStaffAssignments.userId],
+      references: [users.userId],
+    }),
+  })
+);
 
 export const studentsRelations = relations(students, ({ one, many }) => ({
   user: one(users, {

@@ -1,22 +1,10 @@
-/**
- * Users Admin Controller
- *
- * Xử lý admin operations trên users:
- * - GET /admin/users (list)
- * - GET /admin/users/{id} (detail)
- * - PATCH /admin/users/{id}/status (update status)
- * - POST /admin/users/{id}/revoke-token (revoke all tokens)
- *
- * Yêu cầu role: ORGANIZER
- */
-
 import {
+  Body,
   Controller,
   Get,
+  Param,
   Patch,
   Post,
-  Body,
-  Param,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -25,54 +13,77 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import type { JwtPayload } from "@/types/jwt-payload";
+
+import { UpdateUserStatusSchema } from "../dto/update-user-status.dto";
+import { UsersService } from "../services/users.service";
+
+import type { UpdateUserStatusDto } from "../dto/update-user-status.dto";
 
 @Controller("admin/users")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER") // or use UserRole.ORGANIZER enum
+@Roles("ORGANIZER")
 export class UsersAdminController {
-  constructor(private readonly usersService: any) {}
+  constructor(private readonly usersService: UsersService) {}
 
   /**
    * GET /admin/users
-   * @query role? filter by role
-   * @query page, limit pagination
+   *
+   * Returns a paginated list of users, optionally filtered by role.
    */
   @Get()
-  async listUsers(@Query() query: any) {
-    // TODO: Call usersService.listUsers(query)
-    // TODO: Return paginated list of UserResponseDto
+  async listUsers(
+    @Query("role") role?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string
+  ) {
+    return this.usersService.listUsers(role, {
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
   }
 
   /**
    * GET /admin/users/{id}
+   *
+   * Returns details of a single user.
+   *
+   * @param id - The target user's UUID.
    */
   @Get(":id")
   async getUserById(@Param("id") id: string) {
-    // TODO: Call usersService.getUserById(id)
-    // TODO: Return UserResponseDto
+    return this.usersService.getUserById(id);
   }
 
   /**
    * PATCH /admin/users/{id}/status
-   * @body { status: 'ACTIVE' | 'SUSPENDED' }
+   *
+   * Updates a user's account status. When set to SUSPENDED, the admin's
+   * current token is auto-blacklisted to terminate the suspended session.
+   *
+   * @param id - The target user's UUID.
+   * @param updateStatusDto - Validated { status: ACTIVE | SUSPENDED }.
+   * @param admin - The authenticated ORGANIZER's JWT payload (for token revocation).
    */
   @Patch(":id/status")
   async updateUserStatus(
     @Param("id") id: string,
-    @Body() updateStatusDto: any
+    @Body() updateStatusDto: UpdateUserStatusDto,
+    @CurrentUser() admin: JwtPayload
   ) {
-    // TODO: Validate with Zod (UpdateUserStatusSchema)
-    // TODO: Call usersService.updateUserStatus(id, updateStatusDto)
-    // TODO: When SUSPENDED, auto-blacklist all user's tokens
+    const parsed = UpdateUserStatusSchema.parse(updateStatusDto);
+    return this.usersService.updateUserStatus(id, parsed.status, admin.jti);
   }
 
   /**
    * POST /admin/users/{id}/revoke-token
-   * Revoke all active tokens for a user
+   *
+   * Revokes all active tokens for a user, forcing them to re-authenticate.
+   *
+   * @param id - The target user's UUID.
    */
   @Post(":id/revoke-token")
-  async revokeUserTokens(@Param("id") id: string, @CurrentUser() admin: any) {
-    // TODO: Call tokenService to revoke all tokens for this user
-    // TODO: Mark all issued tokens as blacklisted
+  async revokeUserTokens(@Param("id") id: string) {
+    return this.usersService.revokeUserTokens(id);
   }
 }

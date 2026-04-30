@@ -5,7 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 
-import { students, users } from "@/database/schema";
+import { checkinStaffAssignments, students, users } from "@/database/schema";
 
 export const usersSelectSchema = createSelectSchema(users);
 export const usersInsertSchema = createInsertSchema(users);
@@ -22,3 +22,17 @@ export const studentsUpdateSchema = createUpdateSchema(students);
 export type Student = z.infer<typeof studentsSelectSchema>;
 export type NewStudent = z.infer<typeof studentsInsertSchema>;
 export type StudentUpdate = z.infer<typeof studentsUpdateSchema>;
+
+export const checkinStaffAssignmentsSelectSchema = createSelectSchema(
+  checkinStaffAssignments
+);
+export const checkinStaffAssignmentsInsertSchema = createInsertSchema(
+  checkinStaffAssignments
+);
+
+export type CheckinStaffAssignment = z.infer<
+  typeof checkinStaffAssignmentsSelectSchema
+>;
+export type NewCheckinStaffAssignment = z.infer<
+  typeof checkinStaffAssignmentsInsertSchema
+>;

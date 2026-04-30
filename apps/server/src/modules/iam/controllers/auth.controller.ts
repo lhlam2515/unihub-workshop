@@ -1,28 +1,24 @@
-/**
- * Auth Controller
- *
- * Xử lý:
- * - POST /auth/login (PUBLIC)
- * - POST /auth/refresh (PUBLIC)
- * - POST /auth/logout (JWT required, ANY role)
- * - GET /auth/me (JWT required, ANY role)
- */
-
 import {
-  Controller,
-  Post,
-  Get,
   Body,
-  UseGuards,
+  Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Post,
+  UseGuards,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Public } from "@/shared/decorators/public.decorator";
+import type { JwtPayload } from "@/types/jwt-payload";
 
+import { LoginSchema } from "../dto/login.dto";
+import { RefreshTokenSchema } from "../dto/refresh-token.dto";
 import { AuthService } from "../services/auth.service";
+
+import type { LoginDto } from "../dto/login.dto";
+import type { RefreshTokenDto } from "../dto/refresh-token.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -30,53 +26,72 @@ export class AuthController {
 
   /**
    * POST /auth/login
-   * @param loginDto { email, password, platform }
-   * @returns { access_token, refresh_token?, expires_in, user }
+   *
+   * Authenticates a user by email and password. Returns a dual-token pair
+   * (access + refresh) with platform-specific expiry.
+   *
+   * @Public — no JWT required.
+   *
+   * @param loginDto - Validated LoginDto containing email, password, and platform.
    */
   @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: any) {
-    // TODO: Validate input with Zod (LoginSchema)
-    // TODO: Call authService.login(loginDto)
-    // TODO: Return LoginResponseDto via ResponseInterceptor
+  async login(@Body() loginDto: LoginDto) {
+    const parsed = LoginSchema.parse(loginDto);
+    return this.authService.login(
+      parsed.email,
+      parsed.password,
+      parsed.platform
+    );
   }
 
   /**
    * POST /auth/refresh
-   * @param refreshTokenDto { refresh_token? }
-   * @returns { access_token, refresh_token?, expires_in }
+   *
+   * Issues a new access token using a valid refresh token. Implements refresh
+   * token rotation: the consumed refresh token is blacklisted.
+   *
+   * @Public — no JWT required (uses refresh token instead).
+   *
+   * @param refreshTokenDto - Contains the refresh_token string (optional for Web cookie flow).
    */
   @Post("refresh")
   @Public()
   @HttpCode(HttpStatus.OK)
-  async refresh(@Body() refreshTokenDto: any) {
-    // TODO: Validate input with Zod (RefreshTokenSchema)
-    // TODO: Call authService.refreshToken(refreshTokenDto)
-    // TODO: Return new token pair
+  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
+    const parsed = RefreshTokenSchema.parse(refreshTokenDto);
+    return this.authService.refreshToken(parsed.refresh_token ?? "");
   }
 
   /**
    * POST /auth/logout
-   * Requires valid JWT
+   *
+   * Blacklists the current access token's jti in Redis, terminating the session.
+   * Idempotent — calling with an already-blacklisted token succeeds silently.
+   *
+   * Requires valid JWT. Any authenticated role can access.
    */
   @Post("logout")
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async logout(@CurrentUser() user: any) {
-    // TODO: Call authService.logout(user.id, user.jti)
-    // TODO: Blacklist current token in Redis
+  async logout(@CurrentUser() user: JwtPayload) {
+    return this.authService.logout(user.sub, user.jti);
   }
 
   /**
    * GET /auth/me
-   * Requires valid JWT
-   * Returns user info based on role
+   *
+   * Returns the authenticated user's profile with role-specific fields:
+   * - STUDENT: includes student_code, full_name, faculty.
+   * - CHECKIN_STAFF: includes allowed_workshop_ids.
+   * - ORGANIZER: base fields only.
+   *
+   * Requires valid JWT. Any authenticated role can access.
    */
   @Get("me")
   @UseGuards(JwtAuthGuard)
-  async getMe(@CurrentUser() user: any) {
-    // TODO: Call authService.getMe(user.id)
-    // TODO: Return AuthMeResponseDto with role-specific fields
+  async getMe(@CurrentUser() user: JwtPayload) {
+    return this.authService.getMe(user.sub);
   }
 }
