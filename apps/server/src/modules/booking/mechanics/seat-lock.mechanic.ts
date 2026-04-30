@@ -1,53 +1,114 @@
-/**
- * Seat Lock Mechanic
- *
- * Quản lý Redis seat:lock:{workshopId}:{registrationId}.
- * acquire(workshopId, registrationId, studentId, amount): SET NX EX 900 với JSON payload.
- * release(workshopId, registrationId): DEL key.
- * check(workshopId, registrationId): kiểm tra TTL còn không.
- *
- * Trả SEAT_LOCK_EXPIRED nếu TTL = 0 hoặc key không tồn tại.
- */
-
 import { Injectable } from "@nestjs/common";
 
 import { RedisService } from "@/shared/redis/redis.service";
+import { seatErrors } from "@/shared/response/errors";
+import { Result } from "@/shared/response/result";
+
+const KEY_PREFIX = "seat:lock";
+const LOCK_TTL_SECONDS = 900;
+
+interface SeatLockPayload {
+  studentId: string;
+}
+
+export interface SeatLockCheckResult {
+  valid: boolean;
+  remainingSeconds: number;
+}
 
 @Injectable()
 export class SeatLockMechanic {
   constructor(private readonly redisService: RedisService) {}
 
+  private buildKey(workshopId: string, registrationId: string): string {
+    return `${KEY_PREFIX}:${workshopId}:${registrationId}`;
+  }
+
   /**
-   * acquire(workshopId: string, registrationId: string, studentId: string, amount: number)
+   * Acquires a distributed seat lock for a paid workshop registration.
    *
-   * TODO: Acquire seat lock in Redis
-   * Key: seat:lock:{workshopId}:{registrationId}
-   * TTL: 900 seconds (15 minutes)
+   * Uses Redis SET NX with a 900-second TTL to prevent concurrent seat
+   * claims during the payment window.
+   *
+   * Side effects:
+   * - Creates Redis key seat:lock:{workshopId}:{registrationId} with JSON payload
+   *   containing studentId, amount, and createdAt.
+   *
+   * @param workshopId - The UUID of the workshop being registered for.
+   * @param registrationId - The UUID of the newly created registration.
+   * @param studentId - The UUID of the student claiming the seat.
+   * @param amount - The payment amount required (VND), stored for payment verification.
+   * @returns OkResult(true) if lock acquired, or FailResult with code:
+   * - SEAT_LOCK_EXPIRED: Lock key already exists — duplicate seat claim.
    */
   async acquire(
     workshopId: string,
     registrationId: string,
     studentId: string,
     amount: number
-  ) {
-    // TODO: Implement
+  ): Promise<Result<boolean>> {
+    const key = this.buildKey(workshopId, registrationId);
+    const payload: SeatLockPayload = {
+      studentId,
+    };
+
+    const created = await this.redisService.setNx(
+      key,
+      JSON.stringify(payload),
+      LOCK_TTL_SECONDS
+    );
+
+    if (!created) {
+      return Result.fail(seatErrors.lockExpired(workshopId, registrationId));
+    }
+
+    return Result.ok(true);
   }
 
   /**
-   * release(workshopId: string, registrationId: string)
+   * Releases a seat lock, making the seat available for other students.
    *
-   * TODO: Release seat lock
+   * Idempotent — safe to call even if the lock has already expired or was
+   * previously released.
+   *
+   * Side effects:
+   * - Deletes the Redis key seat:lock:{workshopId}:{registrationId}.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param registrationId - The UUID of the registration whose lock is being released.
+   * @returns OkResult(true) — always succeeds (idempotent no-op if key missing).
    */
-  async release(workshopId: string, registrationId: string) {
-    // TODO: Implement
+  async release(
+    workshopId: string,
+    registrationId: string
+  ): Promise<Result<boolean>> {
+    const key = this.buildKey(workshopId, registrationId);
+    await this.redisService.del(key);
+    return Result.ok(true);
   }
 
   /**
-   * check(workshopId: string, registrationId: string)
+   * Checks the validity and remaining lifetime of a seat lock.
    *
-   * TODO: Check if lock still exists and TTL > 0
+   * Side effects:
+   * - Reads the TTL of Redis key seat:lock:{workshopId}:{registrationId}.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param registrationId - The UUID of the registration.
+   * @returns OkResult with { valid: true, remainingSeconds }, or FailResult with code:
+   * - SEAT_LOCK_EXPIRED: Lock key does not exist or TTL has reached 0.
    */
-  async check(workshopId: string, registrationId: string) {
-    // TODO: Implement
+  async check(
+    workshopId: string,
+    registrationId: string
+  ): Promise<Result<SeatLockCheckResult>> {
+    const key = this.buildKey(workshopId, registrationId);
+    const ttl = await this.redisService.ttl(key);
+
+    if (ttl <= 0) {
+      return Result.fail(seatErrors.lockExpired(workshopId, registrationId));
+    }
+
+    return Result.ok({ valid: true, remainingSeconds: ttl });
   }
 }
