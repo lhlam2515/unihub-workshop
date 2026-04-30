@@ -15,7 +15,7 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
-import { CreateRoomSchema } from "../dto/create-room.dto";
+import { CreateRoomDto } from "../dto/create-room.dto";
 import { RoomsService } from "../services/rooms.service";
 
 @Controller("admin/rooms")
@@ -50,8 +50,7 @@ export class RoomsAdminController {
    * @returns The newly created room DTO.
    */
   @Post()
-  async createRoom(@Body() body: any) {
-    const parsed = CreateRoomSchema.parse(body);
-    return this.roomsService.createRoom(parsed);
+  async createRoom(@Body() dto: CreateRoomDto) {
+    return this.roomsService.createRoom(dto);
   }
 }

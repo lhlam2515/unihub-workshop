@@ -33,9 +33,10 @@ import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
-import { CreateWorkshopSchema } from "../dto/create-workshop.dto";
-import { EmergencyUpdateWorkshopSchema } from "../dto/emergency-update-workshop.dto";
-import { UpdateWorkshopSchema } from "../dto/update-workshop.dto";
+import { CreateWorkshopDto } from "../dto/create-workshop.dto";
+import { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
+import { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
+import { UpdateWorkshopDto } from "../dto/update-workshop.dto";
 import { WorkshopsService } from "../services/workshops.service";
 
 @Controller("admin/workshops")
@@ -55,7 +56,7 @@ export class WorkshopsAdminController {
    * @returns Paginated list of workshops with admin-level detail fields.
    */
   @Get()
-  async listAdmin(@Query() query: any) {
+  async listAdmin(@Query() query: ListWorkshopsQueryDto) {
     return this.workshopsService.listAdmin(query);
   }
 
@@ -70,9 +71,11 @@ export class WorkshopsAdminController {
    * @returns The newly created workshop admin detail DTO.
    */
   @Post()
-  async createWorkshop(@Body() body: any, @CurrentUser() user: JwtPayload) {
-    const parsed = CreateWorkshopSchema.parse(body);
-    return this.workshopsService.createWorkshop(parsed, user.sub);
+  async createWorkshop(
+    @Body() dto: CreateWorkshopDto,
+    @CurrentUser() user: JwtPayload
+  ) {
+    return this.workshopsService.createWorkshop(dto, user.sub);
   }
 
   /**
@@ -104,9 +107,11 @@ export class WorkshopsAdminController {
    * @returns The updated workshop admin detail DTO.
    */
   @Put(":id")
-  async updateWorkshop(@Param("id") id: string, @Body() body: any) {
-    const parsed = UpdateWorkshopSchema.parse(body);
-    return this.workshopsService.updateWorkshop(id, parsed);
+  async updateWorkshop(
+    @Param("id") id: string,
+    @Body() dto: UpdateWorkshopDto
+  ) {
+    return this.workshopsService.updateWorkshop(id, dto);
   }
 
   /**
@@ -138,9 +143,11 @@ export class WorkshopsAdminController {
    * @returns The updated workshop admin detail DTO.
    */
   @Patch(":id/emergency-update")
-  async emergencyUpdate(@Param("id") id: string, @Body() body: any) {
-    const parsed = EmergencyUpdateWorkshopSchema.parse(body);
-    return this.workshopsService.emergencyUpdate(id, parsed);
+  async emergencyUpdate(
+    @Param("id") id: string,
+    @Body() dto: EmergencyUpdateWorkshopDto
+  ) {
+    return this.workshopsService.emergencyUpdate(id, dto);
   }
 
   /**

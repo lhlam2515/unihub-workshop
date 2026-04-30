@@ -15,7 +15,7 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
-import { CreateSpeakerSchema } from "../dto/create-speaker.dto";
+import { CreateSpeakerDto } from "../dto/create-speaker.dto";
 import { SpeakersService } from "../services/speakers.service";
 
 @Controller("admin/speakers")
@@ -50,8 +50,7 @@ export class SpeakersAdminController {
    * @returns The newly created speaker DTO.
    */
   @Post()
-  async createSpeaker(@Body() body: any) {
-    const parsed = CreateSpeakerSchema.parse(body);
-    return this.speakersService.createSpeaker(parsed);
+  async createSpeaker(@Body() dto: CreateSpeakerDto) {
+    return this.speakersService.createSpeaker(dto);
   }
 }

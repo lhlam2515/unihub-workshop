@@ -13,7 +13,7 @@ import { Controller, Get, Param, Query } from "@nestjs/common";
 
 import { Public } from "@/shared/decorators/public.decorator";
 
-import { ListWorkshopsQuerySchema } from "../dto/list-workshops-query.dto";
+import { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
 import { WorkshopsService } from "../services/workshops.service";
 
 @Controller("workshops")
@@ -33,9 +33,8 @@ export class WorkshopsPublicController {
    */
   @Get()
   @Public()
-  async listPublished(@Query() query: any) {
-    const parsed = ListWorkshopsQuerySchema.parse(query);
-    return this.workshopsService.listPublished(parsed);
+  async listPublished(@Query() query: ListWorkshopsQueryDto) {
+    return this.workshopsService.listPublished(query);
   }
 
   /**
