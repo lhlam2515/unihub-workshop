@@ -175,8 +175,9 @@ export function runSync(
   targetFilter?: string
 ): boolean {
   const activeTarget = (targetFilter ?? "claude") as "claude" | "github";
+  const isExplicitTarget = targetFilter !== undefined;
 
-  if (!isTargetConfigured(repoRoot, activeTarget)) {
+  if (!isExplicitTarget && !isTargetConfigured(repoRoot, activeTarget)) {
     console.log(
       `[agent-config] Skipping ${activeTarget} sync — target is not configured.`
     );

@@ -46,6 +46,11 @@ function main(): void {
         );
         process.exit(1);
       }
+    } else if (
+      (args[i] === "claude" || args[i] === "github") &&
+      target === undefined
+    ) {
+      target = args[i];
     } else {
       console.error(`Unknown option: ${args[i]}`);
       printUsage();
