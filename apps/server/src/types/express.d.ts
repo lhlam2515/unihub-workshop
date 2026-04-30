@@ -1,3 +1,4 @@
+/// <reference types="multer" />
 import type { JwtPayload } from "./jwt-payload";
 
 declare global {
