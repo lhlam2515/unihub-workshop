@@ -5,14 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build, Lint, Test
 
 ```sh
-pnpm dev           # all apps in parallel
-pnpm dev:server    # NestJS backend
-pnpm dev:web       # Next.js web (port 3000)
-pnpm dev:mobile    # Expo mobile
-pnpm build         # all apps
-pnpm lint          # all apps
-pnpm format        # prettier all
-pnpm check-types   # all apps
+pnpm dev            # all apps in parallel
+pnpm dev:server     # NestJS backend
+pnpm dev:web        # Next.js web (port 3000)
+pnpm dev:mobile     # Expo mobile
+pnpm build          # all apps
+pnpm lint           # all apps (check only, no auto-fix)
+pnpm lint:fix       # all apps (auto-fix)
+pnpm check-types    # all apps (tsc --noEmit)
+pnpm check          # all apps: lint + check-types + build
+pnpm format         # prettier all
 ```
 
 **Single-app filters:** `pnpm dev --filter=server`, `pnpm lint --filter=web`
