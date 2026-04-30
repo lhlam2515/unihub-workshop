@@ -1,37 +1,69 @@
 /**
  * Room Conflict Service
  *
- * Chuyên kiểm tra xung đột phòng:
- * - checkConflict(roomId, startsAt, endsAt, excludeWorkshopId?)
+ * Checks whether a room is already booked during a given time range.
+ * Used by WorkshopsService before creating or updating workshops.
  *
- * Query bảng workshops WHERE room_id = ? AND status = 'PUBLISHED'
- * với time range overlap.
- * Trả WORKSHOP_TIME_CONFLICT nếu bị trùng.
+ * Business rules:
+ * - Only PUBLISHED workshops are considered for conflict detection.
+ * - The excludeWorkshopId parameter allows excluding the current workshop
+ *   when updating (self-conflict should not block the update).
  */
 
 import { Injectable } from "@nestjs/common";
 
-import { WorkshopsRepository } from "../repositories/workshops.repository";
+import { workshopErrors } from "@/shared/response/errors";
+import { Result } from "@/shared/response/result";
+
+import { RoomsRepository } from "../repositories/rooms.repository";
 
 @Injectable()
 export class RoomConflictService {
-  constructor(private readonly workshopsRepo: WorkshopsRepository) {}
+  constructor(private readonly roomsRepo: RoomsRepository) {}
 
   /**
-   * checkConflict(roomId: string, startsAt: Date, endsAt: Date, excludeWorkshopId?: string)
+   * Checks whether a room is available during the specified time range.
    *
-   * TODO: Check if room is available during time range
-   * 1. Query workshops with same room_id
-   * 2. Check for time range overlap
-   * 3. Return error if conflict found
-   * 4. Exclude given workshopId (for update case)
+   * Business rules:
+   * - Overlapping time ranges are detected using PostgreSQL range overlap logic.
+   * - Only PUBLISHED workshops are considered as conflicts.
+   *
+   * @param roomId - The UUID of the room to check.
+   * @param startsAt - Proposed start time for the booking.
+   * @param endsAt - Proposed end time for the booking.
+   * @param excludeWorkshopId - Optional UUID to exclude from conflict check (used during updates).
+   * @returns OkResult with void if the room is available, or FailResult with WORKSHOP_TIME_CONFLICT.
    */
   async checkConflict(
     roomId: string,
     startsAt: Date,
     endsAt: Date,
     excludeWorkshopId?: string
-  ) {
-    // TODO: Implement
+  ): Promise<Result<void>> {
+    const result = await this.roomsRepo.findConflicting(
+      roomId,
+      startsAt,
+      endsAt
+    );
+    if (result.isFailure) return Result.fail(result.error);
+
+    const conflicts = result.data;
+
+    // Filter out the excluded workshop for self-conflict prevention during updates
+    const filteredConflicts = excludeWorkshopId
+      ? conflicts.filter((w) => w.workshopId !== excludeWorkshopId)
+      : conflicts;
+
+    if (filteredConflicts && filteredConflicts.length > 0) {
+      return Result.fail(
+        workshopErrors.roomConflict(
+          roomId,
+          startsAt.toISOString(),
+          endsAt.toISOString()
+        )
+      );
+    }
+
+    return Result.ok();
   }
 }

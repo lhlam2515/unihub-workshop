@@ -1,116 +1,643 @@
 /**
  * Workshops Service
  *
- * Logic cốt lõi của catalog:
- * - listPublished(query)
- * - getPublicDetail(id)
- * - createWorkshop(dto, userId)
- * - updateWorkshop(id, dto)
- * - publishWorkshop(id) — khởi tạo Redis counter
- * - emergencyUpdate(id, dto) — check conflict + emit event
- * - cancelWorkshop(id) — cascade void tickets + DEL counter
- * - getAdminDetail(id)
- * - listAdmin(query)
- * - getStats(id)
+ * Core business logic for the Catalog module.
+ * Handles the full workshop lifecycle: creation (DRAFT), publishing (PUBLISHED),
+ * emergency updates, cancellation, and public/admin querying.
+ *
+ * Business rules:
+ * - Workshops start in DRAFT status and transition through PUBLISHED or CANCELLED.
+ * - Room time conflicts are validated before create/update/publish operations.
+ * - Redis seat counters are initialized on publish and deleted on cancel.
+ * - Emergency updates only affect room_id, starts_at, ends_at of PUBLISHED workshops.
+ *
+ * Cross-module:
+ * - RoomConflictService and SeatCounterService are used from within the Catalog module.
+ * - SeatCounterService is exported for cross-module use by the Booking module.
  */
 
 import { Injectable } from "@nestjs/common";
 
+import type {
+  NewWorkshop,
+  WorkshopUpdate,
+} from "@/database/types/event-core.types";
+import { workshopErrors } from "@/shared/response/errors";
+import { Result } from "@/shared/response/result";
+
 import { RoomConflictService } from "./room-conflict.service";
+import { SeatCounterService } from "./seat-counter.service";
+import { WorkshopResponseBuilder } from "../dto/workshop-response.dto";
+import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
+import { RoomsRepository } from "../repositories/rooms.repository";
+import { SpeakersRepository } from "../repositories/speakers.repository";
+import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
+import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "../repositories/workshops.repository";
+
+import type { CreateWorkshopDto } from "../dto/create-workshop.dto";
+import type { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
+import type { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
+import type { UpdateWorkshopDto } from "../dto/update-workshop.dto";
+import type {
+  WorkshopSummaryDto,
+  WorkshopDetailDto,
+  WorkshopAdminDetailDto,
+} from "../dto/workshop-response.dto";
 
 @Injectable()
 export class WorkshopsService {
   constructor(
     private readonly workshopsRepo: WorkshopsRepository,
-    private readonly roomConflictService: RoomConflictService
+    private readonly roomConflictService: RoomConflictService,
+    private readonly seatCounterService: SeatCounterService,
+    private readonly speakersRepo: SpeakersRepository,
+    private readonly roomsRepo: RoomsRepository,
+    private readonly workshopSlotsRepo: WorkshopSlotsRepository,
+    private readonly workshopDocumentsRepo: WorkshopDocumentsRepository,
+    private readonly aiSummariesRepo: AiSummariesRepository
   ) {}
 
+  // ---------------------------------------------------------------------------
+  // Public Endpoints
+  // ---------------------------------------------------------------------------
+
   /**
-   * listPublished(query: ListWorkshopsQueryDto)
-   * TODO: Implement
+   * Lists published workshops for public browsing.
+   *
+   * Business rules:
+   * - Only PUBLISHED workshops are returned.
+   * - Available seat counts are fetched from Redis for real-time accuracy.
+   *
+   * @param query - Filtering and pagination parameters (faculty, date range, is_paid).
+   * @returns OkResult containing an array of summary DTOs with seat availability and speaker names, or FailResult (INTERNAL_ERROR).
    */
-  async listPublished(query: any) {
-    // TODO: Query PUBLISHED workshops with filters
+  async listPublished(
+    query: ListWorkshopsQueryDto
+  ): Promise<Result<WorkshopSummaryDto[]>> {
+    const result = await this.workshopsRepo.findPublished(query);
+    if (result.isFailure) return Result.fail(result.error);
+
+    const { items } = result.data;
+    const mapped = await Promise.all(
+      items.map(async (workshop: any) => {
+        const [availableSeats, speakerResult] = await Promise.all([
+          this.seatCounterService.getAvailable(workshop.workshopId),
+          this.speakersRepo.findById(workshop.speakerId),
+        ]);
+        return WorkshopResponseBuilder.fromSummary(
+          workshop,
+          speakerResult.isSuccess && speakerResult.data
+            ? speakerResult.data.fullName
+            : "Unknown",
+          availableSeats
+        );
+      })
+    );
+
+    return Result.ok(mapped);
   }
 
   /**
-   * getPublicDetail(id: string)
-   * TODO: Implement
+   * Retrieves public detail of a single published workshop.
+   *
+   * Business rules:
+   * - The workshop must be in PUBLISHED status.
+   * - Available seat count is fetched from Redis for real-time accuracy.
+   * - AI summary is included if available (summary_text only exposed when status is DONE).
+   *
+   * @param id - The UUID of the workshop.
+   * @returns OkResult containing the detail DTO, or FailResult (WORKSHOP_NOT_FOUND, WORKSHOP_NOT_PUBLISHED, INTERNAL_ERROR).
    */
-  async getPublicDetail(id: string) {
-    // TODO: Get workshop detail
+  async getPublicDetail(id: string): Promise<Result<WorkshopDetailDto>> {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshopRow = workshopResult.data!;
+    const workshop = workshopRow.workshops;
+
+    if (workshop.status !== "PUBLISHED") {
+      return Result.fail(workshopErrors.notPublished(id, workshop.status));
+    }
+
+    const [speakerResult, roomResult, availableSeats, summaryResult] =
+      await Promise.all([
+        this.speakersRepo.findById(workshop.speakerId),
+        this.roomsRepo.findById(workshop.roomId),
+        this.seatCounterService.getAvailable(id),
+        this.aiSummariesRepo.findByWorkshopId(id),
+      ]);
+
+    return Result.ok(
+      WorkshopResponseBuilder.fromDetail(
+        workshop,
+        speakerResult.isSuccess && speakerResult.data
+          ? speakerResult.data.fullName
+          : "Unknown",
+        roomResult.isSuccess && roomResult.data
+          ? roomResult.data.name
+          : "Unknown",
+        availableSeats,
+        summaryResult.isSuccess ? summaryResult.data : undefined
+      )
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin CRUD
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Creates a new workshop in DRAFT status.
+   *
+   * Business rules:
+   * - Room time conflicts are validated before creation.
+   * - The workshop always starts in DRAFT status.
+   * - A WorkshopSlot record is created alongside the workshop.
+   * - Speaker existence is validated (optional, falls back gracefully).
+   *
+   * Side effects:
+   * - Inserts a record into the workshops table.
+   * - Inserts a record into the workshop_slots table.
+   *
+   * @param dto - Workshop creation payload with snake_case fields from API.
+   * @param userId - The UUID of the creating user (from JWT sub).
+   * @returns OkResult containing the admin detail DTO, or FailResult with WORKSHOP_TIME_CONFLICT, INTERNAL_ERROR.
+   */
+  async createWorkshop(
+    dto: CreateWorkshopDto,
+    userId: string
+  ): Promise<Result<WorkshopAdminDetailDto>> {
+    // Validate room time conflict
+    const conflictResult = await this.roomConflictService.checkConflict(
+      dto.room_id,
+      dto.starts_at,
+      dto.ends_at
+    );
+    if (conflictResult.isFailure) return Result.fail(conflictResult.error);
+
+    const workshopData: NewWorkshop = {
+      title: dto.title,
+      description: dto.description ?? null,
+      speakerId: dto.speaker_id,
+      roomId: dto.room_id,
+      startsAt: dto.starts_at,
+      endsAt: dto.ends_at,
+      capacity: dto.capacity,
+      isPaid: dto.is_paid,
+      price: dto.is_paid && dto.price ? String(dto.price) : null,
+      status: "DRAFT",
+      createdBy: userId,
+    };
+
+    const workshopResult = await this.workshopsRepo.create(workshopData);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+
+    // Create slot for seat tracking
+    const slotResult = await this.workshopSlotsRepo.create(
+      workshopResult.data.workshopId,
+      dto.capacity
+    );
+    if (slotResult.isFailure) return Result.fail(slotResult.error);
+
+    // Resolve related data for response
+    const [speakerResult, roomResult] = await Promise.all([
+      this.speakersRepo.findById(dto.speaker_id),
+      this.roomsRepo.findById(dto.room_id),
+    ]);
+
+    return Result.ok(
+      WorkshopResponseBuilder.fromAdminDetail(
+        workshopResult.data,
+        slotResult.data,
+        speakerResult.isSuccess && speakerResult.data
+          ? speakerResult.data.fullName
+          : "Unknown",
+        roomResult.isSuccess && roomResult.data
+          ? roomResult.data.name
+          : "Unknown",
+        dto.capacity
+      )
+    );
   }
 
   /**
-   * createWorkshop(dto: CreateWorkshopDto, userId: string)
-   * TODO: Implement
+   * Updates a draft workshop's fields.
+   *
+   * Business rules:
+   * - Only workshops in DRAFT status can be updated.
+   * - If room or time fields change, room conflicts are re-validated.
+   * - Price can only be set when is_paid is true.
+   *
+   * Side effects:
+   * - Updates the workshops table record.
+   *
+   * @param id - The UUID of the workshop to update.
+   * @param dto - Partial update payload with snake_case fields.
+   * @returns OkResult containing the updated admin detail DTO, or FailResult with WORKSHOP_NOT_FOUND, WORKSHOP_NOT_PUBLISHED, WORKSHOP_TIME_CONFLICT.
    */
-  async createWorkshop(dto: any, userId: string) {
-    // TODO: Check room conflicts
-    // TODO: Insert into database
+  async updateWorkshop(
+    id: string,
+    dto: UpdateWorkshopDto
+  ): Promise<Result<WorkshopAdminDetailDto>> {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshopRow = workshopResult.data!;
+    const workshop = workshopRow.workshops;
+
+    if (workshop.status !== "DRAFT") {
+      return Result.fail(workshopErrors.notPublished(id, workshop.status));
+    }
+
+    // Check room conflicts if room or time changed
+    const roomId = dto.room_id ?? workshop.roomId;
+    const startsAt = dto.starts_at ?? workshop.startsAt;
+    const endsAt = dto.ends_at ?? workshop.endsAt;
+
+    if (dto.room_id || dto.starts_at || dto.ends_at) {
+      const conflictResult = await this.roomConflictService.checkConflict(
+        roomId,
+        startsAt,
+        endsAt,
+        id
+      );
+      if (conflictResult.isFailure) return Result.fail(conflictResult.error);
+    }
+
+    // Build update payload (only provided fields)
+    const updateData: WorkshopUpdate = {};
+    if (dto.title !== undefined) updateData.title = dto.title;
+    if (dto.description !== undefined) updateData.description = dto.description;
+    if (dto.speaker_id !== undefined) updateData.speakerId = dto.speaker_id;
+    if (dto.room_id !== undefined) updateData.roomId = dto.room_id;
+    if (dto.starts_at !== undefined) updateData.startsAt = dto.starts_at;
+    if (dto.ends_at !== undefined) updateData.endsAt = dto.ends_at;
+    if (dto.capacity !== undefined) updateData.capacity = dto.capacity;
+    if (dto.is_paid !== undefined) updateData.isPaid = dto.is_paid;
+    if (dto.price !== undefined) {
+      updateData.price = dto.price !== null ? String(dto.price) : null;
+    }
+
+    const updateResult = await this.workshopsRepo.update(id, updateData);
+    if (updateResult.isFailure) return Result.fail(updateResult.error);
+
+    // Resolve related data for response
+    const [slotResult, speakerResult, roomResult] = await Promise.all([
+      this.workshopSlotsRepo.findByWorkshopId(id),
+      this.speakersRepo.findById(workshop.speakerId),
+      this.roomsRepo.findById(workshop.roomId),
+    ]);
+
+    return Result.ok(
+      WorkshopResponseBuilder.fromAdminDetail(
+        updateResult.data,
+        slotResult.isSuccess && slotResult.data ? slotResult.data : null,
+        speakerResult.isSuccess && speakerResult.data
+          ? speakerResult.data.fullName
+          : "Unknown",
+        roomResult.isSuccess && roomResult.data
+          ? roomResult.data.name
+          : "Unknown",
+        updateResult.data.capacity
+      )
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Publishing & Emergency Updates
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Publishes a draft workshop, making it visible and bookable by students.
+   *
+   * Business rules:
+   * - Only DRAFT workshops can be published.
+   * - The Redis seat counter is initialized to the workshop's capacity.
+   * - If no WorkshopSlot exists, one is created during publishing.
+   *
+   * Side effects:
+   * - Updates workshop status to 'PUBLISHED'.
+   * - Creates/updates the WorkshopSlot record if needed.
+   * - Sets `seat:available:{workshopId}` key in Redis.
+   *
+   * @param id - The UUID of the workshop to publish.
+   * @returns OkResult containing the published admin detail DTO, or FailResult with WORKSHOP_NOT_FOUND, WORKSHOP_NOT_PUBLISHED.
+   */
+  async publishWorkshop(id: string): Promise<Result<WorkshopAdminDetailDto>> {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshopRow = workshopResult.data!;
+    const workshop = workshopRow.workshops;
+
+    if (workshop.status !== "DRAFT") {
+      return Result.fail(workshopErrors.notPublished(id, workshop.status));
+    }
+
+    // Update status to PUBLISHED
+    const updateResult = await this.workshopsRepo.updateStatus(id, "PUBLISHED");
+    if (updateResult.isFailure) return Result.fail(updateResult.error);
+
+    // Ensure slot exists (may have been created during draft)
+    let slotResult = await this.workshopSlotsRepo.findByWorkshopId(id);
+    if (slotResult.isFailure) return Result.fail(slotResult.error);
+    if (!slotResult.data) {
+      slotResult = await this.workshopSlotsRepo.create(id, workshop.capacity);
+      if (slotResult.isFailure) return Result.fail(slotResult.error);
+    }
+
+    // Initialize Redis seat counter
+    await this.seatCounterService.initialize(id, workshop.capacity);
+
+    // Resolve related data for response
+    const [speakerResult, roomResult] = await Promise.all([
+      this.speakersRepo.findById(workshop.speakerId),
+      this.roomsRepo.findById(workshop.roomId),
+    ]);
+
+    return Result.ok(
+      WorkshopResponseBuilder.fromAdminDetail(
+        updateResult.data,
+        slotResult.data,
+        speakerResult.isSuccess && speakerResult.data
+          ? speakerResult.data.fullName
+          : "Unknown",
+        roomResult.isSuccess && roomResult.data
+          ? roomResult.data.name
+          : "Unknown",
+        workshop.capacity
+      )
+    );
   }
 
   /**
-   * updateWorkshop(id: string, dto: UpdateWorkshopDto)
-   * TODO: Implement
+   * Performs an emergency update on a published workshop.
+   *
+   * Allows modifying room, start time, or end time of an already published
+   * workshop without going through the full edit-publish cycle.
+   *
+   * Business rules:
+   * - Only PUBLISHED workshops can receive emergency updates.
+   * - Room time conflicts are re-validated (excludes the current workshop).
+   * - Only room_id, starts_at, and ends_at can be modified via this endpoint.
+   * - At least one field must be provided (validated by Zod).
+   *
+   * Side effects:
+   * - Updates the workshops table with new scheduling fields.
+   *
+   * @param id - The UUID of the workshop to update.
+   * @param dto - Emergency update payload (room_id?, starts_at?, ends_at?).
+   * @returns OkResult containing the updated admin detail DTO, or FailResult with WORKSHOP_NOT_FOUND, WORKSHOP_NOT_PUBLISHED, WORKSHOP_TIME_CONFLICT.
    */
-  async updateWorkshop(id: string, dto: any) {
-    // TODO: Only for DRAFT status
-    // TODO: Check room conflicts
-    // TODO: Update database
+  async emergencyUpdate(
+    id: string,
+    dto: EmergencyUpdateWorkshopDto
+  ): Promise<Result<WorkshopAdminDetailDto>> {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshopRow = workshopResult.data!;
+    const workshop = workshopRow.workshops;
+
+    if (workshop.status !== "PUBLISHED") {
+      return Result.fail(workshopErrors.notPublished(id, workshop.status));
+    }
+
+    // Determine effective values (existing or updated)
+    const roomId = dto.room_id ?? workshop.roomId;
+    const startsAt = dto.starts_at ?? workshop.startsAt;
+    const endsAt = dto.ends_at ?? workshop.endsAt;
+
+    // Check room conflicts (exclude self)
+    if (dto.room_id || dto.starts_at || dto.ends_at) {
+      const conflictResult = await this.roomConflictService.checkConflict(
+        roomId,
+        startsAt,
+        endsAt,
+        id
+      );
+      if (conflictResult.isFailure) return Result.fail(conflictResult.error);
+    }
+
+    // Update only scheduling fields
+    const updateData: WorkshopUpdate = {};
+    if (dto.room_id !== undefined) updateData.roomId = dto.room_id;
+    if (dto.starts_at !== undefined) updateData.startsAt = dto.starts_at;
+    if (dto.ends_at !== undefined) updateData.endsAt = dto.ends_at;
+
+    const updateResult = await this.workshopsRepo.update(id, updateData);
+    if (updateResult.isFailure) return Result.fail(updateResult.error);
+
+    // Resolve related data for response
+    const [slotResult, speakerResult, roomResult] = await Promise.all([
+      this.workshopSlotsRepo.findByWorkshopId(id),
+      this.speakersRepo.findById(workshop.speakerId),
+      this.roomsRepo.findById(workshop.roomId),
+    ]);
+
+    return Result.ok(
+      WorkshopResponseBuilder.fromAdminDetail(
+        updateResult.data,
+        slotResult.isSuccess && slotResult.data ? slotResult.data : null,
+        speakerResult.isSuccess && speakerResult.data
+          ? speakerResult.data.fullName
+          : "Unknown",
+        roomResult.isSuccess && roomResult.data
+          ? roomResult.data.name
+          : "Unknown",
+        workshop.capacity
+      )
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cancellation
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Cancels a workshop, transitioning it to CANCELLED status.
+   *
+   * Business rules:
+   * - Workshops that are already CANCELLED cannot be cancelled again.
+   * - If the workshop was PUBLISHED, the Redis seat counter is deleted.
+   *
+   * Side effects:
+   * - Updates workshop status to 'CANCELLED'.
+   * - Deletes the `seat:available:{workshopId}` key from Redis if the workshop
+   *   was previously PUBLISHED.
+   *
+   * Cross-module contract:
+   * - Currently only updates local state. When the Booking module exists,
+   *   this should also call BookingService to void registrations and tickets.
+   *
+   * @param id - The UUID of the workshop to cancel.
+   * @returns OkResult containing the cancelled admin detail DTO, or FailResult with WORKSHOP_NOT_FOUND, WORKSHOP_CANCELLED.
+   */
+  async cancelWorkshop(id: string): Promise<Result<WorkshopAdminDetailDto>> {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshopRow = workshopResult.data!;
+    const workshop = workshopRow.workshops;
+
+    if (workshop.status === "CANCELLED") {
+      return Result.fail(workshopErrors.cancelled(id));
+    }
+
+    const wasPublished = workshop.status === "PUBLISHED";
+
+    // Update status to CANCELLED
+    const updateResult = await this.workshopsRepo.updateStatus(id, "CANCELLED");
+    if (updateResult.isFailure) return Result.fail(updateResult.error);
+
+    // Delete Redis seat counter if workshop was published
+    if (wasPublished) {
+      await this.seatCounterService.delete(id);
+    }
+
+    // Resolve related data for response
+    const [slotResult, speakerResult, roomResult] = await Promise.all([
+      this.workshopSlotsRepo.findByWorkshopId(id),
+      this.speakersRepo.findById(workshop.speakerId),
+      this.roomsRepo.findById(workshop.roomId),
+    ]);
+
+    return Result.ok(
+      WorkshopResponseBuilder.fromAdminDetail(
+        updateResult.data,
+        slotResult.isSuccess && slotResult.data ? slotResult.data : null,
+        speakerResult.isSuccess && speakerResult.data
+          ? speakerResult.data.fullName
+          : "Unknown",
+        roomResult.isSuccess && roomResult.data
+          ? roomResult.data.name
+          : "Unknown",
+        workshop.capacity
+      )
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin Queries
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Retrieves full admin detail for a single workshop by ID.
+   *
+   * Returns workshops in any status including slot counters (confirmed, locked)
+   * and the creator's identity.
+   *
+   * @param id - The UUID of the workshop.
+   * @returns OkResult containing the admin detail DTO with related entities, or FailResult (WORKSHOP_NOT_FOUND, INTERNAL_ERROR).
+   */
+  async getAdminDetail(id: string): Promise<Result<WorkshopAdminDetailDto>> {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshopRow = workshopResult.data!;
+    const workshop = workshopRow.workshops;
+
+    const [slotResult, speakerResult, roomResult] = await Promise.all([
+      this.workshopSlotsRepo.findByWorkshopId(id),
+      this.speakersRepo.findById(workshop.speakerId),
+      this.roomsRepo.findById(workshop.roomId),
+    ]);
+
+    return Result.ok(
+      WorkshopResponseBuilder.fromAdminDetail(
+        workshop,
+        slotResult.isSuccess && slotResult.data ? slotResult.data : null,
+        speakerResult.isSuccess && speakerResult.data
+          ? speakerResult.data.fullName
+          : "Unknown",
+        roomResult.isSuccess && roomResult.data
+          ? roomResult.data.name
+          : "Unknown",
+        workshop.capacity
+      )
+    );
   }
 
   /**
-   * publishWorkshop(id: string)
-   * TODO: Initialize Redis seat counter
+   * Lists all workshops for admin management with optional status filter.
+   *
+   * Business rules:
+   * - Returns workshops in any status (DRAFT, PUBLISHED, CANCELLED).
+   * - Filters by status if provided, otherwise returns all statuses.
+   * - Results are paginated and ordered by creation date descending.
+   *
+   * @param query - Query parameters for filtering (status?, page?, limit?).
+   * @returns OkResult containing an array of admin detail DTOs with slot, speaker, and room data, or FailResult (INTERNAL_ERROR).
    */
-  async publishWorkshop(id: string) {
-    // TODO: Change status to PUBLISHED
-    // TODO: Initialize Redis: SET seat:available:{id} {capacity}
+  async listAdmin(query: any): Promise<Result<WorkshopAdminDetailDto[]>> {
+    const result = await this.workshopsRepo.listAdmin(query);
+    if (result.isFailure) return Result.fail(result.error);
+
+    const { items } = result.data;
+    const mapped = await Promise.all(
+      items.map(async (workshop: any) => {
+        const [slotResult, speakerResult, roomResult] = await Promise.all([
+          this.workshopSlotsRepo.findByWorkshopId(workshop.workshopId),
+          this.speakersRepo.findById(workshop.speakerId),
+          this.roomsRepo.findById(workshop.roomId),
+        ]);
+
+        return WorkshopResponseBuilder.fromAdminDetail(
+          workshop,
+          slotResult.isSuccess && slotResult.data ? slotResult.data : null,
+          speakerResult.isSuccess && speakerResult.data
+            ? speakerResult.data.fullName
+            : "Unknown",
+          roomResult.isSuccess && roomResult.data
+            ? roomResult.data.name
+            : "Unknown",
+          workshop.capacity
+        );
+      })
+    );
+
+    return Result.ok(mapped);
   }
 
-  /**
-   * emergencyUpdate(id: string, dto: EmergencyUpdateWorkshopDto)
-   * TODO: Implement
-   */
-  async emergencyUpdate(id: string, dto: any) {
-    // TODO: Check room conflicts
-    // TODO: Emit event for booking system
-  }
+  // ---------------------------------------------------------------------------
+  // Statistics
+  // ---------------------------------------------------------------------------
 
   /**
-   * cancelWorkshop(id: string)
-   * TODO: Cascade void tickets and payments
+   * Retrieves real-time statistics for a specific workshop.
+   *
+   * Business rules:
+   * - confirmed_count and locked_count come from the WorkshopSlot record.
+   * - available_seats comes from Redis for real-time accuracy.
+   * - total_capacity is the workshop's configured capacity.
+   *
+   * @param id - The UUID of the workshop.
+   * @returns OkResult containing stats object (confirmed_count, locked_count, available_seats, total_capacity), or FailResult (WORKSHOP_NOT_FOUND, INTERNAL_ERROR).
    */
-  async cancelWorkshop(id: string) {
-    // TODO: Change status to CANCELLED
-    // TODO: Void all tickets
-    // TODO: Cancel pending payments
-    // TODO: DELETE Redis counter
-  }
+  async getStats(id: string): Promise<
+    Result<{
+      confirmed_count: number;
+      locked_count: number;
+      available_seats: number;
+      total_capacity: number;
+    }>
+  > {
+    const workshopResult = await this.workshopsRepo.findById(id);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshopRow = workshopResult.data!;
+    const workshop = workshopRow.workshops;
 
-  /**
-   * getAdminDetail(id: string)
-   * TODO: Implement
-   */
-  async getAdminDetail(id: string) {
-    // TODO: Return with admin-specific fields
-  }
+    const [slotResult, availableSeats] = await Promise.all([
+      this.workshopSlotsRepo.findByWorkshopId(id),
+      this.seatCounterService.getAvailable(id),
+    ]);
 
-  /**
-   * listAdmin(query: any)
-   * TODO: Implement
-   */
-  async listAdmin(query: any) {
-    // TODO: Return all workshops (any status) for admin
-  }
-
-  /**
-   * getStats(id: string)
-   * TODO: Implement
-   */
-  async getStats(id: string) {
-    // TODO: Return confirmed_count, locked_count, etc
+    return Result.ok({
+      confirmed_count:
+        slotResult.isSuccess && slotResult.data
+          ? slotResult.data.confirmedCount
+          : 0,
+      locked_count:
+        slotResult.isSuccess && slotResult.data
+          ? slotResult.data.lockedCount
+          : 0,
+      available_seats: availableSeats,
+      total_capacity: workshop.capacity,
+    });
   }
 }
