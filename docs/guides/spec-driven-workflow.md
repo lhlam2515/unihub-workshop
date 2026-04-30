@@ -5,13 +5,43 @@
 
 ## 1. Overview
 
-Spec-Driven Development inverts the traditional "code first, document later" cycle. Before writing a single line of code, you define **what** to build (`proposal`), **how** to build it (`design`), the **acceptance criteria** (`specs`), and the **step-by-step plan** (`tasks`). Only then do you implement (`apply`), verify (`verify`), commit (`commit`), and archive (`archive`).
+Spec-Driven Development inverts the traditional "code first, document later" cycle. Before writing a single line of code, you define **what** to build (`proposal`), **how** to build it (`design`), the **acceptance criteria** (`specs`), and the **step-by-step plan** (`tasks`). Only then do you implement and close the cycle.
 
 ```
-Specification Phase                  Implementation Phase
-───────────────────                  ────────────────────
-/propose  →  [explore]  →  /apply  →  /verify  →  /commit  →  /archive  →  /pr
+Exploration     Specification         Implementation              Closure
+───────────     ─────────────         ──────────────              ───────
+/explore   →    /propose         →    /branch             →     /archive
+                                       ↓                           ↓
+                                  /apply — ↕ — /verify         /docs
+                                       ↓                           ↓
+                                      /commit                  → /pr
 ```
+
+The workflow is iterative: during `/apply`, you may loop back to `/verify` to catch issues early, then continue applying.
+
+### Branching Strategy
+
+Every change MUST be implemented on its own branch, created before any code is written. The branch name follows the Conventional Commits prefix convention:
+
+```
+{feat,fix,chore,hotfix,refactor}/<change-name-kebab-case>
+```
+
+| Prefix | When |
+|--------|------|
+| `feat/` | New feature or capability |
+| `fix/` | Bug fix |
+| `chore/` | Maintenance, tooling, documentation |
+| `hotfix/` | Urgent production fix (branched from release tag, not main) |
+| `refactor/` | Code restructuring with no behavior change |
+
+Examples:
+- `feat/implement-iam-module`
+- `fix/registration-race-condition`
+- `chore/update-spec-driven-workflow`
+- `refactor/consolidate-auth-guards`
+
+The branch is created right after `/opsx:propose` and before `/opsx:apply`. This keeps the main branch clean and allows multiple in-progress changes to coexist.
 
 ## 2. Directory Layout
 
@@ -105,9 +135,27 @@ Rules:
 
 ## 4. Command Reference
 
+### `/opsx:explore` — Explore Requirements
+
+**When:** Starting any new feature, fix, or refactor — before creating artifacts.
+
+**Input:** Description of what to investigate, or just enter explore mode.
+
+**What happens:**
+
+1. Reads existing spec docs (`docs/srs.md`, `docs/blueprint/specs/`, `docs/blueprint/design/`) for business context
+2. Reads the active change artifacts if one exists
+3. Engages in open-ended investigation: problem space, codebase architecture, integration points
+4. May create ASCII diagrams, compare options, surface risks and unknowns
+5. When insights crystallize, offers to create a proposal
+
+**Purpose:** This is the discovery phase. No code is written. The goal is to understand the domain and scope before committing to a plan.
+
+**Output:** Clarified requirements, identified risks, ready for `/opsx:propose`.
+
 ### `/opsx:propose` — Create Change Artifacts
 
-**When:** Starting any new feature, fix, or refactor.
+**When:** Requirements are clear from exploration.
 
 **Input:** Change name (kebab-case) or description of what to build.
 
@@ -120,17 +168,60 @@ Rules:
 5. Dependencies are read for context; template is filled in
 6. Stops when all `applyRequires` artifacts are `done`
 
-**Output:** Change directory with all 4 artifacts, ready for `/opsx:apply`.
+**Output:** Change directory with all 4 artifacts, ready for `/opsx:branch`.
 
 **Example:**
 
 ```
-/opsx:propose implement-auth-guards
+/opsx:propose implement-iam-module
+```
+
+### `/opsx:branch` — Create Implementation Branch
+
+**When:** Artifacts are complete, before writing any code.
+
+**Input:** Change name (kebab-case) or explicit branch name.
+
+**What happens:**
+
+1. Derives branch name from the change name using the Conventional Commits prefix convention:
+
+   ```bash
+   # From proposal scope, determine the prefix:
+   #   feat/  — new capability
+   #   fix/   — bug fix
+   #   chore/ — maintenance, tooling, docs
+   #   hotfix/ — urgent production fix
+   #   refactor/ — restructuring with no behavior change
+
+   git checkout -b <prefix>/<change-name>
+   ```
+
+2. If the change name doesn't clearly map to a prefix (e.g., `implement-iam-module` → `feat/`), infer from the proposal's content.
+
+3. If a branch with that name already exists, prompt user: checkout existing, rename, or create with a date suffix.
+
+**Validation:**
+
+- Branch is NOT `main` — all implementation work happens on feature branches
+- Branch name matches `{feat,fix,chore,hotfix,refactor}/<kebab-case-name>`
+- `git status` is clean before branching (stash or commit pending changes)
+
+**Output:** A new local branch, switched and ready for `/opsx:apply`.
+
+**Examples:**
+
+```
+/opsx:branch implement-iam-module
+→ git checkout -b feat/implement-iam-module
+
+/opsx:branch fix-registration-race-condition
+→ git checkout -b fix/registration-race-condition
 ```
 
 ### `/opsx:apply` — Implement Tasks
 
-**When:** Artifacts are ready; you want to execute the implementation.
+**When:** Branch is created, artifacts are ready; you want to execute the implementation.
 
 **Input:** Change name (optional — inferred from context if only one active).
 
@@ -142,6 +233,16 @@ Rules:
 4. Each pending task is executed in order
 5. After each task: `- [ ]` → `- [x]` in tasks.md
 6. Pauses on: unclear tasks, design issues, blockers, errors
+
+**Parallel execution with subagents:**
+
+For changes with independent task groups (e.g., repositories don't depend on controllers), tasks can be distributed to parallel subagents. Each subagent implements a self-contained group of tasks on an isolated worktree, then changes are merged back.
+
+**Criteria for parallelization:**
+
+- Task groups have no file dependencies on each other
+- Each group produces independently verifiable output
+- Groups share the same context artifacts (schema, types, DTOs)
 
 **Critical rules during apply:**
 
@@ -162,8 +263,10 @@ Rules:
 1. `tsc --noEmit` — TypeScript type checking
 2. `pnpm lint --filter=server` — ESLint on changed files
 3. Cross-references implementation against spec scenarios
-4. Verifies task completion matches file changes
-5. Reports any gaps or inconsistencies
+4. Checks each requirement from delta specs against codebase for implementation evidence
+5. Verifies task completion matches file changes
+6. Reports three dimensions: **Completeness** (tasks, coverage), **Correctness** (requirements, scenarios), **Coherence** (design adherence, patterns)
+7. Discovers **new findings** during verification: error patterns, missing edge cases, architectural insights
 
 **Common issues caught:**
 
@@ -172,47 +275,12 @@ Rules:
 - Incorrect ioredis parameter ordering
 - Uninitialized class properties (missing `!` assertion)
 - Module import issues (missing `@Injectable()`, missing module wiring)
-
-### `/opsx:commit` — Generate Git Commits
-
-**When:** Implementation is verified; ready to commit.
-
-**Input:** Change name (optional).
-
-**What happens:**
-
-1. Reads completed tasks from `tasks.md`
-2. Runs `git status --porcelain` and `git diff --stat`
-3. Groups changed files by task group + architectural layer
-4. Drafts Conventional Commit messages (`feat(scope):`, `docs(scope):`, `chore(openspec):`, `build(deps):`)
-5. Stages and commits each group in dependency order
-6. Skips verification-only tasks (no code changes)
-
-**Commit type mapping:**
-
-| Task pattern | Commit type |
-|-------------|-------------|
-| "Define type", "Add interface" | `feat(types):` |
-| "Implement guard/service/mechanic" | `feat(<module>):` |
-| "Update JSDoc", "Translate docs" | `docs(<area>):` |
-| "Add dependency", "Install package" | `build(deps):` |
-| OpenSpec artifacts | `chore(openspec):` |
-| "Verify build/lint" | skip (no code) |
-
-**Commit message format:**
-
-```
-<type>(<scope>): <imperative summary>
-
-- <task description>
-- <task description>
-
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
-```
+- Incorrect `Result` method calls (e.g., `.propagate()` vs `Result.fail()`)
+- Enum type mismatches in Drizzle `eq()` queries
 
 ### `/opsx:archive` — Archive & Sync Specs
 
-**When:** All tasks complete, all commits made.
+**When:** Implementation verified, ready to close the change.
 
 **Input:** Change name (optional).
 
@@ -226,9 +294,84 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
 **Output:** Change archived with complete audit trail.
 
+### `/opsx:docs` — Generate Contract-Oriented JSDoc
+
+**When:** After archive, before commit. The code is final, now document its contract.
+
+**Input:** Change name, file paths, or module path.
+
+**What happens:**
+
+1. Reads spec artifacts (specs, proposal, design) for business context
+2. Reads project documentation rules (`.agents/rules/documentation.md`)
+3. Collects target files from tasks.md + git diff
+4. Classifies files by architectural layer (controller, service, repository, DTO)
+5. For each file, generates layer-specific JSDoc:
+
+   | Layer | Documentation Focus |
+   |-------|-------------------|
+   | **Service** | Business rules, side effects, error codes |
+   | **Controller** | HTTP contract, security, params source |
+   | **Repository** | Data access logic, indexes, locking |
+   | **DTO / Builder** | Data contract, transformation rules |
+
+6. Each JSDoc block follows the Contract-Oriented format: active-verb summary, domain-meaning `@param`, explicit error codes in `@returns`, side effects section
+
+**Output:** All public methods documented with intent-based JSDoc. Files updated in place.
+
+### `/opsx:commit` — Generate Git Commits
+
+**When:** Implementation is verified and documented; ready to commit.
+
+**Input:** Change name (optional).
+
+**What happens:**
+
+1. Reads completed tasks from `tasks.md`
+2. Runs `git status --porcelain` and `git diff --stat`
+3. Groups changed files by **task dependency order** (lowest dependency first)
+4. Drafts Conventional Commit messages (`feat(scope):`, `docs(scope):`, `chore(openspec):`, `build(deps):`)
+5. Stages and commits each group in dependency order
+6. Skips verification-only tasks (no code changes)
+
+**Grouping strategy — commit by task dependency, not architectural layer:**
+
+Commits follow the same order as tasks: schema/types → DTOs → repositories → services → controllers. Each commit groups files that are functionally related within the same task group, even if they span different layers.
+
+```
+# Instead of grouping all repos together across tasks:
+feat(repositories): implement all repositories          ← BAD: too coarse
+
+# Group by what the task produces:
+feat(auth): add user and student types and schemas      ← schema first
+feat(auth): implement users and students repositories   ← repos with schema context
+feat(auth): add auth service with login/refresh/logout  ← service that uses repos
+feat(auth): implement auth controller endpoints          ← controller that uses service
+```
+
+**Commit type mapping:**
+
+| Task pattern | Commit type |
+|-------------|-------------|
+| "Define type", "Add interface" | `feat(types):` |
+| "Implement guard/service/mechanic" | `feat(<module>):` |
+| "Update JSDoc", "Translate docs" | `docs(<area>):` |
+| "Add dependency", "Install package" | `build(deps):` |
+| OpenSpec artifacts + command files | `chore(openspec):` |
+| "Verify build/lint" | skip (no code) |
+
+**Commit message format:**
+
+```
+<type>(<scope>): <imperative summary>
+
+- <task description>
+- <task description>
+```
+
 ### `/opsx:pr` — Create Pull Request
 
-**When:** Changes committed and pushed; ready for review.
+**When:** All changes committed and pushed; ready for review.
 
 **Input:** None (infers from current branch).
 
@@ -246,89 +389,148 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
 ## 5. Full Workflow Example
 
-Below is a real trace from implementing `implement-auth-guards`:
+Below is a real trace from implementing `implement-iam-module` — a complete IAM (Identity & Access Management) module with authentication, user management, and checkin staff assignment:
 
 ```text
-## 1. /opsx:propose implement-auth-guards
+## 1. /opsx:explore
 
-> User describes: "cài đặt các Guards và Decorators để triển khai
-  xác thực dựa trên tài liệu 03-access-control.md và auth.md"
+> User asks: "Phân tích các task này có thể thực hiện song song bằng subagent?"
+> Agent reads: docs/srs.md, docs/blueprint/specs/auth.md, docs/blueprint/design/03-access-control.md
+> Identifies 33 tasks across 6 groups with clear dependency chains
 
-$ openspec new change "implement-auth-guards"
-  ✔ Created change at openspec/changes/implement-auth-guards/
+Finding: tasks with shared schema dependencies must be sequential;
+repositories can run in parallel since they each own their data access.
 
-$ openspec status --change "implement-auth-guards" --json
-  applyRequires: ["tasks"], artifacts: proposal(ready), design(blocked),
-  specs(blocked), tasks(blocked)
+## 2. /opsx:propose implement-iam-module
 
-Created proposal.md → design.md → specs/auth-guards/spec.md → tasks.md
+> User describes: "cài đặt module IAM — auth, user management, checkin staff"
 
-All artifacts complete!
+$ openspec new change "implement-iam-module"
+  ✔ Created change at openspec/changes/implement-iam-module/
 
-## 2. /opsx:apply implement-auth-guards
+Created proposal.md → design.md → specs/ → tasks.md
 
-13 tasks, 0 complete
+4 delta specs synced:
+  - token-lifecycle (5 requirements, 14 scenarios)
+  - user-authentication (11 requirements, 31 scenarios)
+  - user-management (8 requirements, 25 scenarios)
+  - staff-assignment (6 requirements, 14 scenarios)
 
-### Task 1.1: Define JwtPayload interface
-Created src/shared/types/jwt-payload.ts
-✓ Task 1.1 complete
+## 3. /opsx:branch implement-iam-module
 
-### Task 2.1 + 2.2: Implement JwtAuthGuard
-Implemented JwtAuthGuard with JWT verification + Redis blacklist check
-✓ Tasks 2.1, 2.2 complete
+$ git checkout -b feat/implement-iam-module
+  Switched to a new branch 'feat/implement-iam-module'
 
-... (working through tasks 3-6) ...
+Branch created from main. Ready for implementation.
 
-### Task 5.2: HmacSignatureGuard
-Implemented HMAC-SHA256 verification with timing-safe comparison
-✓ Task 5.2 complete
+## 4. /opsx:apply implement-iam-module
 
-### Tasks 6.1-6.4: Update decorator docs
-Translated all 4 decorators to English contract-oriented JSDoc
-✓ Tasks 6.1-6.4 complete
+33 tasks, 0 complete
 
-### Tasks 7.1-7.2: Verification
+### Phase A: Schema + Types + DTOs (tasks 1-3)
+✓ database schema: checkinStaffAssignments table, relations, types
+✓ DTO builders: UserResponseDto, AuthMeResponseDto, LoginResponseDto
+
+### Phase B: Repositories (parallel via subagents)
+  Agent 1: UsersRepository (5 methods), StudentsRepository (2 methods)
+  Agent 2: CheckinStaffAssignmentsRepository (2 methods)
+✓ Both complete. Changes merged.
+
+### Phase C: Core Services (tasks 8-12)
+✓ TokenService: sign/verify/blacklist access + refresh tokens
+✓ AuthService: login, refreshToken, logout, getMe
+
+### Phase D: Business Services (tasks 13-15)
+✓ UsersService: list, getById, updateStatus, revokeTokens
+✓ StudentProfileService: getProfileByUserId
+✓ CheckinStaffAssignmentService: assignWorkshops, getAssignedWorkshops
+
+### Phase E: Controllers + Wiring (tasks 16-22)
+✓ AuthController: POST login, POST refresh, POST logout, GET me
+✓ UsersAdminController: GET list, GET byId, PATCH status, POST revoke
+✓ CheckinStaffAdminController: POST assign, GET workshops
+✓ IamModule wiring + AppModule registration
+
+### Phase F: Build verification (tasks 23-25)
+
+$ pnpm build --filter=server
+  12 TypeScript errors found
+
+### Fixes applied:
+- systemErrors.internal() signature mismatch (12 occurrences)
+- Drizzle enum type mismatch in eq() → use sql\`...\`
+- Result.propagate() → Result.fail() (type narrowing issue)
+- studentProfile type inference with explicit annotation
+
 $ pnpm build --filter=server  → PASS
-$ eslint on changed files     → PASS
-✓ Tasks 7.1, 7.2 complete
+$ pnpm lint --filter=server    → PASS (0 IAM warnings)
 
-13/13 tasks complete.
+33/33 tasks complete.
 
-## 3. ESLint boundary issue discovered
+## 5. /opsx:verify implement-iam-module
 
-$ eslint reports: shared/types/jwt-payload.ts — shared → database not allowed
+### Summary
+| Dimension    | Status                    |
+|--------------|---------------------------|
+| Completeness | 33/33 tasks, 30 reqs     |
+| Correctness  | 30/30 reqs covered        |
+| Coherence    | Followed (design.md)      |
 
-Fix: Inline UserRole as string union type ("STUDENT" | "ORGANIZER" | "CHECKIN_STAFF")
-instead of importing from database/types/enums.types.
+### New findings discovered:
+- systemErrors.internal() only accepts cause?, not (message, cause)
+- Drizzle enum columns need sql\`\` not eq() for string comparison
+- Result<T>.isFailure is a boolean getter, not type predicate — can't narrow
+- LoginResponseBuilder must use LoginResponseDto return type (snake_case)
 
-$ pnpm build --filter=server → PASS
-$ eslint                     → PASS
+Final assessment: All critical issues resolved. Ready for archive.
 
-## 4. /opsx:commit
+## 6. /opsx:archive implement-iam-module
 
-✓ abc1234 feat(types): add JwtPayload and Express request augmentation
-✓ def5678 feat(guards): implement JwtAuthGuard and RolesGuard
-✓ ghi9012 docs(decorators): translate JSDoc to English
-✓ jkl0123 build(deps): add jsonwebtoken and @types/jsonwebtoken
+4 delta specs to sync:
+  - token-lifecycle → openspec/specs/token-lifecycle/spec.md
+  - user-authentication → openspec/specs/user-authentication/spec.md
+  - user-management → openspec/specs/user-management/spec.md
+  - staff-assignment → openspec/specs/staff-assignment/spec.md
 
-4 commits created.
+→ Sync now
 
-## 5. /opsx:archive implement-auth-guards
+$ mv openspec/changes/implement-iam-module → archive/2026-04-30-implement-iam-module
 
-Delta spec: auth-guards (new capability, 6 requirements, 18 scenarios)
-→ Sync now (recommended)
+Archived. 4 specs synced.
 
-$ cp specs/auth-guards/spec.md → openspec/specs/auth-guards/spec.md
-$ mv openspec/changes/implement-auth-guards → archive/2026-04-29-implement-auth-guards
+## 7. /opsx:docs implement-iam-module
 
-Archived. Synced.
+### Documented Files
+| File | Methods | Rules | Errors | Effects |
+|------|---------|-------|--------|--------|
+| auth.service.ts | 4 | 3 | 3 | 5 |
+| token.service.ts | 6 | 2 | 4 | 2 |
+| users.service.ts | 4 | 1 | 2 | 2 |
+| auth.controller.ts | 4 | — | — | — |
+| users-admin.controller.ts | 4 | — | — | — |
+| checkin-staff.service.ts | 2 | 1 | 1 | 1 |
+| ... | 8 more files | | | |
 
-## 6. /opsx:pr
+All JSDoc follows Contract-Oriented standard (.agents/rules/documentation.md).
 
-$ gh pr create --title "feat(core): implement Redis module and auth security layer"
+## 8. /opsx:commit
+
+7 commits, ordered by task dependency:
+
+✓ a1b2c3d feat(database): add checkinStaffAssignments schema and relations
+✓ e4f5g6h feat(dto): add response DTO builders for auth and user endpoints
+✓ i7j8k9l feat(repositories): implement users and students repositories
+✓ m0n1o2p feat(auth): implement TokenService and AuthService
+✓ q3r4s5t feat(admin): implement UsersService and CheckinStaffAssignmentService
+✓ u6v7w8x feat(controllers): wire auth and admin HTTP endpoints
+✓ y9z0a1b chore(openspec): sync 4 delta specs and archive IAM change
+
+## 9. /opsx:pr
+
+$ gh pr create --title "feat(iam): implement IAM module with full auth lifecycle"
   --body "..."
 
-PR created: https://github.com/lhlam2515/unihub-workshop/pull/6
+PR created: https://github.com/lhlam2515/unihub-workshop/pull/8
 ```
 
 ## 6. Verification Checklist
@@ -341,3 +543,24 @@ Before archiving any change, verify:
 - [ ] ESLint `boundaries` rules are not violated
 - [ ] All JSDoc is in English and follows contract-oriented format
 - [ ] No sensitive files (.env, credentials) are staged
+
+### End-to-End Checklist
+
+```
+Before code:
+  ☐ /opsx:explore       — Requirements clarified from spec docs
+  ☐ /opsx:propose        — All 4 artifacts created (proposal, design, specs, tasks)
+  ☐ /opsx:branch         — Feature branch created from main ({feat,fix,chore}/<name>)
+
+Implementation:
+  ☐ /opsx:apply          — Tasks implemented, build + lint pass
+  ☐ (loop) /opsx:verify  — Matches specs; issues fixed before continuing
+
+Closure:
+  ☐ /opsx:archive        — Change archived, delta specs synced
+  ☐ /opsx:docs           — Contract-Oriented JSDoc generated
+
+Version control:
+  ☐ /opsx:commit         — Commits ordered by task dependency
+  ☐ /opsx:pr             — PR created with structured body
+```

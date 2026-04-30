@@ -3,6 +3,8 @@ name: "OPSX: PR"
 description: Create a pull request from commit and spec history on the current branch
 category: Workflow
 tags: [workflow, git, experimental]
+model: sonnet
+effort: medium
 ---
 
 Create a structured pull request from the commit history and OpenSpec changes on the current branch.

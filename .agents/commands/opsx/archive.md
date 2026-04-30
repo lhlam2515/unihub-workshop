@@ -3,6 +3,8 @@ name: "OPSX: Archive"
 description: Archive a completed change in the experimental workflow
 category: Workflow
 tags: [workflow, archive, experimental]
+model: haiku
+effort: low
 ---
 
 Archive a completed change in the experimental workflow.

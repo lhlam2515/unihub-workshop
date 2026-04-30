@@ -1,5 +1,5 @@
 # Sync agent config for local tooling
 if git diff --cached --name-only | grep -q '^.agents/'; then
   echo "Syncing agent config..."
-  pnpm agent-config sync
+  pnpm agent-config:sync
 fi
