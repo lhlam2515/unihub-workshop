@@ -15,6 +15,13 @@
       "when": 1777519952008,
       "tag": "0001_familiar_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777586707393,
+      "tag": "0002_windy_arclight",
+      "breakpoints": true
     }
   ]
 }
