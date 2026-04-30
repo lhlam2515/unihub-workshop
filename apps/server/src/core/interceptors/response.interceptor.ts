@@ -6,10 +6,31 @@ import {
 } from "@nestjs/common";
 import { map, Observable } from "rxjs";
 
-import { resultToHttpResponse } from "@/shared/response/builder";
+import {
+  paginatedResultToHttpResponse,
+  resultToHttpResponse,
+} from "@/shared/response/builder";
 import { Result } from "@/shared/response/result";
 
 import type { Request, Response } from "express";
+
+/**
+ * Determines whether a Result payload has a paginated shape.
+ */
+function isPaginatedShape(
+  data: unknown
+): data is { items: unknown[]; total: number; page: number; limit: number } {
+  if (data === null || data === undefined || typeof data !== "object") {
+    return false;
+  }
+  const obj = data as Record<string, unknown>;
+  return (
+    Array.isArray(obj.items) &&
+    typeof obj.total === "number" &&
+    typeof obj.page === "number" &&
+    typeof obj.limit === "number"
+  );
+}
 
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
@@ -33,6 +54,19 @@ export class ResponseInterceptor implements NestInterceptor {
         const requestId = Array.isArray(requestIdHeader)
           ? requestIdHeader[0]
           : requestIdHeader;
+
+        // Handle paginated results (data has items + total + page + limit)
+        if (value.isSuccess && isPaginatedShape(value.data)) {
+          const { items, total, page, limit } = value.data;
+          const [statusCode, body] = paginatedResultToHttpResponse(
+            Result.ok({ items, total }),
+            { page, limit },
+            requestId
+          );
+          response.status(statusCode);
+          return body;
+        }
+
         const [statusCode, body] = resultToHttpResponse(value, {
           requestId,
           processingStartMs: startedAt,

@@ -6,6 +6,7 @@
  * Refinement similar to CreateWorkshopDto
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const UpdateWorkshopSchema = z
@@ -22,4 +23,4 @@ export const UpdateWorkshopSchema = z
   })
   .partial();
 
-export type UpdateWorkshopDto = z.infer<typeof UpdateWorkshopSchema>;
+export class UpdateWorkshopDto extends createZodDto(UpdateWorkshopSchema) {}

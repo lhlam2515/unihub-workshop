@@ -4,6 +4,7 @@
  * Validate: { full_name, title?, bio?, avatar_url? }
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const CreateSpeakerSchema = z.object({
@@ -13,4 +14,4 @@ export const CreateSpeakerSchema = z.object({
   avatar_url: z.string().url().optional(),
 });
 
-export type CreateSpeakerDto = z.infer<typeof CreateSpeakerSchema>;
+export class CreateSpeakerDto extends createZodDto(CreateSpeakerSchema) {}

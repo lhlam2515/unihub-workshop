@@ -8,11 +8,12 @@ import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { DatabaseModule } from "./database/database.module";
+import { CatalogModule } from "./modules/catalog/catalog.module";
 import { IamModule } from "./modules/iam/iam.module";
 import { RedisModule } from "./shared/redis/redis.module";
 
 @Module({
-  imports: [DatabaseModule, RedisModule, IamModule],
+  imports: [DatabaseModule, RedisModule, IamModule, CatalogModule],
   controllers: [AppController],
   providers: [
     AppService,

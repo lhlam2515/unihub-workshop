@@ -7,6 +7,7 @@
  * Refinement: if is_paid = true then price > 0
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const CreateWorkshopSchema = z
@@ -25,4 +26,4 @@ export const CreateWorkshopSchema = z
     message: "Price is required when is_paid is true",
   });
 
-export type CreateWorkshopDto = z.infer<typeof CreateWorkshopSchema>;
+export class CreateWorkshopDto extends createZodDto(CreateWorkshopSchema) {}
