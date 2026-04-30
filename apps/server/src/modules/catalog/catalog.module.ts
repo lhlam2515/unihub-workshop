@@ -10,6 +10,7 @@
  */
 
 import { Module } from "@nestjs/common";
+import { ScheduleModule } from "@nestjs/schedule";
 
 import { DatabaseModule } from "@/database/database.module";
 import { RedisModule } from "@/shared/redis/redis.module";
@@ -33,7 +34,7 @@ import { SpeakersService } from "./services/speakers.service";
 import { WorkshopNotificationPublisher } from "./services/workshop-notification-publisher.service";
 import { WorkshopsService } from "./services/workshops.service";
 @Module({
-  imports: [DatabaseModule, RedisModule],
+  imports: [DatabaseModule, RedisModule, ScheduleModule.forRoot()],
   controllers: [
     WorkshopsPublicController,
     WorkshopsAdminController,

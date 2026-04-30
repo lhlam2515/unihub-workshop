@@ -9,13 +9,22 @@
  * - POST /admin/speakers — create a new speaker
  */
 
-import { Controller, Get, Post, Body, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  Body,
+  UseGuards,
+} from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { CreateSpeakerDto } from "../dto/create-speaker.dto";
+import { UpdateSpeakerDto } from "../dto/update-speaker.dto";
 import { SpeakersService } from "../services/speakers.service";
 
 @Controller("admin/speakers")
@@ -52,5 +61,21 @@ export class SpeakersAdminController {
   @Post()
   async createSpeaker(@Body() dto: CreateSpeakerDto) {
     return this.speakersService.createSpeaker(dto);
+  }
+
+  /**
+   * Updates an existing speaker's profile attributes.
+   *
+   * Only provided fields are updated; omitted fields retain their existing values.
+   *
+   * Security context: Requires ORGANIZER role.
+   *
+   * @param id - The UUID of the speaker to update.
+   * @param body - Partial speaker update payload.
+   * @returns The updated speaker DTO.
+   */
+  @Put(":id")
+  async updateSpeaker(@Param("id") id: string, @Body() dto: UpdateSpeakerDto) {
+    return this.speakersService.updateSpeaker(id, dto);
   }
 }

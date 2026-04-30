@@ -128,4 +128,28 @@ export class RoomsRepository {
       (err) => systemErrors.internal(err)
     );
   }
+
+  /**
+   * Updates a room record with partial data.
+   *
+   * Side effects:
+   * - Executes UPDATE on the rooms table for the given ID.
+   *
+   * @param id - The UUID of the room to update.
+   * @param data - The partial room attributes to apply.
+   * @returns OkResult containing the updated Room record, or FailResult (INTERNAL_ERROR).
+   */
+  async update(id: string, data: Partial<NewRoom>): Promise<Result<Room>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .update(this.schema.rooms)
+          .set(data)
+          .where(eq(this.schema.rooms.roomId, id))
+          .returning();
+        return result;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
 }
