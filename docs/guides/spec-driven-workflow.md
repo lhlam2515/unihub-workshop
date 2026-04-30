@@ -11,13 +11,29 @@ Spec-Driven Development inverts the traditional "code first, document later" cyc
 Exploration     Specification         Implementation              Closure
 ───────────     ─────────────         ──────────────              ───────
 /explore   →    /propose         →    /branch             →     /archive
-                                       ↓                           ↓
-                                  /apply — ↕ — /verify         /docs
-                                       ↓                           ↓
-                                      /commit                  → /pr
+                  │                     ↓                           ↓
+                  │                /apply (sequential)          /docs
+                  │                     ↓                           ↓
+                  │                  /verify                    /commit
+                  │                     ↓                           ↓
+                  └── model switch ──> archive               →    /pr
 ```
 
 The workflow is iterative: during `/apply`, you may loop back to `/verify` to catch issues early, then continue applying.
+
+### Model Switching & Cache
+
+Each phase requires different model/effort settings. The pipeline prompts you at checkpoints to switch:
+
+| Phase | Model | Effort | Reason |
+|-------|-------|--------|--------|
+| explore → apply → docs | `opusplan` | `xhigh` | Deep reasoning for artifacts and code |
+| branch → archive | `haiku` | `low` | Mechanical operations |
+| verify → commit → pr | `sonnet` | `medium`/`high` | Pattern matching, drafting |
+
+Every `/model` switch clears the prompt cache (next turn ~10x more expensive). This is acceptable at phase boundaries because long phases (propose, apply, docs) exceed the 5-minute cache TTL naturally. **Never switch mid-phase** — use `ultrathink` or `/effort max` instead.
+
+See `claude-code-config.md` for full analysis. Use `/opsx:e2e` to run the complete pipeline with guided checkpoints.
 
 ### Branching Strategy
 
@@ -36,6 +52,7 @@ Every change MUST be implemented on its own branch, created before any code is w
 | `refactor/` | Code restructuring with no behavior change |
 
 Examples:
+
 - `feat/implement-iam-module`
 - `fix/registration-race-condition`
 - `chore/update-spec-driven-workflow`
@@ -230,19 +247,12 @@ Rules:
 1. `openspec status --change "<name>" --json` confirms artifacts
 2. `openspec instructions apply --change "<name>" --json` returns task list + context files
 3. Context files (proposal, design, specs, tasks) are read
-4. Each pending task is executed in order
+4. Tasks are executed **sequentially** in dependency order
 5. After each task: `- [ ]` → `- [x]` in tasks.md
-6. Pauses on: unclear tasks, design issues, blockers, errors
-
-**Parallel execution with subagents:**
-
-For changes with independent task groups (e.g., repositories don't depend on controllers), tasks can be distributed to parallel subagents. Each subagent implements a self-contained group of tasks on an isolated worktree, then changes are merged back.
-
-**Criteria for parallelization:**
-
-- Task groups have no file dependencies on each other
-- Each group produces independently verifiable output
-- Groups share the same context artifacts (schema, types, DTOs)
+6. After each task group: `pnpm build --filter=server` + lint
+7. **On build failure:** pauses, reports errors, asks "fix or review first?" before proceeding
+8. Pauses on: unclear tasks, design issues, blockers, errors
+9. Between large task groups (schema→DTOs, repos→services), suggests `/compact` to compress context
 
 **Critical rules during apply:**
 
@@ -298,15 +308,18 @@ For changes with independent task groups (e.g., repositories don't depend on con
 
 **When:** After archive, before commit. The code is final, now document its contract.
 
+**Before starting:** Switch to `opusplan` + `xhigh` (archive phase runs on `haiku`). See `claude-code-config.md`.
+
 **Input:** Change name, file paths, or module path.
 
 **What happens:**
 
-1. Reads spec artifacts (specs, proposal, design) for business context
-2. Reads project documentation rules (`.agents/rules/documentation.md`)
-3. Collects target files from tasks.md + git diff
-4. Classifies files by architectural layer (controller, service, repository, DTO)
-5. For each file, generates layer-specific JSDoc:
+1. Pre-scans target files for JSDoc gaps using awk (skips files already fully documented)
+2. Reads spec artifacts (specs, proposal, design) for business context
+3. Reads project documentation rules (`.agents/rules/documentation.md`)
+4. Collects target files from tasks.md + git diff
+5. Classifies files by architectural layer (controller, service, repository, DTO)
+6. For each file, generates layer-specific JSDoc:
 
    | Layer | Documentation Focus |
    |-------|-------------------|
@@ -315,9 +328,9 @@ For changes with independent task groups (e.g., repositories don't depend on con
    | **Repository** | Data access logic, indexes, locking |
    | **DTO / Builder** | Data contract, transformation rules |
 
-6. Each JSDoc block follows the Contract-Oriented format: active-verb summary, domain-meaning `@param`, explicit error codes in `@returns`, side effects section
+7. Each JSDoc block follows the Contract-Oriented format: active-verb summary, domain-meaning `@param`, explicit error codes in `@returns`, side effects and `@throws` sections
 
-**Output:** All public methods documented with intent-based JSDoc. Files updated in place.
+**Output:** Only files with JSDoc gaps are updated. All public methods documented with intent-based JSDoc.
 
 ### `/opsx:commit` — Generate Git Commits
 
@@ -387,19 +400,32 @@ feat(auth): implement auth controller endpoints          ← controller that use
    - **Verification** — build/lint/DI status
 5. Creates PR via GitHub MCP (or `gh pr create`)
 
-## 5. Full Workflow Example
+## 5. Context & Token Management
+
+As the pipeline progresses, conversation context grows. The `/compact` command compresses context without losing information. Optimal compact points:
+
+| After Phase | Why | Agent Says |
+|-------------|-----|-----------|
+| propose | Artifacts (5+ files) just created, context inflated | "Run `/compact`, then switch to haiku" |
+| apply (schema/DTOs) | Schema types and contracts generated | "Schema done. Run `/compact` before repos" |
+| apply (services) | Business logic with error codes and side effects | "Services done. Run `/compact` before controllers" |
+| apply (all) | Full implementation in context, preparing verify | "Apply done. Run `/compact` before verify" |
+| archive | Clean slate before docs generation | "Archive done. Run `/compact` before docs" |
+
+The agent suggests `/compact` at these points automatically. You can run it anytime you feel context is bloated. Use `/context` to check current token usage.
+
+## 6. Full Workflow Example
 
 Below is a real trace from implementing `implement-iam-module` — a complete IAM (Identity & Access Management) module with authentication, user management, and checkin staff assignment:
 
 ```text
 ## 1. /opsx:explore
 
-> User asks: "Phân tích các task này có thể thực hiện song song bằng subagent?"
 > Agent reads: docs/srs.md, docs/blueprint/specs/auth.md, docs/blueprint/design/03-access-control.md
 > Identifies 33 tasks across 6 groups with clear dependency chains
 
-Finding: tasks with shared schema dependencies must be sequential;
-repositories can run in parallel since they each own their data access.
+Finding: IAM module needs schema, DTOs, repos, services, controllers.
+Sequential execution recommended due to cross-group dependencies.
 
 ## 2. /opsx:propose implement-iam-module
 
@@ -416,12 +442,14 @@ Created proposal.md → design.md → specs/ → tasks.md
   - user-management (8 requirements, 25 scenarios)
   - staff-assignment (6 requirements, 14 scenarios)
 
+→ Run `/compact` to compress artifact context, then switch to haiku + low
+
 ## 3. /opsx:branch implement-iam-module
 
 $ git checkout -b feat/implement-iam-module
   Switched to a new branch 'feat/implement-iam-module'
 
-Branch created from main. Ready for implementation.
+Branch created from main. Switch back to opusplan + xhigh for apply.
 
 ## 4. /opsx:apply implement-iam-module
 
@@ -430,15 +458,17 @@ Branch created from main. Ready for implementation.
 ### Phase A: Schema + Types + DTOs (tasks 1-3)
 ✓ database schema: checkinStaffAssignments table, relations, types
 ✓ DTO builders: UserResponseDto, AuthMeResponseDto, LoginResponseDto
+→ Compact: "Schema + DTOs done. Run `/compact` before repositories."
 
-### Phase B: Repositories (parallel via subagents)
-  Agent 1: UsersRepository (5 methods), StudentsRepository (2 methods)
-  Agent 2: CheckinStaffAssignmentsRepository (2 methods)
-✓ Both complete. Changes merged.
+### Phase B: Repositories (tasks 4-7)
+✓ UsersRepository (5 methods), StudentsRepository (2 methods)
+✓ CheckinStaffAssignmentsRepository (2 methods)
+→ Build + lint pass.
 
 ### Phase C: Core Services (tasks 8-12)
 ✓ TokenService: sign/verify/blacklist access + refresh tokens
 ✓ AuthService: login, refreshToken, logout, getMe
+→ Compact: "Services done. Run `/compact` before controllers."
 
 ### Phase D: Business Services (tasks 13-15)
 ✓ UsersService: list, getById, updateStatus, revokeTokens
@@ -456,6 +486,9 @@ Branch created from main. Ready for implementation.
 $ pnpm build --filter=server
   12 TypeScript errors found
 
+> Agent: "12 build errors found. Should I fix these or would you like to review first?"
+> User: "fix them"
+
 ### Fixes applied:
 - systemErrors.internal() signature mismatch (12 occurrences)
 - Drizzle enum type mismatch in eq() → use sql\`...\`
@@ -466,6 +499,7 @@ $ pnpm build --filter=server  → PASS
 $ pnpm lint --filter=server    → PASS (0 IAM warnings)
 
 33/33 tasks complete.
+→ Compact: "Apply done. Run `/compact` before verification."
 
 ## 5. /opsx:verify implement-iam-module
 
@@ -497,8 +531,11 @@ Final assessment: All critical issues resolved. Ready for archive.
 $ mv openspec/changes/implement-iam-module → archive/2026-04-30-implement-iam-module
 
 Archived. 4 specs synced.
+→ Compact: "Archive done. Run `/compact` before docs. Switch to opusplan + xhigh."
 
 ## 7. /opsx:docs implement-iam-module
+
+> Switch to opusplan + xhigh before starting. Docs auto-runs after model switch.
 
 ### Documented Files
 | File | Methods | Rules | Errors | Effects |
@@ -533,7 +570,9 @@ $ gh pr create --title "feat(iam): implement IAM module with full auth lifecycle
 PR created: https://github.com/lhlam2515/unihub-workshop/pull/8
 ```
 
-## 6. Verification Checklist
+## 7. Verification Checklist
+
+> **Tip:** Run `/compact` at the recommended points (see Section 5) to keep context manageable, then use `/context` to verify token usage before the final phases.
 
 Before archiving any change, verify:
 
