@@ -8,6 +8,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { NewRoom } from "@/database/types/event-core.types";
+import { roomErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { RoomResponseBuilder } from "../dto/room-response.dto";
@@ -15,6 +16,7 @@ import { RoomsRepository } from "../repositories/rooms.repository";
 
 import type { CreateRoomDto } from "../dto/create-room.dto";
 import type { RoomResponseDto } from "../dto/room-response.dto";
+import type { UpdateRoomDto } from "../dto/update-room.dto";
 
 @Injectable()
 export class RoomsService {
@@ -58,6 +60,48 @@ export class RoomsService {
       facilities: facilitiesRecord,
     };
     const result = await this.roomsRepo.create(data);
+    if (result.isFailure) return Result.fail(result.error);
+    return Result.ok(RoomResponseBuilder.from(result.data));
+  }
+
+  /**
+   * Updates an existing room's attributes.
+   *
+   * Business rules:
+   * - All fields are optional — only provided fields are updated.
+   * - Facilities are stored as a JSONB record in the database.
+   *
+   * Side effects:
+   * - Executes UPDATE on the rooms table for the given ID.
+   *
+   * @param id - The UUID of the room to update.
+   * @param dto - Partial room update payload with snake_case fields from API.
+   * @returns OkResult containing the updated room DTO, or FailResult (ROOM_NOT_FOUND, INTERNAL_ERROR).
+   */
+  async updateRoom(
+    id: string,
+    dto: UpdateRoomDto
+  ): Promise<Result<RoomResponseDto>> {
+    // Verify room exists
+    const existing = await this.roomsRepo.findById(id);
+    if (existing.isFailure) return Result.fail(existing.error);
+    if (!existing.data) return Result.fail(roomErrors.notFound(id));
+
+    // Build update payload from provided fields
+    const data: Partial<NewRoom> = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.building !== undefined) data.building = dto.building;
+    if (dto.floor !== undefined) data.floor = dto.floor;
+    if (dto.capacity !== undefined) data.capacity = dto.capacity;
+    if (dto.floor_plan_url !== undefined)
+      data.floorPlanUrl = dto.floor_plan_url;
+    if (dto.facilities !== undefined) {
+      data.facilities = Object.fromEntries(
+        dto.facilities.map((f) => [f, true])
+      );
+    }
+
+    const result = await this.roomsRepo.update(id, data);
     if (result.isFailure) return Result.fail(result.error);
     return Result.ok(RoomResponseBuilder.from(result.data));
   }
