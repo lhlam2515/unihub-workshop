@@ -1,4 +1,21 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm *)",
+      "Bash(npx *)",
+      "Bash(git *)",
+      "WebFetch(domain:*)",
+      "mcp__*"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(./secrets/**)"
+    ]
+  },
+  "attribution": {
+    "commit": ""
+  },
   "hooks": {
     "PostToolUse": [
       {
@@ -6,7 +23,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; case \"$f\" in *.ts|*.tsx) pnpm exec prettier --write \"$f\" && pnpm exec eslint --fix \"$f\";; *.js|*.json|*.css) pnpm exec prettier --write \"$f\";; esac; } 2>/dev/null || true"
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; case \"$f\" in *.ts|*.tsx) pnpm exec prettier --write --ignore-unknown \"$f\" 2>/dev/null; pnpm exec eslint --fix \"$f\" 2>/dev/null;; *.js|*.mjs|*.cjs|*.json|*.css|*.md) pnpm exec prettier --write --ignore-unknown \"$f\" 2>/dev/null;; esac; } || true"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); status=$(git status --short 2>/dev/null | head -20); [ -z \"$status\" ] && status=\"(clean)\"; files=$(git diff --name-only 2>/dev/null | head -10); context=$(printf '### Session State\\n- Branch: %s\\n\\n#### Changed Files\\n%s\\n\\n#### Uncommitted Changes\\n%s' \"$branch\" \"$files\" \"$status\"); jq -n --arg ctx \"$context\" '{\"hookSpecificOutput\": {\"hookEventName\": \"PreCompact\", \"additionalContext\": $ctx}}'",
+            "timeout": 5
           }
         ]
       }
