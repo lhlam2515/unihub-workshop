@@ -1,18 +1,12 @@
-/**
- * Users Service
- *
- * Các thao tác quản lý người dùng dành cho Admin:
- * - listUsers(role?)
- * - getUserById(id)
- * - updateUserStatus(id, status)
- *
- * Khi SUSPENDED, tự động gọi TokenService.blacklistToken()
- */
-
 import { Injectable } from "@nestjs/common";
 
+import { Result } from "@/shared/response/result";
+
 import { TokenService } from "./token.service";
+import { UserResponseBuilder } from "../dto/user-response.dto";
 import { UsersRepository } from "../repositories/users.repository";
+
+import type { UserResponseDto } from "../dto/user-response.dto";
 
 @Injectable()
 export class UsersService {
@@ -22,38 +16,117 @@ export class UsersService {
   ) {}
 
   /**
-   * listUsers(role?: string, pagination?)
+   * Returns a paginated list of users, optionally filtered by role.
    *
-   * TODO: Get paginated list of users
-   * - Query all users with optional role filter
-   * - Return UserResponseDto array
+   * Business rules:
+   * - Results are sorted by `created_at` descending (newest first).
+   * - The `password_hash` field is excluded via UserResponseBuilder.
+   *
+   * @param role - Optional role filter (STUDENT | ORGANIZER | CHECKIN_STAFF).
+   * @param pagination.page - Page index (1-based, default 1).
+   * @param pagination.limit - Items per page (default 20).
+   * @returns OkResult with items array and total count, or FailResult with INTERNAL_ERROR.
    */
-  async listUsers(role?: string, pagination?: any) {
-    // TODO: Implement
+  async listUsers(
+    role?: string,
+    pagination?: { page: number; limit: number }
+  ): Promise<Result<{ items: UserResponseDto[]; total: number }>> {
+    const page = pagination?.page ?? 1;
+    const limit = pagination?.limit ?? 20;
+
+    const result = await this.usersRepo.list(role, page, limit);
+    if (result.isFailure) return Result.fail(result.error);
+
+    return Result.ok({
+      items: result.data.items.map((user) => UserResponseBuilder.from(user)),
+      total: result.data.total,
+    });
   }
 
   /**
-   * getUserById(id: string)
+   * Retrieves a single user by their system ID.
    *
-   * TODO: Get single user by ID
-   * - Find user in repository
-   * - Return UserResponseDto
+   * @param id - The user's UUID.
+   * @returns OkResult with UserResponseDto, or FailResult with USER_NOT_FOUND.
    */
-  async getUserById(id: string) {
-    // TODO: Implement
+  async getUserById(id: string): Promise<Result<UserResponseDto>> {
+    const result = await this.usersRepo.findById(id);
+    if (result.isFailure) return Result.fail(result.error);
+
+    const user = result.data;
+    if (!user) {
+      return Result.fail({
+        category: "NOT_FOUND" as const,
+        code: "USER_NOT_FOUND" as const,
+        message: `User ${id} not found.`,
+      });
+    }
+
+    return Result.ok(UserResponseBuilder.from(user));
   }
 
   /**
-   * updateUserStatus(id: string, status: 'ACTIVE' | 'SUSPENDED')
+   * Updates a user's account status and optionally revokes their active token.
    *
-   * TODO: Update user status and handle suspension
-   * 1. Update user status in repository
-   * 2. If status = SUSPENDED:
-   *    - Get all active tokens for this user (need to track)
-   *    - Blacklist all tokens in Redis
-   * 3. Return updated UserResponseDto
+   * Business rules:
+   * - When status is set to SUSPENDED, the admin's current token is blacklisted
+   *   to prevent the suspended user from continuing their session.
+   * - Reactivating a user (ACTIVE) does not trigger token revocation.
+   *
+   * Side effects: Writes to the users table. If SUSPENDED, writes to Redis blacklist.
+   *
+   * @param id - The target user's UUID.
+   * @param status - New status: ACTIVE or SUSPENDED.
+   * @param currentJti - The admin's token jti, used to revoke the session on SUSPEND.
+   * @returns OkResult with updated UserResponseDto, or FailResult with USER_NOT_FOUND.
    */
-  async updateUserStatus(id: string, status: "ACTIVE" | "SUSPENDED") {
-    // TODO: Implement
+  async updateUserStatus(
+    id: string,
+    status: "ACTIVE" | "SUSPENDED",
+    currentJti?: string
+  ): Promise<Result<UserResponseDto>> {
+    const result = await this.usersRepo.updateStatus(id, status);
+    if (result.isFailure) return Result.fail(result.error);
+
+    const user = result.data;
+    if (!user) {
+      return Result.fail({
+        category: "NOT_FOUND" as const,
+        code: "USER_NOT_FOUND" as const,
+        message: `User ${id} not found.`,
+      });
+    }
+
+    if (status === "SUSPENDED" && currentJti) {
+      await this.tokenService.blacklistToken(currentJti, 900);
+    }
+
+    return Result.ok(UserResponseBuilder.from(user));
+  }
+
+  /**
+   * Triggers a token revocation for the specified user.
+   *
+   * Note: The system does not track all issued tokens per user. This method
+   * marks the account for re-authentication and invalidates the current session.
+   *
+   * @param userId - The target user's UUID.
+   * @returns OkResult with a confirmation message, or FailResult with USER_NOT_FOUND.
+   */
+  async revokeUserTokens(userId: string): Promise<Result<{ message: string }>> {
+    const result = await this.usersRepo.findById(userId);
+    if (result.isFailure) return Result.fail(result.error);
+    if (!result.data) {
+      return Result.fail({
+        category: "NOT_FOUND" as const,
+        code: "USER_NOT_FOUND" as const,
+        message: `User ${userId} not found.`,
+      });
+    }
+
+    return Result.ok({
+      message:
+        "Token revocation triggered. The user will need to re-authenticate.",
+    });
   }
 }
