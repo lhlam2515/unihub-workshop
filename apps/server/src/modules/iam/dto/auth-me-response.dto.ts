@@ -1,13 +1,11 @@
 /**
- * Auth Me Response DTO
+ * Current user profile returned by GET /auth/me.
  *
- * Response: GET /auth/me
- * Shape: { user_id, email, role, student_code?, full_name?, faculty?, allowed_workshop_ids? }
- *
- * Factory: from(user, studentProfile?)
- * Maps role-specific fields based on user role
+ * Fields vary by role:
+ * - STUDENT: includes student_code, full_name, faculty.
+ * - CHECKIN_STAFF: includes allowed_workshop_ids.
+ * - ORGANIZER: base fields only.
  */
-
 export interface AuthMeResponseDto {
   user_id: string;
   email: string;
@@ -18,15 +16,45 @@ export interface AuthMeResponseDto {
   allowed_workshop_ids?: string[];
 }
 
+/**
+ * Builds an AuthMeResponseDto with role-specific field resolution.
+ */
 export class AuthMeResponseBuilder {
-  static from(user: any, studentProfile?: any): AuthMeResponseDto {
-    // TODO: Implement factory method
-    // - Include student_code, full_name, faculty only for STUDENT role
-    // - Include allowed_workshop_ids only for CHECKIN_STAFF role
-    return {
-      user_id: "",
-      email: "",
-      role: "",
+  static from(
+    user: {
+      userId: string;
+      email: string;
+      role: string;
+      allowedWorkshopIds?: string[];
+    },
+    studentProfile?: {
+      studentCode: string;
+      fullName: string;
+      faculty: string | null;
+    }
+  ): AuthMeResponseDto {
+    const base = {
+      user_id: user.userId,
+      email: user.email,
+      role: user.role,
     };
+
+    if (user.role === "STUDENT" && studentProfile) {
+      return {
+        ...base,
+        student_code: studentProfile.studentCode,
+        full_name: studentProfile.fullName,
+        faculty: studentProfile.faculty ?? undefined,
+      };
+    }
+
+    if (user.role === "CHECKIN_STAFF") {
+      return {
+        ...base,
+        allowed_workshop_ids: user.allowedWorkshopIds ?? [],
+      };
+    }
+
+    return base;
   }
 }
