@@ -31,6 +31,7 @@ import { Result } from "@/shared/response/result";
 
 import { RoomConflictService } from "./room-conflict.service";
 import { SeatCounterService } from "./seat-counter.service";
+import { WorkshopNotificationPublisher } from "./workshop-notification-publisher.service";
 import { WorkshopResponseBuilder } from "../dto/workshop-response.dto";
 import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 import { RoomsRepository } from "../repositories/rooms.repository";
@@ -70,7 +71,8 @@ export class WorkshopsService {
     private readonly roomsRepo: RoomsRepository,
     private readonly workshopSlotsRepo: WorkshopSlotsRepository,
     private readonly workshopDocumentsRepo: WorkshopDocumentsRepository,
-    private readonly aiSummariesRepo: AiSummariesRepository
+    private readonly aiSummariesRepo: AiSummariesRepository,
+    private readonly notificationPublisher: WorkshopNotificationPublisher
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -87,13 +89,18 @@ export class WorkshopsService {
    * @param query - Filtering and pagination parameters (faculty, date range, is_paid).
    * @returns OkResult containing an array of summary DTOs with seat availability and speaker names, or FailResult (INTERNAL_ERROR).
    */
-  async listPublished(
-    query: ListWorkshopsQueryDto
-  ): Promise<Result<WorkshopSummaryDto[]>> {
+  async listPublished(query: ListWorkshopsQueryDto): Promise<
+    Result<{
+      items: WorkshopSummaryDto[];
+      total: number;
+      page: number;
+      limit: number;
+    }>
+  > {
     const result = await this.workshopsRepo.findPublished(query);
     if (result.isFailure) return Result.fail(result.error);
 
-    const { items } = result.data;
+    const { items, total } = result.data;
     const mapped = await Promise.all(
       items.map(async (workshop: WorkshopWithSpeakerRoom) => {
         const availableSeats = await this.seatCounterService.getAvailable(
@@ -107,7 +114,12 @@ export class WorkshopsService {
       })
     );
 
-    return Result.ok(mapped);
+    return Result.ok({
+      items: mapped,
+      total,
+      page: query.page,
+      limit: query.limit,
+    });
   }
 
   /**
@@ -425,6 +437,13 @@ export class WorkshopsService {
     const updateResult = await this.workshopsRepo.update(id, updateData);
     if (updateResult.isFailure) return Result.fail(updateResult.error);
 
+    // Publish emergency update event for async notification (fire-and-forget)
+    const changes: { roomId?: string; startsAt?: Date; endsAt?: Date } = {};
+    if (dto.room_id !== undefined) changes.roomId = dto.room_id;
+    if (dto.starts_at !== undefined) changes.startsAt = dto.starts_at;
+    if (dto.ends_at !== undefined) changes.endsAt = dto.ends_at;
+    this.notificationPublisher.publishEmergencyUpdate(workshop, changes);
+
     // Resolve related data for response
     const [slotResult, roomResult] = await Promise.all([
       this.workshopSlotsRepo.findByWorkshopId(id),
@@ -488,6 +507,9 @@ export class WorkshopsService {
       await this.seatCounterService.delete(id);
     }
 
+    // Publish cancellation event for async notification (fire-and-forget)
+    this.notificationPublisher.publishCancelled(workshop);
+
     // Resolve related data for response
     const [slotResult, roomResult] = await Promise.all([
       this.workshopSlotsRepo.findByWorkshopId(id),
@@ -550,13 +572,18 @@ export class WorkshopsService {
    * @param query - Query parameters for filtering (status?, page?, limit?).
    * @returns OkResult containing an array of admin detail DTOs with slot, speaker, and room data, or FailResult (INTERNAL_ERROR).
    */
-  async listAdmin(
-    query: ListWorkshopsQueryDto
-  ): Promise<Result<WorkshopAdminDetailDto[]>> {
+  async listAdmin(query: ListWorkshopsQueryDto): Promise<
+    Result<{
+      items: WorkshopAdminDetailDto[];
+      total: number;
+      page: number;
+      limit: number;
+    }>
+  > {
     const result = await this.workshopsRepo.listAdmin(query);
     if (result.isFailure) return Result.fail(result.error);
 
-    const { items } = result.data;
+    const { items, total } = result.data;
     const mapped = items.map((workshop: WorkshopWithRelations) =>
       WorkshopResponseBuilder.fromAdminDetail(
         workshop,
@@ -567,7 +594,12 @@ export class WorkshopsService {
       )
     );
 
-    return Result.ok(mapped);
+    return Result.ok({
+      items: mapped,
+      total,
+      page: query.page,
+      limit: query.limit,
+    });
   }
 
   // ---------------------------------------------------------------------------

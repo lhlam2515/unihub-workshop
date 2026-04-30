@@ -30,6 +30,7 @@ import { RoomConflictService } from "./services/room-conflict.service";
 import { RoomsService } from "./services/rooms.service";
 import { SeatCounterService } from "./services/seat-counter.service";
 import { SpeakersService } from "./services/speakers.service";
+import { WorkshopNotificationPublisher } from "./services/workshop-notification-publisher.service";
 import { WorkshopsService } from "./services/workshops.service";
 @Module({
   imports: [DatabaseModule, RedisModule],
@@ -48,6 +49,7 @@ import { WorkshopsService } from "./services/workshops.service";
     SpeakersService,
     DocumentsService,
     SeatCounterService,
+    WorkshopNotificationPublisher,
     // Repositories
     WorkshopsRepository,
     WorkshopSlotsRepository,
