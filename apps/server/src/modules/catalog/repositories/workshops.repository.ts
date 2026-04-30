@@ -2,7 +2,7 @@
  * Retrieves and persists workshop records with optional joins to related entities.
  */
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, count, gte, lte } from "drizzle-orm";
+import { eq, and, desc, count, gte, lte, lt } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
@@ -291,6 +291,38 @@ export class WorkshopsRepository {
           .where(eq(this.schema.workshops.workshopId, id))
           .returning();
         return result;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Transitions PUBLISHED workshops whose end time has passed to COMPLETED status.
+   *
+   * Business rules:
+   * - Only PUBLISHED workshops with endsAt < now() are eligible.
+   * - Transition is idempotent — workshops in DRAFT, CANCELLED, or already COMPLETED
+   *   are excluded by the WHERE clause.
+   *
+   * Side effects:
+   * - Executes UPDATE workshops SET status = 'COMPLETED' WHERE status = 'PUBLISHED' AND endsAt < now().
+   *
+   * @returns OkResult containing the count of workshops transitioned, or FailResult (INTERNAL_ERROR).
+   */
+  async completePastPublished(): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const now = new Date();
+        const result = await this.db
+          .update(this.schema.workshops)
+          .set({ status: "COMPLETED" })
+          .where(
+            and(
+              eq(this.schema.workshops.status, "PUBLISHED"),
+              lt(this.schema.workshops.endsAt, now)
+            )
+          );
+        return result.rowCount ?? 0;
       },
       (err) => systemErrors.internal(err)
     );

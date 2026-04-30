@@ -17,6 +17,7 @@
  */
 
 import { Injectable } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 
 import type {
   NewWorkshop,
@@ -647,5 +648,27 @@ export class WorkshopsService {
       available_seats: availableSeats,
       total_capacity: workshop.capacity,
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cron Jobs
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Auto-completes PUBLISHED workshops whose end time has passed.
+   *
+   * Business rules:
+   * - Only PUBLISHED workshops with endsAt < now() are eligible.
+   * - Transition is idempotent — already COMPLETED/CANCELLED workshops are excluded.
+   * - Redis seat counter key is NOT deleted (COMPLETED is a display state, not cancel).
+   *
+   * Side effects:
+   * - Updates workshop status to COMPLETED in bulk.
+   *
+   * @returns OkResult containing the count of completed workshops, or FailResult (INTERNAL_ERROR).
+   */
+  @Cron("0 * * * *")
+  async completePastWorkshops(): Promise<Result<number>> {
+    return this.workshopsRepo.completePastPublished();
   }
 }
