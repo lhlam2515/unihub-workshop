@@ -18,11 +18,14 @@
  *   persistent connection. The SDK handles connection pooling internally.
  */
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 
 import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
+  NoSuchKey,
 } from "@aws-sdk/client-s3";
 import { Inject, Injectable } from "@nestjs/common";
 
@@ -36,6 +39,7 @@ import type { StorageConfig } from "./storage.config";
 @Injectable()
 export class StorageService {
   private readonly client: S3Client;
+  private readonly publicUrlPrefix: string;
 
   constructor(@Inject(STORAGE_CONFIG) private readonly config: StorageConfig) {
     this.client = new S3Client({
@@ -47,6 +51,9 @@ export class StorageService {
       },
       forcePathStyle: true,
     });
+    this.publicUrlPrefix = config.publicUrl.endsWith("/")
+      ? config.publicUrl
+      : `${config.publicUrl}/`;
   }
 
   /**
@@ -125,19 +132,118 @@ export class StorageService {
   }
 
   /**
-   * Extracts the storage object key from a public URL.
+   * Downloads a file from object storage as a Readable stream.
    *
-   * The public URL is the base `publicUrl` followed by `/` followed by the
-   * object key (e.g. `https://pub-<hash>.r2.dev/workshops/{wid}/{uuid}-{name}`).
-   * This method strips the `publicUrl` + `/` prefix to recover the key.
+   * Designed for the Batch-Sequential CSV sync pipeline — the consumer
+   * pipes the stream into a CSV parser and processes rows one at a time,
+   * keeping memory usage constant regardless of file size.
    *
-   * @param url - Full public URL stored in the database.
+   * Business rules:
+   * - Accepts either a full public URL or a raw storage key.
+   * - Returns the SDK's native Readable stream — the consumer owns
+   *   stream lifecycle (pipe, destroy, back-pressure).
+   * - An empty file (0 bytes) returns a valid stream that emits `end`
+   *   immediately — not an error.
+   *
+   * Side effects: Opens an HTTP connection to the S3 endpoint.
+   *
+   * @param keyOrUrl - Full public URL or raw storage key.
+   * @returns OkResult containing the Readable stream, or FailResult
+   *          (STORAGE_FILE_NOT_FOUND | STORAGE_DOWNLOAD_FAILED).
+   */
+  async getFileStream(keyOrUrl: string): Promise<Result<Readable>> {
+    const key = this.extractKeyFromUrl(keyOrUrl);
+
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.config.bucketName,
+          Key: key,
+        })
+      );
+
+      if (!response.Body) {
+        return Result.fail(storageErrors.fileNotFound(key));
+      }
+
+      return Result.ok(response.Body as Readable);
+    } catch (err) {
+      if (
+        err instanceof NoSuchKey ||
+        (err as { name?: string })?.name === "NoSuchKey"
+      ) {
+        return Result.fail(storageErrors.fileNotFound(key));
+      }
+      return Result.fail(storageErrors.downloadFailed(err));
+    }
+  }
+
+  /**
+   * Downloads a file from object storage as a Buffer.
+   *
+   * Designed for the Pipe-and-Filter AI summary pipeline — pdf-parse
+   * accepts Buffer directly, so collecting the entire response into
+   * memory avoids unnecessary stream-to-Buffer conversion in the consumer.
+   *
+   * Business rules:
+   * - Accepts either a full public URL or a raw storage key.
+   * - Collects all chunks into a single Buffer — callers should verify
+   *   file size via upload validation (≤50MB for PDFs).
+   * - An empty file (0 bytes) returns an empty Buffer — valid, not an error.
+   *
+   * Side effects: Opens an HTTP connection to the S3 endpoint.
+   *
+   * @param keyOrUrl - Full public URL or raw storage key.
+   * @returns OkResult containing the file buffer, or FailResult
+   *          (STORAGE_FILE_NOT_FOUND | STORAGE_DOWNLOAD_FAILED).
+   */
+  async getFileBuffer(keyOrUrl: string): Promise<Result<Buffer>> {
+    const key = this.extractKeyFromUrl(keyOrUrl);
+
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.config.bucketName,
+          Key: key,
+        })
+      );
+
+      if (!response.Body) {
+        return Result.fail(storageErrors.fileNotFound(key));
+      }
+
+      const body = response.Body as Readable;
+      const chunks: Buffer[] = [];
+
+      for await (const chunk of body) {
+        chunks.push(chunk as Buffer);
+      }
+
+      return Result.ok(Buffer.concat(chunks));
+    } catch (err) {
+      if (
+        err instanceof NoSuchKey ||
+        (err as { name?: string })?.name === "NoSuchKey"
+      ) {
+        return Result.fail(storageErrors.fileNotFound(key));
+      }
+      return Result.fail(storageErrors.downloadFailed(err));
+    }
+  }
+
+  /**
+   * Extracts the object storage key from a full public URL or raw key.
+   *
+   * If the input starts with the configured `publicUrl` prefix, the prefix
+   * is stripped to recover the object key. Otherwise the input is returned
+   * as-is — it is already a raw storage key.
+   *
+   * @param url - Full public URL or raw storage key.
    * @returns The object key suitable for S3 operations.
    */
-  private extractKeyFromUrl(url: string): string {
-    const prefix = this.config.publicUrl.endsWith("/")
-      ? this.config.publicUrl
-      : `${this.config.publicUrl}/`;
-    return url.startsWith(prefix) ? url.slice(prefix.length) : url;
+  public extractKeyFromUrl(url: string): string {
+    return url.startsWith(this.publicUrlPrefix)
+      ? url.slice(this.publicUrlPrefix.length)
+      : url;
   }
 }
