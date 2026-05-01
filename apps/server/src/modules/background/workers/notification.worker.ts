@@ -1,63 +1,84 @@
-import { Injectable } from "@nestjs/common";
+import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Injectable, Logger } from "@nestjs/common";
+
+import type { ErrorCode } from "@/shared/response/types";
+
+import type { NotificationJobData } from "@/shared/queues/event-contracts";
+import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 
 import { NotificationDispatchService } from "../services/notification-dispatch.service";
+
+import type { Job } from "bullmq";
+
+/**
+ * Error codes that represent terminal failures — the job should NOT be retried.
+ *
+ * These are business-logic failures (inactive channel, missing config, etc.)
+ * that will fail identically on every retry attempt.
+ */
+const TERMINAL_ERROR_CODES: ReadonlySet<ErrorCode> = new Set([
+  "NOTIFICATION_LOG_NOT_FOUND",
+  "NOTIFICATION_CHANNEL_CONFIG_NOT_FOUND",
+  "NOTIFICATION_CHANNEL_INACTIVE",
+  "NOTIFICATION_CHANNEL_UNKNOWN",
+]);
 
 /**
  * NotificationWorker
  *
  * Queue consumer for notification delivery.
- * Listens to 'notification' queue and processes each job.
+ * Consumes jobs from the 'notification' BullMQ queue.
  *
- * Job format:
- * {
- *   notification_id: string,
- *   type: 'REGISTRATION_CONFIRMED' | 'PAYMENT_SUCCESS' | 'WORKSHOP_CANCELLED',
- *   retry_count?: number,
- *   max_retries?: number (default: 5)
- * }
+ * Retry strategy (configured via queue defaultJobOptions):
+ * - 5 attempts with exponential backoff: 5s, 10s, 20s, 40s, 80s
+ * - Terminal failures (missing log, inactive channel) return without throwing
+ * - Channel send failures throw to trigger BullMQ retry
  *
- * Handler method:
- * - process(job) → Process notification delivery with retry logic
- *
- * TODO: Implement queue listener and retry logic
+ * Job lifecycle:
+ * - Completed jobs auto-removed after 1 hour
+ * - Failed jobs auto-removed after 24 hours
  */
 @Injectable()
-export class NotificationWorker {
-  constructor(private readonly dispatchService: NotificationDispatchService) {}
+@Processor(NOTIFICATION_QUEUE, { concurrency: 5 })
+export class NotificationWorker extends WorkerHost {
+  private readonly logger = new Logger(NotificationWorker.name);
 
-  // TODO: Implement queue listener setup
-  // Use @Processor('notification') if using Bull/BullMQ
-  // Or EventEmitter2 listener if using event-based approach
-
-  // TODO: Implement process method
-  // @Process() — for Bull/BullMQ
-  async process(job: any): Promise<any> {
-    // 1. Extract notificationId from job.data
-    // 2. Read retry_count (start at 0)
-    // 3. Call dispatchService.dispatch(notificationId)
-    //
-    // 4. Handle response:
-    //    a) If success: Job complete, return result
-    //
-    //    b) If failure:
-    //       - Increment retry_count
-    //       - If retry_count < max_retries:
-    //         * Re-queue with exponential backoff:
-    //           - Attempt 1: 5s delay
-    //           - Attempt 2: 10s delay
-    //           - Attempt 3: 20s delay
-    //           - etc.
-    //       - Else: Move to failed queue, log error
-    //
-    // 5. Update notification_logs in database with attempt count
+  constructor(private readonly dispatchService: NotificationDispatchService) {
+    super();
   }
 
-  // TODO: Implement exponential backoff calculation
-  private calculateBackoffDelay(retryCount: number): number {
-    // Base delay: 5s
-    // Formula: base * 2^(retryCount - 1)
-    // Example: 5s, 10s, 20s, 40s, 80s
-    // Max cap: 300s (5 minutes)
-    return Math.min(5000 * Math.pow(2, retryCount - 1), 300000);
+  /**
+   * Process a notification job from the queue
+   *
+   * Extracts notificationId from the job data and delegates
+   * to the dispatch service. Terminal failures (inactive channel,
+   * missing config, unknown channel, missing log) return silently
+   * without retry. Channel adapter failures throw to trigger
+   * BullMQ's built-in exponential backoff retry.
+   *
+   * @param job - BullMQ job containing notificationId and metadata
+   * @throws Error when a channel adapter fails, triggering BullMQ retry
+   */
+  async process(job: Job<NotificationJobData>): Promise<void> {
+    const { notificationId } = job.data;
+
+    this.logger.log(`Processing notification ${notificationId}`);
+
+    const result = await this.dispatchService.dispatch(notificationId);
+
+    if (result.isFailure) {
+      this.logger.warn(
+        `Notification ${notificationId} failed: ${result.error.message}`,
+        { code: result.error.code }
+      );
+
+      // Terminal failures — don't retry (inactive channel, missing config, etc.)
+      if (TERMINAL_ERROR_CODES.has(result.error.code)) return;
+
+      // Channel adapter failure — throw to trigger BullMQ retry
+      throw new Error(result.error.message);
+    }
+
+    this.logger.log(`Notification ${notificationId} completed successfully`);
   }
 }

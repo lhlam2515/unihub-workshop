@@ -7,6 +7,9 @@ import { Result } from "@/shared/response/result";
 const KEY_PREFIX = "seat:lock";
 const LOCK_TTL_SECONDS = 900;
 
+/** Shared between SeatLockMechanic and PaymentsService — must stay in sync. */
+export const PAYMENT_WINDOW_SECONDS = LOCK_TTL_SECONDS;
+
 interface SeatLockPayload {
   studentId: string;
 }

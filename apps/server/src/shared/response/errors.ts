@@ -620,6 +620,68 @@ export const speakerErrors = {
 } as const;
 
 /**
+ * Group notification error factories
+ */
+export const notificationErrors = {
+  /**
+   * Create an error when a notification log is missing
+   *
+   * @param notificationId - Notification identifier used for audit logging
+   * @returns Notification not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  logNotFound: (notificationId: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "NOTIFICATION_LOG_NOT_FOUND",
+      message: `Notification log ${notificationId} not found.`,
+      context: { notificationId },
+    }),
+  /**
+   * Create an error when channel configuration is missing
+   *
+   * @param channelType - Channel type identifier used for diagnostics
+   * @returns Channel config not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  channelConfigNotFound: (channelType: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "NOTIFICATION_CHANNEL_CONFIG_NOT_FOUND",
+      message: `Channel configuration for ${channelType} not found.`,
+      context: { channelType },
+    }),
+  /**
+   * Create an error when a channel is not active
+   *
+   * @param channelType - Channel type identifier used for diagnostics
+   * @returns Business rule error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  channelInactive: (channelType: string): AppError =>
+    createError({
+      category: "BUSINESS",
+      code: "NOTIFICATION_CHANNEL_INACTIVE",
+      message: `Channel ${channelType} is not active.`,
+      context: { channelType },
+    }),
+  /**
+   * Create an error for an unknown channel type
+   *
+   * @param channelType - Unrecognized channel type identifier
+   * @returns Validation error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  channelUnknown: (channelType: string): AppError =>
+    createError({
+      category: "VALIDATION",
+      code: "NOTIFICATION_CHANNEL_UNKNOWN",
+      message: `Unknown notification channel: ${channelType}.`,
+      context: { channelType },
+    }),
+} as const;
+
+/**
  * Group system-level error factories
  */
 export const systemErrors = {
@@ -653,3 +715,47 @@ export const systemErrors = {
       context: { resource, timeoutMs },
     }),
 } as const;
+
+/**
+ * Checks whether an unknown value is a normalized AppError.
+ *
+ * @param err - The value to check.
+ * @returns Whether the value is an AppError (has code and category properties).
+ */
+export const isAppError = (err: unknown): err is AppError =>
+  typeof err === "object" && err !== null && "code" in err && "category" in err;
+
+/**
+ * Passes through AppError values as-is, wraps everything else as INTERNAL_ERROR.
+ *
+ * Intended for use as the error mapper in tryCatch when the callback may throw
+ * a domain AppError (e.g., Drizzle transaction throw-to-rollback):
+ * `tryCatch(fn, passthroughOrInternal)`
+ *
+ * @param err - The error to map.
+ * @returns AppError unchanged, or a new INTERNAL_ERROR wrapping non-AppError values.
+ */
+export const passthroughOrInternal = (err: unknown): AppError =>
+  isAppError(err) ? err : systemErrors.internal(err);
+
+/**
+ * Creates an error mapper for FOR UPDATE NOWAIT lock-timeout detection.
+ *
+ * Detects PostgreSQL lock conflict errors and maps them to DB_LOCK_TIMEOUT.
+ * Any other error is wrapped as INTERNAL_ERROR.
+ *
+ * @param resource - Resource name for the DB_LOCK_TIMEOUT context (e.g., "workshop_slots").
+ * @param timeoutMs - Timeout in milliseconds (default 3000).
+ * @returns An error mapper function suitable for tryCatch.
+ */
+export const lockTimeoutMapper =
+  (resource: string, timeoutMs = 3000) =>
+  (err: unknown): AppError => {
+    if (
+      String(err).includes("could not obtain lock") ||
+      String(err).includes("NOWAIT")
+    ) {
+      return systemErrors.dbLockTimeout(resource, timeoutMs);
+    }
+    return systemErrors.internal(err);
+  };

@@ -1,20 +1,19 @@
 import {
+  Body,
   Controller,
   Get,
-  Patch,
   Param,
-  Body,
+  Patch,
   Query,
   UseGuards,
-  HttpCode,
-  HttpStatus,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
-import { Result } from "@/shared/response/result";
 
+import { ListNotificationLogsQueryDto } from "../dto/notification-response.dto";
+import { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
 import { NotificationsService } from "../services/notifications.service";
 
 @Controller("/admin/notifications")
@@ -23,27 +22,59 @@ import { NotificationsService } from "../services/notifications.service";
 export class NotificationsAdminController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  /**
+   * List notification logs with filtering and pagination
+   *
+   * @param query - Filter and pagination parameters
+   * @returns Paginated list of notification logs
+   */
   @Get("logs")
-  async listLogs(@Query() query: any): Promise<Result<any>> {
-    throw new Error("Not implemented");
+  async listLogs(@Query() query: ListNotificationLogsQueryDto) {
+    return this.notificationsService.listLogs(
+      {
+        status: query.status,
+        channel: query.channel,
+        type: query.type,
+        userId: query.userId,
+        workshopId: query.workshopId,
+      },
+      { page: query.page, limit: query.limit }
+    );
   }
 
+  /**
+   * Get a single notification log by ID
+   *
+   * @param id - Notification log UUID
+   * @returns Full notification log with payload
+   */
   @Get("logs/:id")
-  async getLogById(@Param("id") id: string): Promise<Result<any>> {
-    throw new Error("Not implemented");
+  async getLogById(@Param("id") id: string) {
+    return this.notificationsService.getLogById(id);
   }
 
+  /**
+   * List all channel configurations
+   *
+   * @returns All channel configs with is_active and config_json
+   */
   @Get("channels")
-  async listChannelConfigs(): Promise<Result<any>> {
-    throw new Error("Not implemented");
+  async listChannelConfigs() {
+    return this.notificationsService.listChannelConfigs();
   }
 
+  /**
+   * Update a channel configuration
+   *
+   * @param channelType - Channel type to update
+   * @param dto - Update payload
+   * @returns Updated channel config
+   */
   @Patch("channels/:channelType")
-  @HttpCode(HttpStatus.OK)
   async updateChannelConfig(
     @Param("channelType") channelType: string,
-    @Body() dto: any
-  ): Promise<Result<any>> {
-    throw new Error("Not implemented");
+    @Body() dto: UpdateChannelConfigDto
+  ) {
+    return this.notificationsService.updateChannelConfig(channelType, dto);
   }
 }

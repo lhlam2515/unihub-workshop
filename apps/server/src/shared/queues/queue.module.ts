@@ -17,9 +17,10 @@ import {
  * need queue access must explicitly import this module.
  *
  * Business rules:
+ * - The notification queue uses 5 retry attempts with exponential backoff.
+ * - The ai-summary and student-sync queues use one attempt (no retry).
  * - Completed jobs are auto-removed after 1 hour.
  * - Failed jobs are auto-removed after 24 hours.
- * - Each job is attempted at most once (no automatic retries).
  *
  * Side effects:
  * - Opens a persistent Redis connection at module initialization.
@@ -36,7 +37,15 @@ import {
       }),
     }),
     BullModule.registerQueue(
-      { name: NOTIFICATION_QUEUE },
+      {
+        name: NOTIFICATION_QUEUE,
+        defaultJobOptions: {
+          attempts: 5,
+          backoff: { type: "exponential", delay: 5000 },
+          removeOnComplete: { age: 3600 },
+          removeOnFail: { age: 86400 },
+        },
+      },
       { name: AI_SUMMARY_QUEUE },
       { name: STUDENT_SYNC_QUEUE }
     ),
