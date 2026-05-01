@@ -1,78 +1,142 @@
-import { Injectable } from "@nestjs/common";
-import { Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
-
-import { RedisService } from "@/shared/redis/redis.service";
-
 /**
  * ReconciliationCron
  *
- * Scheduled job for seat counter reconciliation.
+ * Scheduled job to detect seat-counter discrepancies between Redis and
+ * PostgreSQL. Compares the actual available seat count in Redis against
+ * the expected value computed from DB data.
+ *
  * Runs every 10 minutes.
  *
- * Responsibility:
- * - Compare Redis seat counters with PostgreSQL
- * - Detect discrepancies
- * - Log and alert if needed
- * - Not a source of truth — just a safety net
+ * Business rules:
+ * - Only checks PUBLISHED workshops.
+ * - Expected value = workshop.capacity - SUM(confirmedCount) - SUM(lockedCount)
+ *   from workshop_slots.
+ * - Discrepancies exceeding DISCREPANCY_THRESHOLD (5) are logged as warnings.
+ * - This cron does NOT auto-fix discrepancies — manual admin intervention is
+ *   required to correct seat counters.
  *
- * TODO: Implement reconciliation logic
+ * Side effects:
+ * - Reads seat:available:{workshopId} from Redis.
+ * - Reads workshop_slots from PostgreSQL.
+ * - Logs warnings for significant discrepancies.
  */
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { eq } from "drizzle-orm";
+
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+import type { DatabaseClient, DatabaseSchema } from "@/database";
+import { RedisService } from "@/shared/redis/redis.service";
+
+/**
+ * Maximum allowed difference between Redis seat counter and DB expected value
+ * before a warning is logged.
+ */
+const DISCREPANCY_THRESHOLD = 5;
+
 @Injectable()
 export class ReconciliationCron {
   private readonly logger = new Logger(ReconciliationCron.name);
-  private readonly DISCREPANCY_THRESHOLD = 5; // Alert if diff > 5 seats
 
-  // TODO: Implement @Cron decorator
-  // @Cron(CronExpression.EVERY_10_MINUTES) — or use '*/10 * * * *'
+  constructor(
+    @Inject(DATABASE_CONNECTION)
+    private readonly db: DatabaseClient,
+    @Inject(DATABASE_SCHEMA)
+    private readonly schema: DatabaseSchema,
+    private readonly redisService: RedisService
+  ) {}
+
+  /**
+   * Checks all PUBLISHED workshops for seat-counter discrepancies.
+   *
+   * Runs every 10 minutes. For each workshop, computes the expected available
+   * seats from DB data and compares it against the Redis counter.
+   * Discrepancies above the threshold are logged as warnings.
+   *
+   * Side effects:
+   * - Reads Redis keys and DB tables.
+   * - Logs warnings when discrepancies exceed threshold.
+   *
+   * @returns void — errors are logged but never propagated.
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async handleReconciliation(): Promise<void> {
-    // 1. Query PostgreSQL for all PUBLISHED workshops:
-    //    SELECT id, capacity FROM workshops WHERE status = 'PUBLISHED'
-    //
-    // 2. For each workshop, reconcile:
-    //    a) Get Redis counter: seat:available:{id}
-    //    b) Get DB values:
-    //       - total_capacity = workshop.capacity
-    //       - locked_count = SUM(locked_at IS NOT NULL) FROM workshop_slots
-    //       - confirmed_count = SUM(confirmed) FROM workshop_slots
-    //    c) Calculate expected: total_capacity - locked_count - confirmed_count
-    //    d) Compare: actual vs expected
-    //       - If difference > DISCREPANCY_THRESHOLD:
-    //         * Log warning with details
-    //         * Increment discrepancy counter
-    //         * Send alert if this is the first occurrence
-    //
-    // 3. Log summary:
-    //    this.logger.log(`Reconciliation completed: ${total} checked, ${discrepancies} issues found`)
-    //
-    // 4. Error handling:
-    //    - Wrap in try/catch to prevent cron from crashing
-    //    - Log any database or Redis errors
-    //
-    // Note: This cron DOES NOT fix discrepancies — that must be done manually
-    // through SystemAdminController endpoints or administrative action.
-    throw new Error("Not implemented");
+    try {
+      const workshops = await this.db
+        .select({
+          workshopId: this.schema.workshops.workshopId,
+          capacity: this.schema.workshops.capacity,
+        })
+        .from(this.schema.workshops)
+        .where(eq(this.schema.workshops.status, "PUBLISHED"));
+
+      let discrepancies = 0;
+
+      for (const workshop of workshops) {
+        try {
+          const result = await this.checkWorkshopReconciliation(
+            workshop.workshopId,
+            Number(workshop.capacity)
+          );
+
+          if (result.discrepancy > DISCREPANCY_THRESHOLD) {
+            discrepancies++;
+            this.logger.warn(
+              `Reconciliation discrepancy for workshop ${workshop.workshopId}: ` +
+                `Redis=${result.redisValue}, Expected=${result.expectedValue}, ` +
+                `Diff=${result.discrepancy}`
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Reconciliation check failed for workshop ${workshop.workshopId}`,
+            error
+          );
+        }
+      }
+
+      this.logger.log(
+        `Reconciliation completed: ${workshops.length} checked, ${discrepancies} issues found`
+      );
+    } catch (error) {
+      this.logger.error("Reconciliation cron failed", error);
+    }
   }
 
-  // TODO: Implement helper methods
-  private async checkWorkshopReconciliation(workshopId: string): Promise<{
+  /**
+   * Compares Redis seat counter against DB expected value for a workshop.
+   *
+   * Expected = capacity - confirmedCount - lockedCount (from workshop_slots).
+   * If no workshop_slots row exists, locked and confirmed counts default to 0.
+   *
+   * @param workshopId - The UUID of the workshop to check.
+   * @param capacity - The total seat capacity of the workshop.
+   * @returns Reconciliation detail including discrepancy, Redis value, and expected value.
+   */
+  private async checkWorkshopReconciliation(
+    workshopId: string,
+    capacity: number
+  ): Promise<{
     discrepancy: number;
     redisValue: number;
     expectedValue: number;
   }> {
-    // Get Redis value
-    // Get DB values
-    // Calculate difference
-    // Return details
-    throw new Error("Not implemented");
-  }
+    const key = `seat:available:${workshopId}`;
+    const redisValueStr = await this.redisService.get(key);
+    const redisValue = redisValueStr ? parseInt(redisValueStr, 10) : capacity;
 
-  private async sendAlert(
-    workshopId: string,
-    discrepancy: number
-  ): Promise<void> {
-    // Send alert to administrators
-    // Can use notification system or email
-    throw new Error("Not implemented");
+    const [slot] = await this.db
+      .select()
+      .from(this.schema.workshopSlots)
+      .where(eq(this.schema.workshopSlots.workshopId, workshopId))
+      .limit(1);
+
+    const confirmedCount = slot?.confirmedCount ?? 0;
+    const lockedCount = slot?.lockedCount ?? 0;
+    const expectedValue = capacity - confirmedCount - lockedCount;
+
+    const discrepancy = Math.abs(redisValue - expectedValue);
+
+    return { discrepancy, redisValue, expectedValue };
   }
 }
