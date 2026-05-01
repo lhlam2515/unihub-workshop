@@ -77,10 +77,7 @@ export class AuthService {
 
     const expiresIn = platform === "WEB" ? 900 : 28800;
 
-    let refreshToken: string | undefined;
-    if (platform === "MOBILE") {
-      refreshToken = await this.tokenService.signRefreshToken(user.userId);
-    }
+    const refreshToken = await this.tokenService.signRefreshToken(user.userId);
 
     return Result.ok(
       LoginResponseBuilder.from(
