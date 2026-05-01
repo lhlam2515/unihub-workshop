@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import {
   DATABASE_CONNECTION,
@@ -7,18 +7,15 @@ import {
   type DatabaseClient,
   type DatabaseSchema,
 } from "@/database";
+import type { NewStudentSyncError, StudentSyncError } from "@/database/types";
+import { systemErrors } from "@/shared/response/errors";
+import { Result, tryCatch } from "@/shared/response/result";
 
 /**
  * StudentSyncErrorsRepository
  *
  * CRUD operations for student sync errors.
  * Tracks all errors encountered during CSV import.
- *
- * Methods:
- * - createBatch(errors[]) → Insert multiple errors at once
- * - findByJobId(jobId, pagination) → Get errors for specific job
- *
- * TODO: Implement all methods using Drizzle ORM
  */
 @Injectable()
 export class StudentSyncErrorsRepository {
@@ -27,32 +24,68 @@ export class StudentSyncErrorsRepository {
     @Inject(DATABASE_SCHEMA) private readonly schema: DatabaseSchema
   ) {}
 
-  // TODO: Implement createBatch
-  async createBatch(errors: any[]): Promise<any[]> {
-    // Insert multiple errors into student_sync_errors
-    // For each error:
-    //   - job_id
-    //   - row_number: number (line in CSV)
-    //   - raw_data: JSON (original CSV row)
-    //   - error_reason: string (validation failed, duplicate key, etc.)
-    //   - error_detail: string (specific error message)
-    //   - created_at
-    // Return inserted records
-    throw new Error("Not implemented");
+  /**
+   * Insert multiple sync error records at once
+   *
+   * Side effects: Writes new rows to student_sync_errors.
+   *
+   * @param errors - Array of new sync error fields
+   * @returns OkResult with inserted error records, or FailResult (INTERNAL_ERROR)
+   */
+  async createBatch(
+    errors: NewStudentSyncError[]
+  ): Promise<Result<StudentSyncError[]>> {
+    return tryCatch(
+      async (): Promise<StudentSyncError[]> => {
+        const inserted = await this.db
+          .insert(this.schema.studentSyncErrors)
+          .values(errors)
+          .returning();
+        return inserted;
+      },
+      (err) => systemErrors.internal(err)
+    );
   }
 
-  // TODO: Implement findByJobId
-  async findByJobId(jobId: string, pagination: any): Promise<any[]> {
-    // Query student_sync_errors WHERE job_id = jobId
-    // Order by row_number ASC
-    // Apply pagination: limit, offset
-    // Return list of error records:
-    // [
-    //   {
-    //     error_id, row_number, raw_data (JSON),
-    //     error_reason, error_detail, created_at
-    //   }
-    // ]
-    throw new Error("Not implemented");
+  /**
+   * Retrieve sync errors for a specific job with pagination
+   *
+   * Results ordered by row_number ASC for sequential reading.
+   *
+   * @param jobId - Sync job UUID
+   * @param pagination - Page and limit controls
+   * @param pagination.page - Current page (1-indexed)
+   * @param pagination.limit - Items per page (max 100)
+   * @returns OkResult with items array and total count, or FailResult (INTERNAL_ERROR)
+   */
+  async findByJobId(
+    jobId: string,
+    pagination: { page: number; limit: number }
+  ): Promise<Result<{ items: StudentSyncError[]; total: number }>> {
+    return tryCatch(
+      async (): Promise<{ items: StudentSyncError[]; total: number }> => {
+        const offset = (pagination.page - 1) * pagination.limit;
+
+        const [items, countResult] = await Promise.all([
+          this.db
+            .select()
+            .from(this.schema.studentSyncErrors)
+            .where(eq(this.schema.studentSyncErrors.jobId, jobId))
+            .orderBy(this.schema.studentSyncErrors.rowNumber)
+            .limit(pagination.limit)
+            .offset(offset),
+          this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(this.schema.studentSyncErrors)
+            .where(eq(this.schema.studentSyncErrors.jobId, jobId)),
+        ]);
+
+        return {
+          items: items,
+          total: Number(countResult[0]?.count ?? 0),
+        };
+      },
+      (err) => systemErrors.internal(err)
+    );
   }
 }
