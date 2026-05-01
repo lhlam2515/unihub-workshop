@@ -18,7 +18,8 @@ import {
  *
  * Business rules:
  * - The notification queue uses 5 retry attempts with exponential backoff.
- * - The ai-summary and student-sync queues use one attempt (no retry).
+ * - The ai-summary queue uses 3 retry attempts with exponential backoff (10s, 20s, 40s).
+ * - The student-sync queue uses one attempt (no retry).
  * - Completed jobs are auto-removed after 1 hour.
  * - Failed jobs are auto-removed after 24 hours.
  *
@@ -46,7 +47,15 @@ import {
           removeOnFail: { age: 86400 },
         },
       },
-      { name: AI_SUMMARY_QUEUE },
+      {
+        name: AI_SUMMARY_QUEUE,
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: "exponential", delay: 10000 },
+          removeOnComplete: { age: 3600 },
+          removeOnFail: { age: 86400 },
+        },
+      },
       { name: STUDENT_SYNC_QUEUE }
     ),
   ],

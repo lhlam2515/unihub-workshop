@@ -1,92 +1,228 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 
 import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
-import { Result } from "@/shared/response/result";
+import { systemErrors } from "@/shared/response/errors";
+import { Result, tryCatch } from "@/shared/response/result";
 
 /**
  * AiSummaryService
  *
- * Handles AI-powered document summarization using Claude API.
- * Implements Pipe-and-Filter pattern for text processing.
+ * Orchestrates the AI-powered document summarization pipeline.
+ * Processes a single document through five stages:
+ * upsert record → extract PDF text → clean text → call LLM → save result.
  *
- * Pipeline:
- * 1. Extract text from PDF
- * 2. Clean and normalize text
- * 3. Call Claude Sonnet LLM
- * 4. Save summary to database
+ * Business rules:
+ * - Each documentId maps to exactly one ai_summaries row (enforced by unique constraint).
+ * - Processing status resets to PENDING on each attempt via upsert.
+ * - Failed extractions and LLM calls update the summary status to FAILED.
  *
- * This service is called by AiSummaryWorker for each document job.
+ * Side effects:
+ * - Upserts ai_summaries row on each run.
+ * - Fetches the PDF from the storage URL via HTTP.
+ * - Updates ai_summaries.status to DONE or FAILED.
  *
- * Methods:
- * - processDocument(documentId) → Process single document through pipeline
- *
- * TODO: Implement pipeline stages and LLM integration
+ * This service is consumed by AiSummaryWorker for each queued document job.
  */
 @Injectable()
 export class AiSummaryService {
+  private readonly logger = new Logger(AiSummaryService.name);
+
   constructor(private readonly aiSummariesRepo: AiSummariesRepository) {}
 
-  // TODO: Implement processDocument
-  async processDocument(documentId: string): Promise<Result<any>> {
-    // Pipeline stages:
-    //
-    // 1. EXTRACT TEXT FROM PDF
-    //    - Load document from database
-    //    - Fetch PDF from Object Storage (S3/Azure)
-    //    - Extract text using pdf-parse or similar library
-    //    - Handle corrupted/image-only PDFs
-    //
-    // 2. CLEAN & NORMALIZE
-    //    - Remove extra whitespace
-    //    - Normalize line breaks
-    //    - Remove special characters if needed
-    //    - Truncate to max token length (e.g., 8000 tokens for Claude)
-    //
-    // 3. CALL LLM (Claude Sonnet 4 - 20250514)
-    //    - Prepare system prompt for summarization
-    //    - Call Anthropic API with proper error handling
-    //    - Handle rate limiting and timeout (set timeout to 30s)
-    //    - Return summary_text
-    //
-    // 4. SAVE RESULT
-    //    - Update ai_summaries via aiSummariesRepo.updateStatus()
-    //    - If success: status = COMPLETED, summary_text = result
-    //    - If failure: status = FAILED, error_message = detail
-    //
-    // 5. Return result
-    //
-    // Error handling:
-    // - PDF extraction error → FAILED + error_message
-    // - LLM timeout → FAILED + "LLM_TIMEOUT"
-    // - LLM error → FAILED + error_message
-    // - Database error → FAILED + error_message
-    throw new Error("Not implemented");
+  /**
+   * Runs the full document summarization pipeline.
+   *
+   * Pipeline stages:
+   * 1. Upsert the ai_summaries record (creates new or resets existing to PENDING).
+   * 2. Extract raw text from the PDF located at the storage URL.
+   * 3. Clean and normalise the extracted text (whitespace, newlines, truncation).
+   * 4. Call the Claude API to generate a summary.
+   * 5. Persist the result with status DONE (or FAILED if any stage fails).
+   *
+   * @param documentId - The UUID of the workshop document to summarise.
+   * @param fileUrl - The object-storage URL of the PDF file.
+   * @param workshopId - The UUID of the associated workshop.
+   * @returns OkResult with the generated summary text, or FailResult (INTERNAL_ERROR).
+   */
+  async processDocument(
+    documentId: string,
+    fileUrl: string,
+    workshopId: string
+  ): Promise<Result<string>> {
+    this.logger.log(
+      `Processing document ${documentId} for workshop ${workshopId}`
+    );
+
+    // Stage 1: Upsert summary record (create or reset to PENDING)
+    const upsertResult = await this.aiSummariesRepo.upsert(
+      documentId,
+      workshopId
+    );
+    if (upsertResult.isFailure) {
+      this.logger.error(`Failed to upsert summary for document ${documentId}`, {
+        error: upsertResult.error.code,
+      });
+      return Result.fail(upsertResult.error);
+    }
+
+    const summaryId = upsertResult.data.summaryId;
+
+    // Stage 2: Extract text from PDF via storage URL
+    const extractResult = await this.extractTextFromPdf(fileUrl);
+    if (extractResult.isFailure) {
+      this.logger.warn(`PDF extraction failed for document ${documentId}`, {
+        error: extractResult.error.message,
+      });
+      await this.aiSummariesRepo.updateStatus(
+        summaryId,
+        "FAILED",
+        extractResult.error.message
+      );
+      return Result.fail(extractResult.error);
+    }
+
+    const rawText = extractResult.data;
+
+    // Stage 3: Clean and normalise extracted text
+    const cleanedText = this.cleanAndNormalizeText(rawText);
+
+    // Stage 4: Call Claude API for summarisation
+    const llmResult = await this.callClaudeApi(cleanedText);
+    if (llmResult.isFailure) {
+      this.logger.warn(`LLM call failed for document ${documentId}`, {
+        error: llmResult.error.message,
+      });
+      await this.aiSummariesRepo.updateStatus(
+        summaryId,
+        "FAILED",
+        llmResult.error.message
+      );
+      return Result.fail(llmResult.error);
+    }
+
+    const summaryText = llmResult.data;
+
+    // Stage 5: Persist successful result
+    const updateResult = await this.aiSummariesRepo.updateStatus(
+      summaryId,
+      "DONE",
+      summaryText
+    );
+    if (updateResult.isFailure) {
+      this.logger.error(
+        `Failed to persist summary result for document ${documentId}`,
+        { error: updateResult.error.code }
+      );
+      return Result.fail(updateResult.error);
+    }
+
+    this.logger.log(`Summary completed for document ${documentId}`);
+    return Result.ok(summaryText);
   }
 
-  // TODO: Implement PDF text extraction
+  /**
+   * Fetches a PDF from the object-storage URL and extracts its text content.
+   *
+   * Currently returns a placeholder string. The real implementation should use
+   * a PDF parsing library such as `pdf-parse` (Node.js) or `pdfjs-dist`.
+   *
+   * TODO: Replace placeholder with real pdf-parse integration.
+   *
+   * @param pdfUrl - The object-storage URL of the PDF to extract.
+   * @returns OkResult with the extracted text, or FailResult (INTERNAL_ERROR).
+   */
   private async extractTextFromPdf(pdfUrl: string): Promise<Result<string>> {
-    // Fetch PDF from Object Storage
-    // Parse using pdf-parse or pdfjs-dist
-    // Return extracted text or error
-    throw new Error("Not implemented");
+    return tryCatch(
+      async () => {
+        const response = await fetch(pdfUrl);
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch PDF: ${response.status} ${response.statusText}`
+          );
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+
+        // TODO: Replace with real pdf-parse implementation:
+        //   import pdf from 'pdf-parse';
+        //   const buffer = Buffer.from(arrayBuffer);
+        //   const data = await pdf(buffer);
+        //   return data.text;
+
+        return `[Extracted text from PDF — ${arrayBuffer.byteLength} bytes]`;
+      },
+      (err) => systemErrors.internal(err)
+    );
   }
 
-  // TODO: Implement text cleaning
+  /**
+   * Cleans and normalises extracted document text for LLM consumption.
+   *
+   * Transformations applied:
+   * - Collapses multiple whitespace characters into single spaces.
+   * - Normalises Windows-style line endings (CRLF) to Unix (LF).
+   * - Strips non-printable characters while preserving common punctuation.
+   * - Truncates to 8000 characters to stay within token limits.
+   *
+   * @param text - The raw extracted text to clean.
+   * @returns The cleaned and truncated text.
+   */
   private cleanAndNormalizeText(text: string): string {
-    // Remove extra whitespace
-    // Normalize line breaks
-    // Remove special characters
-    // Truncate to max length
-    // Return cleaned text
-    throw new Error("Not implemented");
+    let cleaned = text;
+
+    // Collapse multiple whitespace characters into single space
+    cleaned = cleaned.replace(/\s+/g, " ");
+
+    // Normalise Windows-style line endings
+    cleaned = cleaned.replace(/\r\n/g, "\n");
+
+    // Strip non-printable characters (preserve alphanumeric, spaces, common punctuation)
+    cleaned = cleaned.replace(/[^\w\s.,!?;:'"()\-–—/@$%#&*\n]/g, "");
+
+    // Truncate to 8000 characters to fit within token limits
+    const MAX_LENGTH = 8000;
+    if (cleaned.length > MAX_LENGTH) {
+      cleaned = cleaned.substring(0, MAX_LENGTH);
+    }
+
+    return cleaned.trim();
   }
 
-  // TODO: Implement Claude API integration
+  /**
+   * Calls the Claude API to generate a summary of the cleaned document text.
+   *
+   * Currently returns a placeholder summary string. The real implementation
+   * should use the Anthropic SDK (`@anthropic-ai/sdk`) with the
+   * `claude-sonnet-4-20250514` model and a summarisation system prompt.
+   *
+   * TODO: Replace placeholder with real Anthropic SDK integration.
+   *
+   * @param text - The cleaned document text to summarise.
+   * @returns OkResult with the generated summary, or FailResult (INTERNAL_ERROR).
+   */
   private async callClaudeApi(text: string): Promise<Result<string>> {
-    // Prepare system prompt for summarization
-    // Call Anthropic SDK or REST API
-    // Handle rate limiting and timeout
-    // Return summary or error
-    throw new Error("Not implemented");
+    return tryCatch(
+      async () => {
+        // TODO: Replace with real Anthropic SDK integration:
+        //   import Anthropic from '@anthropic-ai/sdk';
+        //   const anthropic = new Anthropic({
+        //     apiKey: process.env.ANTHROPIC_API_KEY,
+        //   });
+        //   const message = await anthropic.messages.create({
+        //     model: 'claude-sonnet-4-20250514',
+        //     max_tokens: 1024,
+        //     messages: [
+        //       {
+        //         role: 'user',
+        //         content: `Please summarise the following workshop document:\n\n${text}`,
+        //       },
+        //     ],
+        //   });
+        //   return message.content[0].text;
+
+        return `AI-generated summary of document. Text length: ${text.length} characters.`;
+      },
+      (err) => systemErrors.internal(err)
+    );
   }
 }
