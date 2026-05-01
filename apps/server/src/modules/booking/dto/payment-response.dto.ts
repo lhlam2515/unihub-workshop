@@ -1,9 +1,12 @@
 /**
  * Payment Response DTOs
  *
- * PaymentResponseDto: full payment entity (loại bỏ raw_gateway_response)
- * CreatePaymentResponseDto: { payment_id, redirect_url, payment_deadline }
+ * Defines the public API response shapes for payment endpoints.
+ * Factory methods (from / fromCreate) map database entities to
+ * client-safe DTOs, stripping internal fields like raw_gateway_response.
  */
+
+import type { Payment } from "@/database/types/transaction.types";
 
 export interface PaymentResponseDto {
   payment_id: string;
@@ -12,8 +15,8 @@ export interface PaymentResponseDto {
   status: string;
   gateway: string;
   gateway_txn_id?: string;
-  created_at: Date;
-  updated_at?: Date;
+  initiated_at: Date;
+  completed_at?: Date;
 }
 
 export interface CreatePaymentResponseDto {
@@ -23,26 +26,46 @@ export interface CreatePaymentResponseDto {
 }
 
 export class PaymentResponseBuilder {
-  static from(payment: any): PaymentResponseDto {
-    // TODO: Implement factory
+  /**
+   * Maps a Payment entity to a client-safe PaymentResponseDto.
+   *
+   * Strips internal fields (raw_gateway_response) and renames
+   * camelCase DB columns to snake_case API response format.
+   *
+   * @param payment - The Payment entity from the database.
+   * @returns A PaymentResponseDto suitable for API responses.
+   */
+  static from(payment: Payment): PaymentResponseDto {
     return {
-      payment_id: "",
-      registration_id: "",
-      amount: 0,
-      status: "",
-      gateway: "",
-      created_at: new Date(),
+      payment_id: payment.paymentId,
+      registration_id: payment.registrationId,
+      amount: Number(payment.amount),
+      status: payment.status,
+      gateway: payment.gateway,
+      gateway_txn_id: payment.gatewayTxnId ?? undefined,
+      initiated_at: payment.initiatedAt,
+      completed_at: payment.completedAt ?? undefined,
     };
   }
 
+  /**
+   * Maps payment creation result to CreatePaymentResponseDto.
+   *
+   * Includes the redirect URL for the payment gateway and the
+   * payment deadline (15 minutes from creation).
+   *
+   * @param payment - The newly created Payment entity.
+   * @param redirectUrl - The gateway redirect URL.
+   * @param deadline - The payment timeout deadline.
+   * @returns A CreatePaymentResponseDto with redirect instructions.
+   */
   static fromCreate(
-    payment: any,
+    payment: Payment,
     redirectUrl: string,
     deadline: Date
   ): CreatePaymentResponseDto {
-    // TODO: Implement factory
     return {
-      payment_id: "",
+      payment_id: payment.paymentId,
       redirect_url: redirectUrl,
       payment_deadline: deadline,
     };
