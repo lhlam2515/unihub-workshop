@@ -328,13 +328,13 @@ Mỗi màn hình phải có: mục đích tương tác độc lập, phạm vi d
 | **Tên màn hình** | Organizer Admin Dashboard Screen |
 | **URL Path** | `/admin` |
 | **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-006, FR-F10-001, FR-F10-002, FR-F10-003 |
+| **FR liên quan** | FR-F02-006, FR-F10-001, FR-F10-002, FR-F10-003, FR-F10-005 |
 
 **Mô tả chức năng:** Trang chủ Admin — tổng quan nhanh toàn hệ thống sau khi đăng nhập với role ORGANIZER. Tập hợp các chỉ số quan trọng nhất từ nhiều module để ban tổ chức nắm bắt tình hình ngay lập tức.
 
 **Dữ liệu hiển thị:**
 
-- **Workshop Overview:** số workshop đang PUBLISHED, tổng chỗ còn lại (tổng hợp từ Redis), số đăng ký hôm nay
+- **Workshop Overview:** số workshop đang PUBLISHED, số workshop tự động chuyển COMPLETED trong 24h qua, tổng chỗ còn lại (tổng hợp từ Redis), số đăng ký hôm nay
 - **Quick Stats cards:** tổng đăng ký (CONFIRMED/PENDING), tổng doanh thu (tổng `payments.amount` status=SUCCESS)
 - **Sắp diễn ra:** danh sách 5 workshop gần nhất (tên, thời gian, fill-rate %)
 - **System Health banner:** trạng thái Circuit Breaker của các gateway (CLOSED=xanh, OPEN=đỏ, HALF_OPEN=vàng)
@@ -404,7 +404,7 @@ Mỗi màn hình phải có: mục đích tương tác độc lập, phạm vi d
 | **Tên màn hình** | Organizer Workshop Detail Admin Screen |
 | **URL Path** | `/admin/workshops/[workshopId]` |
 | **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-003, FR-F02-004, FR-F02-005, FR-F02-007 |
+| **FR liên quan** | FR-F02-003, FR-F02-004, FR-F02-005, FR-F02-007, FR-F10-005 |
 
 **Mô tả chức năng:** Hub quản lý trung tâm cho một workshop cụ thể. Đây là màn hình **role-split** so với SCR-W03 (cùng workshop nhưng data scope và actions hoàn toàn khác): bao gồm dữ liệu quản trị (`confirmed_count`, `locked_count`, `created_by`), các action nguy hiểm (Publish, Cancel, Emergency Update). Các action quan trọng dùng dialog xác nhận (UI state, không phải màn hình riêng).
 
