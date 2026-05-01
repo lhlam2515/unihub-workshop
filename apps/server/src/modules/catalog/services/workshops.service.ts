@@ -443,7 +443,7 @@ export class WorkshopsService {
     if (dto.room_id !== undefined) changes.roomId = dto.room_id;
     if (dto.starts_at !== undefined) changes.startsAt = dto.starts_at;
     if (dto.ends_at !== undefined) changes.endsAt = dto.ends_at;
-    this.notificationPublisher.publishEmergencyUpdate(workshop, changes);
+    void this.notificationPublisher.publishEmergencyUpdate(workshop, changes);
 
     // Resolve related data for response
     const [slotResult, roomResult] = await Promise.all([
@@ -509,7 +509,7 @@ export class WorkshopsService {
     }
 
     // Publish cancellation event for async notification (fire-and-forget)
-    this.notificationPublisher.publishCancelled(workshop);
+    void this.notificationPublisher.publishCancelled(workshop);
 
     // Resolve related data for response
     const [slotResult, roomResult] = await Promise.all([

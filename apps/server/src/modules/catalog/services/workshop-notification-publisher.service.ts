@@ -2,98 +2,117 @@
  * Workshop Notification Publisher
  *
  * Publishes domain events for workshop lifecycle changes (cancellation,
- * emergency updates). Currently logs events to the application logger.
- * Designed as an adapter — when the Background module's queue infrastructure
- * is ready, this service will push events to BullMQ queues for async dispatch
- * (email, Telegram, push notifications).
+ * emergency updates) to the BullMQ notification queue for async dispatch.
+ *
+ * Fire-and-forget semantics: never throws to callers. Falls back to
+ * application logging if the BullMQ queue is unreachable, ensuring the
+ * main request path (workshop cancel/update) is never blocked by a
+ * transient queue infrastructure failure.
  *
  * Event contracts:
  * - WORKSHOP_CANCELLED: { workshopId, title, cancelledAt }
- * - WORKSHOP_UPDATED: { workshopId, title, changes: { roomId?, startsAt?, endsAt? }, updatedAt }
+ * - WORKSHOP_UPDATED: { workshopId, changes: { roomChanged?, scheduleChanged? } }
+ *
+ * Business rules:
+ * - The queue is best-effort: a failed enqueue logs an error but does not
+ *   fail the caller's HTTP response.
+ * - Event types match the constants in shared/queues/event-contracts.ts.
+ *
+ * Side effects:
+ * - Enqueues a BullMQ job to the notification queue on each call.
  */
 
+import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
+import { Queue } from "bullmq";
 
 import type { Workshop } from "@/database/types/event-core.types";
-
-export interface WorkshopCancelledEvent {
-  workshopId: string;
-  title: string;
-  cancelledAt: Date;
-}
-
-export interface WorkshopUpdatedEvent {
-  workshopId: string;
-  title: string;
-  changes: {
-    roomId?: string;
-    startsAt?: Date;
-    endsAt?: Date;
-  };
-  updatedAt: Date;
-}
+import type {
+  WorkshopCancelledEventData,
+  WorkshopUpdatedEventData,
+} from "@/shared/queues/event-contracts";
+import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 
 @Injectable()
 export class WorkshopNotificationPublisher {
   private readonly logger = new Logger(WorkshopNotificationPublisher.name);
 
+  constructor(
+    @InjectQueue(NOTIFICATION_QUEUE)
+    private readonly notificationQueue: Queue
+  ) {}
+
   /**
-   * Publishes a WORKSHOP_CANCELLED event.
+   * Publishes a WORKSHOP_CANCELLED event to the notification queue.
    *
-   * Business rules:
-   * - Fire-and-forget: does not throw or fail the caller on error.
-   * - Currently logs to the application logger.
-   * - Will push to BullMQ WORKSHOP_EVENTS queue when infrastructure is ready.
+   * Fire-and-forget: logs and swallows any BullMQ connection error so the
+   * caller (workshop cancel endpoint) is never delayed or failed by the
+   * notification dispatch.
    *
    * Side effects:
-   * - Logs the event (future: enqueues a BullMQ job for NotificationWorker).
+   * - Enqueues a BullMQ job with event type "workshop.cancelled".
+   * - Falls back to application-level logging on queue failure.
    *
    * @param workshop - The cancelled workshop entity.
+   * @returns Promise<void> — Resolves when the job is enqueued or the failure is logged. Never throws.
    */
-  publishCancelled(workshop: Workshop): void {
-    const event: WorkshopCancelledEvent = {
+  async publishCancelled(workshop: Workshop): Promise<void> {
+    const event: WorkshopCancelledEventData = {
       workshopId: workshop.workshopId,
       title: workshop.title,
-      cancelledAt: new Date(),
+      cancelledAt: new Date().toISOString(),
     };
 
-    this.logger.log(
-      `[WORKSHOP_CANCELLED] Workshop "${event.title}" (${event.workshopId}) cancelled`
-    );
-    // TODO: Push to BullMQ WORKSHOP_EVENTS queue when background infrastructure is set up
-    // await this.workshopEventsQueue.add('workshop.cancelled', event);
+    try {
+      await this.notificationQueue.add("workshop.cancelled", event);
+    } catch (error) {
+      this.logger.error(
+        `[WORKSHOP_CANCELLED] Failed to enqueue: ${(error as Error).message}`
+      );
+      // Fallback: log locally so event is not completely lost
+      this.logger.log(
+        `[WORKSHOP_CANCELLED] Workshop "${event.title}" (${event.workshopId}) cancelled`
+      );
+    }
   }
 
   /**
    * Publishes a WORKSHOP_UPDATED event after an emergency update.
    *
-   * Business rules:
-   * - Fire-and-forget: does not throw or fail the caller on error.
-   * - Only includes the fields that actually changed (roomId, startsAt, endsAt).
-   * - Currently logs to the application logger.
+   * Fire-and-forget: never throws to caller. Falls back to logging on
+   * queue infrastructure failure.
    *
    * Side effects:
-   * - Logs the event (future: enqueues a BullMQ job for NotificationWorker).
+   * - Enqueues a BullMQ job with event type "workshop.emergency-update".
+   * - Falls back to application-level logging on queue failure.
    *
    * @param workshop - The updated workshop entity.
-   * @param changes - The scheduling fields that changed (roomId?, startsAt?, endsAt?).
+   * @param changes - The scheduling fields that were modified. An undefined value indicates the field was not changed.
+   * @returns Promise<void> — Resolves when the job is enqueued or the failure is logged. Never throws.
    */
-  publishEmergencyUpdate(
+  async publishEmergencyUpdate(
     workshop: Workshop,
     changes: { roomId?: string; startsAt?: Date; endsAt?: Date }
-  ): void {
-    const event: WorkshopUpdatedEvent = {
+  ): Promise<void> {
+    const event: WorkshopUpdatedEventData = {
       workshopId: workshop.workshopId,
-      title: workshop.title,
-      changes,
-      updatedAt: new Date(),
+      changes: {
+        roomChanged: changes.roomId !== undefined,
+        scheduleChanged:
+          changes.startsAt !== undefined || changes.endsAt !== undefined,
+      },
     };
 
-    this.logger.log(
-      `[WORKSHOP_UPDATED] Workshop "${event.title}" (${event.workshopId}) ` +
-        `schedule changed: ${JSON.stringify(changes)}`
-    );
-    // TODO: Push to BullMQ WORKSHOP_EVENTS queue when background infrastructure is set up
-    // await this.workshopEventsQueue.add('workshop.emergency-update', event);
+    try {
+      await this.notificationQueue.add("workshop.emergency-update", event);
+    } catch (error) {
+      this.logger.error(
+        `[WORKSHOP_UPDATED] Failed to enqueue: ${(error as Error).message}`
+      );
+      this.logger.log(
+        `[WORKSHOP_UPDATED] Workshop "${workshop.title}" (${event.workshopId}) ` +
+          `schedule changed: ${JSON.stringify(changes)}`
+      );
+    }
   }
 }
