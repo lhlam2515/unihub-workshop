@@ -3,12 +3,14 @@ import { ScheduleModule } from "@nestjs/schedule";
 
 import { SharedQueueModule } from "@/shared/queues/queue.module";
 
+import { BookingModule } from "../booking/booking.module";
 import { AppChannel } from "./channels/app.channel";
 import { EmailChannel } from "./channels/email.channel";
 import { TelegramChannel } from "./channels/telegram.channel";
 import { NotificationsAdminController } from "./controllers/notifications-admin.controller";
 import { StudentSyncAdminController } from "./controllers/student-sync-admin.controller";
 import { SystemAdminController } from "./controllers/system-admin.controller";
+import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
 import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
@@ -51,7 +53,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
  * @requires SharedQueueModule — provides BullMQ queue registrations.
  */
 @Module({
-  imports: [ScheduleModule.forRoot(), SharedQueueModule],
+  imports: [ScheduleModule.forRoot(), SharedQueueModule, BookingModule],
   controllers: [
     NotificationsAdminController,
     StudentSyncAdminController,
@@ -68,6 +70,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     StudentSyncWorker,
     PaymentTimeoutCron,
     ReconciliationCron,
+    CircuitBreakerRecoveryCron,
     NotificationLogsRepository,
     NotificationChannelConfigsRepository,
     EmailChannel,
