@@ -1,10 +1,15 @@
 import crypto from "node:crypto";
 
+import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
+import { Queue } from "bullmq";
+import jwt from "jsonwebtoken";
 
 import type { Registration } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import type { RegistrationEventData } from "@/shared/queues/event-contracts";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -27,7 +32,9 @@ export class RegistrationsService {
     private readonly globalRateLimit: GlobalRateLimitMechanic,
     private readonly seatLock: SeatLockMechanic,
     private readonly seatCounter: SeatCounterService,
-    private readonly workshopsService: WorkshopsService
+    private readonly workshopsService: WorkshopsService,
+    @InjectQueue(NOTIFICATION_QUEUE)
+    private readonly notificationQueue: Queue
   ) {}
 
   /**
@@ -147,7 +154,22 @@ export class RegistrationsService {
         status: "ACTIVE",
       });
       // Ticket failure is non-fatal for registration; log and continue
-      if (ticketResult.isFailure) {
+      if (ticketResult.isSuccess) {
+        // Replace placeholder QR with signed JWT containing ticket metadata
+        const signedQrToken = jwt.sign(
+          {
+            ticket_id: ticketResult.data.ticketId,
+            workshop_id: dto.workshop_id,
+            student_id: studentId,
+          },
+          process.env.JWT_SECRET!,
+          { expiresIn: "30d" }
+        );
+        await this.ticketsRepo.updateQrToken(
+          ticketResult.data.ticketId,
+          signedQrToken
+        );
+      } else {
         // TODO: Log warning — ticket creation failed but registration succeeded
       }
     }
@@ -157,6 +179,16 @@ export class RegistrationsService {
       payment_deadline: isPaid ? new Date(Date.now() + 900_000) : undefined,
       amount: isPaid ? Number(workshop.price) : undefined,
     });
+
+    // Fire REGISTRATION_CONFIRMED for free workshops (fire-and-forget)
+    if (!isPaid) {
+      this.fireRegistrationEvent(
+        registration.registrationId,
+        studentId,
+        dto.workshop_id,
+        "registration.confirmed"
+      );
+    }
 
     return Result.ok(response);
   }
@@ -292,7 +324,49 @@ export class RegistrationsService {
     ]);
 
     const response = RegistrationResponseBuilder.from(updateResult.data);
+
+    // Fire REGISTRATION_CANCELLED event (fire-and-forget)
+    this.fireRegistrationEvent(
+      registrationId,
+      studentId,
+      registration.workshopId,
+      "registration.cancelled"
+    );
+
     return Result.ok(response);
+  }
+
+  /**
+   * Fires a registration domain event into the notification queue (fire-and-forget).
+   *
+   * Business rules:
+   * - Fire-and-forget: queue failures are silently ignored per ADR-11.
+   * - The notification worker dispatches the appropriate channel notifications
+   *   (email, push, Telegram) based on the student's preferences.
+   *
+   * Side effects:
+   * - Enqueues a BullMQ job into the notification queue.
+   *
+   * @param registrationId - UUID of the affected registration.
+   * @param studentId - UUID of the student.
+   * @param workshopId - UUID of the workshop.
+   * @param eventType - 'registration.confirmed' or 'registration.cancelled'.
+   */
+  private fireRegistrationEvent(
+    registrationId: string,
+    studentId: string,
+    workshopId: string,
+    eventType: "registration.confirmed" | "registration.cancelled"
+  ): void {
+    const eventData: RegistrationEventData = {
+      registrationId,
+      studentId,
+      workshopId,
+      eventType,
+    };
+    this.notificationQueue.add(eventType, eventData).catch(() => {
+      // Silently ignore queue failures per ADR-11
+    });
   }
 
   /**
@@ -306,6 +380,19 @@ export class RegistrationsService {
    * @returns OkResult with the Registration entity if owned by the student,
    * or FailResult with REGISTRATION_NOT_FOUND for both missing and non-owned records.
    */
+  /**
+   * Counts CONFIRMED registrations for a given workshop.
+   *
+   * Used by the background reconciliation cron to compute the confirmed
+   * attendee count for workshop_slot counter correction.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult containing the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countConfirmedByWorkshop(workshopId: string): Promise<Result<number>> {
+    return this.registrationsRepo.countConfirmedByWorkshop(workshopId);
+  }
+
   private async findByIdWithOwnershipCheck(
     registrationId: string,
     studentId: string

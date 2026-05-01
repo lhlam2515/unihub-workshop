@@ -133,6 +133,8 @@ All errors are created through factory functions in `src/shared/response/errors.
 
 3. **Redis keys** — `seat:available:{wid}` (available counter), `seat:lock:{wid}:{regId}` (15min TTL), `token:blacklist:{jti}` (TTL = remaining JWT life), `idempotency:{key}` (24h TTL), `circuit:payment:{gateway}` (hash), `ratelimit:register:{userId}` (token bucket).
 
-4. **Controller return** — Never use `@Res() res: Response`. Return the Result directly; `ResponseInterceptor` maps it to HTTP.
+4. **Redis persistence** — Production Redis requires AOF persistence with `appendonly yes` and `appendfsync everysec` to prevent data loss on restart for idempotency keys, circuit breaker state, and seat locks. This is an external Redis config, not set in application code.
 
-5. **Jest** — Tests alongside source (`*.spec.ts`). `rootDir` is `src`. Uses `ts-jest` transformer.
+5. **Controller return** — Never use `@Res() res: Response`. Return the Result directly; `ResponseInterceptor` maps it to HTTP.
+
+6. **Jest** — Tests alongside source (`*.spec.ts`). `rootDir` is `src`. Uses `ts-jest` transformer.

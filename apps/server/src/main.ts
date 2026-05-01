@@ -1,3 +1,17 @@
+/**
+ * Application entry point.
+ *
+ * TLS/HTTPS termination is handled by the reverse proxy (Nginx / Cloudflare).
+ * The server itself runs HTTP internally, which is standard practice for
+ * containerized deployments behind a load balancer. Do NOT add
+ * https.createServer() here — TLS certificates are managed at the proxy layer.
+ *
+ * Security middleware:
+ * - helmet() sets secure HTTP headers (HSTS, CSP, X-Frame-Options, etc.).
+ * - CORS is configured via getCorsConfig().
+ * - cookieParser() enables HttpOnly cookie-based refresh token flow.
+ * - morgan logs HTTP traffic to Winston for structured observability.
+ */
 import { NestFactory } from "@nestjs/core";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";

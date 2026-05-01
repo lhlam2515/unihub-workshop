@@ -17,12 +17,10 @@
  * Side effects:
  * - Calls expirePayment on each overdue payment, producing all its side effects.
  */
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { and, eq, sql } from "drizzle-orm";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
+import { PaymentsRepository } from "@/modules/booking/repositories/payments.repository";
 import { PaymentsService } from "@/modules/booking/services/payments.service";
 
 @Injectable()
@@ -30,18 +28,18 @@ export class PaymentTimeoutCron {
   private readonly logger = new Logger(PaymentTimeoutCron.name);
 
   constructor(
-    @Inject(DATABASE_CONNECTION)
-    private readonly db: DatabaseClient,
-    @Inject(DATABASE_SCHEMA)
-    private readonly schema: DatabaseSchema,
+    private readonly paymentsRepo: PaymentsRepository,
     private readonly paymentsService: PaymentsService
   ) {}
 
   /**
-   * Finds all expired PENDING payments and expires them.
+   * Finds all expired PENDING payments via PaymentsRepository and expires them.
    *
-   * Runs every minute. Wraps the entire operation in a try/catch so that any
-   * unexpected database or service error does not crash the cron scheduler.
+   * All database access goes through the repository layer, preserving the
+   * Result pattern and layered architecture (per layered-architecture.md §Anti-Pattern #4).
+   *
+   * Runs every minute. Wraps the operation in a try/catch so that any
+   * unexpected error from the repository or service does not crash the cron scheduler.
    *
    * Side effects:
    * - Calls PaymentsService.expirePayment() for each overdue payment.
@@ -51,22 +49,20 @@ export class PaymentTimeoutCron {
   @Cron(CronExpression.EVERY_MINUTE)
   async handlePaymentTimeout(): Promise<void> {
     try {
-      const expiredPayments = await this.db
-        .select()
-        .from(this.schema.payments)
-        .where(
-          and(
-            eq(this.schema.payments.status, "PENDING"),
-            sql`${this.schema.payments.timeoutAt} < NOW()`
-          )
+      const overdueResult = await this.paymentsRepo.findPendingOverdue();
+      if (overdueResult.isFailure) {
+        this.logger.error(
+          `Failed to query overdue payments: ${overdueResult.error.code}`
         );
+        return;
+      }
 
-      if (expiredPayments.length === 0) {
+      if (overdueResult.data.length === 0) {
         return;
       }
 
       let processed = 0;
-      for (const payment of expiredPayments) {
+      for (const payment of overdueResult.data) {
         const result = await this.paymentsService.expirePayment(
           payment.paymentId
         );
@@ -80,7 +76,7 @@ export class PaymentTimeoutCron {
       }
 
       this.logger.log(
-        `Payment timeout cron: ${processed}/${expiredPayments.length} payments handled`
+        `Payment timeout cron: ${processed}/${overdueResult.data.length} payments handled`
       );
     } catch (error) {
       this.logger.error("Payment timeout cron failed", error);

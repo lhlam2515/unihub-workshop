@@ -15,6 +15,7 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { RegistrationsService } from "../services/registrations.service";
@@ -43,9 +44,9 @@ export class RegistrationsController {
   @HttpCode(HttpStatus.CREATED)
   async createRegistration(
     @Body() dto: CreateRegistrationDto,
-    @CurrentUser() user: { userId: string }
+    @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.register(user.userId, dto);
+    return this.registrationsService.register(user.sub, dto);
   }
 
   /**
@@ -61,12 +62,12 @@ export class RegistrationsController {
    */
   @Get("students/me/registrations")
   async getMyRegistrations(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: JwtPayload,
     @Query("status") status?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string
   ) {
-    return this.registrationsService.getMyRegistrations(user.userId, {
+    return this.registrationsService.getMyRegistrations(user.sub, {
       status,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
@@ -86,9 +87,9 @@ export class RegistrationsController {
   @Get("students/me/registrations/:id")
   async getMyRegistration(
     @Param("id") id: string,
-    @CurrentUser() user: { userId: string }
+    @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.getRegistrationDetail(user.userId, id);
+    return this.registrationsService.getRegistrationDetail(user.sub, id);
   }
 
   /**
@@ -109,8 +110,8 @@ export class RegistrationsController {
   @HttpCode(HttpStatus.OK)
   async cancelRegistration(
     @Param("id") id: string,
-    @CurrentUser() user: { userId: string }
+    @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.cancelRegistration(user.userId, id);
+    return this.registrationsService.cancelRegistration(user.sub, id);
   }
 }

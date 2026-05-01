@@ -21,12 +21,11 @@
  * - SCAN Redis for seat:lock:{workshopId}:* keys.
  * - UPDATE workshop_slots.confirmed_count and locked_count.
  */
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { and, eq, sql } from "drizzle-orm";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
+import { RegistrationsService } from "@/modules/booking/services/registrations.service";
+import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { RedisService } from "@/shared/redis/redis.service";
 
 const DISCREPANCY_THRESHOLD = 5;
@@ -36,10 +35,8 @@ export class ReconciliationCron {
   private readonly logger = new Logger(ReconciliationCron.name);
 
   constructor(
-    @Inject(DATABASE_CONNECTION)
-    private readonly db: DatabaseClient,
-    @Inject(DATABASE_SCHEMA)
-    private readonly schema: DatabaseSchema,
+    private readonly workshopsService: WorkshopsService,
+    private readonly registrationsService: RegistrationsService,
     private readonly redisService: RedisService
   ) {}
 
@@ -59,14 +56,16 @@ export class ReconciliationCron {
   @Cron(CronExpression.EVERY_10_MINUTES)
   async handleReconciliation(): Promise<void> {
     try {
-      const workshops = await this.db
-        .select({
-          workshopId: this.schema.workshops.workshopId,
-          capacity: this.schema.workshops.capacity,
-        })
-        .from(this.schema.workshops)
-        .where(eq(this.schema.workshops.status, "PUBLISHED"));
+      const workshopsResult =
+        await this.workshopsService.getPublishedWorkshopsBasic();
+      if (workshopsResult.isFailure) {
+        this.logger.error(
+          `Failed to fetch published workshops: ${workshopsResult.error.code}`
+        );
+        return;
+      }
 
+      const workshops = workshopsResult.data;
       let discrepancyCount = 0;
 
       for (const workshop of workshops) {
@@ -115,19 +114,18 @@ export class ReconciliationCron {
     workshopId: string,
     capacity: number
   ): Promise<number> {
-    const [confirmedResult] = await this.db
-      .select({ count: sql<number>`COUNT(*)::int` })
-      .from(this.schema.registrations)
-      .where(
-        and(
-          eq(this.schema.registrations.workshopId, workshopId),
-          eq(this.schema.registrations.status, "CONFIRMED")
-        )
+    const countResult =
+      await this.registrationsService.countConfirmedByWorkshop(workshopId);
+    if (countResult.isFailure) {
+      this.logger.error(
+        `Failed to count confirmed registrations for workshop ${workshopId}: ${countResult.error.code}`
       );
+      return 0;
+    }
 
     const lockPattern = `seat:lock:${workshopId}:*`;
     const lockKeys = await this.redisService.scanKeys(lockPattern);
-    const confirmedCount = confirmedResult?.count ?? 0;
+    const confirmedCount = countResult.data;
     const lockedCount = lockKeys.length;
 
     // Read old seat:available value for discrepancy logging
@@ -139,23 +137,18 @@ export class ReconciliationCron {
       ? Math.abs(parseInt(oldRedisValue, 10) - oldExpected)
       : 0;
 
-    // UPSERT workshop_slots with reconciled counts
-    await this.db
-      .insert(this.schema.workshopSlots)
-      .values({
-        workshopId,
-        totalCapacity: capacity,
-        confirmedCount,
-        lockedCount,
-      })
-      .onConflictDoUpdate({
-        target: this.schema.workshopSlots.workshopId,
-        set: {
-          confirmedCount,
-          lockedCount,
-          updatedAt: sql`NOW()`,
-        },
-      });
+    // UPSERT workshop_slots with reconciled counts via service
+    const slotResult = await this.workshopsService.reconcileSlot(
+      workshopId,
+      capacity,
+      lockedCount,
+      confirmedCount
+    );
+    if (slotResult.isFailure) {
+      this.logger.error(
+        `Failed to reconcile workshop_slots for ${workshopId}: ${slotResult.error.code}`
+      );
+    }
 
     return diff;
   }
