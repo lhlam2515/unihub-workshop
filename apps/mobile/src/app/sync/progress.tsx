@@ -1,58 +1,21 @@
-import { router, useLocalSearchParams } from "expo-router";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { router } from "expo-router";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
-import { useSync } from "@/features/checkin/api/use-sync";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-const DEMO_WORKSHOP_ID = "ws-101";
+const steps = [
+  { label: "Queue scan", state: "Done" },
+  { label: "Prepare batch", state: "In progress" },
+  { label: "Upload payload", state: "Pending" },
+  { label: "Refresh dashboard", state: "Pending" },
+];
 
 export default function SyncProgressScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
-  const params = useLocalSearchParams<{ workshopId?: string }>();
-  const workshopId = params.workshopId ?? DEMO_WORKSHOP_ID;
-  const { stats, runStatus, errorMessage, sync } = useSync();
-
-  const steps = [
-    {
-      label: "Đọc hàng đợi local",
-      state: runStatus === "idle" ? "Sẵn sàng" : "Hoàn thành",
-    },
-    {
-      label: "Chuẩn bị batch",
-      state:
-        runStatus === "syncing"
-          ? "Đang xử lý"
-          : runStatus === "done"
-            ? "Hoàn thành"
-            : "Chờ",
-    },
-    {
-      label: "Đẩy lên server",
-      state:
-        runStatus === "syncing"
-          ? "Đang xử lý"
-          : runStatus === "done"
-            ? "Hoàn thành"
-            : runStatus === "error"
-              ? "Thất bại"
-              : "Chờ",
-    },
-    {
-      label: "Cập nhật trạng thái local",
-      state: runStatus === "done" ? "Hoàn thành" : "Chờ",
-    },
-  ];
 
   return (
     <SafeAreaView
@@ -61,52 +24,25 @@ export default function SyncProgressScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={[styles.eyebrow, { color: colors.tint }]}>
-            M07 · ĐỒNG BỘ
+            M07 · MODAL
           </Text>
           <Text style={[styles.title, { color: colors.text }]}>
             Tiến độ đồng bộ
           </Text>
           <Text style={[styles.subtitle, { color: colors.icon }]}>
-            Đẩy dữ liệu check-in offline lên server. Mỗi bản ghi được xử lý với
-            ON CONFLICT DO NOTHING để đảm bảo idempotency.
+            Màn hình blocking cho tiến trình sync, mở từ tab Sự kiện hoặc Hàng
+            đợi khi cần xác nhận trạng thái đẩy dữ liệu.
           </Text>
         </View>
 
         <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Thống kê hàng đợi
+            Batch hiện tại
           </Text>
-          <View style={styles.metricRow}>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.pending}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Chờ sync
-              </Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.synced}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Đã sync
-              </Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.conflicts}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Xung đột
-              </Text>
-            </View>
-          </View>
-          {errorMessage ? (
-            <Text style={[styles.errorText, { color: "#F87171" }]}>
-              {errorMessage}
-            </Text>
-          ) : null}
+          <Text style={[styles.cardBody, { color: colors.icon }]}>
+            54 bản ghi local đang chờ, 39 bản ghi đã hoàn thành, còn 15 bản ghi
+            ở hàng đợi retry.
+          </Text>
         </View>
 
         <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
@@ -127,46 +63,21 @@ export default function SyncProgressScreen() {
                     {step.state}
                   </Text>
                 </View>
-                {runStatus === "syncing" && index === 2 ? (
-                  <ActivityIndicator size="small" color={colors.tint} />
-                ) : null}
               </View>
             ))}
           </View>
         </View>
 
         <View style={styles.actions}>
-          {runStatus === "done" ? (
-            <Pressable
-              onPress={() => router.back()}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-              ]}
-            >
-              <Text style={styles.primaryButtonText}>Hoàn thành</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => void sync(workshopId)}
-              disabled={runStatus === "syncing"}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                {
-                  backgroundColor: colors.tint,
-                  opacity: pressed || runStatus === "syncing" ? 0.85 : 1,
-                },
-              ]}
-            >
-              {runStatus === "syncing" ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text style={styles.primaryButtonText}>
-                  {runStatus === "error" ? "Thử lại" : "Bắt đầu đồng bộ"}
-                </Text>
-              )}
-            </Pressable>
-          )}
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Đóng modal</Text>
+          </Pressable>
           <Pressable
             onPress={() => router.push(ROUTES.TAB_QUEUE)}
             style={({ pressed }) => [
@@ -223,25 +134,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  metricRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  metric: {
-    flex: 1,
-    gap: 2,
-  },
-  metricValue: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  metricLabel: {
-    fontSize: 12,
-  },
-  errorText: {
-    fontSize: 13,
-    lineHeight: 18,
+  cardBody: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   stepList: {
     gap: 12,
@@ -249,7 +144,7 @@ const styles = StyleSheet.create({
   stepRow: {
     flexDirection: "row",
     gap: 12,
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   stepIndex: {
     width: 30,
@@ -280,8 +175,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingVertical: 14,
     paddingHorizontal: 18,
-    minHeight: 52,
-    justifyContent: "center",
   },
   primaryButtonText: {
     color: "white",

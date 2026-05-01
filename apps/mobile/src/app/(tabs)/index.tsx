@@ -1,16 +1,9 @@
 import { router } from "expo-router";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
-import { usePreload } from "@/features/checkin/api/use-preload";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 const workshops = [
@@ -37,12 +30,6 @@ const workshops = [
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
-  const { preload } = usePreload();
-
-  function handleWorkshopPress(workshopId: string) {
-    router.push(ROUTES.WORKSHOP(workshopId));
-    void preload(workshopId);
-  }
 
   return (
     <SafeAreaView
@@ -66,7 +53,7 @@ export default function HomeScreen() {
           {workshops.map((workshop) => (
             <Pressable
               key={workshop.id}
-              onPress={() => handleWorkshopPress(workshop.id)}
+              onPress={() => router.push(ROUTES.WORKSHOP(workshop.id))}
               style={({ pressed }) => [
                 styles.card,
                 {
