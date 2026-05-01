@@ -1388,6 +1388,40 @@ Priority:       SHOULD
 
 ---
 
+#### FR-F10-005 — Workshop Auto-Completion
+
+```
+ID:             FR-F10-005
+Name:           Auto-Complete Past Published Workshops
+Description:    Hệ thống SHALL chạy cron job mỗi 1 giờ (0 * * * *) quét các Workshop có
+                status = PUBLISHED và ends_at < NOW(). Với mỗi workshop hợp lệ, hệ thống
+                SHALL chuyển status = COMPLETED. Workshop ở trạng thái DRAFT, CANCELLED,
+                hoặc COMPLETED SHALL bị loại trừ. Redis seat counter không bị xóa
+                (COMPLETED là trạng thái hiển thị, không phải hủy).
+Classification: FULLY AUTOMATED
+Actor:          System (Scheduled Job — chạy mỗi 1 giờ)
+Trigger:        Cron: 0 * * * *
+Inputs:         workshops WHERE status = PUBLISHED AND ends_at < NOW()
+Outputs:        Workshop.status = COMPLETED (batch), count of completed workshops
+Business Rules: BR-042
+Acceptance Criteria:
+  Given Workshop PUBLISHED có ends_at đã qua
+  When Cron job chạy
+  Then Workshop.status = COMPLETED
+  And Redis key seat:available:{workshop_id} KHÔNG bị xóa
+
+  Given Workshop ở trạng thái DRAFT, CANCELLED, hoặc COMPLETED
+  When Cron job chạy
+  Then Workshop bị loại trừ bởi WHERE clause, không thay đổi status
+
+  Given Database connection lỗi
+  When completion query fails
+  Then Service trả FailResult(INTERNAL_ERROR), cron retry ở tick tiếp theo
+Priority:       MUST
+```
+
+---
+
 ## 4. Business Rules
 
 | ID | Rule | Nguồn | Loại |
@@ -1433,6 +1467,7 @@ Priority:       SHOULD
 | BR-039 | Payment Timeout: job chạy mỗi 1 phút, quét payments PENDING quá timeout_at | FR-F10-001 | Time-based |
 | BR-040 | Reconciliation: job chạy mỗi 10 phút; KHÔNG dùng PostgreSQL làm source of truth cho real-time seat | FR-F10-002 | Architecture |
 | BR-041 | Workshop assignment cho CheckinStaff: Eventual Consistency (hiệu lực ở JWT tiếp theo) | FR-F10-004 | Routing |
+| BR-042 | Workshop auto-completion: cron mỗi giờ quét PUBLISHED ends_at < NOW() → COMPLETED | FR-F10-005 | Time-based |
 
 ---
 
@@ -1478,6 +1513,7 @@ Priority:       SHOULD
 | Payment Timeout Monitor | FULLY AUTOMATED | FR-F10-001 | BR-039 | payments, registrations, Redis |
 | Seat Reconciliation | FULLY AUTOMATED | FR-F10-002 | BR-040 | workshop_slots |
 | Circuit Breaker Monitor | FULLY AUTOMATED | FR-F10-003 | BR-025, BR-026 | Redis (circuit:) |
+| Workshop Auto-Completion | FULLY AUTOMATED | FR-F10-005 | BR-042 | workshops |
 | Notification Dispatch | FULLY AUTOMATED | FR-F08-001, FR-F08-002 | BR-035, BR-036 | notification_logs (Queue) |
 | CSV Import Job | FULLY AUTOMATED | FR-F09-002 | BR-037, BR-038 | students, student_sync_errors |
 
