@@ -1,5 +1,4 @@
 import { Module } from "@nestjs/common";
-import { ScheduleModule } from "@nestjs/schedule";
 
 import { DatabaseModule } from "@/database/database.module";
 import { SharedQueueModule } from "@/shared/queues/queue.module";
@@ -48,12 +47,7 @@ import { WorkshopsService } from "./services/workshops.service";
  * - WorkshopNotificationPublisher — consumed by BackgroundModule (notification worker)
  */
 @Module({
-  imports: [
-    DatabaseModule,
-    RedisModule,
-    ScheduleModule.forRoot(),
-    SharedQueueModule,
-  ],
+  imports: [DatabaseModule, RedisModule, SharedQueueModule],
   controllers: [
     WorkshopsPublicController,
     WorkshopsAdminController,
