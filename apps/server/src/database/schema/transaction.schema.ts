@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, unique } from "drizzle-orm/pg-core";
+import {
+  check,
+  index,
+  pgTable,
+  unique,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 import {
   checkinSourceEnum,
@@ -39,10 +45,9 @@ export const registrations = pgTable(
       .defaultNow(),
   }),
   (table) => [
-    unique("uq_registrations_student_workshop").on(
-      table.studentId,
-      table.workshopId
-    ),
+    uniqueIndex("uq_registrations_student_workshop_active")
+      .on(table.studentId, table.workshopId)
+      .where(sql`${table.status} <> 'CANCELLED'`),
     index("idx_registrations_student_id").on(table.studentId),
     index("idx_registrations_workshop_id").on(table.workshopId),
     index("idx_registrations_status").on(table.status),
