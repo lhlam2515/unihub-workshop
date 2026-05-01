@@ -1,18 +1,8 @@
-/**
- * Catalog Module
- *
- * Handles:
- * - Workshop catalog (public list/detail, admin CRUD)
- * - Room management
- * - Speaker management
- * - Document upload and AI summarization
- * - Redis seat counter integration
- */
-
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
 import { DatabaseModule } from "@/database/database.module";
+import { SharedQueueModule } from "@/shared/queues/queue.module";
 import { RedisModule } from "@/shared/redis/redis.module";
 
 import { DocumentsAdminController } from "./controllers/documents-admin.controller";
@@ -33,8 +23,37 @@ import { SeatCounterService } from "./services/seat-counter.service";
 import { SpeakersService } from "./services/speakers.service";
 import { WorkshopNotificationPublisher } from "./services/workshop-notification-publisher.service";
 import { WorkshopsService } from "./services/workshops.service";
+/**
+ * Catalog Module
+ *
+ * Central domain module for the workshop catalog lifecycle.
+ *
+ * Domain responsibilities:
+ * - Workshop CRUD (admin) and public listing/detail queries
+ * - Room management with schedule conflict detection
+ * - Speaker management
+ * - Document upload, storage, and AI summarization
+ * - Seat counter management (Redis — consumed by BookingModule)
+ * - Workshop notification publishing (BullMQ — consumed by BackgroundModule)
+ *
+ * Imports:
+ * - DatabaseModule — PostgreSQL access via Drizzle ORM
+ * - RedisModule — seat:available counter management
+ * - SharedQueueModule — BullMQ notification queue for workshop lifecycle events
+ * - ScheduleModule — cron scheduling (room conflict detection, etc.)
+ *
+ * Exports:
+ * - WorkshopsService — consumed by BookingModule (registration validation) and BackgroundModule
+ * - SeatCounterService — consumed by BookingModule (seat availability checks)
+ * - WorkshopNotificationPublisher — consumed by BackgroundModule (notification worker)
+ */
 @Module({
-  imports: [DatabaseModule, RedisModule, ScheduleModule.forRoot()],
+  imports: [
+    DatabaseModule,
+    RedisModule,
+    ScheduleModule.forRoot(),
+    SharedQueueModule,
+  ],
   controllers: [
     WorkshopsPublicController,
     WorkshopsAdminController,
@@ -59,6 +78,10 @@ import { WorkshopsService } from "./services/workshops.service";
     WorkshopDocumentsRepository,
     AiSummariesRepository,
   ],
-  exports: [WorkshopsService, SeatCounterService],
+  exports: [
+    WorkshopsService,
+    SeatCounterService,
+    WorkshopNotificationPublisher,
+  ],
 })
 export class CatalogModule {}

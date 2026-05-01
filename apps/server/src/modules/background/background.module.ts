@@ -4,6 +4,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { SharedQueueModule } from "@/shared/queues/queue.module";
 
 import { BookingModule } from "../booking/booking.module";
+import { CatalogModule } from "../catalog/catalog.module";
 import { AppChannel } from "./channels/app.channel";
 import { EmailChannel } from "./channels/email.channel";
 import { TelegramChannel } from "./channels/telegram.channel";
@@ -51,9 +52,16 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
  * - Exposes admin HTTP endpoints for manual job management.
  *
  * @requires SharedQueueModule — provides BullMQ queue registrations.
+ * @requires BookingModule — provides RegistrationsService and PaymentsService (reconciliation, payment timeout cron).
+ * @requires CatalogModule — provides WorkshopNotificationPublisher and WorkshopsService (notification, AI summary workers).
  */
 @Module({
-  imports: [ScheduleModule.forRoot(), SharedQueueModule, BookingModule],
+  imports: [
+    ScheduleModule.forRoot(),
+    SharedQueueModule,
+    BookingModule,
+    CatalogModule,
+  ],
   controllers: [
     NotificationsAdminController,
     StudentSyncAdminController,

@@ -1,20 +1,8 @@
-/**
- * Booking Module
- *
- * Critical path module — handles:
- * - Registration (workshop signup)
- * - Payments (multiple gateways, webhooks)
- * - Rate limiting and seat management
- * - Idempotency and circuit breaker
- *
- * Imports: DatabaseModule, RedisModule, CatalogModule (SeatCounterService)
- */
-
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/database/database.module";
-import { RedisModule } from "@/shared/redis/redis.module";
 import { SharedQueueModule } from "@/shared/queues/queue.module";
+import { RedisModule } from "@/shared/redis/redis.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
 import { PaymentsController } from "./controllers/payments.controller";
@@ -31,6 +19,28 @@ import { PaymentGatewayService } from "./services/payment-gateway.service";
 import { PaymentsService } from "./services/payments.service";
 import { RegistrationsService } from "./services/registrations.service";
 
+/**
+ * Booking Module
+ *
+ * Critical path module for the registration-to-payment flow.
+ *
+ * Domain responsibilities:
+ * - Workshop registration with seat locking (Redis)
+ * - Payment processing via multiple gateways and webhooks
+ * - Rate limiting (global + per-endpoint) and idempotency checks
+ * - Circuit breaker for payment gateway failure isolation
+ *
+ * Imports:
+ * - DatabaseModule — PostgreSQL access via Drizzle ORM
+ * - RedisModule — distributed locks, rate counters, circuit breaker state
+ * - CatalogModule — SeatCounterService for seat availability checks
+ * - SharedQueueModule — BullMQ queue definitions for payment-timeout jobs
+ *
+ * Exports:
+ * - RegistrationsService — consumed by BackgroundModule (reconciliation cron)
+ * - PaymentsService — consumed by BackgroundModule (reconciliation cron)
+ * - SeatLockMechanic — consumed by CatalogModule (workshop cancellation flow)
+ */
 @Module({
   imports: [DatabaseModule, RedisModule, CatalogModule, SharedQueueModule],
   controllers: [RegistrationsController, PaymentsController],
@@ -50,6 +60,6 @@ import { RegistrationsService } from "./services/registrations.service";
     TicketsRepository,
     PaymentsRepository,
   ],
-  exports: [RegistrationsService, PaymentsService],
+  exports: [RegistrationsService, PaymentsService, SeatLockMechanic],
 })
 export class BookingModule {}
