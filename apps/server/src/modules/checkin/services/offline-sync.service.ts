@@ -1,37 +1,81 @@
-/**
- * Offline Sync Service
- *
- * processSyncBatch(items[], staffUserId):
- * - Với mỗi item, giải mã qr_token để lấy ticket_id
- * - Thực thi INSERT INTO checkin_records ON CONFLICT DO NOTHING
- * - Phân loại thành synced, skipped, conflicts
- *
- * Trả SyncResultDto.
- */
-
 import { Injectable } from "@nestjs/common";
+
+import { Result } from "@/shared/response/result";
+
+import { SyncResultBuilder, type SyncResultDto } from "../dto/sync-result.dto";
+import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
+import { TicketsRepository } from "../repositories/tickets.repository";
 
 @Injectable()
 export class OfflineSyncService {
   constructor(
-    private readonly checkinRepo: any // TODO: Inject CheckinRecordsRepository
+    private readonly checkinRecordsRepo: CheckinRecordsRepository,
+    private readonly ticketsRepo: TicketsRepository
   ) {}
 
   /**
-   * processSyncBatch(items: Array<{ qr_token, timestamp }>, staffUserId: string, workshopId: string)
+   * Idempotently persists a batch of offline check-in records from mobile.
    *
-   * TODO: Process batch of offline QR scans
-   * 1. For each item, decode qr_token
-   * 2. Verify ticket still valid
-   * 3. Insert checkin_record with ON CONFLICT DO NOTHING
-   * 4. Categorize results: synced, skipped, conflicts
-   * 5. Return SyncResultDto with counts
+   * Business rules:
+   * - Each item is validated: ticket must exist and be ACTIVE for the given workshop.
+   * - VOID tickets or wrong-workshop tickets are counted as conflicts, not errors.
+   * - Duplicate records (already synced) are silently skipped via ON CONFLICT DO NOTHING.
+   * - Batch processing continues even if individual items are invalid.
+   *
+   * Side effects:
+   * - Inserts records into `checkin_records` with source=OFFLINE_SYNC for valid items.
+   *
+   * @param items - Array of offline scan records with qr_token and timestamp.
+   * @param staffUserId - UUID of the CHECKIN_STAFF who performed the scans (from jwt.sub).
+   * @param workshopId - UUID of the workshop scope for this sync batch.
+   * @returns OkResult with SyncResultDto (synced/skipped/conflicts counts), or FailResult (INTERNAL_ERROR).
    */
   async processSyncBatch(
-    items: any[],
+    items: Array<{ qr_token: string; timestamp: Date; device_id?: string }>,
     staffUserId: string,
     workshopId: string
-  ) {
-    // TODO: Implement
+  ): Promise<Result<SyncResultDto>> {
+    let synced = 0;
+    let skipped = 0;
+    let conflicts = 0;
+
+    for (const item of items) {
+      const ticketResult = await this.ticketsRepo.findByQRToken(item.qr_token);
+
+      if (ticketResult.isFailure) return Result.fail(ticketResult.error);
+
+      const ticket = ticketResult.data;
+
+      if (
+        !ticket ||
+        ticket.status === "VOID" ||
+        ticket.registration.workshopId !== workshopId
+      ) {
+        conflicts++;
+        continue;
+      }
+
+      const createResult = await this.checkinRecordsRepo.create({
+        registrationId: ticket.registrationId,
+        ticketId: ticket.ticketId,
+        studentId: ticket.registration.studentId,
+        workshopId,
+        checkedInAt: item.timestamp,
+        checkedInBy: staffUserId,
+        source: "OFFLINE_SYNC",
+        deviceId: item.device_id,
+        syncedAt: new Date(),
+      });
+
+      if (createResult.isFailure) return Result.fail(createResult.error);
+
+      if (createResult.data === null) {
+        skipped++;
+      } else {
+        synced++;
+      }
+    }
+
+    return Result.ok(SyncResultBuilder.from(synced, skipped, conflicts));
   }
 }

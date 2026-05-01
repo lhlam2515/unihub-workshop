@@ -6,19 +6,30 @@ import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-function getWorkshopId(value: string | string[] | undefined) {
-  if (Array.isArray(value)) {
-    return value[0] ?? "ws-demo";
-  }
-
-  return value ?? "ws-demo";
+function getParam(value: string | string[] | undefined, fallback = "") {
+  if (Array.isArray(value)) return value[0] ?? fallback;
+  return value ?? fallback;
 }
 
 export default function ResultScreen() {
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
-  const workshopId = getWorkshopId(params.id);
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    source?: string | string[];
+    name?: string | string[];
+    code?: string | string[];
+  }>();
+  const workshopId = getParam(params.id, "ws-demo");
+  const source = getParam(params.source, "ONLINE");
+  const studentName = decodeURIComponent(getParam(params.name, "—"));
+  const studentCode = getParam(params.code, "—");
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
+
+  const isOffline = source === "OFFLINE_QUEUED";
+  const now = new Date().toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <SafeAreaView
@@ -32,10 +43,6 @@ export default function ResultScreen() {
           <Text style={[styles.title, { color: colors.text }]}>
             Kết quả quét cho {workshopId}
           </Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>
-            Màn hình xác nhận sau khi quét, nơi nhân sự có thể kiểm tra trạng
-            thái vé và quyết định quét tiếp hay quay lại dashboard.
-          </Text>
         </View>
 
         <View style={[styles.card, { borderColor: colors.tint }]}>
@@ -43,7 +50,7 @@ export default function ResultScreen() {
             Check-in thành công
           </Text>
           <Text style={[styles.cardBody, { color: colors.icon }]}>
-            Student ID: ST-2048 · Ticket: TK-55012 · Gate: A3
+            {studentName} · {studentCode}
           </Text>
         </View>
 
@@ -54,15 +61,15 @@ export default function ResultScreen() {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.icon }]}>Time</Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>
-              09:42
+              {now}
             </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.icon }]}>
-              Queue action
+              Ghi nhận
             </Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>
-              Marked locally
+              {isOffline ? "Lưu local (offline)" : "Ghi nhận trực tiếp"}
             </Text>
           </View>
           <View style={styles.infoRow}>
@@ -70,7 +77,7 @@ export default function ResultScreen() {
               Sync state
             </Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>
-              Pending upload
+              {isOffline ? "Chờ đồng bộ" : "Đã đồng bộ"}
             </Text>
           </View>
         </View>
@@ -126,10 +133,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     lineHeight: 34,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
   },
   card: {
     borderWidth: 1,

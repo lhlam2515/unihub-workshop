@@ -1,16 +1,3 @@
-/**
- * Checkin Controller
- *
- * Xử lý toàn bộ check-in endpoints:
- * - GET /checkin/workshops/{id}/tickets
- * - POST /checkin/scan
- * - POST /checkin/sync (offline sync)
- * - GET /checkin/workshops/{id}/status
- *
- * Tất cả yêu cầu role CHECKIN_STAFF.
- * GET .../tickets và POST /checkin/scan còn yêu cầu @UseGuards(WorkshopScopeGuard).
- */
-
 import {
   Controller,
   Get,
@@ -27,52 +14,84 @@ import { RolesGuard } from "@/core/guards/roles.guard";
 import { WorkshopScopeGuard } from "@/core/guards/workshop-scope.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import type { JwtPayload } from "@/types/jwt-payload";
+
+import { CheckinService } from "../services/checkin.service";
+import { OfflineSyncService } from "../services/offline-sync.service";
+import { TicketService } from "../services/ticket.service";
+
+import type { OfflineSyncDto } from "../dto/offline-sync.dto";
+import type { ScanQRDto } from "../dto/scan-qr.dto";
 
 @Controller("checkin")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("CHECKIN_STAFF")
 export class CheckinController {
-  constructor(private readonly checkinService: any) {}
+  constructor(
+    private readonly checkinService: CheckinService,
+    private readonly offlineSyncService: OfflineSyncService,
+    private readonly ticketService: TicketService
+  ) {}
 
   /**
-   * GET /checkin/workshops/{id}/tickets
-   * Get list of tickets for workshop
+   * Retrieves all active tickets for a workshop for staff pre-load into mobile SQLite cache.
+   *
+   * @param workshopId - UUID of the workshop (validated against staff's allowed_workshop_ids by WorkshopScopeGuard).
+   * @returns List of active TicketResponseDto.
    */
   @Get("workshops/:id/tickets")
   @UseGuards(WorkshopScopeGuard)
   async getWorkshopTickets(@Param("id") workshopId: string) {
-    // TODO: Call checkinService.getWorkshopTickets(workshopId)
+    return this.ticketService.preloadActiveTickets(workshopId);
   }
 
   /**
-   * POST /checkin/scan
-   * QR code scanning endpoint
-   * @body { qr_token, workshop_id, device_id }
+   * Validates a QR token and records an online check-in.
+   *
+   * @param body - Validated scan payload (qr_token, workshop_id, device_id?).
+   * @param user - Authenticated CHECKIN_STAFF payload from JWT.
+   * @returns Checkin record details (checkin_id, checked_in_at).
    */
   @Post("scan")
   @UseGuards(WorkshopScopeGuard)
   @HttpCode(HttpStatus.OK)
-  async scanQR(@Body() scanDto: any, @CurrentUser() user: any) {
-    // TODO: Call checkinService.scanQR(scanDto, user.id)
+  async scanQR(@Body() body: ScanQRDto, @CurrentUser() user: JwtPayload) {
+    return this.checkinService.scanQR(
+      body.qr_token,
+      body.workshop_id,
+      user.sub,
+      body.device_id
+    );
   }
 
   /**
-   * POST /checkin/sync
-   * Offline sync - batch process QR codes from mobile app
-   * @body { items: [{ qr_token, timestamp }] }
+   * Accepts a batch of offline check-in records and persists them idempotently.
+   *
+   * @param body - Validated sync payload (workshop_id, items[]).
+   * @param user - Authenticated CHECKIN_STAFF payload from JWT.
+   * @returns SyncResultDto with counts of synced, skipped, and conflicted records.
    */
   @Post("sync")
   @HttpCode(HttpStatus.OK)
-  async syncOfflineData(@Body() syncDto: any, @CurrentUser() user: any) {
-    // TODO: Call offlineSyncService.processSyncBatch(syncDto.items, user.id)
+  async syncOfflineData(
+    @Body() body: OfflineSyncDto,
+    @CurrentUser() user: JwtPayload
+  ) {
+    return this.offlineSyncService.processSyncBatch(
+      body.items,
+      user.sub,
+      body.workshop_id
+    );
   }
 
   /**
-   * GET /checkin/workshops/{id}/status
-   * Get workshop check-in status and stats
+   * Retrieves real-time check-in statistics and recent activity for a workshop.
+   *
+   * @param workshopId - UUID of the workshop to query.
+   * @returns CheckinStatusDto with confirmed/checked-in counts and last 20 check-ins.
    */
   @Get("workshops/:id/status")
   async getWorkshopStatus(@Param("id") workshopId: string) {
-    // TODO: Call checkinService.getWorkshopCheckinStatus(workshopId)
+    return this.checkinService.getWorkshopCheckinStatus(workshopId);
   }
 }

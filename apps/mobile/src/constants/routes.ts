@@ -20,6 +20,9 @@ const ROUTES = {
 
   // Blocking sync flow
   SYNC_PROGRESS: "/sync/progress",
+
+  // Student ticket list
+  MY_TICKETS: "/tickets",
 } as const;
 
 export default ROUTES;

@@ -4,29 +4,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { useSync } from "@/features/checkin/api/use-sync";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-const queueItems = [
-  {
-    id: "q-01",
-    title: "Check-in batch #174",
-    detail: "24 bản ghi chờ đẩy lên server",
-  },
-  {
-    id: "q-02",
-    title: "Ticket revalidation",
-    detail: "3 vé cần thử lại sau lỗi kết nối",
-  },
-  {
-    id: "q-03",
-    title: "Attendance snapshot",
-    detail: "Bản sao local đã sẵn sàng đồng bộ",
-  },
-];
+const DEMO_WORKSHOP_ID = "ws-101";
 
 export default function QueueScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
+  const { stats, sync, runStatus } = useSync();
 
   return (
     <SafeAreaView
@@ -53,7 +39,7 @@ export default function QueueScreen() {
           <View style={styles.metricRow}>
             <View style={styles.metric}>
               <Text style={[styles.metricValue, { color: colors.text }]}>
-                12
+                {stats.pending}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.icon }]}>
                 Pending
@@ -61,51 +47,74 @@ export default function QueueScreen() {
             </View>
             <View style={styles.metric}>
               <Text style={[styles.metricValue, { color: colors.text }]}>
-                4
+                {stats.failed}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Failed retry
+                Failed
               </Text>
             </View>
             <View style={styles.metric}>
               <Text style={[styles.metricValue, { color: colors.text }]}>
-                98%
+                {stats.synced}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Ready
+                Synced
               </Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.list}>
-          {queueItems.map((item) => (
-            <View
-              key={item.id}
-              style={[styles.card, { borderColor: colors.tabIconDefault }]}
-            >
-              <Text style={[styles.cardTitle, { color: colors.text }]}>
-                {item.title}
-              </Text>
-              <Text style={[styles.cardBody, { color: colors.icon }]}>
-                {item.detail}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {stats.conflicts > 0 ? (
+          <View style={[styles.card, { borderColor: "#F87171" }]}>
+            <Text style={[styles.cardTitle, { color: "#F87171" }]}>
+              {stats.conflicts} xung đột cần xem xét
+            </Text>
+            <Text style={[styles.cardBody, { color: colors.icon }]}>
+              Các vé này đã được check-in bởi thiết bị khác hoặc đã bị hủy. Xem
+              chi tiết trên web portal.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.actions}>
           <Pressable
-            onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
+            onPress={() => void sync(DEMO_WORKSHOP_ID)}
+            disabled={runStatus === "syncing" || stats.pending === 0}
             style={({ pressed }) => [
               styles.primaryButton,
-              { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
+              {
+                backgroundColor: colors.tint,
+                opacity:
+                  pressed || runStatus === "syncing" || stats.pending === 0
+                    ? 0.6
+                    : 1,
+              },
             ]}
           >
-            <Text style={styles.primaryButtonText}>Đồng bộ ngay</Text>
+            <Text style={styles.primaryButtonText}>
+              {runStatus === "syncing"
+                ? "Đang đồng bộ..."
+                : stats.pending === 0
+                  ? "Không có gì để sync"
+                  : `Đồng bộ ${stats.pending} bản ghi`}
+            </Text>
           </Pressable>
           <Pressable
-            onPress={() => router.push(ROUTES.WORKSHOP("ws-101"))}
+            onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              {
+                borderColor: colors.tabIconDefault,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+              Xem chi tiết tiến độ
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push(ROUTES.WORKSHOP(DEMO_WORKSHOP_ID))}
             style={({ pressed }) => [
               styles.secondaryButton,
               {
@@ -179,9 +188,6 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     fontSize: 12,
-  },
-  list: {
-    gap: 12,
   },
   actions: {
     gap: 12,
