@@ -50,6 +50,13 @@ export interface PaymentEventData {
   eventType: PaymentEventType;
 }
 
+export interface RegistrationEventData {
+  registrationId: string;
+  studentId: string;
+  workshopId: string;
+  eventType: "registration.confirmed" | "registration.cancelled";
+}
+
 export interface WorkshopCancelledEventData {
   workshopId: string;
   title: string;

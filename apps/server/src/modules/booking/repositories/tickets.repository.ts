@@ -111,6 +111,34 @@ export class TicketsRepository {
     );
   }
 
+  /**
+   * Updates a ticket's QR token with a signed JWT.
+   *
+   * Called after initial ticket creation to replace the placeholder QR token
+   * with a cryptographically signed JWT containing ticket_id, workshop_id,
+   * and student_id for offline check-in verification.
+   *
+   * Side effects:
+   * - Executes UPDATE on the tickets table for the given ID.
+   *
+   * @param id - The ticket UUID.
+   * @param qrToken - The signed JWT string to set as the QR token.
+   * @returns OkResult containing the updated Ticket entity, or FailResult (INTERNAL_ERROR).
+   */
+  async updateQrToken(id: string, qrToken: string): Promise<Result<Ticket>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .update(this.schema.tickets)
+          .set({ qrToken })
+          .where(eq(this.schema.tickets.ticketId, id))
+          .returning();
+        return result;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
   async updateStatus(id: string, status: string): Promise<Result<Ticket>> {
     return tryCatch(
       async () => {

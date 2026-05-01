@@ -34,6 +34,7 @@ import crypto from "node:crypto";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
+import jwt from "jsonwebtoken";
 
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
@@ -53,7 +54,10 @@ import { RegistrationsRepository } from "../repositories/registrations.repositor
 import { TicketsRepository } from "../repositories/tickets.repository";
 
 import type { Payment } from "@/database/types/transaction.types";
-import type { PaymentEventData } from "@/shared/queues/event-contracts";
+import type {
+  PaymentEventData,
+  RegistrationEventData,
+} from "@/shared/queues/event-contracts";
 import type { CreatePaymentDto } from "../dto/create-payment.dto";
 import type {
   CreatePaymentResponseDto,
@@ -353,6 +357,39 @@ export class PaymentsService {
       isSuccess ? "payment.success" : "payment.failed",
       !isSuccess
     );
+
+    // Post-transaction: Replace placeholder QR token with signed JWT
+    if (isSuccess) {
+      const ticketResult = await this.ticketsRepo.findByRegistrationId(
+        payment.registrationId
+      );
+      if (ticketResult.isSuccess && ticketResult.data) {
+        const ticket = ticketResult.data;
+        const signedQrToken = jwt.sign(
+          {
+            ticket_id: ticket.ticketId,
+            workshop_id: workshopId,
+            student_id: payment.studentId,
+          },
+          process.env.JWT_SECRET!,
+          { expiresIn: "30d" }
+        );
+        await this.ticketsRepo.updateQrToken(ticket.ticketId, signedQrToken);
+      }
+
+      // Fire REGISTRATION_CONFIRMED for paid workshop (fire-and-forget)
+      const regEventData: RegistrationEventData = {
+        registrationId: payment.registrationId,
+        studentId: payment.studentId,
+        workshopId,
+        eventType: "registration.confirmed",
+      };
+      this.notificationQueue
+        .add("registration.confirmed", regEventData)
+        .catch(() => {
+          // Silently ignore queue failures per ADR-11
+        });
+    }
 
     return Result.ok();
   }
