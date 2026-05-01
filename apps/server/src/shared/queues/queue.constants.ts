@@ -8,7 +8,7 @@
  * Queue lifecycle:
  * - Completed jobs are auto-removed after 1 hour.
  * - Failed jobs are auto-removed after 24 hours.
- * - Each job is attempted at most once (no retries).
+ * - Default is 1 attempt; individual queues can override with attempts + backoff.
  */
 export const NOTIFICATION_QUEUE = "notification";
 export const AI_SUMMARY_QUEUE = "ai-summary";
