@@ -26,10 +26,11 @@ export class TicketsRepository {
    * @returns OkResult with the created Ticket entity.
    * - May return FailResult with INTERNAL_ERROR on database failure.
    */
-  async create(data: NewTicket): Promise<Result<Ticket>> {
+  async create(data: NewTicket, tx?: any): Promise<Result<Ticket>> {
+    const conn = tx ?? this.db;
     return tryCatch(
       async () => {
-        const [result] = await this.db
+        const [result] = await conn
           .insert(this.schema.tickets)
           .values(data)
           .returning();
