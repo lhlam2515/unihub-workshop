@@ -623,3 +623,47 @@ export const systemErrors = {
       context: { resource, timeoutMs },
     }),
 } as const;
+
+/**
+ * Checks whether an unknown value is a normalized AppError.
+ *
+ * @param err - The value to check.
+ * @returns Whether the value is an AppError (has code and category properties).
+ */
+export const isAppError = (err: unknown): err is AppError =>
+  typeof err === "object" && err !== null && "code" in err && "category" in err;
+
+/**
+ * Passes through AppError values as-is, wraps everything else as INTERNAL_ERROR.
+ *
+ * Intended for use as the error mapper in tryCatch when the callback may throw
+ * a domain AppError (e.g., Drizzle transaction throw-to-rollback):
+ * `tryCatch(fn, passthroughOrInternal)`
+ *
+ * @param err - The error to map.
+ * @returns AppError unchanged, or a new INTERNAL_ERROR wrapping non-AppError values.
+ */
+export const passthroughOrInternal = (err: unknown): AppError =>
+  isAppError(err) ? err : systemErrors.internal(err);
+
+/**
+ * Creates an error mapper for FOR UPDATE NOWAIT lock-timeout detection.
+ *
+ * Detects PostgreSQL lock conflict errors and maps them to DB_LOCK_TIMEOUT.
+ * Any other error is wrapped as INTERNAL_ERROR.
+ *
+ * @param resource - Resource name for the DB_LOCK_TIMEOUT context (e.g., "workshop_slots").
+ * @param timeoutMs - Timeout in milliseconds (default 3000).
+ * @returns An error mapper function suitable for tryCatch.
+ */
+export const lockTimeoutMapper =
+  (resource: string, timeoutMs = 3000) =>
+  (err: unknown): AppError => {
+    if (
+      String(err).includes("could not obtain lock") ||
+      String(err).includes("NOWAIT")
+    ) {
+      return systemErrors.dbLockTimeout(resource, timeoutMs);
+    }
+    return systemErrors.internal(err);
+  };
