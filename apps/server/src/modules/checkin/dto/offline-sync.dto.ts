@@ -1,17 +1,12 @@
-/**
- * Offline Sync DTO
- *
- * Request: POST /checkin/sync
- * Validate: { items: Array<{ qr_token, timestamp }> }
- */
-
 import { z } from "zod";
 
 export const OfflineSyncSchema = z.object({
+  workshop_id: z.string().uuid(),
   items: z.array(
     z.object({
       qr_token: z.string(),
-      timestamp: z.date(),
+      timestamp: z.coerce.date(),
+      device_id: z.string().optional(),
     })
   ),
 });
