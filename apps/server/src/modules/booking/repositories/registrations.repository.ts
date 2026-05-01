@@ -127,8 +127,9 @@ export class RegistrationsRepository {
   async updateStatus(
     id: string,
     status: string,
-    _tx?: any
+    tx?: any
   ): Promise<Result<Registration>> {
+    const conn = tx ?? this.db;
     return tryCatch(
       async () => {
         const updateData: Record<string, unknown> = {
@@ -142,7 +143,7 @@ export class RegistrationsRepository {
           updateData.cancelledAt = new Date();
         }
 
-        const [result] = await this.db
+        const [result] = await conn
           .update(this.schema.registrations)
           .set(updateData)
           .where(eq(this.schema.registrations.registrationId, id))
