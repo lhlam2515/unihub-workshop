@@ -1,12 +1,11 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
-// Controllers
+import { SharedQueueModule } from "@/shared/queues/queue.module";
+
 import { NotificationsAdminController } from "./controllers/notifications-admin.controller";
 import { StudentSyncAdminController } from "./controllers/student-sync-admin.controller";
 import { SystemAdminController } from "./controllers/system-admin.controller";
-
-// Services
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
 import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
@@ -18,8 +17,6 @@ import { NotificationDispatchService } from "./services/notification-dispatch.se
 import { NotificationsService } from "./services/notifications.service";
 import { StudentSyncService } from "./services/student-sync.service";
 import { SystemMonitorService } from "./services/system-monitor.service";
-
-// Workers (Queue Consumers)
 import { AiSummaryWorker } from "./workers/ai-summary.worker";
 import { NotificationWorker } from "./workers/notification.worker";
 import { StudentSyncWorker } from "./workers/student-sync.worker";
@@ -31,67 +28,49 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
 // Note: AiSummariesRepository is imported from CatalogModule to avoid duplication
 
 /**
- * BackgroundModule
+ * Orchestrates all async and scheduled background processing.
  *
- * Handles all async/scheduled tasks:
- * - Notifications: send via email/telegram with retry logic
- * - AI Summarization: document processing via Claude API
- * - Student Sync: bulk CSV import with error tracking
- * - Payment Timeouts: cron job to expire pending payments
- * - Reconciliation: seat counter consistency check
- * - System Monitoring: job health and circuit breaker status
+ * Owns the workers, cron jobs, and admin controllers for notification
+ * dispatch, AI document summarization, student CSV import, payment
+ * timeout expiry, and seat-reconciliation monitoring.
  *
- * Dependencies:
- * - @nestjs/schedule (for @Cron decorators)
- * - Bull/BullMQ (for job queue, optional for MVP)
- * - EventEmitter2 (alternative to Bull for MVP)
+ * Business rules:
+ * - Notification delivery uses retry-with-backoff per channel type.
+ * - Seat reconciliation runs on a 10-minute cron cycle.
+ * - Payment timeouts expire PENDING registrations after 15 minutes.
+ * - Each worker consumes from its dedicated BullMQ queue.
  *
- * Imports:
- * - DatabaseModule (for repositories)
- * - RedisModule (for mechanics and caching)
- * - CatalogModule (for AiSummariesRepository)
- * - BookingModule (for payment data)
+ * Side effects:
+ * - Registers cron schedules via @nestjs/schedule.
+ * - Registers BullMQ workers via SharedQueueModule queues.
+ * - Exposes admin HTTP endpoints for manual job management.
  *
- * TODO: Setup queue library configuration (Bull/BullMQ or EventEmitter2)
- * TODO: Implement all TODO comments in services, workers, and cron jobs
+ * @requires SharedQueueModule — provides BullMQ queue registrations.
  */
 @Module({
-  imports: [
-    ScheduleModule.forRoot(),
-    // TODO: Import queue module here
-    // BullModule.forRoot({ ... }),
-    // or EventEmitterModule for event-based approach
-    //
-    // TODO: Import feature modules
-    // CatalogModule, DatabaseModule, RedisModule
-  ],
+  imports: [ScheduleModule.forRoot(), SharedQueueModule],
   controllers: [
     NotificationsAdminController,
     StudentSyncAdminController,
     SystemAdminController,
   ],
   providers: [
-    // Services
     NotificationsService,
     NotificationDispatchService,
     AiSummaryService,
     StudentSyncService,
     SystemMonitorService,
-    // Workers
     NotificationWorker,
     AiSummaryWorker,
     StudentSyncWorker,
-    // Cron Jobs
     PaymentTimeoutCron,
     ReconciliationCron,
-    // Repositories
     NotificationLogsRepository,
     NotificationChannelConfigsRepository,
     StudentSyncJobsRepository,
     StudentSyncErrorsRepository,
   ],
   exports: [
-    // Export services for use in other modules if needed
     NotificationsService,
     NotificationDispatchService,
     AiSummaryService,
