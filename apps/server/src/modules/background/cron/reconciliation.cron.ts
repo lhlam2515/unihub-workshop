@@ -1,37 +1,34 @@
 /**
  * ReconciliationCron
  *
- * Scheduled job to detect seat-counter discrepancies between Redis and
- * PostgreSQL. Compares the actual available seat count in Redis against
- * the expected value computed from DB data.
+ * Scheduled job that reconciles workshop_slot counters from actual data.
+ * Updates confirmed_count from PostgreSQL registrations and locked_count
+ * from active Redis seat locks.
  *
  * Runs every 10 minutes.
  *
  * Business rules:
- * - Only checks PUBLISHED workshops.
- * - Expected value = workshop.capacity - SUM(confirmedCount) - SUM(lockedCount)
- *   from workshop_slots.
- * - Discrepancies exceeding DISCREPANCY_THRESHOLD (5) are logged as warnings.
- * - This cron does NOT auto-fix discrepancies — manual admin intervention is
- *   required to correct seat counters.
+ * - confirmed_count = COUNT of registrations WHERE status = 'CONFIRMED' per workshop.
+ * - locked_count = COUNT of active Redis keys seat:lock:{workshopId}:*.
+ * - Only PUBLISHED workshops are checked.
+ * - Redis is the source of truth for real-time seat availability (BR-040);
+ *   this job updates PostgreSQL for reporting accuracy only.
+ * - Large discrepancies (>DISCREPANCY_THRESHOLD) are logged as warnings
+ *   in addition to the update.
  *
  * Side effects:
- * - Reads seat:available:{workshopId} from Redis.
- * - Reads workshop_slots from PostgreSQL.
- * - Logs warnings for significant discrepancies.
+ * - SELECT from registrations, workshops, workshop_slots tables.
+ * - SCAN Redis for seat:lock:{workshopId}:* keys.
+ * - UPDATE workshop_slots.confirmed_count and locked_count.
  */
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
 import { RedisService } from "@/shared/redis/redis.service";
 
-/**
- * Maximum allowed difference between Redis seat counter and DB expected value
- * before a warning is logged.
- */
 const DISCREPANCY_THRESHOLD = 5;
 
 @Injectable()
@@ -47,15 +44,15 @@ export class ReconciliationCron {
   ) {}
 
   /**
-   * Checks all PUBLISHED workshops for seat-counter discrepancies.
+   * Reconciles workshop_slot counters for all PUBLISHED workshops.
    *
-   * Runs every 10 minutes. For each workshop, computes the expected available
-   * seats from DB data and compares it against the Redis counter.
-   * Discrepancies above the threshold are logged as warnings.
+   * Runs every 10 minutes. For each PUBLISHED workshop, queries the actual
+   * CONFIRMED registrations count from PostgreSQL and active lock keys from
+   * Redis, then updates workshop_slots accordingly.
    *
    * Side effects:
-   * - Reads Redis keys and DB tables.
-   * - Logs warnings when discrepancies exceed threshold.
+   * - Updates confirmed_count and locked_count in workshop_slots.
+   * - Logs warnings for large discrepancies.
    *
    * @returns void — errors are logged but never propagated.
    */
@@ -70,33 +67,33 @@ export class ReconciliationCron {
         .from(this.schema.workshops)
         .where(eq(this.schema.workshops.status, "PUBLISHED"));
 
-      let discrepancies = 0;
+      let discrepancyCount = 0;
 
       for (const workshop of workshops) {
         try {
-          const result = await this.checkWorkshopReconciliation(
-            workshop.workshopId,
+          const wid = workshop.workshopId;
+          const diff = await this.reconcileWorkshop(
+            wid,
             Number(workshop.capacity)
           );
-
-          if (result.discrepancy > DISCREPANCY_THRESHOLD) {
-            discrepancies++;
+          if (diff > DISCREPANCY_THRESHOLD) {
+            discrepancyCount++;
             this.logger.warn(
-              `Reconciliation discrepancy for workshop ${workshop.workshopId}: ` +
-                `Redis=${result.redisValue}, Expected=${result.expectedValue}, ` +
-                `Diff=${result.discrepancy}`
+              `Reconciliation discrepancy for workshop ${wid}: diff=${diff}` +
+                ` (exceeds threshold of ${DISCREPANCY_THRESHOLD})`
             );
           }
         } catch (error) {
           this.logger.error(
-            `Reconciliation check failed for workshop ${workshop.workshopId}`,
+            `Reconciliation failed for workshop ${workshop.workshopId}`,
             error
           );
         }
       }
 
       this.logger.log(
-        `Reconciliation completed: ${workshops.length} checked, ${discrepancies} issues found`
+        `Reconciliation completed: ${workshops.length} processed, ` +
+          `${discrepancyCount} discrepancies > threshold`
       );
     } catch (error) {
       this.logger.error("Reconciliation cron failed", error);
@@ -104,39 +101,62 @@ export class ReconciliationCron {
   }
 
   /**
-   * Compares Redis seat counter against DB expected value for a workshop.
+   * Reconciles a single workshop's slot counters.
    *
-   * Expected = capacity - confirmedCount - lockedCount (from workshop_slots).
-   * If no workshop_slots row exists, locked and confirmed counts default to 0.
+   * 1. Counts CONFIRMED registrations from PostgreSQL.
+   * 2. Counts active lock keys from Redis (seat:lock:{workshopId}:*).
+   * 3. Updates workshop_slots.confirmed_count and locked_count.
    *
-   * @param workshopId - The UUID of the workshop to check.
+   * @param workshopId - The UUID of the workshop.
    * @param capacity - The total seat capacity of the workshop.
-   * @returns Reconciliation detail including discrepancy, Redis value, and expected value.
+   * @returns The absolute difference between old and new seat:available values.
    */
-  private async checkWorkshopReconciliation(
+  private async reconcileWorkshop(
     workshopId: string,
     capacity: number
-  ): Promise<{
-    discrepancy: number;
-    redisValue: number;
-    expectedValue: number;
-  }> {
-    const key = `seat:available:${workshopId}`;
-    const redisValueStr = await this.redisService.get(key);
-    const redisValue = redisValueStr ? parseInt(redisValueStr, 10) : capacity;
+  ): Promise<number> {
+    const [confirmedResult] = await this.db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(this.schema.registrations)
+      .where(
+        and(
+          eq(this.schema.registrations.workshopId, workshopId),
+          eq(this.schema.registrations.status, "CONFIRMED")
+        )
+      );
 
-    const [slot] = await this.db
-      .select()
-      .from(this.schema.workshopSlots)
-      .where(eq(this.schema.workshopSlots.workshopId, workshopId))
-      .limit(1);
+    const lockPattern = `seat:lock:${workshopId}:*`;
+    const lockKeys = await this.redisService.scanKeys(lockPattern);
+    const confirmedCount = confirmedResult?.count ?? 0;
+    const lockedCount = lockKeys.length;
 
-    const confirmedCount = slot?.confirmedCount ?? 0;
-    const lockedCount = slot?.lockedCount ?? 0;
-    const expectedValue = capacity - confirmedCount - lockedCount;
+    // Read old seat:available value for discrepancy logging
+    const oldRedisValue = await this.redisService.get(
+      `seat:available:${workshopId}`
+    );
+    const oldExpected = capacity - confirmedCount - lockedCount;
+    const diff = oldRedisValue
+      ? Math.abs(parseInt(oldRedisValue, 10) - oldExpected)
+      : 0;
 
-    const discrepancy = Math.abs(redisValue - expectedValue);
+    // UPSERT workshop_slots with reconciled counts
+    await this.db
+      .insert(this.schema.workshopSlots)
+      .values({
+        workshopId,
+        totalCapacity: capacity,
+        confirmedCount,
+        lockedCount,
+      })
+      .onConflictDoUpdate({
+        target: this.schema.workshopSlots.workshopId,
+        set: {
+          confirmedCount,
+          lockedCount,
+          updatedAt: sql`NOW()`,
+        },
+      });
 
-    return { discrepancy, redisValue, expectedValue };
+    return diff;
   }
 }
