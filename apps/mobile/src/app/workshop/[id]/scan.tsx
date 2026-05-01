@@ -1,5 +1,10 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
@@ -10,7 +15,6 @@ function getWorkshopId(value: string | string[] | undefined) {
   if (Array.isArray(value)) {
     return value[0] ?? "ws-demo";
   }
-
   return value ?? "ws-demo";
 }
 
@@ -19,6 +23,12 @@ export default function ScanScreen() {
   const workshopId = getWorkshopId(params.id);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
+  function handleScan() {
+    const url =
+      ROUTES.WORKSHOP_RESULT(workshopId) +
+      `?source=OFFLINE_QUEUED&name=${encodeURIComponent("Nguyen Van A")}&code=SV001`;
+    router.replace(url as Parameters<typeof router.replace>[0]);
+  }
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: "#0B1020" }]}>
@@ -26,8 +36,9 @@ export default function ScanScreen() {
         <Text style={styles.eyebrow}>M04 · QR SCANNER</Text>
         <Text style={styles.title}>Quét vé cho {workshopId}</Text>
         <Text style={styles.subtitle}>
-          Giao diện full-screen mô phỏng camera, giữ tập trung vào thao tác scan
-          và trả kết quả nhanh về dashboard.
+          Giao diện full-screen mô phỏng camera. Nhấn nút bên dưới để thực hiện
+          scan. Khi online, gọi server ngay lập tức. Khi offline, ghi vào hàng
+          đợi SQLite.
         </Text>
 
         <View style={styles.frameOuter}>
@@ -67,27 +78,29 @@ export default function ScanScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Pressable
-            onPress={() => router.push(ROUTES.WORKSHOP_RESULT(workshopId))}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-            ]}
-          >
-            <Text style={styles.primaryButtonText}>Xem kết quả quét</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                borderColor: "rgba(255,255,255,0.3)",
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
-          >
-            <Text style={styles.secondaryButtonText}>Quay lại dashboard</Text>
-          </Pressable>
+          <>
+            <Pressable
+              onPress={handleScan}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Mô phỏng quét QR</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                {
+                  borderColor: "rgba(255,255,255,0.3)",
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>Quay lại dashboard</Text>
+            </Pressable>
+          </>
         </View>
       </View>
     </SafeAreaView>
@@ -143,6 +156,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     lineHeight: 22,
+  },
+  errorBox: {
+    alignItems: "center",
+    gap: 12,
+  },
+  errorIcon: {
+    color: "#F87171",
+    fontSize: 48,
+    fontWeight: "800",
+  },
+  errorText: {
+    color: "#F87171",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 20,
   },
   corner: {
     position: "absolute",
