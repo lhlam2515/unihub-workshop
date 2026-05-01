@@ -697,4 +697,47 @@ export class WorkshopsService {
   async completePastWorkshops(): Promise<Result<number>> {
     return this.workshopsRepo.completePastPublished();
   }
+
+  /**
+   * Retrieves workshopId and capacity for all PUBLISHED workshops.
+   *
+   * Lightweight query used by the background reconciliation cron to iterate
+   * over active workshops without loading full entity data.
+   *
+   * @returns OkResult containing an array of { workshopId, capacity } objects, or FailResult (INTERNAL_ERROR).
+   */
+  async getPublishedWorkshopsBasic(): Promise<
+    Result<{ workshopId: string; capacity: number }[]>
+  > {
+    return this.workshopsRepo.findPublishedBasic();
+  }
+
+  /**
+   * Reconciles the locked and confirmed counters for a workshop slot.
+   *
+   * Used by the background reconciliation cron to correct drift between
+   * Redis seat counters and the database.
+   *
+   * Side effects:
+   * - UPSERTs workshop_slots with provided counts.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param capacity - The total seat capacity of the workshop.
+   * @param lockedCount - The corrected locked seat count.
+   * @param confirmedCount - The corrected confirmed seat count.
+   * @returns OkResult containing the updated WorkshopSlot record, or FailResult (INTERNAL_ERROR).
+   */
+  async reconcileSlot(
+    workshopId: string,
+    capacity: number,
+    lockedCount: number,
+    confirmedCount: number
+  ): Promise<Result<WorkshopSlot>> {
+    return this.workshopSlotsRepo.reconcile(
+      workshopId,
+      capacity,
+      lockedCount,
+      confirmedCount
+    );
+  }
 }

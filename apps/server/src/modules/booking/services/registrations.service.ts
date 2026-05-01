@@ -380,6 +380,19 @@ export class RegistrationsService {
    * @returns OkResult with the Registration entity if owned by the student,
    * or FailResult with REGISTRATION_NOT_FOUND for both missing and non-owned records.
    */
+  /**
+   * Counts CONFIRMED registrations for a given workshop.
+   *
+   * Used by the background reconciliation cron to compute the confirmed
+   * attendee count for workshop_slot counter correction.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult containing the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countConfirmedByWorkshop(workshopId: string): Promise<Result<number>> {
+    return this.registrationsRepo.countConfirmedByWorkshop(workshopId);
+  }
+
   private async findByIdWithOwnershipCheck(
     registrationId: string,
     studentId: string
