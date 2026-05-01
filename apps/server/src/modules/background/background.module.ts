@@ -14,6 +14,7 @@ import { SystemAdminController } from "./controllers/system-admin.controller";
 import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
+import { WorkshopAutoCompleteCron } from "./cron/workshop-auto-complete.cron";
 import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "./repositories/notification-logs.repository";
 import { StudentSyncErrorsRepository } from "./repositories/student-sync-errors.repository";
@@ -79,6 +80,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     PaymentTimeoutCron,
     ReconciliationCron,
     CircuitBreakerRecoveryCron,
+    WorkshopAutoCompleteCron,
     NotificationLogsRepository,
     NotificationChannelConfigsRepository,
     EmailChannel,
