@@ -13,6 +13,8 @@
  * PENDING AI summary jobs and updating the status to DONE or FAILED.
  */
 
+import { Readable } from "node:stream";
+
 import { Injectable } from "@nestjs/common";
 
 import type { NewWorkshopDocument } from "@/database/types/async.types";
@@ -192,5 +194,45 @@ export class DocumentsService {
     if (updateResult.isFailure) return Result.fail(updateResult.error);
 
     return Result.ok();
+  }
+
+  /**
+   * Retrieves a document's file stream for download from object storage.
+   *
+   * Business rules:
+   * - Verifies the document exists and belongs to the specified workshop.
+   * - Delegates to StorageService.getFileStream() for the actual download —
+   *   the returned stream is the S3 SDK's native body stream.
+   *
+   * Side effects: Opens an HTTP connection to the S3 endpoint.
+   *
+   * @param workshopId - The UUID of the parent workshop.
+   * @param documentId - The UUID of the document to download.
+   * @returns OkResult with { stream, filename, mimeType }, or FailResult
+   *          (WORKSHOP_NOT_FOUND | STORAGE_FILE_NOT_FOUND | STORAGE_DOWNLOAD_FAILED).
+   */
+  async getDocumentStream(
+    workshopId: string,
+    documentId: string
+  ): Promise<Result<{ stream: Readable; filename: string; mimeType: string }>> {
+    const docResult = await this.documentsRepo.findById(documentId);
+    if (docResult.isFailure) return Result.fail(docResult.error);
+    if (!docResult.data)
+      return Result.fail(workshopErrors.notFound(documentId));
+
+    if (docResult.data.workshopId !== workshopId) {
+      return Result.fail(workshopErrors.notFound(documentId));
+    }
+
+    const streamResult = await this.storageService.getFileStream(
+      docResult.data.fileUrl
+    );
+    if (streamResult.isFailure) return Result.fail(streamResult.error);
+
+    return Result.ok({
+      stream: streamResult.data,
+      filename: docResult.data.originalName ?? "document.pdf",
+      mimeType: "application/pdf",
+    });
   }
 }

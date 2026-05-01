@@ -547,6 +547,36 @@ export const storageErrors = {
       message: "File deletion from storage service failed.",
       cause,
     }),
+
+  /**
+   * Create an error when a file is not found in object storage.
+   *
+   * @param key - The storage key that was requested.
+   * @returns Not found error payload.
+   * @throws Never. Returns an error object instead of throwing.
+   */
+  fileNotFound: (key: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "STORAGE_FILE_NOT_FOUND",
+      message: `File not found in storage: ${key}.`,
+      context: { key },
+    }),
+
+  /**
+   * Create an error when downloading a file from storage fails.
+   *
+   * @param cause - Original S3 error for internal diagnostics.
+   * @returns External dependency error payload.
+   * @throws Never. Returns an error object instead of throwing.
+   */
+  downloadFailed: (cause?: unknown): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "STORAGE_DOWNLOAD_FAILED",
+      message: "Failed to download file from storage service.",
+      cause,
+    }),
 } as const;
 
 /**

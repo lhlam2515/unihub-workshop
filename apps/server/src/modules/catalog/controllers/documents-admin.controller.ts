@@ -24,6 +24,8 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  Res,
+  NotFoundException,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 
@@ -34,6 +36,8 @@ import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { DocumentsService } from "../services/documents.service";
+
+import type { Response } from "express";
 
 /** Maximum allowed file size: 50 MB. */
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -112,6 +116,43 @@ export class DocumentsAdminController {
     @Param("documentId") documentId: string
   ) {
     return this.documentsService.deleteDocument(workshopId, documentId);
+  }
+
+  /**
+   * Downloads a document file from object storage.
+   *
+   * Route: GET /admin/workshops/:workshopId/documents/:documentId/download
+   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Streams the document PDF from object storage directly to the HTTP response.
+   * Uses @Res({ passthrough: true }) to set Content-Disposition headers
+   * while still delegating the response body to NestJS's stream handling.
+   *
+   * @param workshopId - The UUID of the parent workshop.
+   * @param documentId - The UUID of the document to download.
+   * @param res - NestJS response object (passthrough mode).
+   * @returns Readable stream piped to the HTTP response.
+   */
+  @Get(":documentId/download")
+  async downloadDocument(
+    @Param("workshopId") workshopId: string,
+    @Param("documentId") documentId: string,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const result = await this.documentsService.getDocumentStream(
+      workshopId,
+      documentId
+    );
+
+    if (result.isFailure) {
+      throw new NotFoundException(result.error.message);
+    }
+
+    res.set({
+      "Content-Type": result.data.mimeType,
+      "Content-Disposition": `attachment; filename="${result.data.filename}"`,
+    });
+
+    return result.data.stream;
   }
 
   /**
