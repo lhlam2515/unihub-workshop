@@ -1,3 +1,4 @@
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 import type { NotificationLog } from "@/database/types";
@@ -7,7 +8,7 @@ export const NotificationLogResponseSchema = z.object({
   user_id: z.string().uuid(),
   workshop_id: z.string().uuid().optional(),
   type: z.string(),
-  channel: z.enum(["EMAIL", "TELEGRAM"]),
+  channel: z.enum(["APP", "EMAIL", "TELEGRAM"]),
   status: z.enum(["PENDING", "SENT", "FAILED"]),
   payload: z.record(z.string(), z.any()),
   sent_at: z.date().optional(),
@@ -20,13 +21,22 @@ export type NotificationLogResponseDto = z.infer<
 >;
 
 export class NotificationLogResponse {
+  /**
+   * Convert a raw notification log entity to the API response DTO.
+   *
+   * Strips internal DB fields and maps snake_case DB columns
+   * to camelCase when required by the response schema.
+   *
+   * @param log - Raw notification log entity from the database
+   * @returns Response DTO matching NotificationLogResponseSchema
+   */
   static from(log: NotificationLog): NotificationLogResponseDto {
     return {
       notification_id: log.notificationId,
       user_id: log.userId,
       workshop_id: log.workshopId ?? undefined,
       type: log.type,
-      channel: log.channel as "EMAIL" | "TELEGRAM",
+      channel: log.channel,
       status: log.status,
       payload: log.payload as Record<string, any>,
       sent_at: log.sentAt ?? undefined,
@@ -35,3 +45,32 @@ export class NotificationLogResponse {
     };
   }
 }
+
+/**
+ * Query DTO for listing notification logs with filters and pagination.
+ *
+ * All filter fields are optional. Pagination defaults to page 1, limit 20.
+ */
+export const ListNotificationLogsQuerySchema = z.object({
+  status: z.enum(["PENDING", "SENT", "FAILED"]).optional(),
+  channel: z.enum(["APP", "EMAIL", "TELEGRAM"]).optional(),
+  type: z
+    .enum([
+      "REGISTRATION_CONFIRMED",
+      "REGISTRATION_CANCELLED",
+      "WORKSHOP_UPDATED",
+      "WORKSHOP_CANCELLED",
+      "PAYMENT_SUCCESS",
+      "PAYMENT_FAILED",
+      "CHECKIN_REMINDER",
+    ])
+    .optional(),
+  userId: z.string().uuid().optional(),
+  workshopId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export class ListNotificationLogsQueryDto extends createZodDto(
+  ListNotificationLogsQuerySchema
+) {}
