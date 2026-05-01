@@ -590,6 +590,68 @@ export const speakerErrors = {
 } as const;
 
 /**
+ * Group notification error factories
+ */
+export const notificationErrors = {
+  /**
+   * Create an error when a notification log is missing
+   *
+   * @param notificationId - Notification identifier used for audit logging
+   * @returns Notification not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  logNotFound: (notificationId: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "NOTIFICATION_LOG_NOT_FOUND",
+      message: `Notification log ${notificationId} not found.`,
+      context: { notificationId },
+    }),
+  /**
+   * Create an error when channel configuration is missing
+   *
+   * @param channelType - Channel type identifier used for diagnostics
+   * @returns Channel config not found payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  channelConfigNotFound: (channelType: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "NOTIFICATION_CHANNEL_CONFIG_NOT_FOUND",
+      message: `Channel configuration for ${channelType} not found.`,
+      context: { channelType },
+    }),
+  /**
+   * Create an error when a channel is not active
+   *
+   * @param channelType - Channel type identifier used for diagnostics
+   * @returns Business rule error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  channelInactive: (channelType: string): AppError =>
+    createError({
+      category: "BUSINESS",
+      code: "NOTIFICATION_CHANNEL_INACTIVE",
+      message: `Channel ${channelType} is not active.`,
+      context: { channelType },
+    }),
+  /**
+   * Create an error for an unknown channel type
+   *
+   * @param channelType - Unrecognized channel type identifier
+   * @returns Validation error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  channelUnknown: (channelType: string): AppError =>
+    createError({
+      category: "VALIDATION",
+      code: "NOTIFICATION_CHANNEL_UNKNOWN",
+      message: `Unknown notification channel: ${channelType}.`,
+      context: { channelType },
+    }),
+} as const;
+
+/**
  * Group system-level error factories
  */
 export const systemErrors = {

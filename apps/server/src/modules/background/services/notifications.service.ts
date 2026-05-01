@@ -2,24 +2,26 @@ import { Injectable } from "@nestjs/common";
 
 import { Result } from "@/shared/response/result";
 
-import { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
+import { notificationErrors } from "../../../shared/response/errors";
+import { NotificationLogResponse } from "../dto/notification-response.dto";
 import { NotificationChannelConfigsRepository } from "../repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "../repositories/notification-logs.repository";
+
+import type { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
 
 /**
  * NotificationsService
  *
  * Manages notification audit logs and channel configuration.
- * This service handles read-only audit operations and configuration updates.
+ * Handles read-only audit queries and configuration updates.
  * The actual sending of notifications is handled by NotificationWorker.
  *
- * Methods:
- * - listLogs(filters, pagination) → List notification logs
- * - getLogById(id) → Get single log with full details
- * - listChannelConfigs() → List all channel configurations
- * - updateChannelConfig(channelType, dto) → Update channel config
+ * Business rules:
+ * - Channel configs are relatively static and can be cached
+ * - Log queries use a partial index on PENDING status for efficiency
  *
- * TODO: Implement all methods
+ * Side effects:
+ * - updateChannelConfig mutates channel_configs.updated_at
  */
 @Injectable()
 export class NotificationsService {
@@ -28,46 +30,85 @@ export class NotificationsService {
     private readonly channelConfigsRepo: NotificationChannelConfigsRepository
   ) {}
 
-  // TODO: Implement listLogs
-  async listLogs(filters: any, pagination: any): Promise<Result<any>> {
-    // Query notificationLogsRepo.findMany(filters, pagination)
-    // Apply filters: status, channel_type, type, user_id, workshop_id, date_range
-    // Return paginated list of notification logs
-    // Use index idx_notif_status for PENDING queries
-    throw new Error("Not implemented");
+  /**
+   * List notification logs with filtering and pagination
+   *
+   * @param filters - Filter criteria (status, channel, type, userId, workshopId)
+   * @param pagination - Page and limit controls
+   * @returns OkResult with paginated notification log response items and total count,
+   * or FailResult (INTERNAL_ERROR)
+   */
+  async listLogs(
+    filters: {
+      status?: string;
+      channel?: string;
+      type?: string;
+      userId?: string;
+      workshopId?: string;
+    },
+    pagination: { page: number; limit: number }
+  ): Promise<
+    Result<{
+      items: Record<string, unknown>[];
+      total: number;
+      page: number;
+      limit: number;
+    }>
+  > {
+    const result = await this.notificationLogsRepo.findMany(
+      filters,
+      pagination
+    );
+    if (result.isFailure) return Result.fail(result.error);
+
+    return Result.ok({
+      items: result.data.items.map((log) => NotificationLogResponse.from(log)),
+      total: result.data.total,
+      page: pagination.page,
+      limit: pagination.limit,
+    });
   }
 
-  // TODO: Implement getLogById
-  async getLogById(id: string): Promise<Result<any>> {
-    // Query notificationLogsRepo.findById(id)
-    // Return full log with payload and error details
-    throw new Error("Not implemented");
+  /**
+   * Retrieve a single notification log with full details
+   *
+   * @param id - Notification log UUID
+   * @returns OkResult with the notification log response, or FailResult (INTERNAL_ERROR)
+   */
+  async getLogById(
+    id: string
+  ): Promise<Result<Record<string, unknown> | null>> {
+    const result = await this.notificationLogsRepo.findById(id);
+    if (result.isFailure) return Result.fail(result.error);
+
+    if (!result.data) return Result.fail(notificationErrors.logNotFound(id));
+
+    return Result.ok(NotificationLogResponse.from(result.data));
   }
 
-  // TODO: Implement listChannelConfigs
-  async listChannelConfigs(): Promise<Result<any>> {
-    // Query notificationChannelConfigsRepo.findAll()
-    // Can be cached in memory as data is relatively static
-    // Return: [
-    //   {
-    //     channel_type: 'EMAIL' | 'TELEGRAM',
-    //     is_active: boolean,
-    //     config_json: object,
-    //     updated_at: DateTime
-    //   }
-    // ]
-    throw new Error("Not implemented");
+  /**
+   * List all channel configurations
+   *
+   * @returns OkResult with all channel configs, or FailResult (INTERNAL_ERROR)
+   */
+  async listChannelConfigs(): Promise<Result<unknown[]>> {
+    return this.channelConfigsRepo.findAll();
   }
 
-  // TODO: Implement updateChannelConfig
+  /**
+   * Update a channel configuration
+   *
+   * @param channelType - Channel type to update
+   * @param dto - Update payload with is_active and optional config_json
+   * @returns OkResult with the updated config, or FailResult (INTERNAL_ERROR)
+   */
   async updateChannelConfig(
     channelType: string,
     dto: UpdateChannelConfigDto
-  ): Promise<Result<any>> {
-    // Validate channelType enum
-    // Call notificationChannelConfigsRepo.update(channelType, { is_active, config_json })
-    // Clear cache if using memory cache
-    // Return updated config
-    throw new Error("Not implemented");
+  ): Promise<Result<unknown>> {
+    return this.channelConfigsRepo.update(channelType, {
+      isActive: dto.is_active,
+      configJson: dto.config_json,
+    });
   }
 }

@@ -7,6 +7,9 @@ import {
   type DatabaseClient,
   type DatabaseSchema,
 } from "@/database";
+import type { NotificationChannelConfig } from "@/database/types";
+import { systemErrors } from "@/shared/response/errors";
+import { Result, tryCatch } from "@/shared/response/result";
 
 /**
  * NotificationChannelConfigsRepository
@@ -20,8 +23,6 @@ import {
  * - update(channelType, data) → Update channel config
  *
  * Note: Data is relatively static and can be cached in memory.
- *
- * TODO: Implement all methods using Drizzle ORM
  */
 @Injectable()
 export class NotificationChannelConfigsRepository {
@@ -30,31 +31,86 @@ export class NotificationChannelConfigsRepository {
     @Inject(DATABASE_SCHEMA) private readonly schema: DatabaseSchema
   ) {}
 
-  // TODO: Implement findAll
-  async findAll(): Promise<any[]> {
-    // Query notification_channel_configs table
-    // Return all channel configs with fields:
-    // - channel_type: 'EMAIL' | 'TELEGRAM'
-    // - is_active: boolean
-    // - config_json: JSON with provider-specific settings
-    // - updated_at: DateTime
-    throw new Error("Not implemented");
+  /**
+   * Retrieve all channel configurations
+   *
+   * @returns OkResult with all channel configs, or FailResult (INTERNAL_ERROR)
+   */
+  async findAll(): Promise<Result<NotificationChannelConfig[]>> {
+    return tryCatch(
+      async () =>
+        this.db
+          .select()
+          .from(this.schema.notificationChannelConfigs) as Promise<
+          NotificationChannelConfig[]
+        >,
+      (err) => systemErrors.internal(err)
+    );
   }
 
-  // TODO: Implement findByChannelType
-  async findByChannelType(channelType: string): Promise<any | null> {
-    // Query notification_channel_configs WHERE channel_type = channelType
-    // Return config or null
-    throw new Error("Not implemented");
+  /**
+   * Find a channel configuration by its type
+   *
+   * @param channelType - Channel type identifier (EMAIL, TELEGRAM, APP)
+   * @returns OkResult with the config or null, or FailResult (INTERNAL_ERROR)
+   */
+  async findByChannelType(
+    channelType: string
+  ): Promise<Result<NotificationChannelConfig | null>> {
+    return tryCatch(
+      async (): Promise<NotificationChannelConfig | null> => {
+        const results = await this.db
+          .select()
+          .from(this.schema.notificationChannelConfigs)
+          .where(
+            eq(
+              this.schema.notificationChannelConfigs.channelType,
+              channelType as "APP" | "EMAIL" | "TELEGRAM"
+            )
+          );
+        return (results[0] as NotificationChannelConfig) ?? null;
+      },
+      (err) => systemErrors.internal(err)
+    );
   }
 
-  // TODO: Implement update
-  async update(channelType: string, data: any): Promise<any> {
-    // Update notification_channel_configs SET is_active, config_json, updated_at
-    // Fields from data:
-    //   - is_active: boolean
-    //   - config_json?: object (provider-specific settings)
-    // Return updated record
-    throw new Error("Not implemented");
+  /**
+   * Update a channel configuration
+   *
+   * Side effects:
+   * - Updates is_active, config_json, updated_at columns
+   *
+   * @param channelType - Channel type to update
+   * @param data - Partial update fields
+   * @param data.isActive - Whether the channel is active
+   * @param data.configJson - Provider-specific configuration
+   * @returns OkResult with the updated config, or FailResult (INTERNAL_ERROR)
+   */
+  async update(
+    channelType: string,
+    data: {
+      isActive?: boolean;
+      configJson?: Record<string, unknown>;
+    }
+  ): Promise<Result<NotificationChannelConfig>> {
+    return tryCatch(
+      async (): Promise<NotificationChannelConfig> => {
+        const results = await this.db
+          .update(this.schema.notificationChannelConfigs)
+          .set({
+            ...data,
+            updatedAt: new Date(),
+          })
+          .where(
+            eq(
+              this.schema.notificationChannelConfigs.channelType,
+              channelType as "APP" | "EMAIL" | "TELEGRAM"
+            )
+          )
+          .returning();
+        return results[0] as NotificationChannelConfig;
+      },
+      (err) => systemErrors.internal(err)
+    );
   }
 }

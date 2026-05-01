@@ -3,6 +3,9 @@ import { ScheduleModule } from "@nestjs/schedule";
 
 import { SharedQueueModule } from "@/shared/queues/queue.module";
 
+import { AppChannel } from "./channels/app.channel";
+import { EmailChannel } from "./channels/email.channel";
+import { TelegramChannel } from "./channels/telegram.channel";
 import { NotificationsAdminController } from "./controllers/notifications-admin.controller";
 import { StudentSyncAdminController } from "./controllers/student-sync-admin.controller";
 import { SystemAdminController } from "./controllers/system-admin.controller";
@@ -67,6 +70,9 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     ReconciliationCron,
     NotificationLogsRepository,
     NotificationChannelConfigsRepository,
+    EmailChannel,
+    TelegramChannel,
+    AppChannel,
     StudentSyncJobsRepository,
     StudentSyncErrorsRepository,
   ],
