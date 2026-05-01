@@ -14,6 +14,7 @@ import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/database/database.module";
 import { RedisModule } from "@/shared/redis/redis.module";
+import { SharedQueueModule } from "@/shared/queues/queue.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
 import { PaymentsController } from "./controllers/payments.controller";
@@ -31,7 +32,7 @@ import { PaymentsService } from "./services/payments.service";
 import { RegistrationsService } from "./services/registrations.service";
 
 @Module({
-  imports: [DatabaseModule, RedisModule, CatalogModule],
+  imports: [DatabaseModule, RedisModule, CatalogModule, SharedQueueModule],
   controllers: [RegistrationsController, PaymentsController],
   providers: [
     // Services
