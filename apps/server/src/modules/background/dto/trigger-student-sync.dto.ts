@@ -1,27 +1,52 @@
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 /**
- * TriggerStudentSyncDto
+ * Zod schema for triggering a student data sync job.
  *
- * Request DTO for triggering student data synchronization.
+ * Validates the source file name/path in Object Storage.
  *
- * Schema:
- * {
- *   source_file_name: string (path/name of CSV file in Object Storage)
- * }
- *
- * Example:
- * { "source_file_name": "s3://bucket/uploads/students-2024-04-28.csv" }
- *
- * TODO: Define validation rules for file naming/location
+ * @example { "source_file_name": "s3://bucket/uploads/students-2024-04-28.csv" }
  */
 export const TriggerStudentSyncSchema = z.object({
   source_file_name: z.string().min(1).max(500),
-  // Additional validation:
-  // - Must reference valid Object Storage location
-  // - File must exist before job starts
-  // - Can add: .regex(/\.csv$/, 'Must be CSV file')
-  // - Can add: .regex(/students/, 'File must contain "students" in name')
 });
 
-export type TriggerStudentSyncDto = z.infer<typeof TriggerStudentSyncSchema>;
+/**
+ * Request DTO for triggering student data synchronization.
+ *
+ * Used by the NestJS ZodValidationPipe to validate the request body.
+ */
+export class TriggerStudentSyncDto extends createZodDto(
+  TriggerStudentSyncSchema
+) {}
+
+/**
+ * Query schema for listing sync jobs with pagination.
+ */
+export const ListSyncJobsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+/**
+ * Query DTO for listing sync jobs with pagination.
+ */
+export class ListSyncJobsQueryDto extends createZodDto(
+  ListSyncJobsQuerySchema
+) {}
+
+/**
+ * Query schema for listing sync job errors with pagination.
+ */
+export const ListSyncJobErrorsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+/**
+ * Query DTO for listing sync job errors with pagination.
+ */
+export class ListSyncJobErrorsQueryDto extends createZodDto(
+  ListSyncJobErrorsQuerySchema
+) {}
