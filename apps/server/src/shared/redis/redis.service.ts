@@ -213,6 +213,34 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ---------------------------------------------------------------------------
+  // Key Scanning
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Scans Redis for all keys matching a glob-style pattern.
+   *
+   * Uses ioredis `scanStream` under the hood — iterates the keyspace in
+   * incremental buckets rather than blocking the server with a single `KEYS`
+   * call. Suitable for administrative tasks (reconciliation, monitoring,
+   * circuit-breaker recovery) that need to discover keys by pattern.
+   *
+   * @param pattern - Glob-style key pattern (e.g. `"seat:lock:*"`, `"circuit:payment:*"`).
+   * @returns An array of matching key names (empty if none match).
+   */
+  async scanKeys(pattern: string): Promise<string[]> {
+    return new Promise<string[]>((resolve, reject) => {
+      const keys: string[] = [];
+      const stream = this.client.scanStream({ match: pattern, count: 100 });
+
+      stream.on("data", (batch: string[]) => {
+        if (batch.length > 0) keys.push(...batch);
+      });
+      stream.on("end", () => resolve(keys));
+      stream.on("error", (err: Error) => reject(err));
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // JSON Helpers
   // ---------------------------------------------------------------------------
 

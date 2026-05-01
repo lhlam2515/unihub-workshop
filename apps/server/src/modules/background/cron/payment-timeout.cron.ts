@@ -1,69 +1,89 @@
-import { Injectable } from "@nestjs/common";
-import { Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
-
 /**
  * PaymentTimeoutCron
  *
- * Scheduled job to handle payment timeouts.
+ * Scheduled job to identify PENDING payments whose timeout deadline has passed
+ * and transition them to TIMEOUT via the PaymentsService.
+ *
  * Runs every 1 minute.
  *
- * Responsibility:
- * - Find all PENDING payments with timeout_at < NOW()
- * - Mark them as TIMEOUT
- * - Release seat locks: INCR seat:available:{workshopId}
- * - Mark registrations as CANCELLED
- * - Log statistics
+ * Business rules:
+ * - Only targets payments where status = 'PENDING' AND timeout_at < NOW().
+ * - Delegates each expiry to PaymentsService.expirePayment() which handles
+ *   the full ACID transaction (payment → TIMEOUT, registration → CANCELLED,
+ *   Redis seat release, and notification dispatch).
+ * - Does NOT process the same payment twice — expirePayment is idempotent
+ *   for already-terminal payments.
  *
- * TODO: Implement timeout processing logic
+ * Side effects:
+ * - Calls expirePayment on each overdue payment, producing all its side effects.
  */
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { and, eq, sql } from "drizzle-orm";
+
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+import type { DatabaseClient, DatabaseSchema } from "@/database";
+import { PaymentsService } from "@/modules/booking/services/payments.service";
+
 @Injectable()
 export class PaymentTimeoutCron {
   private readonly logger = new Logger(PaymentTimeoutCron.name);
 
-  // TODO: Implement @Cron decorator
-  // @Cron(CronExpression.EVERY_MINUTE) — or use '*/1 * * * *'
+  constructor(
+    @Inject(DATABASE_CONNECTION)
+    private readonly db: DatabaseClient,
+    @Inject(DATABASE_SCHEMA)
+    private readonly schema: DatabaseSchema,
+    private readonly paymentsService: PaymentsService
+  ) {}
+
+  /**
+   * Finds all expired PENDING payments and expires them.
+   *
+   * Runs every minute. Wraps the entire operation in a try/catch so that any
+   * unexpected database or service error does not crash the cron scheduler.
+   *
+   * Side effects:
+   * - Calls PaymentsService.expirePayment() for each overdue payment.
+   *
+   * @returns void — errors are logged but never propagated.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
   async handlePaymentTimeout(): Promise<void> {
-    // 1. Query PostgreSQL for expired payments:
-    //    SELECT * FROM payments
-    //    WHERE status = 'PENDING'
-    //    AND timeout_at < NOW()
-    //    AND updated_at < NOW() - INTERVAL '5 seconds' (avoid processing same payment twice)
-    //
-    // 2. For each expired payment in transaction:
-    //    a) Update payment.status = 'TIMEOUT'
-    //       - Set updated_at = NOW()
-    //
-    //    b) For the associated registration:
-    //       - Find registration_id from payments.registration_id
-    //       - Update registration.status = 'CANCELLED'
-    //
-    //    c) Release seat lock in Redis:
-    //       - INCR seat:available:{workshopId}
-    //       - DEL seat:lock:{workshopId}:{registration_id}
-    //
-    // 3. Log statistics:
-    //    this.logger.log(`Payment timeout cron: ${processed} payments handled`)
-    //
-    // 4. Error handling:
-    //    - Wrap in try/catch to prevent cron from crashing
-    //    - Log any database or Redis errors
-    throw new Error("Not implemented");
-  }
+    try {
+      const expiredPayments = await this.db
+        .select()
+        .from(this.schema.payments)
+        .where(
+          and(
+            eq(this.schema.payments.status, "PENDING"),
+            sql`${this.schema.payments.timeoutAt} < NOW()`
+          )
+        );
 
-  // TODO: Implement helper methods
-  private async expirePayments(): Promise<number> {
-    // Fetch and expire payments
-    // Return count of processed payments
-    throw new Error("Not implemented");
-  }
+      if (expiredPayments.length === 0) {
+        return;
+      }
 
-  private async releaseSeats(
-    workshopId: string,
-    registrationId: string
-  ): Promise<void> {
-    // INCR Redis counter
-    // Delete seat lock
-    throw new Error("Not implemented");
+      let processed = 0;
+      for (const payment of expiredPayments) {
+        const result = await this.paymentsService.expirePayment(
+          payment.paymentId
+        );
+        if (result.isSuccess) {
+          processed++;
+        } else {
+          this.logger.warn(
+            `Failed to expire payment ${payment.paymentId}: ${result.error.code}`
+          );
+        }
+      }
+
+      this.logger.log(
+        `Payment timeout cron: ${processed}/${expiredPayments.length} payments handled`
+      );
+    } catch (error) {
+      this.logger.error("Payment timeout cron failed", error);
+    }
   }
 }
