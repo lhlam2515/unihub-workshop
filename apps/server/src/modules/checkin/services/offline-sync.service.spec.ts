@@ -1,9 +1,10 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { Result } from "@/shared/response/result";
+
+import { OfflineSyncService } from "./offline-sync.service";
 import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";
-import { OfflineSyncService } from "./offline-sync.service";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -93,10 +94,10 @@ describe("OfflineSyncService", () => {
         .mockResolvedValueOnce(Result.ok(null)); // item 2: skipped (duplicate)
 
       const items = [
-        { qr_token: "qr-valid-123", timestamp: new Date() },
-        { qr_token: "qr-valid-123", timestamp: new Date() }, // duplicate
-        { qr_token: "qr-void-456", timestamp: new Date() }, // VOID
-        { qr_token: "qr-other-789", timestamp: new Date() }, // wrong workshop
+        { qr_token: "qr-valid-123", checked_in_at: new Date() },
+        { qr_token: "qr-valid-123", checked_in_at: new Date() }, // duplicate
+        { qr_token: "qr-void-456", checked_in_at: new Date() }, // VOID
+        { qr_token: "qr-other-789", checked_in_at: new Date() }, // wrong workshop
       ];
 
       const result = await service.processSyncBatch(
@@ -115,7 +116,7 @@ describe("OfflineSyncService", () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(voidTicket));
 
       const result = await service.processSyncBatch(
-        [{ qr_token: "qr-void-456", timestamp: new Date() }],
+        [{ qr_token: "qr-void-456", checked_in_at: new Date() }],
         "staff-001",
         "w-001"
       );
@@ -132,7 +133,7 @@ describe("OfflineSyncService", () => {
       );
 
       const result = await service.processSyncBatch(
-        [{ qr_token: "qr-other-789", timestamp: new Date() }],
+        [{ qr_token: "qr-other-789", checked_in_at: new Date() }],
         "staff-001",
         "w-001"
       );
@@ -147,7 +148,7 @@ describe("OfflineSyncService", () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(null));
 
       const result = await service.processSyncBatch(
-        [{ qr_token: "qr-nonexistent", timestamp: new Date() }],
+        [{ qr_token: "qr-nonexistent", checked_in_at: new Date() }],
         "staff-001",
         "w-001"
       );
@@ -158,11 +159,15 @@ describe("OfflineSyncService", () => {
 
     it("returns FailResult when ticket repo lookup fails", async () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.processSyncBatch(
-        [{ qr_token: "qr-any", timestamp: new Date() }],
+        [{ qr_token: "qr-any", checked_in_at: new Date() }],
         "staff-001",
         "w-001"
       );
@@ -174,11 +179,15 @@ describe("OfflineSyncService", () => {
     it("returns FailResult when checkin creation fails", async () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(validTicket));
       mockCheckinRecordsRepo.create.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.processSyncBatch(
-        [{ qr_token: "qr-valid-123", timestamp: new Date() }],
+        [{ qr_token: "qr-valid-123", checked_in_at: new Date() }],
         "staff-001",
         "w-001"
       );

@@ -119,7 +119,8 @@ describe("FailResult", () => {
 describe("tryCatch", () => {
   it("returns ok on success", async () => {
     const result = await tryCatch(
-      () => "value",
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async () => "value",
       () => ({
         category: "INTERNAL" as const,
         code: "INTERNAL_ERROR" as const,

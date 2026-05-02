@@ -182,7 +182,7 @@ describe("WorkshopSlotsRepository", () => {
       const reconciled = { ...mockSlot, lockedCount: 0, confirmedCount: 8 };
       mockChain.returning.mockResolvedValue([reconciled]);
 
-      const result = await repo.reconcile("w-001", 999, 0, 8);
+      const result = await repo.reconcile("w-001", 0, 8);
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.lockedCount).toBe(0);
@@ -192,7 +192,7 @@ describe("WorkshopSlotsRepository", () => {
     it("returns FailResult on DB error", async () => {
       mockChain.returning.mockRejectedValue(new Error("DB error"));
 
-      const result = await repo.reconcile("w-001", 999, 0, 8);
+      const result = await repo.reconcile("w-001", 0, 8);
 
       expect(result.isFailure).toBe(true);
     });

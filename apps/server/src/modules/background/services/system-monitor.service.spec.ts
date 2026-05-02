@@ -192,7 +192,7 @@ describe("SystemMonitorService", () => {
       const result = await service.getCircuitBreakerStatus();
 
       expect(result.isSuccess).toBe(true);
-      const vnpay = result.data.find((d) => d.gateway === "VNPAY");
+      const vnpay = result.data.find((d) => d.gateway === "VNPAY")!;
       expect(vnpay.state).toBe("OPEN");
       expect(vnpay.failure_count).toBe(5);
       expect(vnpay.recovery_deadline).toBeDefined();

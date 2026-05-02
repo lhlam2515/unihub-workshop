@@ -105,14 +105,14 @@ const checkinRecord = {
 
 const staffUser = {
   sub: "staff-001",
-  role: "CHECKIN_STAFF",
+  role: "CHECKIN_STAFF" as const,
   jti: "jti-staff",
   allowed_workshop_ids: ["wid-001"],
 };
 
 const studentUser = {
   sub: "stu-001",
-  role: "STUDENT",
+  role: "STUDENT" as const,
   jti: "jti-stu",
   allowed_workshop_ids: [],
 };
@@ -176,7 +176,7 @@ describe("Checkin Module — Integration", () => {
         { qr_token: "qr-valid-123", workshop_id: "wid-001" },
         {
           sub: "staff-001",
-          role: "CHECKIN_STAFF",
+          role: "CHECKIN_STAFF" as const,
           jti: "jti-001",
           allowed_workshop_ids: ["wid-001"],
         }
@@ -204,7 +204,7 @@ describe("Checkin Module — Integration", () => {
         { qr_token: "qr-void", workshop_id: "wid-001" },
         {
           sub: "staff-001",
-          role: "CHECKIN_STAFF",
+          role: "CHECKIN_STAFF" as const,
           jti: "jti-001",
           allowed_workshop_ids: ["wid-001"],
         }
@@ -221,7 +221,7 @@ describe("Checkin Module — Integration", () => {
         { qr_token: "qr-unknown", workshop_id: "wid-001" },
         {
           sub: "staff-001",
-          role: "CHECKIN_STAFF",
+          role: "CHECKIN_STAFF" as const,
           jti: "jti-001",
           allowed_workshop_ids: ["wid-001"],
         }
@@ -240,7 +240,7 @@ describe("Checkin Module — Integration", () => {
         { qr_token: "qr-other", workshop_id: "wid-001" },
         {
           sub: "staff-001",
-          role: "CHECKIN_STAFF",
+          role: "CHECKIN_STAFF" as const,
           jti: "jti-001",
           allowed_workshop_ids: ["wid-001"],
         }
@@ -259,7 +259,7 @@ describe("Checkin Module — Integration", () => {
         { qr_token: "qr-valid-123", workshop_id: "wid-001" },
         {
           sub: "staff-001",
-          role: "CHECKIN_STAFF",
+          role: "CHECKIN_STAFF" as const,
           jti: "jti-001",
           allowed_workshop_ids: ["wid-001"],
         }
@@ -284,7 +284,7 @@ describe("Checkin Module — Integration", () => {
           items: [
             {
               qr_token: "qr-valid-123",
-              timestamp: new Date("2026-06-01T10:00:00Z"),
+              checked_in_at: new Date("2026-06-01T10:00:00Z"),
             },
           ],
         },
@@ -311,8 +311,8 @@ describe("Checkin Module — Integration", () => {
         {
           workshop_id: "wid-001",
           items: [
-            { qr_token: "qr-void", timestamp: new Date() },
-            { qr_token: "qr-valid-123", timestamp: new Date() },
+            { qr_token: "qr-void", checked_in_at: new Date() },
+            { qr_token: "qr-valid-123", checked_in_at: new Date() },
           ],
         },
         staffUser
@@ -329,7 +329,7 @@ describe("Checkin Module — Integration", () => {
       const result = await checkinController.syncOfflineData(
         {
           workshop_id: "wid-001",
-          items: [{ qr_token: "qr-valid-123", timestamp: new Date() }],
+          items: [{ qr_token: "qr-valid-123", checked_in_at: new Date() }],
         },
         staffUser
       );

@@ -20,7 +20,7 @@ const mockWorkshop = {
   capacity: 30,
   isPaid: false,
   price: null,
-  status: "PUBLISHED",
+  status: "PUBLISHED" as const,
   createdBy: "u-001",
   createdAt: new Date("2026-05-01T00:00:00Z"),
   updatedAt: new Date("2026-05-01T00:00:00Z"),

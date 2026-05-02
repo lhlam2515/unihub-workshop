@@ -449,7 +449,9 @@ describe("Background Module — Integration", () => {
         const result = await systemAdminController.getCircuitBreakerStatus();
 
         expect(result.isSuccess).toBe(true);
-        const vnpayStatus = result.data.find((s: any) => s.gateway === "VNPAY");
+        const vnpayStatus = result.data.find(
+          (s: any) => s.gateway === "VNPAY"
+        )!;
         expect(vnpayStatus.state).toBe("OPEN");
         expect(vnpayStatus.failure_count).toBe(5);
         expect(vnpayStatus.recovery_deadline).toBeDefined();

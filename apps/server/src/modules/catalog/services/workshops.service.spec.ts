@@ -21,22 +21,22 @@ import { WorkshopsRepository } from "../repositories/workshops.repository";
 const baseWorkshop = {
   workshopId: "w-001",
   title: "Intro to Testing",
-  description: "Learn testing",
+  description: "Learn testing" as string | null,
   speakerId: "s-001",
   roomId: "r-001",
   startsAt: new Date("2026-06-01T09:00:00Z"),
   endsAt: new Date("2026-06-01T11:00:00Z"),
   capacity: 30,
   isPaid: false,
-  price: null,
-  status: "DRAFT",
+  price: null as string | null,
+  status: "DRAFT" as const,
   createdBy: "u-001",
   createdAt: new Date("2026-05-01T00:00:00Z"),
   updatedAt: new Date("2026-05-01T00:00:00Z"),
 };
 
-const publishedWorkshop = { ...baseWorkshop, status: "PUBLISHED" };
-const cancelledWorkshop = { ...baseWorkshop, status: "CANCELLED" };
+const publishedWorkshop = { ...baseWorkshop, status: "PUBLISHED" as const };
+const cancelledWorkshop = { ...baseWorkshop, status: "CANCELLED" as const };
 
 const mockSpeaker = {
   speakerId: "s-001",
@@ -62,19 +62,23 @@ const mockRoom = {
 
 const mockSlot = {
   workshopId: "w-001",
+  slotId: "slot-xxx",
   totalCapacity: 30,
   lockedCount: 2,
   confirmedCount: 10,
+  updatedAt: new Date(),
 };
 
 const mockAiSummary = {
   summaryId: "sum-001",
   documentId: "doc-001",
   workshopId: "w-001",
-  status: "DONE",
+  status: "DONE" as const,
   summaryText: "AI generated summary",
   modelUsed: "gpt-4",
+  rawText: null,
   generatedAt: new Date("2026-05-01T00:00:00Z"),
+  createdAt: new Date(),
   errorMessage: null,
 };
 

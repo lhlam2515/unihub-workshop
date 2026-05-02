@@ -57,6 +57,7 @@ describe("RegistrationsService", () => {
     registeredAt: new Date(),
     confirmedAt: new Date(),
     cancelledAt: null,
+    cancellationReason: null,
     updatedAt: new Date(),
   };
 
@@ -354,6 +355,7 @@ describe("RegistrationsService", () => {
       registeredAt: new Date(),
       confirmedAt: new Date(),
       cancelledAt: null,
+      cancellationReason: null,
       updatedAt: new Date(),
     };
 
@@ -361,6 +363,7 @@ describe("RegistrationsService", () => {
       ...mockConfirmedRegistration,
       status: "PENDING_PAYMENT",
       confirmedAt: null,
+      cancellationReason: null,
     };
 
     function setupConfirmed() {

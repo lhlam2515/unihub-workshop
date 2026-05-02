@@ -171,7 +171,7 @@ describe("RegistrationsRepository", () => {
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         returning: jest.fn().mockResolvedValue([mockRegistration]),
-      };
+      } as any;
 
       const result = await repo.updateStatus("reg-001", "CONFIRMED", tx);
 

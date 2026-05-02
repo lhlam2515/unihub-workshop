@@ -14,7 +14,7 @@ const mockDocument = {
   fileUrl: "https://storage.example.com/workshops/w-001/doc.pdf",
   originalName: "presentation.pdf",
   fileSizeBytes: 102400,
-  uploadStatus: "UPLOADED",
+  uploadStatus: "UPLOADED" as const,
   uploadedBy: "u-001",
   uploadedAt: new Date("2026-05-01T00:00:00Z"),
 };

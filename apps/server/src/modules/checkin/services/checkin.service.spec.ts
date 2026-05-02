@@ -160,7 +160,11 @@ describe("CheckinService", () => {
 
     it("propagates repo failure from ticket lookup", async () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.scanQR("qr-any", "w-001", "staff-001");
@@ -172,7 +176,11 @@ describe("CheckinService", () => {
     it("propagates repo failure from checkin creation", async () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(validTicket));
       mockCheckinRecordsRepo.create.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.scanQR("qr-valid-123", "w-001", "staff-001");
@@ -222,7 +230,11 @@ describe("CheckinService", () => {
 
     it("returns FailResult when confirmed count query fails", async () => {
       mockCheckinRecordsRepo.countConfirmedRegistrationsByWorkshopId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getWorkshopCheckinStatus("w-001");
@@ -236,7 +248,11 @@ describe("CheckinService", () => {
         Result.ok(50)
       );
       mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getWorkshopCheckinStatus("w-001");
@@ -251,7 +267,11 @@ describe("CheckinService", () => {
       );
       mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(Result.ok(30));
       mockCheckinRecordsRepo.findByWorkshopId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getWorkshopCheckinStatus("w-001");
