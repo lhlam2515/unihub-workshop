@@ -37,31 +37,32 @@ import {
   RawBodyRequest,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
 import type { Request } from "express";
 
-/**
- * Loads gateway shared secrets from the `PAYMENT_GATEWAY_SECRETS` environment variable.
- *
- * The value must be a JSON-encoded object mapping gateway identifiers to their
- * corresponding HMAC shared secrets.
- *
- * @returns A map of gateway names to secrets, or an empty object if not configured.
- */
-function loadGatewaySecrets(): Record<string, string> {
-  const raw = process.env.PAYMENT_GATEWAY_SECRETS;
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-const GATEWAY_SECRETS: Record<string, string> = loadGatewaySecrets();
-
 @Injectable()
 export class HmacSignatureGuard implements CanActivate {
+  constructor(private readonly config: ConfigService) {}
+
+  /**
+   * Loads gateway shared secrets from the validated configuration.
+   *
+   * Reads `PAYMENT_GATEWAY_SECRETS` via ConfigService and parses the
+   * JSON-encoded map of gateway names to HMAC shared secrets.
+   *
+   * @returns A map of gateway names to secrets, or an empty object if not configured.
+   */
+  private loadGatewaySecrets(): Record<string, string> {
+    const raw = this.config.get<string>("payment.gatewaySecrets");
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+
   /**
    * Verifies the HMAC-SHA256 signature of an incoming payment webhook.
    *
@@ -91,7 +92,8 @@ export class HmacSignatureGuard implements CanActivate {
       throw new UnauthorizedException("Missing signature header");
     }
 
-    const secret = GATEWAY_SECRETS[gateway];
+    const secrets = this.loadGatewaySecrets();
+    const secret = secrets[gateway];
     if (!secret) {
       throw new UnauthorizedException("Unknown payment gateway");
     }

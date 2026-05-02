@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import jwt from "jsonwebtoken";
 
 import { RedisService } from "@/shared/redis/redis.service";
@@ -11,12 +12,12 @@ import type { JwtPayload, UserRole } from "@/types/jwt-payload";
 export const ACCESS_EXPIRY = { WEB: 900, MOBILE: 28800 } as const;
 const REFRESH_EXPIRY_SECONDS = 604_800;
 
-const JWT_SECRET = () => process.env.JWT_SECRET!;
-const REFRESH_SECRET = () => process.env.JWT_REFRESH_SECRET!;
-
 @Injectable()
 export class TokenService {
-  constructor(private readonly redisService: RedisService) {}
+  constructor(
+    private readonly redisService: RedisService,
+    private readonly config: ConfigService
+  ) {}
 
   /**
    * Signs a JWT access token with platform-specific expiry.
@@ -49,7 +50,7 @@ export class TokenService {
           jti,
           allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
         },
-        JWT_SECRET(),
+        this.config.getOrThrow<string>("jwt.secret"),
         { expiresIn: ACCESS_EXPIRY[platform] }
       )
     );
@@ -68,10 +69,37 @@ export class TokenService {
   signRefreshToken(userId: string): Promise<string> {
     const jti = randomUUID();
     return Promise.resolve(
-      jwt.sign({ sub: userId, jti }, REFRESH_SECRET(), {
-        expiresIn: REFRESH_EXPIRY_SECONDS,
-      })
+      jwt.sign(
+        { sub: userId, jti },
+        this.config.getOrThrow<string>("jwt.refreshSecret"),
+        {
+          expiresIn: REFRESH_EXPIRY_SECONDS,
+        }
+      )
     );
+  }
+
+  /**
+   * Signs a short-lived QR token for ticket check-in.
+   *
+   * Business rules:
+   * - Token contains the ticket_id, workshop_id, and student_id.
+   * - Expires in 30 days, matching the workshop event lifecycle.
+   * - Signed with the same JWT secret as access tokens for validation simplicity.
+   *
+   * @param payload.ticket_id - The ticket UUID from the database.
+   * @param payload.workshop_id - The workshop UUID the ticket grants access to.
+   * @param payload.student_id - The student's user UUID.
+   * @returns The signed JWT string (30-day expiry).
+   */
+  signQrToken(payload: {
+    ticket_id: string;
+    workshop_id: string;
+    student_id: string;
+  }): string {
+    return jwt.sign(payload, this.config.getOrThrow<string>("jwt.secret"), {
+      expiresIn: "30d",
+    });
   }
 
   /**
@@ -84,7 +112,13 @@ export class TokenService {
    */
   verifyAccessToken(token: string): Promise<Result<JwtPayload>> {
     return tryCatch(
-      () => Promise.resolve(jwt.verify(token, JWT_SECRET()) as JwtPayload),
+      () =>
+        Promise.resolve(
+          jwt.verify(
+            token,
+            this.config.getOrThrow<string>("jwt.secret")
+          ) as JwtPayload
+        ),
       (err) => {
         if (err instanceof jwt.TokenExpiredError) {
           return authErrors.tokenExpired();
@@ -106,7 +140,10 @@ export class TokenService {
     return tryCatch(
       () =>
         Promise.resolve(
-          jwt.verify(token, REFRESH_SECRET()) as { sub: string; jti: string }
+          jwt.verify(
+            token,
+            this.config.getOrThrow<string>("jwt.refreshSecret")
+          ) as { sub: string; jti: string }
         ),
       (err) => authErrors.refreshTokenInvalid(err)
     );

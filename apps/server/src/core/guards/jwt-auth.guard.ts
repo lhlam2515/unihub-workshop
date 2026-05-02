@@ -30,6 +30,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { Request } from "express";
 import jwt from "jsonwebtoken";
@@ -43,7 +44,8 @@ import type { JwtPayload } from "@/types/jwt-payload";
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly config: ConfigService
   ) {}
 
   /**
@@ -80,7 +82,10 @@ export class JwtAuthGuard implements CanActivate {
 
     let payload: JwtPayload;
     try {
-      payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+      payload = jwt.verify(
+        token,
+        this.config.getOrThrow<string>("jwt.secret")
+      ) as JwtPayload;
     } catch {
       throw new UnauthorizedException("Invalid token");
     }
