@@ -27,7 +27,7 @@ describe("RateLimiterMechanic", () => {
     }).compile();
 
     mechanic = module.get<RateLimiterMechanic>(RateLimiterMechanic);
-    redisService = module.get(RedisService) as jest.Mocked<RedisService>;
+    redisService = module.get(RedisService);
   });
 
   describe("consumeToken — FR-F04-001 (Token Bucket: 5 tokens, 1/10s refill, BR-016)", () => {
@@ -84,7 +84,7 @@ describe("RateLimiterMechanic", () => {
 
     it("should refill tokens when enough time has elapsed (lazy refill)", async () => {
       const now = Date.now();
-      const lastRefillAt = now - 25_000; // 25 seconds ago → 2 tokens refilled
+      const lastRefillAt = now - 2_000; // 2 seconds ago → 2 tokens refilled
       redisService.hGetAll.mockResolvedValue({
         tokens: "0",
         last_refill_at: String(lastRefillAt),
@@ -101,7 +101,7 @@ describe("RateLimiterMechanic", () => {
 
     it("should not exceed capacity of 5 after refill", async () => {
       const now = Date.now();
-      const lastRefillAt = now - 100_000; // 100 seconds ago → 10 tokens would refill, but capped at 5
+      const lastRefillAt = now - 100_000; // 100 seconds ago → 100 tokens would refill, but capped at 5
       redisService.hGetAll.mockResolvedValue({
         tokens: "2",
         last_refill_at: String(lastRefillAt),
@@ -110,7 +110,7 @@ describe("RateLimiterMechanic", () => {
 
       const result = await mechanic.consumeToken(USER_ID);
 
-      // min(5, 2 + 10) - 1 = 4
+      // min(5, 2 + 100) - 1 = 4
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBe(true);
       expect(redisService.hSet).toHaveBeenCalledWith(key, "tokens", "4");
@@ -118,7 +118,7 @@ describe("RateLimiterMechanic", () => {
 
     it("should advance last_refill_at proportionally when refill happens", async () => {
       const now = Date.now();
-      const lastRefillAt = now - 25_000; // 2 refills of 10s each
+      const lastRefillAt = now - 25_000; // 25 refills of 1s each
       redisService.hGetAll.mockResolvedValue({
         tokens: "1",
         last_refill_at: String(lastRefillAt),
@@ -127,17 +127,17 @@ describe("RateLimiterMechanic", () => {
 
       await mechanic.consumeToken(USER_ID);
 
-      // refillTokens = 2, so last_refill_at should advance by 2 * 10000
+      // refillTokens = 25, so last_refill_at should advance by 25 * 1000
       expect(redisService.hSet).toHaveBeenCalledWith(
         key,
         "last_refill_at",
-        String(lastRefillAt + 20_000)
+        String(lastRefillAt + 25_000)
       );
     });
 
     it("should keep last_refill_at unchanged when no refill happens", async () => {
       const now = Date.now();
-      const lastRefillAt = now - 5_000; // only 5s elapsed, no full refill
+      const lastRefillAt = now - 500; // only 500ms elapsed, no full 1s refill
       redisService.hGetAll.mockResolvedValue({
         tokens: "2",
         last_refill_at: String(lastRefillAt),
