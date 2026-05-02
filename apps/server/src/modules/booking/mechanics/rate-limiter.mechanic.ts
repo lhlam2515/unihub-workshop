@@ -6,7 +6,7 @@ import { Result } from "@/shared/response/result";
 
 const KEY_PREFIX = "ratelimit:register";
 const CAPACITY = 5;
-const REFILL_INTERVAL_MS = 1_000;
+const REFILL_INTERVAL_MS = 5_000;
 const KEY_TTL_SECONDS = 300;
 
 interface TokenBucket {
@@ -22,7 +22,7 @@ export class RateLimiterMechanic {
    * Consumes a token from the per-user rate limiter bucket.
    *
    * Implements the Token Bucket algorithm with lazy refill. Each user gets a
-   * capacity of 5 tokens, refilling at 1 token per 10 seconds. The bucket
+   * capacity of 5 tokens, refilling at 1 token per 5 seconds. The bucket
    * auto-expires after 300 seconds of inactivity.
    *
    * Business rules:
