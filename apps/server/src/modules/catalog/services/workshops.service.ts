@@ -733,15 +733,25 @@ export class WorkshopsService {
    */
   async reconcileSlot(
     workshopId: string,
-    capacity: number,
     lockedCount: number,
     confirmedCount: number
   ): Promise<Result<WorkshopSlot>> {
     return this.workshopSlotsRepo.reconcile(
       workshopId,
-      capacity,
       lockedCount,
       confirmedCount
     );
+  }
+
+  /**
+   * Retrieves a workshop slot by workshop ID.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with the WorkshopSlot, or null if not found.
+   */
+  async getSlotByWorkshopId(
+    workshopId: string
+  ): Promise<Result<WorkshopSlot | null>> {
+    return this.workshopSlotsRepo.findByWorkshopId(workshopId);
   }
 }

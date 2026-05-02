@@ -26,9 +26,9 @@ function isPaginatedShape(
   const obj = data as Record<string, unknown>;
   return (
     Array.isArray(obj.items) &&
-    typeof obj.total === "number" &&
-    typeof obj.page === "number" &&
-    typeof obj.limit === "number"
+    Number.isFinite(obj.total) &&
+    Number.isFinite(obj.page) &&
+    Number.isFinite(obj.limit)
   );
 }
 

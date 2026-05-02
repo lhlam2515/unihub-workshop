@@ -5,6 +5,7 @@
  * Validate: { qr_token, workshop_id, device_id? }
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const ScanQRSchema = z.object({
@@ -13,4 +14,4 @@ export const ScanQRSchema = z.object({
   device_id: z.string().optional(),
 });
 
-export type ScanQRDto = z.infer<typeof ScanQRSchema>;
+export class ScanQRDto extends createZodDto(ScanQRSchema) {}

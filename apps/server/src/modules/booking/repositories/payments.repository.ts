@@ -278,4 +278,23 @@ export class PaymentsRepository {
       (err) => systemErrors.internal(err)
     );
   }
+
+  /**
+   * Counts payments with a given status.
+   *
+   * @param status - Payment status to filter by.
+   * @returns OkResult with the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countPending(): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const [{ count }] = await this.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(this.schema.payments)
+          .where(eq(this.schema.payments.status, "PENDING"));
+        return count;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
 }

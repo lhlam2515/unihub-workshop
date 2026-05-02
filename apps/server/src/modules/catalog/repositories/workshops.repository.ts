@@ -327,4 +327,29 @@ export class WorkshopsRepository {
       (err) => systemErrors.internal(err)
     );
   }
+
+  /**
+   * Retrieves workshopId and capacity for all PUBLISHED workshops.
+   *
+   * Lightweight query used by the background reconciliation cron to iterate
+   * over active workshops without loading full entity data.
+   *
+   * @returns OkResult containing { workshopId, capacity }[], or FailResult (INTERNAL_ERROR).
+   */
+  async findPublishedBasic(): Promise<
+    Result<{ workshopId: string; capacity: number }[]>
+  > {
+    return tryCatch(
+      async () => {
+        return this.db
+          .select({
+            workshopId: this.schema.workshops.workshopId,
+            capacity: this.schema.workshops.capacity,
+          })
+          .from(this.schema.workshops)
+          .where(eq(this.schema.workshops.status, "PUBLISHED"));
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
 }

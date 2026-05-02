@@ -267,4 +267,28 @@ export class RegistrationsRepository {
       (err) => systemErrors.internal(err)
     );
   }
+
+  /**
+   * Counts CONFIRMED registrations for a workshop.
+   *
+   * @param workshopId - UUID of the workshop.
+   * @returns OkResult with the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countConfirmedByWorkshop(workshopId: string): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const [{ count }] = await this.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(this.schema.registrations)
+          .where(
+            and(
+              eq(this.schema.registrations.workshopId, workshopId),
+              eq(this.schema.registrations.status, "CONFIRMED")
+            )
+          );
+        return count;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
 }

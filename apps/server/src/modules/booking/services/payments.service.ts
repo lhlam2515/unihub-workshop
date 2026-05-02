@@ -36,28 +36,27 @@ import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
 import jwt from "jsonwebtoken";
 
+import type { Payment } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import type {
+  PaymentEventData,
+  RegistrationEventData,
+} from "@/shared/queues/event-contracts";
 import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import { passthroughOrInternal, paymentErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
 import { PaymentGatewayService } from "./payment-gateway.service";
-import { PAYMENT_WINDOW_SECONDS } from "../mechanics/seat-lock.mechanic";
-
 import { PaymentResponseBuilder } from "../dto/payment-response.dto";
 import { CircuitBreakerMechanic } from "../mechanics/circuit-breaker.mechanic";
 import { IdempotencyMechanic } from "../mechanics/idempotency.mechanic";
+import { PAYMENT_WINDOW_SECONDS } from "../mechanics/seat-lock.mechanic";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import { PaymentsRepository } from "../repositories/payments.repository";
 import { RegistrationsRepository } from "../repositories/registrations.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";
 
-import type { Payment } from "@/database/types/transaction.types";
-import type {
-  PaymentEventData,
-  RegistrationEventData,
-} from "@/shared/queues/event-contracts";
 import type { CreatePaymentDto } from "../dto/create-payment.dto";
 import type {
   CreatePaymentResponseDto,
@@ -592,12 +591,28 @@ export class PaymentsService {
       studentId: payment.studentId,
       workshopId,
       amount: Number(payment.amount),
-      gateway: payment.gateway as PaymentEventData["gateway"],
+      gateway: payment.gateway,
       eventType,
     };
 
     this.notificationQueue.add(eventType, eventData).catch(() => {
       // Silently ignore queue failures per ADR-11
     });
+  }
+
+  /**
+   * Returns the count of PENDING payments.
+   */
+  async countPending(): Promise<Result<number>> {
+    return this.paymentsRepo.countPending();
+  }
+
+  /**
+   * Returns the count of overdue (PENDING + past timeout) payments.
+   */
+  async countOverdue(): Promise<Result<number>> {
+    const result = await this.paymentsRepo.findPendingOverdue();
+    if (result.isFailure) return Result.fail(result.error);
+    return Result.ok(result.data.length);
   }
 }

@@ -1,3 +1,4 @@
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const OfflineSyncSchema = z.object({
@@ -11,4 +12,4 @@ export const OfflineSyncSchema = z.object({
   ),
 });
 
-export type OfflineSyncDto = z.infer<typeof OfflineSyncSchema>;
+export class OfflineSyncDto extends createZodDto(OfflineSyncSchema) {}

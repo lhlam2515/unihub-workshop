@@ -1,5 +1,7 @@
+import crypto from "node:crypto";
+
 import { Injectable, Inject } from "@nestjs/common";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
@@ -123,7 +125,12 @@ export class CheckinRecordsRepository {
         const [{ count }] = await this.db
           .select({ count: sql<number>`count(*)::int` })
           .from(this.schema.registrations)
-          .where(eq(this.schema.registrations.workshopId, workshopId));
+          .where(
+            and(
+              eq(this.schema.registrations.workshopId, workshopId),
+              eq(this.schema.registrations.status, "CONFIRMED")
+            )
+          );
         return count;
       },
       (err) => systemErrors.internal(err)
