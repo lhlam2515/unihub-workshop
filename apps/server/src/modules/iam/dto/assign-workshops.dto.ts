@@ -5,10 +5,11 @@
  * Validate: { workshop_ids: string[] (UUIDs) }
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const AssignWorkshopsSchema = z.object({
   workshop_ids: z.array(z.string().uuid()),
 });
 
-export type AssignWorkshopsDto = z.infer<typeof AssignWorkshopsSchema>;
+export class AssignWorkshopsDto extends createZodDto(AssignWorkshopsSchema) {}

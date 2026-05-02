@@ -5,10 +5,11 @@
  * Validate: { status: 'ACTIVE' | 'SUSPENDED' }
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const UpdateUserStatusSchema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED"]),
 });
 
-export type UpdateUserStatusDto = z.infer<typeof UpdateUserStatusSchema>;
+export class UpdateUserStatusDto extends createZodDto(UpdateUserStatusSchema) {}

@@ -7,6 +7,7 @@
  * Note: Mobile requires refresh_token in body, Web uses cookies/headers
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const RefreshTokenSchema = z.object({
@@ -14,4 +15,4 @@ export const RefreshTokenSchema = z.object({
   platform: z.enum(["WEB", "MOBILE"]).optional().default("WEB"),
 });
 
-export type RefreshTokenDto = z.infer<typeof RefreshTokenSchema>;
+export class RefreshTokenDto extends createZodDto(RefreshTokenSchema) {}

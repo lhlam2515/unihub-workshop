@@ -13,7 +13,6 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
-import { UpdateUserStatusSchema } from "../dto/update-user-status.dto";
 import { UsersService } from "../services/users.service";
 
 import type { UpdateUserStatusDto } from "../dto/update-user-status.dto";
@@ -67,8 +66,7 @@ export class UsersAdminController {
     @Param("id") id: string,
     @Body() updateStatusDto: UpdateUserStatusDto
   ) {
-    const parsed = UpdateUserStatusSchema.parse(updateStatusDto);
-    return this.usersService.updateUserStatus(id, parsed.status);
+    return this.usersService.updateUserStatus(id, updateStatusDto.status);
   }
 
   /**

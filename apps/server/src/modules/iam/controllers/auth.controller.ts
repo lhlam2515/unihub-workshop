@@ -16,8 +16,6 @@ import { Public } from "@/shared/decorators/public.decorator";
 import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
-import { LoginSchema } from "../dto/login.dto";
-import { RefreshTokenSchema } from "../dto/refresh-token.dto";
 import { AuthService } from "../services/auth.service";
 
 import type { LoginDto } from "../dto/login.dto";
@@ -58,14 +56,13 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: Response
   ) {
-    const parsed = LoginSchema.parse(loginDto);
     const result = await this.authService.login(
-      parsed.email,
-      parsed.password,
-      parsed.platform
+      loginDto.email,
+      loginDto.password,
+      loginDto.platform
     );
 
-    if (result.isSuccess && parsed.platform === "WEB") {
+    if (result.isSuccess && loginDto.platform === "WEB") {
       response.cookie(
         "refreshToken",
         result.data.refresh_token!,
@@ -100,14 +97,13 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request
   ) {
-    const parsed = RefreshTokenSchema.parse(refreshTokenDto);
-    const bodyToken = parsed.refresh_token ?? "";
+    const bodyToken = refreshTokenDto.refresh_token ?? "";
     const cookieToken =
       (request.cookies?.refreshToken as string | undefined) ?? "";
     const refreshTokenStr = bodyToken || cookieToken;
     const result = await this.authService.refreshToken(
       refreshTokenStr,
-      parsed.platform
+      refreshTokenDto.platform
     );
 
     if (result.isSuccess) {

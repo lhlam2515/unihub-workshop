@@ -5,6 +5,7 @@
  * Validate: { email, password, platform: 'WEB' | 'MOBILE' }
  */
 
+import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const LoginSchema = z.object({
@@ -13,4 +14,4 @@ export const LoginSchema = z.object({
   platform: z.enum(["WEB", "MOBILE"]),
 });
 
-export type LoginDto = z.infer<typeof LoginSchema>;
+export class LoginDto extends createZodDto(LoginSchema) {}
