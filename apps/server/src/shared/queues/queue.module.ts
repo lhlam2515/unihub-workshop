@@ -1,5 +1,6 @@
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
 import {
   NOTIFICATION_QUEUE,
@@ -32,8 +33,9 @@ import {
 @Module({
   imports: [
     BullModule.forRootAsync({
-      useFactory: () => ({
-        connection: { url: process.env.REDIS_URL },
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: { url: config.getOrThrow<string>("redis.url") },
         defaultJobOptions: DEFAULT_JOB_OPTIONS,
       }),
     }),

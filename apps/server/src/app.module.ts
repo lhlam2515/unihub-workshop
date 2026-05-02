@@ -1,7 +1,19 @@
 import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { ZodValidationPipe } from "nestjs-zod";
 
+import {
+  appConfig,
+  corsConfig,
+  dbConfig,
+  jwtConfig,
+  loggingConfig,
+  paymentConfig,
+  r2Config,
+  redisConfig,
+  validateEnv,
+} from "@/core/config/env.config";
 import { GlobalExceptionFilter } from "@/core/exceptions/global-exception.filter";
 import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 
@@ -37,19 +49,34 @@ import { StorageModule } from "./shared/storage/storage.module";
  */
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateEnv,
+      load: [
+        appConfig,
+        jwtConfig,
+        dbConfig,
+        redisConfig,
+        r2Config,
+        paymentConfig,
+        loggingConfig,
+        corsConfig,
+      ],
+    }),
     DatabaseModule,
     RedisModule,
-    StorageModule.forRoot({
-      endpoint: process.env.R2_ENDPOINT!,
-      region: process.env.R2_REGION ?? "auto",
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-      bucketName: process.env.R2_BUCKET_NAME!,
-      publicUrl: process.env.R2_PUBLIC_URL!,
-      maxFileSizeBytes: parseInt(
-        process.env.UPLOAD_MAX_FILE_SIZE ?? "52428800",
-        10
-      ),
+    StorageModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        endpoint: config.getOrThrow<string>("r2.endpoint"),
+        region: config.get<string>("r2.region") ?? "auto",
+        accessKeyId: config.getOrThrow<string>("r2.accessKeyId"),
+        secretAccessKey: config.getOrThrow<string>("r2.secretAccessKey"),
+        bucketName: config.getOrThrow<string>("r2.bucketName"),
+        publicUrl: config.getOrThrow<string>("r2.publicUrl"),
+        maxFileSizeBytes:
+          config.get<number>("r2.maxFileSizeBytes") ?? 52_428_800,
+      }),
     }),
     SharedQueueModule,
     IamModule,

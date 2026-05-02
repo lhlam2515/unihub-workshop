@@ -12,6 +12,7 @@
  * - cookieParser() enables HttpOnly cookie-based refresh token flow.
  * - morgan logs HTTP traffic to Winston for structured observability.
  */
+import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -28,8 +29,11 @@ async function bootstrap() {
     rawBody: true,
   });
 
+  const configService = app.get(ConfigService);
+  const frontendUrl = configService.get<string>("cors.frontendUrl");
+
   app.use(helmet());
-  app.enableCors(getCorsConfig());
+  app.enableCors(getCorsConfig(frontendUrl));
   app.use(cookieParser());
   app.use(
     morgan(
@@ -44,7 +48,7 @@ async function bootstrap() {
     )
   );
 
-  const port = process.env.PORT || 3000;
+  const port = configService.get<number>("app.port") ?? 3000;
   await app.listen(port);
 
   winstonLogger.log(

@@ -1,26 +1,23 @@
 import { neon } from "@neondatabase/serverless";
 import { Global, Module } from "@nestjs/common";
-import * as dotenv from "dotenv";
+import { ConfigService } from "@nestjs/config";
 import { drizzle } from "drizzle-orm/neon-http";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "./database.constants";
 import * as schema from "./schema";
 
-dotenv.config();
+import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set");
-}
-
-const db = drizzle({ client: neon(DATABASE_URL), schema });
-
-export type DatabaseClient = typeof db;
 const databaseConnectionProvider = {
   provide: DATABASE_CONNECTION,
-  useValue: db,
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => {
+    const url = config.getOrThrow<string>("database.url");
+    return drizzle({ client: neon(url), schema });
+  },
 };
 
+export type DatabaseClient = NeonHttpDatabase<typeof schema>;
 export type DatabaseSchema = typeof schema;
 const databaseSchemaProvider = {
   provide: DATABASE_SCHEMA,

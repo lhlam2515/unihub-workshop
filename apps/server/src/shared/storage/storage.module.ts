@@ -2,15 +2,15 @@
  * Storage Module
  *
  * Global dynamic module that provides {@link StorageService}. Imported once
- * in `AppModule` via `StorageModule.forRoot(config)`. The `@Global()` decorator
- * makes `StorageService` injectable in every feature module without explicit
- * imports.
+ * in `AppModule` via `StorageModule.forRoot(config)`.
+ * The `@Global()` decorator makes `StorageService` injectable in every feature
+ * module without explicit imports.
  *
  * Design rationale:
  * - A dynamic `forRoot()` pattern allows the consumer (`AppModule`) to
  *   supply environment-specific configuration (endpoint, credentials, bucket).
  * - Validation is performed at module initialization time (fail-fast): if a
- *   required environment variable is missing the application crashes on startup
+ *   required configuration field is missing the application crashes on startup
  *   rather than at the first upload request.
  *
  * Side effects: Registers StorageService as a global provider.
@@ -36,6 +36,43 @@ export class StorageModule {
    * @returns A dynamic module with StorageService registered as a provider.
    */
   static forRoot(config: StorageConfig): DynamicModule {
+    StorageModule.validateConfig(config);
+    return StorageModule.buildDynamicModule(config);
+  }
+
+  /**
+   * Registers the StorageModule asynchronously using NestJS factory pattern.
+   *
+   * Accepts `inject` and `useFactory` parameters, mirroring the standard
+   * NestJS async provider pattern. The factory receives the injected services
+   * and must return a fully resolved `StorageConfig` object.
+   *
+   * @param options - Async module options with inject array and useFactory.
+   * @returns A dynamic module with StorageService registered as a provider.
+   */
+  static forRootAsync(options: {
+    inject: any[];
+    useFactory: (...args: any[]) => StorageConfig | Promise<StorageConfig>;
+  }): DynamicModule {
+    return {
+      module: StorageModule,
+      providers: [
+        {
+          provide: STORAGE_CONFIG,
+          inject: options.inject,
+          useFactory: async (...args: any[]) => {
+            const config = await options.useFactory(...args);
+            StorageModule.validateConfig(config);
+            return config;
+          },
+        },
+        StorageService,
+      ],
+      exports: [StorageService],
+    };
+  }
+
+  private static validateConfig(config: StorageConfig): void {
     const resolvedConfig = {
       ...config,
       region: config.region ?? "auto",
@@ -57,6 +94,14 @@ export class StorageModule {
           "and R2_PUBLIC_URL environment variables are set."
       );
     }
+  }
+
+  private static buildDynamicModule(config: StorageConfig): DynamicModule {
+    const resolvedConfig = {
+      ...config,
+      region: config.region ?? "auto",
+      maxFileSizeBytes: config.maxFileSizeBytes ?? 52_428_800,
+    };
 
     return {
       module: StorageModule,
