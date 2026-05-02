@@ -267,6 +267,30 @@ apps/server/src/
 
 ---
 
+## Appendix D: Spec Doc Updates (2026-05-02)
+
+| Finding | Resolution | Documents Updated |
+|---------|-----------|-------------------|
+| **A-H01** | **False positive.** `REFILL_INTERVAL_MS = 10_000` là 1 token/10s, nhưng OpenSpec registration-load-control và SRS BR-016 đều ghi 1 token/giây. Code đã fix về 1_000 (1 token/s) trong PR #26. | `docs/blueprint/data/redis-keys.md` (fix refill rate), `docs/srs.md` BR-016 (fix refill rate) |
+| **A-M03** | Redis AOF persistence requirement đã được thêm vào blueprint storage strategy | `docs/blueprint/design/02-storage-strategy.md` (subsection mới) |
+| **S-M06** | 10 error codes thiếu trong OpenAPI ErrorCode enum đã được thêm | `docs/openapi.yaml` ErrorCode enum |
+| **S-M05** | Field name `timestamp` trong offline-sync DTO khác với OpenAPI `checked_in_at`. Cần fix code DTO. | Ghi nhận — chưa sửa (code change) |
+| **S-M02** | `WorkshopDetailDto.fromDetail()` bỏ qua `aiSummary` param do blueprint chưa spec chi tiết. | `docs/blueprint/specs/workshop-management.md` (spec mới) |
+| **S-M03** | `WorkshopAdminDetailDto` thiếu ai_summary error_message/document_id | `docs/blueprint/specs/workshop-management.md` (spec mới) |
+
+**Internal blueprint conflicts resolved:**
+- Rate limit refill rate: `04-safety-mechanisms.md` 1 token/giây (đúng) vs `redis-keys.md` 1 token/10 giây (sai) → đã đồng bộ
+- Circuit breaker trip condition: `04-safety-mechanisms.md` dùng percentage >50% vs `redis-keys.md` count-based 5 failures/60s → đã đồng bộ về count-based
+- ADR numbering: duplicate ADR 05 + duplicate SeatLock ADR 07 → đã gộp và đánh số lại
+
+**Blueprint coverage expanded (Phase 4):**
+- Thêm 3 spec files mới: `workshop-management.md`, `registration.md`, `background-jobs.md`
+- Cập nhật 3 spec files hiện có: `auth.md`, `payment.md`, `checkin-offline.md`
+- Backfill 4 design docs với implementation patterns từ OpenSpec (Result Pattern, guards, Error Factory, Redis keys)
+- Chuẩn hóa `openspec/specs/`: 3 flat-file specs → directory format `spec-name/spec.md`
+
+---
+
 ## Sign-off
 
 | Role | Teammate | Status |

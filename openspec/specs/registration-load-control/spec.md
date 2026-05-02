@@ -2,9 +2,9 @@
 
 Delta spec for the load control layer that protects the registration endpoint from traffic surges.
 
-## Requirements
+## ADDED Requirements
 
-### REQ-RLM-001: Token Bucket Rate Limiter
+### Requirement: Token Bucket Rate Limiter
 
 **Source:** FR-F04-001, BR-016
 **Priority:** MUST
@@ -14,7 +14,7 @@ Per-user rate limiting using the Token Bucket algorithm stored in Redis Hash `ra
 
 **Configuration:**
 - Capacity: 5 tokens
-- Refill rate: 1 token per 10 seconds
+- Refill rate: 1 token per 5 seconds
 - Key TTL: 300 seconds (idle cleanup)
 
 **Behavior:**
@@ -31,17 +31,17 @@ Per-user rate limiting using the Token Bucket algorithm stored in Redis Hash `ra
 
 #### Scenario: Bucket exhausted
 
-- **Given** Student has sent 5 requests in 10 seconds (bucket empty)
-- **When** Student sends 6th request
+- **Given** Student has bucket empty
+- **When** Student sends registration request
 - **Then** Return HTTP 429 with `{ error: "RATE_LIMIT_EXCEEDED", retry_after: <seconds> }`
 
 #### Scenario: Bucket refills over time
 
-- **Given** Student exhausted bucket 10 seconds ago
+- **Given** Student exhausted bucket 1 second ago
 - **When** Student sends new request
 - **Then** 1 token is refilled and consumed, request proceeds
 
-### REQ-RLM-002: Global Rate Limiter
+### Requirement: Global Rate Limiter
 
 **Source:** FR-F04-001, BR-017
 **Priority:** MUST
@@ -70,7 +70,7 @@ System-wide rate limiting using INCR + EXPIRE on `ratelimit:global:register`.
 - **When** Request arrives
 - **Then** Return HTTP 429, request blocked
 
-### REQ-RLM-003: Atomic Seat Decrement
+### Requirement: Atomic Seat Decrement
 
 **Source:** FR-F04-002, BR-018
 **Priority:** MUST
@@ -101,7 +101,7 @@ Atomic DECR on `seat:available:{workshopId}` with automatic rollback when sold o
 - **When** DECR executes
 - **Then** Returns -1 → INCR back to 0 → `SEAT_UNAVAILABLE`
 
-### REQ-RLM-004: Seat Lock for Paid Workshops
+### Requirement: Seat Lock for Paid Workshops
 
 **Source:** FR-F04-004, BR-021
 **Priority:** MUST
