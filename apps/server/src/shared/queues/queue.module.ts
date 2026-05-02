@@ -2,6 +2,7 @@ import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
+import { NotificationPublisher } from "./notification-publisher";
 import {
   NOTIFICATION_QUEUE,
   AI_SUMMARY_QUEUE,
@@ -61,6 +62,7 @@ import {
       { name: STUDENT_SYNC_QUEUE }
     ),
   ],
-  exports: [BullModule],
+  providers: [NotificationPublisher],
+  exports: [BullModule, NotificationPublisher],
 })
 export class SharedQueueModule {}

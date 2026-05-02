@@ -31,23 +31,21 @@
  */
 import crypto from "node:crypto";
 
-import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
-import { Queue } from "bullmq";
 
 import type { Payment } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { TokenService } from "@/modules/iam/services/token.service";
 import type {
   PaymentEventData,
   RegistrationEventData,
 } from "@/shared/queues/event-contracts";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import { NotificationPublisher } from "@/shared/queues/notification-publisher";
 import { passthroughOrInternal, paymentErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
 import { PaymentGatewayService } from "./payment-gateway.service";
+import { TicketsService } from "./tickets.service";
 import { PaymentResponseBuilder } from "../dto/payment-response.dto";
 import { CircuitBreakerMechanic } from "../mechanics/circuit-breaker.mechanic";
 import { IdempotencyMechanic } from "../mechanics/idempotency.mechanic";
@@ -76,9 +74,8 @@ export class PaymentsService {
     private readonly paymentGatewayService: PaymentGatewayService,
     private readonly workshopsService: WorkshopsService,
     private readonly seatCounter: SeatCounterService,
-    private readonly tokenService: TokenService,
-    @InjectQueue(NOTIFICATION_QUEUE)
-    private readonly notificationQueue: Queue
+    private readonly ticketsService: TicketsService,
+    private readonly notificationPublisher: NotificationPublisher
   ) {}
 
   /**
@@ -364,13 +361,11 @@ export class PaymentsService {
         payment.registrationId
       );
       if (ticketResult.isSuccess && ticketResult.data) {
-        const ticket = ticketResult.data;
-        const signedQrToken = this.tokenService.signQrToken({
-          ticket_id: ticket.ticketId,
-          workshop_id: workshopId,
-          student_id: payment.studentId,
-        });
-        await this.ticketsRepo.updateQrToken(ticket.ticketId, signedQrToken);
+        await this.ticketsService.signAndUpdateQrToken(
+          ticketResult.data.ticketId,
+          workshopId,
+          payment.studentId
+        );
       }
 
       // Fire REGISTRATION_CONFIRMED for paid workshop (fire-and-forget)
@@ -380,11 +375,7 @@ export class PaymentsService {
         workshopId,
         eventType: "registration.confirmed",
       };
-      this.notificationQueue
-        .add("registration.confirmed", regEventData)
-        .catch(() => {
-          // Silently ignore queue failures per ADR-11
-        });
+      this.notificationPublisher.fire("registration.confirmed", regEventData);
     }
 
     return Result.ok();
@@ -592,9 +583,7 @@ export class PaymentsService {
       eventType,
     };
 
-    this.notificationQueue.add(eventType, eventData).catch(() => {
-      // Silently ignore queue failures per ADR-11
-    });
+    this.notificationPublisher.fire(eventType, eventData);
   }
 
   /**

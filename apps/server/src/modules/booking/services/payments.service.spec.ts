@@ -1,17 +1,15 @@
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { Queue } from "bullmq";
 
 import type { Payment } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { TokenService } from "@/modules/iam/services/token.service";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import { NotificationPublisher } from "@/shared/queues/notification-publisher";
 import { paymentErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { PaymentGatewayService } from "./payment-gateway.service";
 import { PaymentsService } from "./payments.service";
+import { TicketsService } from "./tickets.service";
 import { CircuitBreakerMechanic } from "../mechanics/circuit-breaker.mechanic";
 import { IdempotencyMechanic } from "../mechanics/idempotency.mechanic";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
@@ -34,7 +32,7 @@ describe("PaymentsService", () => {
   let paymentGatewayService: jest.Mocked<PaymentGatewayService>;
   let workshopsService: jest.Mocked<WorkshopsService>;
   let seatCounter: jest.Mocked<SeatCounterService>;
-  let notificationQueue: jest.Mocked<Queue>;
+  let notificationPublisher: jest.Mocked<NotificationPublisher>;
 
   const STUDENT_ID = "stu-001";
   const WORKSHOP_ID = "ws-001";
@@ -158,15 +156,15 @@ describe("PaymentsService", () => {
           },
         },
         {
-          provide: TokenService,
+          provide: TicketsService,
           useValue: {
-            signQrToken: jest.fn().mockReturnValue("signed-qr-token"),
+            signAndUpdateQrToken: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
-          provide: getQueueToken(NOTIFICATION_QUEUE),
+          provide: NotificationPublisher,
           useValue: {
-            add: jest.fn().mockResolvedValue({ id: "job-1" } as any),
+            fire: jest.fn(),
           },
         },
       ],
@@ -182,7 +180,7 @@ describe("PaymentsService", () => {
     paymentGatewayService = module.get(PaymentGatewayService);
     workshopsService = module.get(WorkshopsService);
     seatCounter = module.get(SeatCounterService);
-    notificationQueue = module.get(getQueueToken(NOTIFICATION_QUEUE));
+    notificationPublisher = module.get(NotificationPublisher);
   });
 
   // ==================== initiate ====================
@@ -471,7 +469,7 @@ describe("PaymentsService", () => {
         WORKSHOP_ID,
         REGISTRATION_ID
       );
-      expect(notificationQueue.add).toHaveBeenCalled();
+      expect(notificationPublisher.fire).toHaveBeenCalled();
     });
 
     it("should process FAILED webhook — payment FAILED, seat released, event fired", async () => {
@@ -506,7 +504,7 @@ describe("PaymentsService", () => {
         REGISTRATION_ID
       );
       // event type should be payment.failed
-      expect(notificationQueue.add).toHaveBeenCalledWith(
+      expect(notificationPublisher.fire).toHaveBeenCalledWith(
         "payment.failed",
         expect.objectContaining({ eventType: "payment.failed" })
       );
@@ -549,7 +547,7 @@ describe("PaymentsService", () => {
 
       await service.handleWebhook(GATEWAY, webhookDto);
 
-      expect(notificationQueue.add).toHaveBeenCalledWith(
+      expect(notificationPublisher.fire).toHaveBeenCalledWith(
         "payment.success",
         expect.objectContaining({
           paymentId: PAYMENT_ID,
@@ -604,7 +602,7 @@ describe("PaymentsService", () => {
         REGISTRATION_ID
       );
       expect(seatCounter.increment).toHaveBeenCalledWith(WORKSHOP_ID);
-      expect(notificationQueue.add).toHaveBeenCalledWith(
+      expect(notificationPublisher.fire).toHaveBeenCalledWith(
         "payment.failed",
         expect.objectContaining({ eventType: "payment.failed" })
       );

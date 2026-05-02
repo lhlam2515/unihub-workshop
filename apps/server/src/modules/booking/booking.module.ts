@@ -19,6 +19,7 @@ import { TicketsRepository } from "./repositories/tickets.repository";
 import { PaymentGatewayService } from "./services/payment-gateway.service";
 import { PaymentsService } from "./services/payments.service";
 import { RegistrationsService } from "./services/registrations.service";
+import { TicketsService } from "./services/tickets.service";
 
 /**
  * Booking Module
@@ -56,6 +57,7 @@ import { RegistrationsService } from "./services/registrations.service";
     RegistrationsService,
     PaymentsService,
     PaymentGatewayService,
+    TicketsService,
     // Mechanics
     RateLimiterMechanic,
     SeatLockMechanic,

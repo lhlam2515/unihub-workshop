@@ -1,15 +1,14 @@
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import type { Registration } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { TokenService } from "@/modules/iam/services/token.service";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import { NotificationPublisher } from "@/shared/queues/notification-publisher";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { RegistrationsService } from "./registrations.service";
+import { TicketsService } from "./tickets.service";
 import { RegistrationResponseBuilder } from "../dto/registration-response.dto";
 import { GlobalRateLimitMechanic } from "../mechanics/global-rate-limit.mechanic";
 import { RateLimiterMechanic } from "../mechanics/rate-limiter.mechanic";
@@ -106,15 +105,15 @@ describe("RegistrationsService", () => {
           useValue: { getPublishedById: jest.fn() },
         },
         {
-          provide: TokenService,
+          provide: TicketsService,
           useValue: {
-            signQrToken: jest.fn().mockReturnValue("signed-qr-token"),
+            signAndUpdateQrToken: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
-          provide: getQueueToken(NOTIFICATION_QUEUE),
+          provide: NotificationPublisher,
           useValue: {
-            add: jest.fn().mockResolvedValue({ id: "job-1" } as any),
+            fire: jest.fn(),
           },
         },
       ],
