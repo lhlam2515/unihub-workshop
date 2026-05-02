@@ -117,7 +117,7 @@ describe("AuthService", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.access_token).toBe(accessToken);
-      expect(result.data.refresh_token).toBeUndefined();
+      expect(result.data.refresh_token).toBe(refreshToken);
       expect(result.data.expires_in).toBe(900);
       expect(result.data.user.user_id).toBe(activeUser.userId);
       expect(result.data.user.email).toBe(activeUser.email);
@@ -130,7 +130,9 @@ describe("AuthService", () => {
         },
         "WEB"
       );
-      expect(mockTokenService.signRefreshToken).not.toHaveBeenCalled();
+      expect(mockTokenService.signRefreshToken).toHaveBeenCalledWith(
+        activeUser.userId
+      );
     });
 
     it("returns OkResult with LoginResponseDto for valid MOBILE credentials (includes refreshToken)", async () => {

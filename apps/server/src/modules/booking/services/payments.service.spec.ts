@@ -9,6 +9,8 @@ import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import { paymentErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
+import { PaymentGatewayService } from "./payment-gateway.service";
+import { PaymentsService } from "./payments.service";
 import { CircuitBreakerMechanic } from "../mechanics/circuit-breaker.mechanic";
 import { IdempotencyMechanic } from "../mechanics/idempotency.mechanic";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
@@ -16,12 +18,13 @@ import { PaymentsRepository } from "../repositories/payments.repository";
 import { RegistrationsRepository } from "../repositories/registrations.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";
 
-import { PaymentGatewayService } from "./payment-gateway.service";
-import { PaymentsService } from "./payments.service";
-
 describe("PaymentsService", () => {
   let service: PaymentsService;
   let paymentsRepo: jest.Mocked<PaymentsRepository>;
+
+  beforeAll(() => {
+    process.env.JWT_SECRET = "test-secret";
+  });
   let registrationsRepo: jest.Mocked<RegistrationsRepository>;
   let ticketsRepo: jest.Mocked<TicketsRepository>;
   let seatLock: jest.Mocked<SeatLockMechanic>;
@@ -79,7 +82,7 @@ describe("PaymentsService", () => {
     status: "CONFIRMED",
     confirmedAt: new Date(),
     workshopId: WORKSHOP_ID,
-  } as any;
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -109,6 +112,8 @@ describe("PaymentsService", () => {
           provide: TicketsRepository,
           useValue: {
             create: jest.fn(),
+            findByRegistrationId: jest.fn(),
+            updateQrToken: jest.fn(),
           },
         },
         {
@@ -161,34 +166,16 @@ describe("PaymentsService", () => {
     }).compile();
 
     service = module.get<PaymentsService>(PaymentsService);
-    paymentsRepo = module.get(
-      PaymentsRepository
-    ) as jest.Mocked<PaymentsRepository>;
-    registrationsRepo = module.get(
-      RegistrationsRepository
-    ) as jest.Mocked<RegistrationsRepository>;
-    ticketsRepo = module.get(
-      TicketsRepository
-    ) as jest.Mocked<TicketsRepository>;
-    seatLock = module.get(SeatLockMechanic) as jest.Mocked<SeatLockMechanic>;
-    idempotencyMechanic = module.get(
-      IdempotencyMechanic
-    ) as jest.Mocked<IdempotencyMechanic>;
-    circuitBreaker = module.get(
-      CircuitBreakerMechanic
-    ) as jest.Mocked<CircuitBreakerMechanic>;
-    paymentGatewayService = module.get(
-      PaymentGatewayService
-    ) as jest.Mocked<PaymentGatewayService>;
-    workshopsService = module.get(
-      WorkshopsService
-    ) as jest.Mocked<WorkshopsService>;
-    seatCounter = module.get(
-      SeatCounterService
-    ) as jest.Mocked<SeatCounterService>;
-    notificationQueue = module.get(
-      getQueueToken(NOTIFICATION_QUEUE)
-    ) as jest.Mocked<Queue>;
+    paymentsRepo = module.get(PaymentsRepository);
+    registrationsRepo = module.get(RegistrationsRepository);
+    ticketsRepo = module.get(TicketsRepository);
+    seatLock = module.get(SeatLockMechanic);
+    idempotencyMechanic = module.get(IdempotencyMechanic);
+    circuitBreaker = module.get(CircuitBreakerMechanic);
+    paymentGatewayService = module.get(PaymentGatewayService);
+    workshopsService = module.get(WorkshopsService);
+    seatCounter = module.get(SeatCounterService);
+    notificationQueue = module.get(getQueueToken(NOTIFICATION_QUEUE));
   });
 
   // ==================== initiate ====================
@@ -432,6 +419,13 @@ describe("PaymentsService", () => {
       ticketsRepo.create.mockResolvedValue(
         Result.ok({ ticketId: "tkt-001" } as any)
       );
+      ticketsRepo.findByRegistrationId.mockResolvedValue(
+        Result.ok({
+          ticketId: "tkt-001",
+          registrationId: REGISTRATION_ID,
+        } as any)
+      );
+      ticketsRepo.updateQrToken.mockResolvedValue(Result.ok({} as any));
       seatLock.release.mockResolvedValue(Result.ok(true));
       seatCounter.increment.mockResolvedValue(1);
     }

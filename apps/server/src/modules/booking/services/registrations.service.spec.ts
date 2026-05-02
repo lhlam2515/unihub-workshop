@@ -1,22 +1,27 @@
+import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import type { Registration } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
+import { RegistrationsService } from "./registrations.service";
+import { RegistrationResponseBuilder } from "../dto/registration-response.dto";
 import { GlobalRateLimitMechanic } from "../mechanics/global-rate-limit.mechanic";
 import { RateLimiterMechanic } from "../mechanics/rate-limiter.mechanic";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "../repositories/registrations.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";
-import { RegistrationResponseBuilder } from "../dto/registration-response.dto";
-
-import { RegistrationsService } from "./registrations.service";
 
 describe("RegistrationsService", () => {
   let service: RegistrationsService;
+
+  beforeAll(() => {
+    process.env.JWT_SECRET = "test-secret";
+  });
   let registrationsRepo: jest.Mocked<RegistrationsRepository>;
   let ticketsRepo: jest.Mocked<TicketsRepository>;
   let rateLimiter: jest.Mocked<RateLimiterMechanic>;
@@ -75,6 +80,8 @@ describe("RegistrationsService", () => {
           useValue: {
             create: jest.fn(),
             updateStatusByRegistrationId: jest.fn(),
+            findByRegistrationId: jest.fn(),
+            updateQrToken: jest.fn(),
           },
         },
         {
@@ -97,29 +104,23 @@ describe("RegistrationsService", () => {
           provide: WorkshopsService,
           useValue: { getPublishedById: jest.fn() },
         },
+        {
+          provide: getQueueToken(NOTIFICATION_QUEUE),
+          useValue: {
+            add: jest.fn().mockResolvedValue({ id: "job-1" } as any),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<RegistrationsService>(RegistrationsService);
-    registrationsRepo = module.get(
-      RegistrationsRepository
-    ) as jest.Mocked<RegistrationsRepository>;
-    ticketsRepo = module.get(
-      TicketsRepository
-    ) as jest.Mocked<TicketsRepository>;
-    rateLimiter = module.get(
-      RateLimiterMechanic
-    ) as jest.Mocked<RateLimiterMechanic>;
-    globalRateLimit = module.get(
-      GlobalRateLimitMechanic
-    ) as jest.Mocked<GlobalRateLimitMechanic>;
-    seatLock = module.get(SeatLockMechanic) as jest.Mocked<SeatLockMechanic>;
-    seatCounter = module.get(
-      SeatCounterService
-    ) as jest.Mocked<SeatCounterService>;
-    workshopsService = module.get(
-      WorkshopsService
-    ) as jest.Mocked<WorkshopsService>;
+    registrationsRepo = module.get(RegistrationsRepository);
+    ticketsRepo = module.get(TicketsRepository);
+    rateLimiter = module.get(RateLimiterMechanic);
+    globalRateLimit = module.get(GlobalRateLimitMechanic);
+    seatLock = module.get(SeatLockMechanic);
+    seatCounter = module.get(SeatCounterService);
+    workshopsService = module.get(WorkshopsService);
   });
 
   describe("register", () => {
@@ -139,6 +140,10 @@ describe("RegistrationsService", () => {
         Result.ok({ ...mockRegistration, status: "CONFIRMED" })
       );
       ticketsRepo.create.mockResolvedValue(Result.ok({} as any));
+      ticketsRepo.findByRegistrationId.mockResolvedValue(
+        Result.ok({ ticketId: "tkt-001" } as any)
+      );
+      ticketsRepo.updateQrToken.mockResolvedValue(Result.ok({} as any));
     }
 
     // FR-F04-003: free workshop → CONFIRMED
