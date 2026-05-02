@@ -5,7 +5,7 @@ export const OfflineSyncSchema = z.object({
   items: z.array(
     z.object({
       qr_token: z.string(),
-      timestamp: z.coerce.date(),
+      checked_in_at: z.coerce.date(),
       device_id: z.string().optional(),
     })
   ),
