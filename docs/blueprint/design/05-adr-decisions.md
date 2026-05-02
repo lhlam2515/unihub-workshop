@@ -32,23 +32,19 @@
 - **Ngữ cảnh & Lý do:** Khi hàng ngàn người giữ chỗ mà không thanh toán, lưu tạm bản ghi trong DB sẽ tạo ra nhiều dữ liệu rác và cần cơ chế dọn dẹp. Redis TTL cho phép khóa tự động hết hạn, trả ghế về hệ thống mà không cần cron job.
 - **Sự đánh đổi:** Nếu Redis mất dữ liệu (crash), các khóa có thể biến mất sớm dẫn đến rủi ro cạnh tranh ghế. Giảm thiểu bằng cấu hình persistence (RDB/AOF) và cơ chế sao lưu/giám sát Redis.
 
-### ADR 05: Kiểm soát tải đột biến bằng Token Bucket (Redis) tại API Gateway
+### ADR 06: Kiểm soát tải đột biến bằng Token Bucket (Redis) tại API Gateway
 
 - **Quyết định:** Áp dụng thuật toán **Token Bucket** (Xô Token) định danh theo Student ID lưu trữ trên Redis (`ratelimit:register:{user_id}`), kết hợp cơ chế Debounce (Chặn click liên tục) tại Frontend. Nhóm quyết định **không** sử dụng Message Queue để hứng request đăng ký.
 - **Ngữ cảnh & Lý do:** Hệ thống phải chịu tải 12.000 sinh viên truy cập dồn dập trong 3-10 phút đầu. Token Bucket vượt trội hơn _Fixed Window_ hay _Leaky Bucket_ vì nó vừa ngăn chặn tool spam, vừa cho phép một lượng tải bùng nổ ngắn hạn (Burst) để bù đắp cho thao tác nhanh của người dùng thực. Việc không dùng Message Queue cho luồng đăng ký giúp giữ nguyên mô hình xử lý Đồng bộ (Synchronous), đảm bảo sinh viên biết kết quả ngay lập tức (KISS principle).
 - **Sự đánh đổi:** Đánh đổi sự công bằng tuyệt đối (First-In-First-Out của Queue) lấy tốc độ phản hồi tức thì và giảm độ phức tạp của hệ thống. "Sự công bằng" ở đây được định nghĩa là chặn lạm dụng (anti-spam) và xử lý theo thứ tự đến trước tại cổng Redis.
 
-### ADR 06: Chống tranh chấp chỗ (Race Condition) bằng Redis Counters & DB Fail-Fast
+### ADR 07: Chống tranh chấp chỗ (Race Condition) bằng Redis Counters & DB Fail-Fast
 
 - **Quyết định:** Sử dụng lệnh nguyên tử `DECR` trên Redis (`seat:available:{workshop_id}`) làm chốt chặn tốc độ cao (Source of Truth cho số lượng ghế). Tại Database, áp dụng **Khóa bi quan (Pessimistic Locking)** với câu lệnh `SELECT ... FOR UPDATE` kết hợp nguyên lý **Fail-Fast** (`Lock Wait Timeout` = 3 giây).
 - **Ngữ cảnh & Lý do:** Yêu cầu tuyệt đối không để xảy ra tình trạng bán vượt số chỗ (Overselling). Nếu để hàng ngàn request lao thẳng vào Database, Connection Pool sẽ cạn kiệt và gây treo máy chủ. Việc trừ ghế trên Redis trước giúp loại bỏ 99% request dư thừa. Tại DB, Khóa bi quan ép các request hợp lệ phải xếp hàng tuần tự. Nếu hàng đợi quá dài (chờ quá 3s), nguyên lý Fail-Fast sẽ chủ động hủy giao dịch và báo lỗi _"Hệ thống quá tải"_ để bảo vệ sự sống còn của CSDL.
 - **Sự đánh đổi:** Chấp nhận từ chối phục vụ (chủ động báo lỗi) một số request hợp lệ trong lúc cao điểm để tránh hiện tượng sụp đổ dây chuyền (Cascading Failure).
 
-### ADR 07: Quản lý giam ghế (Seat Lock) hoàn toàn bằng Redis TTL
-
-- **Quyết định:** Không lưu trạng thái "giam ghế chờ thanh toán" vào bảng vật lý trong PostgreSQL. Sử dụng cấu trúc Redis Key (`seat:lock:{workshop_id}:{registration_id}`) với cơ chế **TTL (Time-To-Live) là 15 phút**.
-- **Ngữ cảnh & Lý do:** Khi hàng ngàn sinh viên giữ chỗ nhưng không thanh toán, PostgreSQL sẽ sinh ra một lượng khổng lồ các bản ghi rác, đòi hỏi phải viết Cronjob quét liên tục để xóa và nhả ghế (gây nặng DB). Redis TTL giải quyết bài toán này một cách thụ động: Key tự động bốc hơi khỏi RAM khi hết 15 phút, giải phóng slot mà không tốn bất kỳ tài nguyên tính toán nào của Backend.
-- **Sự đánh đổi:** Nếu máy chủ Redis sụp đổ (Crash) và mất dữ liệu trên RAM, hệ thống có thể bị nhả ghế sớm hơn dự kiến. (Đã giảm thiểu bằng cách cấu hình Redis Persistence RDB/AOF).
+*[Gộp với ADR 05 (SeatLock) bên trên — không trùng lặp]*
 
 ### ADR 08: Chống trừ tiền hai lần bằng Khóa lũy đẳng (Idempotency Key) 2 lớp
 

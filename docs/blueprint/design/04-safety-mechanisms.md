@@ -18,14 +18,14 @@ Trước khi đưa ra quyết định, nhóm đã đánh giá các phương án 
 
 **Cách hoạt động & Thuật toán:**
 
-- **Cơ chế vòng ngoài (Token Bucket):** Mỗi mã sinh viên (`student_id` từ JWT) được cấp một "cái xô" có sức chứa tối đa là `N` token. Tốc độ nạp (Refill rate) là `R` token mỗi giây.
+- **Cơ chế vòng ngoài (Token Bucket):** Mỗi mã sinh viên (`student_id` từ JWT) được cấp một "cái xô" có sức chứa tối đa là `N` token. Tốc độ nạp (Refill rate) là `R` token mỗi 5 giây.
 - **Cơ chế vòng trong (Redis Counters & DB Fail-Fast):** Thay vì để hàng ngàn request lao thẳng vào Database tranh giành khóa, hệ thống sử dụng phép toán nguyên tử `DECR` trên Redis (`seat:available:{workshop_id}`) làm chốt chặn tốc độ cao. Chỉ những request lấy được ghế trên Redis mới được phép đi tiếp vào Database để ghi nhận Đơn hàng (`registrations`). Tại DB, hệ thống vẫn áp dụng Khóa bi quan kèm `Lock Wait Timeout = 3s` (Fail-Fast) làm lớp bảo vệ cuối cùng chống quá tải Connection Pool.
 - **Quy trình:** Khi request đến, hệ thống lấy 1 token. Nếu xô rỗng, chặn ngay tại API Gateway. Nếu xô còn token, request trừ ghế trên Redis. Nếu thành công, request đi vào Database xếp hàng đợi cấp khóa. Nếu hàng đợi quá dài khiến thời gian chờ vượt quá `Lock Wait Timeout`, Database tự động hủy giao dịch, Backend lập tức trả lỗi về cho người dùng (Fail-Fast) thay vì giữ kết nối vô thời hạn.
 
 **Ngưỡng thiết lập (Thresholds) dự kiến:**
 
 - **Capacity (Kích thước xô):** `5` tokens (Cho phép burst tối đa 5 requests để bù đắp thao tác nhanh của người dùng).
-- **Refill Rate (Tốc độ nạp):** `1` token/giây.
+- **Refill Rate (Tốc độ nạp):** `1` token/5 giây.
 - **Database Lock Wait Timeout:** `3` giây.
 - **Hành vi khi vượt ngưỡng:**
   - Nếu bị chặn ở Gateway: Trả về mã lỗi `HTTP 429 Too Many Requests`.
@@ -51,10 +51,10 @@ Nhóm quyết định áp dụng bộ ngắt mạch tại lớp tích hợp (Pay
 Bộ ngắt mạch theo dõi kết quả của các yêu cầu thanh toán (lưu trạng thái trên Redis) và chuyển đổi giữa 3 trạng thái:
 
 - **CLOSED (Mạch đóng - Bình thường):** Các yêu cầu thanh toán được gửi đi bình thường. Hệ thống ghi nhận tỷ lệ lỗi và thời gian phản hồi. Nếu mọi thứ ổn định, mạch tiếp tục đóng.
-- **OPEN (Mạch hở - Sự cố):** Khi tỷ lệ lỗi (timeout, lỗi mạng) vượt quá **Ngưỡng kích hoạt** (Ví dụ: > 50% trong 10 giây), mạch sẽ tự động ngắt.
+- **OPEN (Mạch hở - Sự cố):** Khi số lần thất bại liên tiếp đạt **failure_count >= 5 trong vòng 60 giây**, mạch sẽ tự động ngắt.
   - _Hành vi:_ Mọi yêu cầu thanh toán mới bị từ chối ngay lập tức tại Backend (Fail-fast) mà không gửi sang cổng thanh toán.
   - _Graceful Degradation:_ Hệ thống vẫn cho phép sinh viên xem lịch, đọc tóm tắt AI, và đăng ký workshop miễn phí. Với workshop có phí, nút "Thanh toán" sẽ được ẩn hoặc thay thế bằng thông báo: _"Dịch vụ thanh toán đang bảo trì, đơn đăng ký của bạn đã được ghi nhận ở trạng thái Chờ (Pending)."_
-- **HALF-OPEN (Nửa mở - Thử nghiệm):** Sau khoảng thời gian "nguội" (VD: 30-60 giây), hệ thống cho phép một vài yêu cầu thử nghiệm đi qua. Nếu thành công, mạch đóng lại (CLOSED). Nếu vẫn lỗi, mạch tiếp tục mở (OPEN).
+- **HALF-OPEN (Nửa mở - Thử nghiệm):** Sau **30 giây** nguội, Circuit Breaker Recovery Monitor cron (mỗi 30s) tự động chuyển từ OPEN sang HALF_OPEN. Hệ thống cho phép **1 request thực tế** đi qua làm "Canary Request". Nếu thành công, mạch đóng lại (CLOSED), `failure_count = 0`. Nếu vẫn lỗi, mạch tiếp tục mở (OPEN).
 
 **Lý do phù hợp & Sự đánh đổi (Trade-offs):**
 

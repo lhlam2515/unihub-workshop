@@ -80,3 +80,61 @@ Vì JWT có bản chất bất biến (immutable), nếu Ban tổ chức thay đ
 - **Khởi tạo:** Nhân sự đăng nhập khi có mạng (Online). Access Token (cấu hình đặc biệt hạn 8 giờ) và Refresh Token được lưu an toàn vào **Keychain / Secure Storage** của hệ điều hành.
 - **Xác thực Offline:** Khi mất mạng, App tự giải mã Access Token để kiểm tra thời hạn (`exp`). Nếu còn hạn, App mở khóa tính năng Camera để quét QR và lưu dữ liệu vào `offline_checkin_queue`.
 - **Idempotency Sync (Đồng bộ an toàn):** Khi có mạng, App gửi luồng dữ liệu offline lên Server. Middleware kiểm tra toàn bộ (chữ ký, thời hạn, Blacklist, Scope) của Token. Nếu Token hết hạn, Server trả lỗi 401, Mobile App sẽ dùng Refresh Token trong Keychain để lấy Access Token mới và tự động tiếp tục tiến trình đồng bộ mà không cần nhân sự can thiệp.
+
+---
+
+### 5. Chi tiết triển khai Guards
+
+#### JwtAuthGuard (src/core/guards/jwt-auth.guard.ts)
+
+Flow: (1) Extract token từ `Authorization: Bearer <token>` header → (2) Nếu KHÔNG có header → throw `UnauthorizedException('Missing authorization token')` → (3) Gọi `TokenService.verifyAccessToken(token)` để verify chữ ký + expiration → (4) Nếu verify thất bại → throw `UnauthorizedException('Invalid token')` → (5) Gọi `TokenService.isBlacklisted(jti)` với Redis key `token:blacklist:{jti}` → (6) Nếu blacklisted → throw `UnauthorizedException('Token has been revoked')` → (7) Attach decoded `JwtPayload` vào `request.user`.
+
+- `@Public()` decorator: skip toàn bộ guard chain
+- Lưu ý: JwtAuthGuard dùng `TokenService.verifyAccessToken()` KHÔNG dùng raw `jwt.verify()`
+
+#### RolesGuard (src/core/guards/roles.guard.ts)
+
+- Dùng `@Roles(UserRole.STUDENT)` decorator trên controller method
+- Đọc `requiredRoles` từ metadata, so sánh với `request.user.role`
+- Nếu không match → throw `ForbiddenException('Insufficient permissions')`
+- Nếu không có `@Roles()` trên route → cho phép (opt-in authorization)
+
+#### WorkshopScopeGuard (src/modules/checkin/guards/)
+
+- Chỉ áp dụng cho CHECKIN_STAFF endpoints
+- Đọc `workshop_id` từ `request.params.id` hoặc `request.body.workshop_id`
+- Kiểm tra `workshop_id` có trong `request.user.allowed_workshop_ids` (từ JWT claim)
+- Nếu không match → throw `ForbiddenException` với `WORKSHOP_NOT_IN_SCOPE`
+
+#### HmacSignatureGuard (src/core/guards/hmac-signature.guard.ts)
+
+- Dùng cho payment webhooks (KHÔNG dùng JWT)
+- Đọc HMAC từ header `X-Gateway-Signature`
+- Tính toán HMAC-SHA256 từ request body + gateway secret
+- **Timing-safe comparison** để tránh timing attack
+- Gateway-specific secret từ `request.params.gateway`
+
+### 6. JwtPayload Interface
+
+```typescript
+interface JwtPayload {
+  sub: string;           // user_id (KHÔNG phải userId!)
+  role: UserRole;        // STUDENT | ORGANIZER | CHECKIN_STAFF
+  jti: string;           // UUID v4 — unique token ID for blacklist
+  allowed_workshop_ids?: string[];  // Chỉ có khi role = CHECKIN_STAFF
+}
+```
+
+**QUAN TRỌNG:** Field là `sub` (JWT standard claim), không phải `userId`. Controller dùng `@CurrentUser() user: JwtPayload` và truy cập `user.sub` để lấy user_id. Sai field name (`userId`) là lỗi S-C01 đã được phát hiện trong audit.
+
+### 7. Refresh Token Rotation
+
+Khi refresh token được sử dụng:
+1. Blacklist token cũ (thêm `jti` vào Redis blacklist)
+2. Sinh cặp token mới (Access + Refresh)
+3. Refresh token cũ không thể dùng lại
+4. Nếu refresh token đã bị blacklist → toàn bộ session bị vô hiệu hóa (phát hiện stolen token)
+
+### 8. Logout Idempotent
+
+Logout KHÔNG throw lỗi nếu token đã được blacklist trước đó. Double-logout là silent success.
