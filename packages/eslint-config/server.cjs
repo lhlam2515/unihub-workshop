@@ -58,7 +58,12 @@ function serverConfig({ tsconfigRootDir }) {
       rules: {
         "@typescript-eslint/no-explicit-any": "off",
         "@typescript-eslint/no-floating-promises": "warn",
+        "@typescript-eslint/no-unused-vars": [
+          "error",
+          { argsIgnorePattern: "^_" },
+        ],
         "@typescript-eslint/no-unsafe-argument": "warn",
+        "@typescript-eslint/only-throw-error": "off",
         "prettier/prettier": ["error", { endOfLine: "auto" }],
         "import/order": createImportOrderRule(),
         "boundaries/dependencies": [
@@ -150,6 +155,7 @@ function serverConfig({ tsconfigRootDir }) {
         "@typescript-eslint/only-throw-error": "off",
         "@typescript-eslint/no-unsafe-return": "warn",
         "@typescript-eslint/no-unsafe-argument": "warn",
+        "@typescript-eslint/prefer-promise-reject-errors": "off",
       },
     },
   ];
