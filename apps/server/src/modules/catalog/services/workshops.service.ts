@@ -347,7 +347,11 @@ export class WorkshopsService {
     const workshop = workshopRow.workshops;
 
     if (workshop.status !== "DRAFT") {
-      return Result.fail(workshopErrors.notPublished(id, workshop.status));
+      return Result.fail(
+        workshop.status === "PUBLISHED"
+          ? workshopErrors.alreadyPublished(id)
+          : workshopErrors.notPublished(id, workshop.status)
+      );
     }
 
     // Update status to PUBLISHED

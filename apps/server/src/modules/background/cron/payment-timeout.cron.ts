@@ -22,6 +22,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 
 import { PaymentsRepository } from "@/modules/booking/repositories/payments.repository";
 import { PaymentsService } from "@/modules/booking/services/payments.service";
+import { RedisService } from "@/shared/redis/redis.service";
 
 @Injectable()
 export class PaymentTimeoutCron {
@@ -29,7 +30,8 @@ export class PaymentTimeoutCron {
 
   constructor(
     private readonly paymentsRepo: PaymentsRepository,
-    private readonly paymentsService: PaymentsService
+    private readonly paymentsService: PaymentsService,
+    private readonly redisService: RedisService
   ) {}
 
   /**
@@ -77,6 +79,12 @@ export class PaymentTimeoutCron {
 
       this.logger.log(
         `Payment timeout cron: ${processed}/${overdueResult.data.length} payments handled`
+      );
+
+      // Record last_run timestamp for system monitoring
+      await this.redisService.set(
+        "cron:last_run:payment-timeout",
+        new Date().toISOString()
       );
     } catch (error) {
       this.logger.error("Payment timeout cron failed", error);

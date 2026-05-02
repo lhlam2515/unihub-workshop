@@ -199,6 +199,19 @@ components:
         - DB_LOCK_TIMEOUT
         - VALIDATION_FAILED
         - INTERNAL_ERROR
+        # Storage & File Upload
+        - UPLOAD_FAILED
+        - DELETE_FAILED
+        - STORAGE_DOWNLOAD_FAILED
+        - STORAGE_FILE_NOT_FOUND
+        # Notification
+        - NOTIFICATION_LOG_NOT_FOUND
+        - NOTIFICATION_CHANNEL_CONFIG_NOT_FOUND
+        - NOTIFICATION_CHANNEL_INACTIVE
+        - NOTIFICATION_CHANNEL_UNKNOWN
+        # Catalog
+        - ROOM_NOT_FOUND
+        - SPEAKER_NOT_FOUND
 
     # ── Generic Success/Error Envelope helpers ─────────────────────────────
     # Vì OpenAPI 3.1 không hỗ trợ generic trực tiếp, ta dùng

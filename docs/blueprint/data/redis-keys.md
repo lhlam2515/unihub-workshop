@@ -49,7 +49,8 @@
    TTL: 300 giây (reset nếu user không active)
    Config:
    Bucket capacity: 5 requests
-   Refill rate: 1 token / 10 giây
+   Refill rate: 1 token / 5 giây (1 request/5 seconds)
+   Note: Giá trị này PHẢI khớp với 04-safety-mechanisms.md. Nếu một trong hai được cập nhật, cái kia cũng phải cập nhật đồng bộ.
    Global API protection:
    Key: ratelimit:global:register
    Type: String (counter)

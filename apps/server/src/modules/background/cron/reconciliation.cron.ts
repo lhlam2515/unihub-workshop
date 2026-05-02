@@ -28,6 +28,8 @@ import { RegistrationsService } from "@/modules/booking/services/registrations.s
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { RedisService } from "@/shared/redis/redis.service";
 
+const LAST_RUN_KEY = "cron:last_run:reconciliation";
+
 const DISCREPANCY_THRESHOLD = 5;
 
 @Injectable()
@@ -94,6 +96,9 @@ export class ReconciliationCron {
         `Reconciliation completed: ${workshops.length} processed, ` +
           `${discrepancyCount} discrepancies > threshold`
       );
+
+      // Record last_run timestamp for system monitoring
+      await this.redisService.set(LAST_RUN_KEY, new Date().toISOString());
     } catch (error) {
       this.logger.error("Reconciliation cron failed", error);
     }

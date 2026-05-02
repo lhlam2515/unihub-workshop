@@ -72,6 +72,7 @@ export class CheckinController {
    * @returns SyncResultDto with counts of synced, skipped, and conflicted records.
    */
   @Post("sync")
+  @UseGuards(WorkshopScopeGuard)
   @HttpCode(HttpStatus.OK)
   async syncOfflineData(
     @Body() body: OfflineSyncDto,
@@ -91,6 +92,7 @@ export class CheckinController {
    * @returns CheckinStatusDto with confirmed/checked-in counts and last 20 check-ins.
    */
   @Get("workshops/:id/status")
+  @UseGuards(WorkshopScopeGuard)
   async getWorkshopStatus(@Param("id") workshopId: string) {
     return this.checkinService.getWorkshopCheckinStatus(workshopId);
   }

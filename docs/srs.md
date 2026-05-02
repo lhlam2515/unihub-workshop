@@ -1441,7 +1441,7 @@ Priority:       MUST
 | BR-013 | Student chỉ xem Workshop có status = PUBLISHED | FR-F02-006 | Authorization |
 | BR-014 | Workshop Document: chỉ lưu URL (VARCHAR) vào DB; binary lưu Object Storage | FR-F03-001 | Architecture |
 | BR-015 | AI Summary pipeline: PENDING → PROCESSING → DONE/FAILED (không skip bước) | FR-F03-002 | Routing |
-| BR-016 | Token Bucket: capacity = 5 tokens/user; refill = 1 token / 10 giây | FR-F04-001 | Calculation |
+| BR-016 | Token Bucket: capacity = 5 tokens/user; refill = 1 token / 5 giây; key TTL = 300s (idle cleanup) | FR-F04-001 | Calculation |
 | BR-017 | Global rate limit: 500 requests/giây toàn hệ thống → HTTP 429 | FR-F04-001 | Calculation |
 | BR-018 | DECR Redis: nếu kết quả < 0 → INCR lại ngay lập tức → báo Sold Out | FR-F04-002 | Calculation |
 | BR-019 | UNIQUE(student_id, workshop_id) trong registrations: 1 sinh viên chỉ có 1 đơn hợp lệ | FR-F04-003, FR-F04-004 | Validation |
@@ -1461,7 +1461,7 @@ Priority:       MUST
 | BR-033 | Offline check-in: Access Token PHẢI còn hạn (kiểm tra exp cục bộ trên device) | FR-F07-003 | Authorization |
 | BR-034 | Offline sync: INSERT ON CONFLICT (ticket_id, workshop_id) DO NOTHING | FR-F07-004 | Routing |
 | BR-035 | Notification: LUÔN dùng Message Queue (không gửi trực tiếp trong luồng chính) | FR-F08-001 | Architecture |
-| BR-036 | Notification retry: tối đa 3 lần với exponential backoff | FR-F08-002 | Routing |
+| BR-036 | Notification retry: tối đa 5 lần với exponential backoff (5s, 10s, 20s, 40s, 80s) | FR-F08-002 | Routing |
 | BR-037 | CSV Sync: UPSERT dựa trên student_code; cập nhật last_synced_at | FR-F09-002 | Routing |
 | BR-038 | CSV Sync: dòng lỗi KHÔNG dừng job; ghi vào student_sync_errors, tiếp tục | FR-F09-002 | Routing |
 | BR-039 | Payment Timeout: job chạy mỗi 1 phút, quét payments PENDING quá timeout_at | FR-F10-001 | Time-based |
@@ -1539,8 +1539,8 @@ Priority:       MUST
 
 | # | Mơ hồ | Giải pháp / Giả định áp dụng |
 |---|---|---|
-| AMB-01 | "Idempotency Key do Client hay Backend sinh?" | **[ASSUMED]** Backend sinh key theo format `REG_{registration_id}_{attempt_n}` trả về cho Client. Client dùng lại key này nếu thao tác lỗi mạng. Kiểm soát bảo mật hoàn toàn ở Backend. |
-| AMB-02 | "PostgreSQL cập nhật số lượng locked_count từ đâu?" | **[ASSUMED]** Bỏ qua luồng Reconciliation định kỳ để tiết kiệm thời gian dev. Số chỗ trống thực tế (`available_seats`) hoàn toàn tin tưởng vào Redis (`seat:available:{wid}`). PostgreSQL chỉ lưu lại tổng số vé đã `CONFIRMED`. |
+| AMB-01 | "Idempotency Key do Client hay Backend sinh?" | **[ASSUMED]** Backend sinh key theo format `REG_{registration_id}_{attempt_n}` trả về cho Client. Client dùng lại key này nếu thao tác lỗi mạng. Kiểm soát bảo mật hoàn toàn ở Backend. **Cơ chế:** 2-layer — Layer 1 (Redis `SET NX idempotency:{key} EX 86400`), Layer 2 (DB `UNIQUE` constraint trên `payments.idempotency_key`). |
+| AMB-02 | "PostgreSQL cập nhật số lượng locked_count từ đâu?" | **[ASSUMED]** Bỏ qua luồng Reconciliation định kỳ để tiết kiệm thời gian dev. Số chỗ trống thực tế (`available_seats`) hoàn toàn tin tưởng vào Redis (`seat:available:{wid}`). PostgreSQL chỉ lưu lại tổng số vé đã `CONFIRMED`. **Yêu cầu:** Redis PHẢI được cấu hình AOF persistence (`appendonly yes`, `appendfsync everysec`) để tránh mất dữ liệu khi restart. |
 | AMB-03 | "Workshop DRAFT có được đổi phòng/giờ không?" | **[ASSUMED]** Có. Chỉ workshop `PUBLISHED` khi đổi phòng/giờ mới kích hoạt logic kiểm tra xung đột phòng và đẩy thông báo vào Queue. |
 | AMB-04 | "Ticket qr_token là JWT hay UUID?" | **[ASSUMED]** Là **Signed JWT** chứa `{ticket_id, workshop_id, student_id, exp}`. Chữ ký số cho phép Mobile App verify tính hợp lệ cục bộ (Offline) mà không cần query Database. |
 | AMB-05 | "Offline Sync conflict: ticket VOID — lưu checkin hay bỏ qua?" | **[ASSUMED]** Thực thi `INSERT DO NOTHING` nhưng nếu Frontend nhận diện vé đã bị hủy, app đánh dấu `sync_status = CONFLICT` để ghi log, không cộng vào số liệu check-in thực tế. |

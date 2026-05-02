@@ -72,11 +72,17 @@ export class SystemMonitorService {
 
       const now = new Date();
       const nextRun = new Date(now.getTime() + 60_000);
+      const paymentLastRunStr = await this.redisService.get(
+        "cron:last_run:payment-timeout"
+      );
+      const paymentLastRun = paymentLastRunStr
+        ? new Date(paymentLastRunStr)
+        : now;
 
       return Result.ok({
         pending_count: Number(pendingResult?.count ?? 0),
         timeout_count: Number(overdueResult?.count ?? 0),
-        last_run: now,
+        last_run: paymentLastRun,
         next_run: nextRun,
         job_status: "IDLE",
       });
@@ -133,11 +139,15 @@ export class SystemMonitorService {
 
       const now = new Date();
       const nextRun = new Date(now.getTime() + 600_000);
+      const reconLastRunStr = await this.redisService.get(
+        "cron:last_run:reconciliation"
+      );
+      const reconLastRun = reconLastRunStr ? new Date(reconLastRunStr) : now;
 
       return Result.ok({
         total_workshops: workshops.length,
         discrepancies_found: discrepanciesFound,
-        last_run: now,
+        last_run: reconLastRun,
         next_run: nextRun,
       });
     } catch (error) {

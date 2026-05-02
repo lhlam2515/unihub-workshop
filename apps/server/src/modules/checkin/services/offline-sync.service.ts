@@ -31,7 +31,7 @@ export class OfflineSyncService {
    * @returns OkResult with SyncResultDto (synced/skipped/conflicts counts), or FailResult (INTERNAL_ERROR).
    */
   async processSyncBatch(
-    items: Array<{ qr_token: string; timestamp: Date; device_id?: string }>,
+    items: Array<{ qr_token: string; checked_in_at: Date; device_id?: string }>,
     staffUserId: string,
     workshopId: string
   ): Promise<Result<SyncResultDto>> {
@@ -60,7 +60,7 @@ export class OfflineSyncService {
         ticketId: ticket.ticketId,
         studentId: ticket.registration.studentId,
         workshopId,
-        checkedInAt: item.timestamp,
+        checkedInAt: item.checked_in_at,
         checkedInBy: staffUserId,
         source: "OFFLINE_SYNC",
         deviceId: item.device_id,

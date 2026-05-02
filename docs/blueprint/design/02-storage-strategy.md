@@ -83,3 +83,40 @@ _(Lưu ý: Tất cả các bảng đều sử dụng UUID làm Khóa chính - Pr
    - **Định dạng Key:** idempotency:{payment_token}
    - **Giá trị (Value):** {payment_id}
    - **Hành vi:** Hoạt động như lớp màng lọc đầu tiên (Layer 1). Sử dụng lệnh SET NX EX 86400 (TTL 24h). Nếu Key từ Client gửi lên đã tồn tại trong Redis, Backend lập tức chặn Request và trả về kết quả cũ trước khi Request đó kịp chạm tới PostgreSQL.
+
+4. **Bộ ngắt mạch thanh toán (Circuit Breaker - Bảo vệ Payment Gateway)**
+   - **Định dạng Key:** circuit:payment:{gateway}
+   - **Giá trị (Value):** Hash — state machine (CLOSED/OPEN/HALF_OPEN)
+   - **Fields:** state, failure_count, last_attempt, opened_at
+   - **TTL:** None (managed by circuit breaker logic)
+   - **Hành vi:** Lưu trạng thái của từng cổng thanh toán. Khi số lần thất bại vượt ngưỡng (5 lần), mạch chuyển sang OPEN để chặn request. Sau thời gian chờ (30 giây), chuyển sang HALF_OPEN để thử lại. Đây là cơ chế fail-fast cho payment gateway.
+
+5. **Giới hạn tốc độ đăng ký theo người dùng (Per-user Rate Limiter)**
+   - **Định dạng Key:** ratelimit:register:{userId}
+   - **Giá trị (Value):** Hash — token bucket per user
+   - **Fields:** tokens, last_refill_at
+   - **TTL:** 300 giây (idle cleanup)
+   - **Hành vi:** Giới hạn số lượng request đăng ký workshop mỗi người dùng. Token bucket được nạp lại định kỳ. Nếu hết token, request bị chặn để bảo vệ endpoint đăng ký khỏi abuse từ một tài khoản duy nhất.
+
+6. **Giới hạn tốc độ toàn hệ thống (Global Rate Limiter - Safety Net)**
+   - **Định dạng Key:** ratelimit:global:register
+   - **Giá trị (Value):** String counter
+   - **Hành vi:** Sử dụng lệnh INCR + EXPIRE. Ngưỡng 500 requests/second. Đây là lớp bảo vệ cuối cùng cho endpoint đăng ký, ngăn chặn DDoS và traffic đột biến từ nhiều nguồn.
+
+7. **Blacklist Token thu hồi (Emergency Token Revocation)**
+   - **Định dạng Key:** token:blacklist:{jti}
+   - **Giá trị (Value):** String ("revoked")
+   - **TTL:** Thời gian còn lại của JWT
+   - **Hành vi:** Lưu danh sách token đã bị thu hồi khẩn cấp. Khi Admin khóa tài khoản hoặc phát hiện token bị đánh cắp, jti được thêm vào Redis. JwtAuthGuard kiểm tra key này trước khi cho phép request đi tiếp.
+
+### Cấu hình Persistence cho Redis
+
+Redis MUST be configured with AOF persistence for production deployment:
+- `appendonly yes`
+- `appendfsync everysec`
+
+This prevents data loss on restart for critical ephemeral state:
+- Idempotency keys (`idempotency:*`) — mất key = rủi ro double-charge
+- Circuit breaker state (`circuit:payment:*`) — mất state = mất bảo vệ fail-fast
+- Seat locks (`seat:lock:*`) — mất lock = nhả ghế sớm, overselling risk
+- Rate limit buckets (`ratelimit:*`) — mất bucket = reset rate limit

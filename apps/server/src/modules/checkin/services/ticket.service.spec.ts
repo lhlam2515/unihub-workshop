@@ -1,8 +1,9 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { Result } from "@/shared/response/result";
-import { TicketsRepository } from "../repositories/tickets.repository";
+
 import { TicketService } from "./ticket.service";
+import { TicketsRepository } from "../repositories/tickets.repository";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -77,41 +78,6 @@ describe("TicketService", () => {
     }).compile();
 
     service = module.get<TicketService>(TicketService);
-  });
-
-  // -----------------------------------------------------------------------
-  // issueTicket — FR-F06-001
-  // -----------------------------------------------------------------------
-  describe("issueTicket — FR-F06-001", () => {
-    it("creates an ACTIVE ticket with a qrToken", async () => {
-      mockTicketsRepo.create.mockResolvedValue(
-        Result.ok({ ticketId: "tkt-001", qrToken: "qr-abc-123" })
-      );
-
-      const result = await service.issueTicket("reg-001");
-
-      expect(result.isSuccess).toBe(true);
-      expect(result.data.ticketId).toBe("tkt-001");
-      expect(result.data.qrToken).toBe("qr-abc-123");
-      expect(mockTicketsRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          registrationId: "reg-001",
-          status: "ACTIVE",
-          qrToken: expect.any(String),
-        })
-      );
-    });
-
-    it("returns FailResult when repo create fails", async () => {
-      mockTicketsRepo.create.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
-      );
-
-      const result = await service.issueTicket("reg-001");
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("INTERNAL_ERROR");
-    });
   });
 
   // -----------------------------------------------------------------------

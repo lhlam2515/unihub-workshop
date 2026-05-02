@@ -2,9 +2,9 @@
 
 Delta spec for the registration CRUD operations — create, read, cancel.
 
-## Requirements
+## ADDED Requirements
 
-### REQ-REG-001: Register for Free Workshop
+### Requirement: Register for Free Workshop
 
 **Source:** FR-F04-003, BR-019, BR-020
 **Priority:** MUST
@@ -41,7 +41,7 @@ Create a registration with CONFIRMED status for free workshops after passing all
 - **When** Student `POST /registrations` again
 - **Then** HTTP 409 `{ error: "REGISTRATION_DUPLICATE" }`
 
-### REQ-REG-002: Register for Paid Workshop
+### Requirement: Register for Paid Workshop
 
 **Source:** FR-F04-004, BR-019, BR-021, BR-022
 **Priority:** MUST
@@ -80,7 +80,7 @@ Create a registration with PENDING_PAYMENT status for paid workshops and acquire
 - **When** 15 minutes pass
 - **Then** Redis key auto-expires, `check()` returns `SEAT_LOCK_EXPIRED`
 
-### REQ-REG-003: Cancel Registration
+### Requirement: Cancel Registration
 
 **Source:** FR-F04-005, BR-019, BR-023
 **Priority:** MUST
@@ -123,7 +123,7 @@ Cancel own registration, void the ticket, and release the seat.
 - **When** Student `DELETE /registrations/{id}`
 - **Then** HTTP 409 `{ error: "REGISTRATION_CANCELLED" }`
 
-### REQ-REG-004: View Registration History
+### Requirement: View Registration History
 
 **Source:** FR-F04-006, BR-006
 **Priority:** MUST
@@ -153,7 +153,7 @@ List own registrations with workshop and ticket details, enforcing IDOR.
 - **When** Query executes
 - **Then** `WHERE student_id = jwt.sub` — only Student A's registrations returned
 
-### REQ-REG-005: Get Registration Detail
+### Requirement: Get Registration Detail
 
 **Source:** FR-F04-006, BR-006
 **Priority:** MUST
