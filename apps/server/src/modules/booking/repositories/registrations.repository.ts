@@ -3,6 +3,7 @@ import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
+import type { DrizzleTransaction } from "@/database/types/drizzle.types";
 import type {
   Registration,
   NewRegistration,
@@ -95,7 +96,7 @@ export class RegistrationsRepository {
    */
   async create(
     data: NewRegistration,
-    _tx?: any
+    _tx?: DrizzleTransaction
   ): Promise<Result<Registration>> {
     return tryCatch(
       async () => {
@@ -127,7 +128,7 @@ export class RegistrationsRepository {
   async updateStatus(
     id: string,
     status: string,
-    tx?: any
+    tx?: DrizzleTransaction
   ): Promise<Result<Registration>> {
     const conn = tx ?? this.db;
     return tryCatch(
@@ -240,7 +241,7 @@ export class RegistrationsRepository {
    */
   async cancelAllForWorkshop(
     workshopId: string,
-    _tx?: any
+    _tx?: DrizzleTransaction
   ): Promise<Result<CancelResult>> {
     return tryCatch(
       async () => {

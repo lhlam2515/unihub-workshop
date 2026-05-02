@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
+import type { DrizzleTransaction } from "@/database/types/drizzle.types";
 import type { Ticket, NewTicket } from "@/database/types/transaction.types";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
@@ -26,7 +27,10 @@ export class TicketsRepository {
    * @returns OkResult with the created Ticket entity.
    * - May return FailResult with INTERNAL_ERROR on database failure.
    */
-  async create(data: NewTicket, tx?: any): Promise<Result<Ticket>> {
+  async create(
+    data: NewTicket,
+    tx?: DrizzleTransaction
+  ): Promise<Result<Ticket>> {
     const conn = tx ?? this.db;
     return tryCatch(
       async () => {
