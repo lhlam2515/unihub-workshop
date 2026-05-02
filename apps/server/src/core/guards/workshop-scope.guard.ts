@@ -27,8 +27,6 @@ import {
 } from "@nestjs/common";
 import { Request } from "express";
 
-import type { JwtPayload } from "@/types/jwt-payload";
-
 @Injectable()
 export class WorkshopScopeGuard implements CanActivate {
   /**
