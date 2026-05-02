@@ -1,6 +1,8 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import { systemErrors } from "@/shared/response/errors";
+
 import { SpeakersRepository } from "./speakers.repository";
 
 // ---------------------------------------------------------------------------

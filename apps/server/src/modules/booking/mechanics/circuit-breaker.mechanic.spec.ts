@@ -27,7 +27,7 @@ describe("CircuitBreakerMechanic", () => {
     }).compile();
 
     mechanic = module.get<CircuitBreakerMechanic>(CircuitBreakerMechanic);
-    redisService = module.get(RedisService) as jest.Mocked<RedisService>;
+    redisService = module.get(RedisService);
   });
 
   describe("checkAndAllow — FR-F05-002 (circuit breaker)", () => {

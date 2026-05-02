@@ -26,7 +26,7 @@ describe("GlobalRateLimitMechanic", () => {
     }).compile();
 
     mechanic = module.get<GlobalRateLimitMechanic>(GlobalRateLimitMechanic);
-    redisService = module.get(RedisService) as jest.Mocked<RedisService>;
+    redisService = module.get(RedisService);
   });
 
   describe("check — FR-F04-001 (500 req/s global limit, BR-017)", () => {

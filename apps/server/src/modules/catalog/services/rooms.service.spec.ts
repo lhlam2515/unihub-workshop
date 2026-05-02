@@ -1,9 +1,11 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { roomErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+
+import { RoomsService } from "./rooms.service";
 import { RoomResponseBuilder } from "../dto/room-response.dto";
 import { RoomsRepository } from "../repositories/rooms.repository";
-import { RoomsService } from "./rooms.service";
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -100,7 +102,7 @@ describe("RoomsService", () => {
     it("creates a room and returns its DTO", async () => {
       roomsRepo.create.mockResolvedValue(Result.ok(mockRoomEntity));
 
-      const result = await service.createRoom(createDto as any);
+      const result = await service.createRoom(createDto);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -118,7 +120,7 @@ describe("RoomsService", () => {
     it("converts facilities array to JSONB record", async () => {
       roomsRepo.create.mockResolvedValue(Result.ok(mockRoomEntity));
 
-      await service.createRoom(createDto as any);
+      await service.createRoom(createDto);
 
       expect(roomsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -131,7 +133,7 @@ describe("RoomsService", () => {
       roomsRepo.create.mockResolvedValue(Result.ok(mockRoomEntity));
       const dtoNoFacilities = { ...createDto, facilities: undefined };
 
-      await service.createRoom(dtoNoFacilities as any);
+      await service.createRoom(dtoNoFacilities);
 
       expect(roomsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ facilities: null })
@@ -143,7 +145,7 @@ describe("RoomsService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.createRoom(createDto as any);
+      const result = await service.createRoom(createDto);
 
       expect(result.isFailure).toBe(true);
     });
@@ -158,7 +160,7 @@ describe("RoomsService", () => {
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoomEntity));
       roomsRepo.update.mockResolvedValue(Result.ok(updatedEntity));
 
-      const result = await service.updateRoom("r-001", updateDto as any);
+      const result = await service.updateRoom("r-001", updateDto);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -169,7 +171,7 @@ describe("RoomsService", () => {
     it("fails when room does not exist", async () => {
       roomsRepo.findById.mockResolvedValue(Result.ok(null));
 
-      const result = await service.updateRoom("nonexistent", updateDto as any);
+      const result = await service.updateRoom("nonexistent", updateDto);
 
       expect(result.isFailure).toBe(true);
       expect(result.error).toEqual(roomErrors.notFound("nonexistent"));
@@ -180,7 +182,7 @@ describe("RoomsService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.updateRoom("r-001", updateDto as any);
+      const result = await service.updateRoom("r-001", updateDto);
 
       expect(result.isFailure).toBe(true);
     });
@@ -191,7 +193,7 @@ describe("RoomsService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.updateRoom("r-001", updateDto as any);
+      const result = await service.updateRoom("r-001", updateDto);
 
       expect(result.isFailure).toBe(true);
     });
@@ -201,7 +203,7 @@ describe("RoomsService", () => {
       roomsRepo.update.mockResolvedValue(Result.ok(mockRoomEntity));
       const dto = { facilities: ["wifi"] };
 
-      await service.updateRoom("r-001", dto as any);
+      await service.updateRoom("r-001", dto);
 
       expect(roomsRepo.update).toHaveBeenCalledWith(
         "r-001",

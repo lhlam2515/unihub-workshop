@@ -6,7 +6,6 @@ import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { RegistrationsController } from "./registrations.controller";
-import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { RegistrationsService } from "../services/registrations.service";
 
 describe("RegistrationsController", () => {
