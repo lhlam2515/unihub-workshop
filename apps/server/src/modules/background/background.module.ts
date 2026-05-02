@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
+import { IamModule } from "@/modules/iam/iam.module";
 import { SharedQueueModule } from "@/shared/queues/queue.module";
 
 import { BookingModule } from "../booking/booking.module";
@@ -62,6 +63,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     SharedQueueModule,
     BookingModule,
     CatalogModule,
+    IamModule,
   ],
   controllers: [
     NotificationsAdminController,
