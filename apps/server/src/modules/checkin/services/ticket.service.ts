@@ -14,32 +14,6 @@ export class TicketService {
   constructor(private readonly ticketsRepo: TicketsRepository) {}
 
   /**
-   * Issues a new ticket for a confirmed registration.
-   *
-   * Side effects:
-   * - Inserts a record into the `tickets` table with status=ACTIVE and a random UUID as qr_token.
-   *
-   * @param registrationId - UUID of the confirmed registration.
-   * @returns OkResult with ticketId and qrToken, or FailResult (INTERNAL_ERROR).
-   */
-  async issueTicket(
-    registrationId: string
-  ): Promise<Result<{ ticketId: string; qrToken: string }>> {
-    const result = await this.ticketsRepo.create({
-      registrationId,
-      qrToken: crypto.randomUUID(),
-      status: "ACTIVE",
-    });
-
-    if (result.isFailure) return Result.fail(result.error);
-
-    return Result.ok({
-      ticketId: result.data.ticketId,
-      qrToken: result.data.qrToken,
-    });
-  }
-
-  /**
    * Voids the ticket associated with a registration.
    *
    * Business rules:

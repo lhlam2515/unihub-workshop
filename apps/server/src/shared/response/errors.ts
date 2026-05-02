@@ -387,6 +387,20 @@ export const workshopErrors = {
       context: { workshopId, status },
     }),
   /**
+   * Create an error when trying to publish an already-published workshop
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Business rule error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  alreadyPublished: (workshopId: string): AppError =>
+    createError({
+      category: "BUSINESS",
+      code: "WORKSHOP_ALREADY_PUBLISHED",
+      message: "This workshop is already published.",
+      context: { workshopId },
+    }),
+  /**
    * Create an error when a workshop is cancelled
    *
    * @param workshopId - Workshop identifier used for audit logging
