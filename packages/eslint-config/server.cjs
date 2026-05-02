@@ -140,6 +140,18 @@ function serverConfig({ tsconfigRootDir }) {
         ],
       },
     },
+    {
+      files: ["**/*.spec.ts", "**/*.e2e-spec.ts", "**/*.integration.spec.ts"],
+      rules: {
+        "@typescript-eslint/unbound-method": "off",
+        "@typescript-eslint/no-unsafe-assignment": "warn",
+        "@typescript-eslint/no-unsafe-member-access": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
+        "@typescript-eslint/only-throw-error": "off",
+        "@typescript-eslint/no-unsafe-return": "warn",
+        "@typescript-eslint/no-unsafe-argument": "warn",
+      },
+    },
   ];
 }
 
