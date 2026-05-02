@@ -4,6 +4,7 @@ import { Test, type TestingModule } from "@nestjs/testing";
 import type { Registration } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { TokenService } from "@/modules/iam/services/token.service";
 import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -103,6 +104,12 @@ describe("RegistrationsService", () => {
         {
           provide: WorkshopsService,
           useValue: { getPublishedById: jest.fn() },
+        },
+        {
+          provide: TokenService,
+          useValue: {
+            signQrToken: jest.fn().mockReturnValue("signed-qr-token"),
+          },
         },
         {
           provide: getQueueToken(NOTIFICATION_QUEUE),

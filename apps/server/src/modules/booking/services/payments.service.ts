@@ -34,11 +34,11 @@ import crypto from "node:crypto";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
-import jwt from "jsonwebtoken";
 
 import type { Payment } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { TokenService } from "@/modules/iam/services/token.service";
 import type {
   PaymentEventData,
   RegistrationEventData,
@@ -76,6 +76,7 @@ export class PaymentsService {
     private readonly paymentGatewayService: PaymentGatewayService,
     private readonly workshopsService: WorkshopsService,
     private readonly seatCounter: SeatCounterService,
+    private readonly tokenService: TokenService,
     @InjectQueue(NOTIFICATION_QUEUE)
     private readonly notificationQueue: Queue
   ) {}
@@ -364,15 +365,11 @@ export class PaymentsService {
       );
       if (ticketResult.isSuccess && ticketResult.data) {
         const ticket = ticketResult.data;
-        const signedQrToken = jwt.sign(
-          {
-            ticket_id: ticket.ticketId,
-            workshop_id: workshopId,
-            student_id: payment.studentId,
-          },
-          process.env.JWT_SECRET!,
-          { expiresIn: "30d" }
-        );
+        const signedQrToken = this.tokenService.signQrToken({
+          ticket_id: ticket.ticketId,
+          workshop_id: workshopId,
+          student_id: payment.studentId,
+        });
         await this.ticketsRepo.updateQrToken(ticket.ticketId, signedQrToken);
       }
 

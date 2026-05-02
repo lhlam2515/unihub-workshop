@@ -3,13 +3,13 @@ import crypto from "node:crypto";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
-import jwt from "jsonwebtoken";
 
 import type { Registration } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import { TokenService } from "@/modules/iam/services/token.service";
 import type { RegistrationEventData } from "@/shared/queues/event-contracts";
+import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -33,6 +33,7 @@ export class RegistrationsService {
     private readonly seatLock: SeatLockMechanic,
     private readonly seatCounter: SeatCounterService,
     private readonly workshopsService: WorkshopsService,
+    private readonly tokenService: TokenService,
     @InjectQueue(NOTIFICATION_QUEUE)
     private readonly notificationQueue: Queue
   ) {}
@@ -156,15 +157,11 @@ export class RegistrationsService {
       // Ticket failure is non-fatal for registration; log and continue
       if (ticketResult.isSuccess) {
         // Replace placeholder QR with signed JWT containing ticket metadata
-        const signedQrToken = jwt.sign(
-          {
-            ticket_id: ticketResult.data.ticketId,
-            workshop_id: dto.workshop_id,
-            student_id: studentId,
-          },
-          process.env.JWT_SECRET!,
-          { expiresIn: "30d" }
-        );
+        const signedQrToken = this.tokenService.signQrToken({
+          ticket_id: ticketResult.data.ticketId,
+          workshop_id: dto.workshop_id,
+          student_id: studentId,
+        });
         await this.ticketsRepo.updateQrToken(
           ticketResult.data.ticketId,
           signedQrToken

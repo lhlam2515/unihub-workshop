@@ -5,6 +5,7 @@ import { Queue } from "bullmq";
 import type { Payment } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { TokenService } from "@/modules/iam/services/token.service";
 import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import { paymentErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -154,6 +155,12 @@ describe("PaymentsService", () => {
           provide: SeatCounterService,
           useValue: {
             increment: jest.fn(),
+          },
+        },
+        {
+          provide: TokenService,
+          useValue: {
+            signQrToken: jest.fn().mockReturnValue("signed-qr-token"),
           },
         },
         {
