@@ -77,7 +77,6 @@ export class UsersService {
    *
    * @param id - The target user's UUID.
    * @param status - New status: ACTIVE or SUSPENDED.
-   * @param currentJti - The admin's token jti, used to revoke the session on SUSPEND.
    * @returns OkResult with updated UserResponseDto, or FailResult with USER_NOT_FOUND.
    */
   async updateUserStatus(

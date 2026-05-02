@@ -2,7 +2,7 @@
  * Retrieves and persists AI-generated document summaries with upsert support.
  */
 import { Injectable, Inject } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
@@ -58,7 +58,8 @@ export class AiSummariesRepository {
         this.db
           .select()
           .from(this.schema.aiSummaries)
-          .where(eq(this.schema.aiSummaries.workshopId, workshopId)),
+          .where(eq(this.schema.aiSummaries.workshopId, workshopId))
+          .orderBy(desc(this.schema.aiSummaries.createdAt)),
       (err) => systemErrors.internal(err)
     );
   }
