@@ -1,6 +1,12 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+
+import { RoomConflictService } from "./room-conflict.service";
+import { SeatCounterService } from "./seat-counter.service";
+import { WorkshopNotificationPublisher } from "./workshop-notification-publisher.service";
+import { WorkshopsService } from "./workshops.service";
 import { WorkshopResponseBuilder } from "../dto/workshop-response.dto";
 import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 import { RoomsRepository } from "../repositories/rooms.repository";
@@ -8,10 +14,6 @@ import { SpeakersRepository } from "../repositories/speakers.repository";
 import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
 import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "../repositories/workshops.repository";
-import { RoomConflictService } from "./room-conflict.service";
-import { SeatCounterService } from "./seat-counter.service";
-import { WorkshopNotificationPublisher } from "./workshop-notification-publisher.service";
-import { WorkshopsService } from "./workshops.service";
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -289,7 +291,7 @@ describe("WorkshopsService", () => {
       speakersRepo.findById.mockResolvedValue(Result.ok(null));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.createWorkshop(paidDto as any, "u-001");
+      await service.createWorkshop(paidDto, "u-001");
 
       expect(workshopsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -314,7 +316,7 @@ describe("WorkshopsService", () => {
       speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeaker));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.updateWorkshop("w-001", updateDto as any);
+      const result = await service.updateWorkshop("w-001", updateDto);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -328,7 +330,7 @@ describe("WorkshopsService", () => {
     it("fails when workshop is not DRAFT", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
 
-      const result = await service.updateWorkshop("w-001", updateDto as any);
+      const result = await service.updateWorkshop("w-001", updateDto);
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_NOT_PUBLISHED");
@@ -346,7 +348,7 @@ describe("WorkshopsService", () => {
       speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeaker));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.updateWorkshop("w-001", dtoWithRoom as any);
+      const result = await service.updateWorkshop("w-001", dtoWithRoom);
 
       expect(result.isSuccess).toBe(true);
       expect(roomConflictService.checkConflict).toHaveBeenCalledWith(
@@ -365,7 +367,7 @@ describe("WorkshopsService", () => {
 
       const result = await service.updateWorkshop("w-001", {
         room_id: "r-002",
-      } as any);
+      });
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_TIME_CONFLICT");
@@ -376,7 +378,7 @@ describe("WorkshopsService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.updateWorkshop("w-001", updateDto as any);
+      const result = await service.updateWorkshop("w-001", updateDto);
 
       expect(result.isFailure).toBe(true);
     });
@@ -408,13 +410,13 @@ describe("WorkshopsService", () => {
       expect(seatCounterService.initialize).toHaveBeenCalledWith("w-001", 30);
     });
 
-    it("fails when workshop is not DRAFT (wrong status)", async () => {
+    it("fails when workshop is already PUBLISHED", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
 
       const result = await service.publishWorkshop("w-001");
 
       expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("WORKSHOP_NOT_PUBLISHED");
+      expect(result.error.code).toBe("WORKSHOP_ALREADY_PUBLISHED");
     });
 
     it("creates a slot if none exists during publish", async () => {
@@ -465,10 +467,7 @@ describe("WorkshopsService", () => {
       workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.emergencyUpdate(
-        "w-001",
-        emergencyDto as any
-      );
+      const result = await service.emergencyUpdate("w-001", emergencyDto);
 
       expect(result.isSuccess).toBe(true);
       expect(workshopsRepo.update).toHaveBeenCalledWith("w-001", {
@@ -480,10 +479,7 @@ describe("WorkshopsService", () => {
     it("fails when workshop is not PUBLISHED", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
 
-      const result = await service.emergencyUpdate(
-        "w-001",
-        emergencyDto as any
-      );
+      const result = await service.emergencyUpdate("w-001", emergencyDto);
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_NOT_PUBLISHED");
@@ -501,7 +497,7 @@ describe("WorkshopsService", () => {
       workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.emergencyUpdate("w-001", emergencyDto as any);
+      await service.emergencyUpdate("w-001", emergencyDto);
 
       expect(roomConflictService.checkConflict).toHaveBeenCalledWith(
         "r-002",
@@ -522,10 +518,7 @@ describe("WorkshopsService", () => {
         Result.fail(workshopErrors.roomConflict("r-002", "09:00", "11:00"))
       );
 
-      const result = await service.emergencyUpdate(
-        "w-001",
-        emergencyDto as any
-      );
+      const result = await service.emergencyUpdate("w-001", emergencyDto);
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_TIME_CONFLICT");
@@ -543,7 +536,7 @@ describe("WorkshopsService", () => {
       workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.emergencyUpdate("w-001", emergencyDto as any);
+      await service.emergencyUpdate("w-001", emergencyDto);
 
       expect(notificationPublisher.publishEmergencyUpdate).toHaveBeenCalledWith(
         publishedWorkshop,
@@ -625,7 +618,7 @@ describe("WorkshopsService", () => {
       );
       seatCounterService.getAvailable.mockResolvedValue(25);
 
-      const result = await service.listPublished(query as any);
+      const result = await service.listPublished(query);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -650,7 +643,7 @@ describe("WorkshopsService", () => {
         Result.ok({ items: [], total: 0 })
       );
 
-      const result = await service.listPublished(filteredQuery as any);
+      const result = await service.listPublished(filteredQuery);
 
       expect(result.isSuccess).toBe(true);
       expect(workshopsRepo.findPublished).toHaveBeenCalledWith(filteredQuery);
@@ -789,7 +782,7 @@ describe("WorkshopsService", () => {
         })
       );
 
-      const result = await service.listAdmin(query as any);
+      const result = await service.listAdmin(query);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -807,7 +800,7 @@ describe("WorkshopsService", () => {
         Result.ok({ items: [], total: 0 })
       );
 
-      const result = await service.listAdmin(filteredQuery as any);
+      const result = await service.listAdmin(filteredQuery);
 
       expect(result.isSuccess).toBe(true);
       expect(workshopsRepo.listAdmin).toHaveBeenCalledWith(filteredQuery);
@@ -818,7 +811,7 @@ describe("WorkshopsService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.listAdmin(query as any);
+      const result = await service.listAdmin(query);
 
       expect(result.isFailure).toBe(true);
     });

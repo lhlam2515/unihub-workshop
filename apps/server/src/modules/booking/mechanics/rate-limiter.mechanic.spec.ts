@@ -84,7 +84,7 @@ describe("RateLimiterMechanic", () => {
 
     it("should refill tokens when enough time has elapsed (lazy refill)", async () => {
       const now = Date.now();
-      const lastRefillAt = now - 2_000; // 2 seconds ago → 2 tokens refilled
+      const lastRefillAt = now - 10_000; // 10 seconds ago → 2 tokens refilled
       redisService.hGetAll.mockResolvedValue({
         tokens: "0",
         last_refill_at: String(lastRefillAt),
