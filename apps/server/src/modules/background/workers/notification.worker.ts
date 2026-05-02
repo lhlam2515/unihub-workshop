@@ -1,10 +1,9 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
 
-import type { ErrorCode } from "@/shared/response/types";
-
 import type { NotificationJobData } from "@/shared/queues/event-contracts";
 import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import type { ErrorCode } from "@/shared/response/types";
 
 import { NotificationDispatchService } from "../services/notification-dispatch.service";
 
