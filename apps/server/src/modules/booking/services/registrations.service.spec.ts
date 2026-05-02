@@ -9,7 +9,6 @@ import { Result } from "@/shared/response/result";
 
 import { RegistrationsService } from "./registrations.service";
 import { TicketsService } from "./tickets.service";
-import { RegistrationResponseBuilder } from "../dto/registration-response.dto";
 import { GlobalRateLimitMechanic } from "../mechanics/global-rate-limit.mechanic";
 import { RateLimiterMechanic } from "../mechanics/rate-limiter.mechanic";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";

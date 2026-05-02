@@ -20,7 +20,6 @@ import { Test } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
-import { WorkshopScopeGuard } from "@/core/guards/workshop-scope.guard";
 import { CheckinController } from "@/modules/checkin/controllers/checkin.controller";
 import { TicketsController } from "@/modules/checkin/controllers/tickets.controller";
 import { CheckinRecordsRepository } from "@/modules/checkin/repositories/checkin-records.repository";
@@ -29,7 +28,6 @@ import { CheckinService } from "@/modules/checkin/services/checkin.service";
 import { OfflineSyncService } from "@/modules/checkin/services/offline-sync.service";
 import { TicketService } from "@/modules/checkin/services/ticket.service";
 import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
-import { ticketErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------
@@ -134,35 +132,6 @@ function provideMockRolesGuard() {
   return {
     provide: RolesGuard,
     useValue: { canActivate: jest.fn().mockReturnValue(true) },
-  };
-}
-
-/**
- * Real WorkshopScopeGuard with mocked ExecutionContext.
- * Only used when the test explicitly validates scope enforcement.
- */
-function createScopeMocks() {
-  return {
-    provide: WorkshopScopeGuard,
-    useValue: {
-      canActivate: jest.fn().mockImplementation((ctx: any) => {
-        const req = ctx.switchToHttp().getRequest();
-        const user = req.user;
-        const allowedWorkshops: string[] = user?.allowed_workshop_ids ?? [];
-        const workshopId: string | undefined =
-          req.params?.id || req.body?.workshop_id;
-
-        if (!workshopId) {
-          throw new Error("Workshop identifier is required");
-        }
-        if (!allowedWorkshops.includes(workshopId)) {
-          throw new Error(
-            `Staff is not authorized to check in for workshop ${workshopId}.`
-          );
-        }
-        return true;
-      }),
-    },
   };
 }
 
@@ -368,13 +337,9 @@ describe("Checkin Module — Integration", () => {
       expect(result.isSuccess).toBe(true);
     });
 
-    it("MISSING WorkshopScopeGuard — S-H04: sync endpoint does not have @UseGuards(WorkshopScopeGuard)", async () => {
+    it("MISSING WorkshopScopeGuard — S-H04: sync endpoint does not have @UseGuards(WorkshopScopeGuard)", () => {
       // Note: according to the CheckinController source, syncOfflineData does NOT
       // have WorkshopScopeGuard. This test documents the omission.
-      const controllerGuard = Reflect.getMetadata(
-        "scopeGuard",
-        CheckinController.prototype.syncOfflineData
-      );
       // The checkin controller source confirms sync endpoint has NO WorkshopScopeGuard
       // This is noted per audit finding S-H04
       expect(true).toBe(true);
@@ -386,16 +351,6 @@ describe("Checkin Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("CheckinController.getWorkshopTickets — FR-F07-001", () => {
     it("preloads active tickets for a workshop", async () => {
-      const ticketDtos = [
-        {
-          ticketId: "tkt-001",
-          qrToken: "qr-valid-123",
-          status: "ACTIVE",
-          studentName: "John Doe",
-          studentCode: "STU001",
-          workshopTitle: "Test Workshop",
-        },
-      ];
       mockTicketsRepo.findByWorkshopIdAndStatus.mockResolvedValue(
         Result.ok([validTicket])
       );
@@ -434,7 +389,7 @@ describe("Checkin Module — Integration", () => {
       );
     });
 
-    it("MISSING WorkshopScopeGuard — S-H04: status endpoint does not have @UseGuards(WorkshopScopeGuard)", async () => {
+    it("MISSING WorkshopScopeGuard — S-H04: status endpoint does not have @UseGuards(WorkshopScopeGuard)", () => {
       // Note: according to the CheckinController source, getWorkshopStatus does NOT
       // have WorkshopScopeGuard. This documents the audit finding S-H04.
       // This is an intentional omission that should be reviewed.

@@ -7,8 +7,6 @@ import { Result } from "@/shared/response/result";
 import { AuthService } from "./auth.service";
 import { StudentProfileService } from "./student-profile.service";
 import { TokenService } from "./token.service";
-import { AuthMeResponseBuilder } from "../dto/auth-me-response.dto";
-import { LoginResponseBuilder } from "../dto/login-response.dto";
 import { CheckinStaffAssignmentsRepository } from "../repositories/checkin-staff-assignments.repository";
 import { UsersRepository } from "../repositories/users.repository";
 

@@ -75,13 +75,11 @@ describe("NotificationLogsRepository", () => {
   let repo: NotificationLogsRepository;
   let mockDb: ReturnType<typeof createMockDb>["db"];
   let mockChain: ReturnType<typeof createMockDb>["chainable"];
-  let setResult: (v: any) => void;
 
   beforeEach(async () => {
-    const { db, chainable, setResult: sr } = createMockDb();
+    const { db, chainable } = createMockDb();
     mockDb = db;
     mockChain = chainable;
-    setResult = sr;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

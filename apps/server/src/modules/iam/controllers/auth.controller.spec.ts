@@ -5,8 +5,6 @@ import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { AuthController } from "./auth.controller";
-import { LoginDto } from "../dto/login.dto";
-import { RefreshTokenDto } from "../dto/refresh-token.dto";
 import { AuthService } from "../services/auth.service";
 
 import type { Response } from "express";

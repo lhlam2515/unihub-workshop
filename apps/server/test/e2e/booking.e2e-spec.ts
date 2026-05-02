@@ -35,7 +35,6 @@ import { RedisService } from "../../src/shared/redis/redis.service";
 import {
   paymentErrors,
   registrationErrors,
-  seatErrors,
   workshopErrors,
 } from "../../src/shared/response/errors";
 import { Result } from "../../src/shared/response/result";

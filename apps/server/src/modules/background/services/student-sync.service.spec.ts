@@ -1,6 +1,5 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { Queue } from "bullmq";
 
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";

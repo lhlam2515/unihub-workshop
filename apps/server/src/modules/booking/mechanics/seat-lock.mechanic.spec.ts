@@ -1,7 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { RedisService } from "@/shared/redis/redis.service";
-import { Result } from "@/shared/response/result";
 
 import { SeatLockMechanic } from "./seat-lock.mechanic";
 
@@ -30,7 +29,7 @@ describe("SeatLockMechanic", () => {
     }).compile();
 
     mechanic = module.get<SeatLockMechanic>(SeatLockMechanic);
-    redisService = module.get(RedisService) as jest.Mocked<RedisService>;
+    redisService = module.get(RedisService);
   });
 
   const expectedKey = `seat:lock:${WORKSHOP_ID}:${REGISTRATION_ID}`;

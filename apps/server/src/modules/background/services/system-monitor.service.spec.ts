@@ -8,34 +8,6 @@ import { Result } from "@/shared/response/result";
 import { SystemMonitorService } from "./system-monitor.service";
 
 // ---------------------------------------------------------------------------
-// Factory: creates a chainable that resolves to a given value when awaited
-// ---------------------------------------------------------------------------
-
-function chainableResolving(resolveValue: unknown) {
-  const chain: any = {
-    from: jest.fn().mockReturnThis(),
-    where: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockReturnThis(),
-    then: (resolve: any) => resolve(resolveValue),
-  };
-  return chain;
-}
-
-// ---------------------------------------------------------------------------
-// Schema
-// ---------------------------------------------------------------------------
-
-const mockSchema: any = {
-  payments: { status: "status", timeoutAt: "timeoutAt" },
-  workshops: {
-    workshopId: "workshopId",
-    capacity: "capacity",
-    status: "status",
-  },
-  workshopSlots: { workshopId: "workshopId" },
-};
-
-// ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
 
@@ -43,11 +15,9 @@ describe("SystemMonitorService", () => {
   let service: SystemMonitorService;
   let mockPaymentsService: any;
   let mockWorkshopsService: any;
-  let mockDb: any;
   let mockRedisService: any;
 
   beforeEach(async () => {
-    mockDb = { select: jest.fn() };
     mockPaymentsService = { countPending: jest.fn(), countOverdue: jest.fn() };
     mockWorkshopsService = {
       getPublishedWorkshopsBasic: jest.fn(),

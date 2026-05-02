@@ -378,7 +378,6 @@ describe("Background Module — Integration", () => {
     describe("getPaymentTimeoutJobStatus", () => {
       it("returns payment timeout job status with counts", async () => {
         // mockDb.select chain
-        const mockFrom = jest.fn().mockReturnThis();
         const mockWhere = jest.fn().mockResolvedValue([{ count: 10 }]);
         mockDb.select.mockReturnValue({
           from: () => ({ where: mockWhere }),

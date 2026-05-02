@@ -7,7 +7,6 @@ import { RoomConflictService } from "./room-conflict.service";
 import { SeatCounterService } from "./seat-counter.service";
 import { WorkshopNotificationPublisher } from "./workshop-notification-publisher.service";
 import { WorkshopsService } from "./workshops.service";
-import { WorkshopResponseBuilder } from "../dto/workshop-response.dto";
 import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 import { RoomsRepository } from "../repositories/rooms.repository";
 import { SpeakersRepository } from "../repositories/speakers.repository";
@@ -109,7 +108,7 @@ describe("WorkshopsService", () => {
   let speakersRepo: jest.Mocked<SpeakersRepository>;
   let roomsRepo: jest.Mocked<RoomsRepository>;
   let workshopSlotsRepo: jest.Mocked<WorkshopSlotsRepository>;
-  let workshopDocumentsRepo: jest.Mocked<WorkshopDocumentsRepository>;
+  // let workshopDocumentsRepo: jest.Mocked<WorkshopDocumentsRepository>;
   let aiSummariesRepo: jest.Mocked<AiSummariesRepository>;
   let notificationPublisher: jest.Mocked<WorkshopNotificationPublisher>;
 
@@ -181,7 +180,7 @@ describe("WorkshopsService", () => {
     speakersRepo = module.get(SpeakersRepository);
     roomsRepo = module.get(RoomsRepository);
     workshopSlotsRepo = module.get(WorkshopSlotsRepository);
-    workshopDocumentsRepo = module.get(WorkshopDocumentsRepository);
+    // workshopDocumentsRepo = module.get(WorkshopDocumentsRepository);
     aiSummariesRepo = module.get(AiSummariesRepository);
     notificationPublisher = module.get(WorkshopNotificationPublisher);
   });

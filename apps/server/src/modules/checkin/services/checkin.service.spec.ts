@@ -1,11 +1,10 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { ticketErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+
+import { CheckinService } from "./checkin.service";
 import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";
-import { CheckinStatusBuilder } from "../dto/checkin-status.dto";
-import { CheckinService } from "./checkin.service";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -67,17 +66,6 @@ const wrongWorkshopTicket = {
 const checkinRecord = {
   checkinId: "ci-001",
   checkedInAt: new Date("2026-06-01T10:00:00Z"),
-};
-
-const createCheckinInput = {
-  registrationId: "reg-001",
-  ticketId: "tkt-001",
-  studentId: "stu-001",
-  workshopId: "w-001",
-  checkedInAt: expect.any(Date),
-  checkedInBy: "staff-001",
-  source: "ONLINE",
-  deviceId: undefined,
 };
 
 // ---------------------------------------------------------------------------

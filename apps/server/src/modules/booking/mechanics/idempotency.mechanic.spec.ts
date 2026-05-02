@@ -1,7 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { RedisService } from "@/shared/redis/redis.service";
-import { Result } from "@/shared/response/result";
 
 import { IdempotencyMechanic } from "./idempotency.mechanic";
 
@@ -29,7 +28,7 @@ describe("IdempotencyMechanic", () => {
     }).compile();
 
     mechanic = module.get<IdempotencyMechanic>(IdempotencyMechanic);
-    redisService = module.get(RedisService) as jest.Mocked<RedisService>;
+    redisService = module.get(RedisService);
   });
 
   describe("check — FR-F05-001 (idempotency Layer 1, SET NX 24h TTL)", () => {
