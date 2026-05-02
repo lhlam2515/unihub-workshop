@@ -197,7 +197,7 @@ describe("PaymentsService", () => {
         Result.ok(mockWorkshop)
       );
       circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
-      paymentsRepo.transaction.mockImplementation(async (cb: any) => cb({}));
+      paymentsRepo.transaction.mockImplementation((cb: any) => cb({}));
       paymentsRepo.lockWorkshopSlot.mockResolvedValue(Result.ok());
       paymentsRepo.create.mockResolvedValue(Result.ok(mockPayment));
       paymentGatewayService.initiatePayment.mockResolvedValue(
@@ -392,14 +392,7 @@ describe("PaymentsService", () => {
     };
 
     function setupWebhookSuccess() {
-      const tx = {
-        select: jest.fn(),
-        from: jest.fn(),
-        where: jest.fn(),
-        for: jest.fn().mockReturnThis(),
-        limit: jest.fn(),
-      };
-      paymentsRepo.transaction.mockImplementation(async (cb: any) =>
+      paymentsRepo.transaction.mockImplementation((cb: any) =>
         cb({
           select: jest.fn().mockReturnThis(),
           from: jest.fn().mockReturnThis(),
@@ -474,9 +467,7 @@ describe("PaymentsService", () => {
 
     it("should process FAILED webhook — payment FAILED, seat released, event fired", async () => {
       const failedDto = { ...webhookDto, status: "FAILED" as const };
-      paymentsRepo.transaction.mockImplementation(async (cb: any) =>
-        cb({} as any)
-      );
+      paymentsRepo.transaction.mockImplementation((cb: any) => cb({} as any));
       paymentsRepo.findByIdempotencyKeyWithLock.mockResolvedValue(
         Result.ok(mockPayment)
       );
@@ -511,7 +502,7 @@ describe("PaymentsService", () => {
     });
 
     it("should return PAYMENT_ALREADY_SUCCESS for already processed payment", async () => {
-      paymentsRepo.transaction.mockImplementation(async (cb: any) => {
+      paymentsRepo.transaction.mockImplementation(() => {
         throw paymentErrors.alreadySuccess(PAYMENT_ID);
       });
 
@@ -523,7 +514,7 @@ describe("PaymentsService", () => {
     });
 
     it("should return PAYMENT_NOT_FOUND when idempotency key has no payment", async () => {
-      paymentsRepo.transaction.mockImplementation(async (cb: any) => {
+      paymentsRepo.transaction.mockImplementation(() => {
         throw paymentErrors.notFound(IDEMPOTENCY_KEY);
       });
 
@@ -562,9 +553,7 @@ describe("PaymentsService", () => {
   describe("expirePayment", () => {
     it("should expire a PENDING payment → TIMEOUT + CANCELLED + seat released", async () => {
       paymentsRepo.findById.mockResolvedValue(Result.ok(mockPayment));
-      paymentsRepo.transaction.mockImplementation(async (cb: any) =>
-        cb({} as any)
-      );
+      paymentsRepo.transaction.mockImplementation((cb: any) => cb({} as any));
       paymentsRepo.updateStatus.mockResolvedValue(
         Result.ok({
           ...mockPayment,

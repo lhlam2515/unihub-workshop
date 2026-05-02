@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
@@ -62,7 +64,6 @@ describe("HmacSignatureGuard", () => {
     configService.get.mockReturnValue('{"MOCK":"sec1"}');
     const rawBody = Buffer.from('{"key":"value"}');
     // Pre-compute HMAC-SHA256 of the raw body with secret "sec1"
-    const { createHmac } = require("node:crypto");
     const expectedSig = createHmac("sha256", "sec1")
       .update(rawBody)
       .digest("hex");
@@ -76,7 +77,6 @@ describe("HmacSignatureGuard", () => {
   it("returns true with valid signature from string body fallback", () => {
     configService.get.mockReturnValue('{"MOCK":"sec1"}');
     const bodyStr = '{"key":"value"}';
-    const { createHmac } = require("node:crypto");
     const expectedSig = createHmac("sha256", "sec1")
       .update(bodyStr)
       .digest("hex");

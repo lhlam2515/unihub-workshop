@@ -119,7 +119,7 @@ describe("FailResult", () => {
 describe("tryCatch", () => {
   it("returns ok on success", async () => {
     const result = await tryCatch(
-      async () => "value",
+      () => "value",
       () => ({
         category: "INTERNAL" as const,
         code: "INTERNAL_ERROR" as const,
@@ -132,7 +132,7 @@ describe("tryCatch", () => {
 
   it("returns fail on thrown error", async () => {
     const result = await tryCatch(
-      async () => {
+      () => {
         throw new Error("db down");
       },
       (err) => ({
@@ -154,22 +154,20 @@ describe("chainAsync", () => {
         code: "USER_NOT_FOUND",
         message: "no user",
       }),
-      async (n) => Result.ok(n * 2)
+      (n) => Result.ok(n * 2)
     );
     expect(result.isFailure).toBe(true);
     expect(result.error.code).toBe("USER_NOT_FOUND");
   });
 
   it("chains on success", async () => {
-    const result = await chainAsync(Result.ok(5), async (n) =>
-      Result.ok(n * 2)
-    );
+    const result = await chainAsync(Result.ok(5), (n) => Result.ok(n * 2));
     expect(result.isSuccess).toBe(true);
     expect(result.data).toBe(10);
   });
 
   it("propagates failure from chained function", async () => {
-    const result = await chainAsync(Result.ok(5), async (_n) =>
+    const result = await chainAsync(Result.ok(5), () =>
       Result.fail<number>({
         category: "BUSINESS",
         code: "RATE_LIMIT_EXCEEDED",

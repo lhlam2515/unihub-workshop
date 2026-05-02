@@ -1,6 +1,8 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import { systemErrors } from "@/shared/response/errors";
+
 import { WorkshopsRepository } from "./workshops.repository";
 
 // ---------------------------------------------------------------------------
@@ -93,7 +95,7 @@ function createMockDb() {
         try {
           return Promise.resolve(resolver()).then(onFulfilled);
         } catch (err) {
-          return Promise.reject(err).then(undefined, onRejected);
+          return Promise.reject(err as Error).then(undefined, onRejected);
         }
       }
       return Promise.resolve(undefined).then(onFulfilled);
