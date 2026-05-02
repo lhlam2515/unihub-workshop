@@ -48,7 +48,7 @@ export class StudentSyncErrorResponse {
     return {
       error_id: error.errorId,
       row_number: error.rowNumber,
-      raw_data: JSON.parse(error.rawData),
+      raw_data: JSON.parse(error.rawData) as Record<string, unknown>,
       error_reason: error.errorReason,
       error_detail: error.errorDetail ?? "",
       created_at: error.createdAt,

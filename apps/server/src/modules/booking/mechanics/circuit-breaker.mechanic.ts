@@ -33,14 +33,6 @@ const FAILURE_THRESHOLD = 5;
 const COOLDOWN_MS = 30_000;
 const FAILURE_WINDOW_MS = 60_000;
 
-interface CircuitState {
-  state: string;
-  failure_count: string;
-  opened_at: string;
-  last_attempt: string;
-  last_failure_at: string;
-}
-
 @Injectable()
 export class CircuitBreakerMechanic {
   constructor(private readonly redisService: RedisService) {}
