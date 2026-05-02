@@ -11,6 +11,7 @@ import { z } from "zod";
 
 export const RefreshTokenSchema = z.object({
   refresh_token: z.string().optional(),
+  platform: z.enum(["WEB", "MOBILE"]).optional().default("WEB"),
 });
 
 export type RefreshTokenDto = z.infer<typeof RefreshTokenSchema>;

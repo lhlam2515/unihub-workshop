@@ -8,7 +8,7 @@ import { authErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 import type { JwtPayload, UserRole } from "@/types/jwt-payload";
 
-const ACCESS_EXPIRY = { WEB: 900, MOBILE: 28800 } as const;
+export const ACCESS_EXPIRY = { WEB: 900, MOBILE: 28800 } as const;
 const REFRESH_EXPIRY_SECONDS = 604_800;
 
 const JWT_SECRET = () => process.env.JWT_SECRET!;

@@ -36,6 +36,7 @@ import jwt from "jsonwebtoken";
 
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
 import { RedisService } from "@/shared/redis/redis.service";
+import { authErrors } from "@/shared/response/errors";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 @Injectable()
@@ -89,6 +90,15 @@ export class JwtAuthGuard implements CanActivate {
     );
     if (isBlacklisted !== null) {
       throw new UnauthorizedException("Token has been revoked");
+    }
+
+    const isSuspended = await this.redisService.get(
+      `user:suspended:${payload.sub}`
+    );
+    if (isSuspended !== null) {
+      throw new UnauthorizedException(
+        authErrors.userSuspended(payload.sub).message
+      );
     }
 
     request.user = payload;

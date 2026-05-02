@@ -34,9 +34,11 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  RawBodyRequest,
   UnauthorizedException,
 } from "@nestjs/common";
-import { Request } from "express";
+
+import type { Request } from "express";
 
 /**
  * Loads gateway shared secrets from the `PAYMENT_GATEWAY_SECRETS` environment variable.
@@ -75,7 +77,9 @@ export class HmacSignatureGuard implements CanActivate {
    *         is missing, or the computed signature does not match.
    */
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context
+      .switchToHttp()
+      .getRequest<RawBodyRequest<Request>>();
     const signature = request.headers["x-gateway-signature"] as string;
     const gateway = request.params.gateway as string;
 
@@ -92,8 +96,9 @@ export class HmacSignatureGuard implements CanActivate {
       throw new UnauthorizedException("Unknown payment gateway");
     }
 
-    const rawBody =
-      typeof request.body === "string"
+    const rawBody = request.rawBody
+      ? request.rawBody.toString("utf-8")
+      : typeof request.body === "string"
         ? request.body
         : JSON.stringify(request.body);
 

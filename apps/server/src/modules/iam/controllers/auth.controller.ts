@@ -5,10 +5,10 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   Res,
   UseGuards,
 } from "@nestjs/common";
-import { Response } from "express";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
@@ -22,6 +22,7 @@ import { AuthService } from "../services/auth.service";
 
 import type { LoginDto } from "../dto/login.dto";
 import type { RefreshTokenDto } from "../dto/refresh-token.dto";
+import type { Request, Response } from "express";
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -96,11 +97,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Body() refreshTokenDto: RefreshTokenDto,
-    @Res({ passthrough: true }) response: Response
+    @Res({ passthrough: true }) response: Response,
+    @Req() request: Request
   ) {
     const parsed = RefreshTokenSchema.parse(refreshTokenDto);
+    const bodyToken = parsed.refresh_token ?? "";
+    const cookieToken =
+      (request.cookies?.refreshToken as string | undefined) ?? "";
+    const refreshTokenStr = bodyToken || cookieToken;
     const result = await this.authService.refreshToken(
-      parsed.refresh_token ?? ""
+      refreshTokenStr,
+      parsed.platform
     );
 
     if (result.isSuccess) {
