@@ -1,13 +1,20 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
+import { parse, CsvError } from "csv-parse";
 
 import type { NewStudentSyncError, StudentSyncJob } from "@/database/types";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
+import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import type { StudentSyncJobData } from "@/shared/queues/event-contracts";
 import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";
-import { systemErrors } from "@/shared/response/errors";
+import {
+  passthroughOrInternal,
+  systemErrors,
+  validationError,
+} from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+import { StorageService } from "@/shared/storage/storage.service";
 
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";
@@ -20,10 +27,27 @@ import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.rep
  */
 @Injectable()
 export class StudentSyncService {
+  private static readonly REQUIRED_CSV_HEADERS = [
+    "student_code",
+    "email",
+    "full_name",
+  ] as const;
+
+  private static readonly VALIDATION_PREFIX_MAP: Record<
+    string,
+    NewStudentSyncError["errorReason"]
+  > = {
+    MISSING_FIELD: "MISSING_FIELD",
+    INVALID_FORMAT: "INVALID_FORMAT",
+    DUPLICATE: "DUPLICATE",
+  };
+
   constructor(
     private readonly studentSyncJobsRepo: StudentSyncJobsRepository,
     private readonly studentSyncErrorsRepo: StudentSyncErrorsRepository,
     private readonly studentsRepo: StudentsRepository,
+    private readonly usersRepo: UsersRepository,
+    private readonly storageService: StorageService,
     @InjectQueue(STUDENT_SYNC_QUEUE)
     private readonly studentSyncQueue: Queue
   ) {}
@@ -42,7 +66,7 @@ export class StudentSyncService {
    *
    * @param sourceFileName - Path/name of CSV file in Object Storage
    * @returns OkResult with job metadata (jobId, status, triggeredAt),
-   *          or FailResult (INTERNAL_ERROR)
+   *          or FailResult with INTERNAL_ERROR when job creation or queue enqueue fails.
    */
   async triggerSync(
     sourceFileName: string
@@ -57,11 +81,16 @@ export class StudentSyncService {
     const job = createResult.data;
 
     // Enqueue for background processing
-    await this.studentSyncQueue.add(
-      "student-sync",
-      { jobId: job.jobId, sourceFileName } satisfies StudentSyncJobData,
-      { jobId: job.jobId }
-    );
+    try {
+      await this.studentSyncQueue.add(
+        "student-sync",
+        { jobId: job.jobId, sourceFileName } satisfies StudentSyncJobData,
+        { jobId: job.jobId }
+      );
+    } catch (err) {
+      await this.studentSyncJobsRepo.updateStatus(job.jobId, "FAILED");
+      return Result.fail(passthroughOrInternal(err));
+    }
 
     return Result.ok({
       jobId: job.jobId,
@@ -86,7 +115,9 @@ export class StudentSyncService {
    * - Upserts rows into the students table
    *
    * @param jobId - Sync job UUID
-   * @returns OkResult with sync summary (jobId, status, counts), or FailResult
+   * @returns OkResult with sync summary (jobId, status, counts),
+   *          or FailResult with INTERNAL_ERROR, STORAGE_FILE_NOT_FOUND,
+   *          or VALIDATION_FAILED.
    */
   async processJob(jobId: string): Promise<
     Result<{
@@ -119,52 +150,69 @@ export class StudentSyncService {
     const rows = parseResult.data;
     let processedRows = 0;
     let errorRows = 0;
+    let totalRows = 0;
     const errors: NewStudentSyncError[] = [];
 
     // 4. Batch-Sequential processing of each row
-    for (const [index, row] of rows.entries()) {
-      const rowNumber = index + 1;
+    try {
+      for await (const row of rows) {
+        totalRows++;
+        const rowNumber = totalRows;
 
-      // a) Validate row data
-      const validation = this.validateRow(row);
-      if (!validation.valid) {
-        errorRows++;
-        errors.push({
-          jobId,
-          rowNumber,
-          rawData: JSON.stringify(row),
-          errorReason:
-            (validation.errors?.[0] as NewStudentSyncError["errorReason"]) ??
-            "UNKNOWN",
-          errorDetail: validation.errors?.join("; ") ?? null,
-        });
-        continue;
+        // a) Validate row data
+        const validation = this.validateRow(row);
+        if (!validation.valid) {
+          errorRows++;
+          errors.push({
+            jobId,
+            rowNumber,
+            rawData: JSON.stringify(row),
+            errorReason:
+              this.resolveErrorReason(validation.errors?.[0]) ?? "UNKNOWN",
+            errorDetail: validation.errors?.join("; ") ?? null,
+          });
+          continue;
+        }
+
+        // b) Upsert student record
+        const upsertResult = await this.upsertStudent(row);
+        if (upsertResult.isFailure) {
+          errorRows++;
+          errors.push({
+            jobId,
+            rowNumber,
+            rawData: JSON.stringify(row),
+            errorReason: "UNKNOWN",
+            errorDetail: upsertResult.error.message,
+          });
+          continue;
+        }
+
+        processedRows++;
       }
-
-      // b) Upsert student record
-      const upsertResult = await this.upsertStudent(row);
-      if (upsertResult.isFailure) {
-        errorRows++;
-        errors.push({
-          jobId,
-          rowNumber,
-          rawData: JSON.stringify(row),
-          errorReason: "UNKNOWN",
-          errorDetail: upsertResult.error.message,
-        });
-        continue;
-      }
-
-      processedRows++;
+    } catch (err) {
+      await this.studentSyncJobsRepo.updateStatus(jobId, "FAILED", {
+        totalRows,
+        processedRows,
+        errorRows,
+      });
+      return Result.fail(this.normalizeProcessingError(err));
     }
 
     // 5. Save errors in batch
     if (errors.length > 0) {
-      await this.studentSyncErrorsRepo.createBatch(errors);
+      const errorsResult = await this.studentSyncErrorsRepo.createBatch(errors);
+      if (errorsResult.isFailure) {
+        await this.studentSyncJobsRepo.updateStatus(jobId, "FAILED", {
+          totalRows,
+          processedRows,
+          errorRows,
+        });
+        return Result.fail(errorsResult.error);
+      }
     }
 
     // 6. Finalize job status
-    const totalRows = rows.length;
     let finalStatus: "SUCCESS" | "PARTIAL_FAILURE" | "FAILED";
 
     if (errorRows === 0) {
@@ -175,11 +223,18 @@ export class StudentSyncService {
       finalStatus = "PARTIAL_FAILURE";
     }
 
-    await this.studentSyncJobsRepo.updateStatus(jobId, finalStatus, {
-      totalRows,
-      processedRows,
-      errorRows,
-    });
+    const finalizeResult = await this.studentSyncJobsRepo.updateStatus(
+      jobId,
+      finalStatus,
+      {
+        totalRows,
+        processedRows,
+        errorRows,
+      }
+    );
+    if (finalizeResult.isFailure) {
+      return Result.fail(finalizeResult.error);
+    }
 
     return Result.ok({
       jobId,
@@ -194,7 +249,8 @@ export class StudentSyncService {
    * Retrieve the current status and metadata for a sync job
    *
    * @param jobId - Sync job UUID
-   * @returns OkResult with the full job record, or FailResult (INTERNAL_ERROR)
+   * @returns OkResult with the full job record,
+   *          or FailResult with INTERNAL_ERROR when job is not found or DB query fails.
    */
   async getJob(jobId: string): Promise<Result<StudentSyncJob>> {
     const result = await this.studentSyncJobsRepo.findById(jobId);
@@ -215,7 +271,8 @@ export class StudentSyncService {
    * @param pagination - Page and limit controls
    * @param pagination.page - Current page (1-indexed)
    * @param pagination.limit - Items per page
-   * @returns OkResult with items and total count, or FailResult (INTERNAL_ERROR)
+   * @returns OkResult with items and total count,
+   *          or FailResult with INTERNAL_ERROR.
    */
   async getJobErrors(
     jobId: string,
@@ -232,7 +289,8 @@ export class StudentSyncService {
    * @param pagination - Page and limit controls
    * @param pagination.page - Current page (1-indexed)
    * @param pagination.limit - Items per page
-   * @returns OkResult with items array and total count, or FailResult (INTERNAL_ERROR)
+   * @returns OkResult with items array and total count,
+   *          or FailResult with INTERNAL_ERROR.
    */
   async listJobs(pagination: {
     page: number;
@@ -246,24 +304,37 @@ export class StudentSyncService {
    *
    * Business rules:
    * - Expects CSV with headers matching student fields
-   * - Returns rows as an array of plain objects
-   *
-   * TODO: Implement real CSV parsing with fast-csv or papaparse
-   * TODO: Validate CSV headers before processing rows
+   * - Returns a stream-friendly async iterable of row objects
    *
    * @param csvUrl - Object Storage URL of the CSV file
    * @returns OkResult with parsed rows, or FailResult
    */
-  private parseCSV(csvUrl: string): Promise<Result<any[]>> {
-    // Stub: Real implementation would:
-    // 1. Fetch CSV content from Object Storage (S3)
-    // 2. Parse using fast-csv or papaparse
-    // 3. Validate headers match expected student fields
-    // 4. Return rows array
-    //
-    // For now, return empty rows as placeholder
-    void csvUrl; // Mark parameter as used
-    return Promise.resolve(Result.ok([]));
+  private async parseCSV(
+    csvUrl: string
+  ): Promise<Result<AsyncIterable<Record<string, unknown>>>> {
+    const streamResult = await this.storageService.getFileStream(csvUrl);
+
+    if (streamResult.isFailure) {
+      return Result.fail(streamResult.error);
+    }
+
+    const rows = streamResult.data.pipe(
+      parse({
+        columns: (headers: string[]) => {
+          const headerValidation = this.validateCsvHeaders(headers);
+          if (headerValidation.isFailure) {
+            throw headerValidation.error;
+          }
+
+          return headers;
+        },
+        bom: true,
+        skip_empty_lines: true,
+        trim: true,
+      })
+    ) as AsyncIterable<Record<string, unknown>>;
+
+    return Result.ok(rows);
   }
 
   /**
@@ -322,8 +393,6 @@ export class StudentSyncService {
    * Side effects:
    * - Inserts or updates a row in the students table
    *
-   * TODO: Link with users table when userId is available from CSV
-   *
    * @param row - Validated CSV row data
    * @returns OkResult with the upserted student, or FailResult
    */
@@ -343,12 +412,159 @@ export class StudentSyncService {
           ? Number(row.class_year)
           : null;
 
+    const userIdResult = await this.resolveLinkedUserId(row);
+    if (userIdResult.isFailure) {
+      return Result.fail(userIdResult.error);
+    }
+
     return this.studentsRepo.upsertByStudentCode({
       studentCode,
       fullName,
       emailEdu,
       faculty,
       classYear: Number.isNaN(classYear) ? null : classYear,
+      userId: userIdResult.data ?? undefined,
     });
+  }
+
+  /**
+   * Validate the required CSV headers before row processing begins.
+   *
+   * @param headers - Header names parsed from the CSV file.
+   * @returns OkResult when all required headers exist, or FailResult when one or more are missing.
+   */
+  private validateCsvHeaders(headers: string[]): Result<void> {
+    const normalizedHeaders = new Set(headers.map((header) => header.trim()));
+    const missingHeaders = StudentSyncService.REQUIRED_CSV_HEADERS.filter(
+      (header) => !normalizedHeaders.has(header)
+    );
+
+    if (missingHeaders.length > 0) {
+      return Result.fail(
+        validationError(
+          missingHeaders.map((header) => ({
+            field: header,
+            rule: "required",
+            message: `CSV header ${header} is required.`,
+          }))
+        )
+      );
+    }
+
+    return Result.ok();
+  }
+
+  /**
+   * Resolves an optional linked user from the CSV row.
+   *
+   * @param row - Parsed CSV row data.
+   * @returns OkResult with a linked user UUID when present, or null when absent.
+   */
+  private async resolveLinkedUserId(
+    row: Record<string, unknown>
+  ): Promise<Result<string | null>> {
+    const rawUserId = row.user_id;
+
+    if (rawUserId === undefined || rawUserId === null || rawUserId === "") {
+      return Result.ok(null);
+    }
+
+    if (typeof rawUserId !== "string") {
+      return Result.fail(
+        validationError([
+          {
+            field: "user_id",
+            rule: "format",
+            message: "CSV field user_id must be a string UUID.",
+            received: rawUserId,
+          },
+        ])
+      );
+    }
+
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        rawUserId.trim()
+      )
+    ) {
+      return Result.fail(
+        validationError([
+          {
+            field: "user_id",
+            rule: "format",
+            message: "CSV field user_id must be a valid UUID.",
+            received: rawUserId,
+          },
+        ])
+      );
+    }
+
+    const userResult = await this.usersRepo.findById(rawUserId.trim());
+    if (userResult.isFailure) {
+      return Result.fail(userResult.error);
+    }
+
+    if (!userResult.data) {
+      return Result.fail(
+        validationError([
+          {
+            field: "user_id",
+            rule: "not_found",
+            message: `User ${rawUserId} was not found.`,
+            received: rawUserId,
+          },
+        ])
+      );
+    }
+
+    return Result.ok(rawUserId.trim());
+  }
+
+  /**
+   * Resolve a validation failure message into a sync error reason.
+   *
+   * @param errorMessage - Validation message emitted by validateRow().
+   * @returns A known sync error reason or undefined when the message is not recognized.
+   */
+  private resolveErrorReason(
+    errorMessage?: string
+  ): NewStudentSyncError["errorReason"] | undefined {
+    if (!errorMessage) return undefined;
+
+    const prefix = errorMessage.split(":")[0];
+    return StudentSyncService.VALIDATION_PREFIX_MAP[prefix] ?? "UNKNOWN";
+  }
+
+  /**
+   * Normalize worker-level failures into public application errors.
+   *
+   * Header validation failures from the CSV parser are converted into a
+   * standard validation error so callers receive a stable client-facing code.
+   *
+   * @param error - The thrown failure value.
+   * @returns A normalized AppError suitable for Result.fail().
+   */
+  private normalizeProcessingError(error: unknown) {
+    if (error instanceof CsvError) {
+      return validationError([
+        {
+          field: "csv_parse",
+          rule: "format",
+          message: error.message,
+        },
+      ]);
+    }
+
+    if (error instanceof Error && error.message.includes("CSV header")) {
+      return validationError([
+        {
+          field: "csv_headers",
+          rule: "required",
+          message: error.message,
+        },
+      ]);
+    }
+
+    return passthroughOrInternal(error);
   }
 }
