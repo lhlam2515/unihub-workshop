@@ -1,9 +1,14 @@
+import { Readable } from "node:stream";
+
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
+import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";
+import { storageErrors, systemErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+import { StorageService } from "@/shared/storage/storage.service";
 
 import { StudentSyncService } from "./student-sync.service";
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
@@ -27,6 +32,14 @@ const mockStudentSyncErrorsRepo = {
 
 const mockStudentsRepo = {
   upsertByStudentCode: jest.fn(),
+};
+
+const mockUsersRepo = {
+  findById: jest.fn(),
+};
+
+const mockStorageService = {
+  getFileStream: jest.fn(),
 };
 
 const mockQueue = {
@@ -67,6 +80,8 @@ describe("StudentSyncService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockStudentSyncErrorsRepo.createBatch.mockResolvedValue(Result.ok([]));
+    mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -83,6 +98,14 @@ describe("StudentSyncService", () => {
           provide: StudentsRepository,
           useValue: mockStudentsRepo,
         },
+        {
+          provide: UsersRepository,
+          useValue: mockUsersRepo,
+        },
+        {
+          provide: StorageService,
+          useValue: mockStorageService,
+        },
         { provide: getQueueToken(STUDENT_SYNC_QUEUE), useValue: mockQueue },
       ],
     }).compile();
@@ -98,7 +121,7 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.create.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockQueue.add.mockResolvedValue({} as any);
+      mockQueue.add.mockResolvedValue({});
 
       const result = await service.triggerSync("students-2026-06-01.csv");
 
@@ -117,7 +140,7 @@ describe("StudentSyncService", () => {
 
     it("returns FailResult when job creation fails", async () => {
       mockStudentSyncJobsRepo.create.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail(systemErrors.internal(new Error("DB down")))
       );
 
       const result = await service.triggerSync("students.csv");
@@ -125,6 +148,25 @@ describe("StudentSyncService", () => {
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
       expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+
+    it("marks the job as FAILED when queue enqueue fails", async () => {
+      mockStudentSyncJobsRepo.create.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockQueue.add.mockRejectedValue(new Error("Redis down"));
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockJobRecord, status: "FAILED" })
+      );
+
+      const result = await service.triggerSync("students-2026-06-01.csv");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("INTERNAL_ERROR");
+      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenCalledWith(
+        "job-001",
+        "FAILED"
+      );
     });
   });
 
@@ -136,25 +178,136 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year",
+              "STU001,stu001@university.edu,John Doe,Engineering,2024",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.ok({ studentCode: "STU001" })
+      );
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
         Result.ok({ ...mockJobRecord, status: "SUCCESS" })
       );
 
-      // parseCSV returns empty array in stub → no rows to process
       const result = await service.processJob("job-001");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.status).toBe("SUCCESS");
-      expect(result.data.totalRows).toBe(0);
-      expect(result.data.processedRows).toBe(0);
+      expect(result.data.totalRows).toBe(1);
+      expect(result.data.processedRows).toBe(1);
       expect(result.data.errorRows).toBe(0);
-      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenCalledWith(
+      expect(mockStudentsRepo.upsertByStudentCode).toHaveBeenCalledWith({
+        studentCode: "STU001",
+        fullName: "John Doe",
+        emailEdu: "stu001@university.edu",
+        faculty: "Engineering",
+        classYear: 2024,
+      });
+      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenNthCalledWith(
+        2,
         "job-001",
         "SUCCESS",
         expect.objectContaining({
-          totalRows: 0,
-          processedRows: 0,
+          totalRows: 1,
+          processedRows: 1,
           errorRows: 0,
+        })
+      );
+    });
+
+    it("finalizes with PARTIAL_FAILURE when some rows are invalid", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year",
+              "STU001,stu001@university.edu,John Doe,Engineering,2024",
+              ",invalid-email,Missing Code,Engineering,2024",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.ok({ studentCode: "STU001" })
+      );
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockJobRecord, status: "PARTIAL_FAILURE" })
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.status).toBe("PARTIAL_FAILURE");
+      expect(result.data.totalRows).toBe(2);
+      expect(result.data.processedRows).toBe(1);
+      expect(result.data.errorRows).toBe(1);
+      expect(mockStudentSyncErrorsRepo.createBatch).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            jobId: "job-001",
+            rowNumber: 2,
+            errorReason: "MISSING_FIELD",
+          }),
+        ])
+      );
+      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenCalledWith(
+        "job-001",
+        "PARTIAL_FAILURE",
+        expect.objectContaining({
+          totalRows: 2,
+          processedRows: 1,
+          errorRows: 1,
+        })
+      );
+    });
+
+    it("finalizes with FAILED when all rows are invalid", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year",
+              ",bad-email,Missing Code,Engineering,2024",
+              "STU002,not-an-email,Jane Doe,Science,2025",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockJobRecord, status: "FAILED" })
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.status).toBe("FAILED");
+      expect(result.data.totalRows).toBe(2);
+      expect(result.data.processedRows).toBe(0);
+      expect(result.data.errorRows).toBe(2);
+      expect(mockStudentsRepo.upsertByStudentCode).not.toHaveBeenCalled();
+      expect(mockStudentSyncErrorsRepo.createBatch).toHaveBeenCalledTimes(1);
+      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenCalledWith(
+        "job-001",
+        "FAILED",
+        expect.objectContaining({
+          totalRows: 2,
+          processedRows: 0,
+          errorRows: 2,
         })
       );
     });
@@ -170,13 +323,283 @@ describe("StudentSyncService", () => {
 
     it("returns FailResult when findById repo fails", async () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail(systemErrors.internal(new Error("DB down")))
       );
 
       const result = await service.processJob("job-001");
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
+    });
+
+    it("returns FailResult when CSV file cannot be loaded", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.fail(storageErrors.fileNotFound("students-2026-06-01.csv"))
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("STORAGE_FILE_NOT_FOUND");
+      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenCalledWith(
+        "job-001",
+        "FAILED"
+      );
+    });
+
+    it("returns FailResult when required CSV headers are missing", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,faculty,class_year",
+              "STU001,stu001@university.edu,Engineering,2024",
+            ].join("\n"),
+          ])
+        )
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("VALIDATION_FAILED");
+      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenNthCalledWith(
+        2,
+        "job-001",
+        "FAILED",
+        expect.objectContaining({
+          totalRows: 0,
+          processedRows: 0,
+          errorRows: 0,
+        })
+      );
+    });
+
+    it("treats upsert failure on a valid row as an UNKNOWN error", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year",
+              "STU001,stu001@university.edu,John Doe,Engineering,2024",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.fail(systemErrors.internal(new Error("DB constraint")))
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.status).toBe("FAILED");
+      expect(result.data.processedRows).toBe(0);
+      expect(result.data.errorRows).toBe(1);
+      expect(mockStudentSyncErrorsRepo.createBatch).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            errorReason: "UNKNOWN",
+            errorDetail: expect.stringContaining("internal error"),
+          }),
+        ])
+      );
+    });
+
+    it("finalizes with FAILED when createBatch of errors fails", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year",
+              "STU001,stu001@university.edu,John Doe,Engineering,2024",
+              ",invalid-email,Missing Code,Engineering,2024",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.ok({ studentCode: "STU001" })
+      );
+      mockStudentSyncErrorsRepo.createBatch.mockResolvedValue(
+        Result.fail(systemErrors.internal(new Error("DB write batch failed")))
+      );
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockJobRecord, status: "FAILED" })
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("INTERNAL_ERROR");
+    });
+
+    it("returns FAILED when finalize updateStatus call fails", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year",
+              "STU001,stu001@university.edu,John Doe,Engineering,2024",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.ok({ studentCode: "STU001" })
+      );
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.fail(systemErrors.internal(new Error("DB update failed")))
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("INTERNAL_ERROR");
+    });
+
+    it("returns FAILED with csv-parse CsvError when malformed data is encountered", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            'student_code,email,full_name\nSTU001,stu001@university.edu,"John Doe\n',
+          ])
+        )
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("VALIDATION_FAILED");
+      expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenNthCalledWith(
+        2,
+        "job-001",
+        "FAILED",
+        expect.objectContaining({
+          totalRows: 0,
+          processedRows: 0,
+          errorRows: 0,
+        })
+      );
+    });
+
+    it("handles CSV with BOM marker correctly", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            "﻿student_code,email,full_name,faculty,class_year\nSTU001,stu001@university.edu,John Doe,Engineering,2024",
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.ok({ studentCode: "STU001" })
+      );
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockJobRecord, status: "SUCCESS" })
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.status).toBe("SUCCESS");
+      expect(result.data.totalRows).toBe(1);
+    });
+
+    it("skips empty lines in CSV", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year",
+              "STU001,stu001@university.edu,John Doe,Engineering,2024",
+              "",
+              "STU002,stu002@university.edu,Jane Doe,Science,2025",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.ok({ studentCode: "STU002" })
+      );
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockJobRecord, status: "SUCCESS" })
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.totalRows).toBe(2);
+      expect(result.data.processedRows).toBe(2);
+      expect(result.data.errorRows).toBe(0);
+    });
+
+    it("links a student record to an existing user when user_id is present", async () => {
+      mockStudentSyncJobsRepo.findById.mockResolvedValue(
+        Result.ok(mockJobRecord)
+      );
+      mockUsersRepo.findById.mockResolvedValue(
+        Result.ok({ userId: "11111111-1111-4111-8111-111111111111" })
+      );
+      mockStorageService.getFileStream.mockResolvedValue(
+        Result.ok(
+          Readable.from([
+            [
+              "student_code,email,full_name,faculty,class_year,user_id",
+              "STU001,stu001@university.edu,John Doe,Engineering,2024,11111111-1111-4111-8111-111111111111",
+            ].join("\n"),
+          ])
+        )
+      );
+      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+        Result.ok({ studentCode: "STU001" })
+      );
+      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockJobRecord, status: "SUCCESS" })
+      );
+
+      const result = await service.processJob("job-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(mockUsersRepo.findById).toHaveBeenCalledWith(
+        "11111111-1111-4111-8111-111111111111"
+      );
+      expect(mockStudentsRepo.upsertByStudentCode).toHaveBeenCalledWith({
+        studentCode: "STU001",
+        fullName: "John Doe",
+        emailEdu: "stu001@university.edu",
+        faculty: "Engineering",
+        classYear: 2024,
+        userId: "11111111-1111-4111-8111-111111111111",
+      });
     });
   });
 
@@ -185,8 +608,15 @@ describe("StudentSyncService", () => {
   // -----------------------------------------------------------------------
   describe("validateRow", () => {
     it("detects MISSING_FIELD for empty student_code", () => {
-      // Access private method via service prototype
-      const validateRow = (StudentSyncService.prototype as any).validateRow;
+      const validateRow = (row: Record<string, unknown>) =>
+        (
+          StudentSyncService.prototype as unknown as {
+            validateRow(row: Record<string, unknown>): {
+              valid: boolean;
+              errors?: string[];
+            };
+          }
+        ).validateRow(row);
 
       const result = validateRow({ email: "test@test.com", full_name: "Test" });
 
@@ -197,7 +627,15 @@ describe("StudentSyncService", () => {
     });
 
     it("detects INVALID_FORMAT for student_code exceeding 20 characters", () => {
-      const validateRow = (StudentSyncService.prototype as any).validateRow;
+      const validateRow = (row: Record<string, unknown>) =>
+        (
+          StudentSyncService.prototype as unknown as {
+            validateRow(row: Record<string, unknown>): {
+              valid: boolean;
+              errors?: string[];
+            };
+          }
+        ).validateRow(row);
 
       const result = validateRow({
         student_code: "A".repeat(21),
@@ -212,7 +650,15 @@ describe("StudentSyncService", () => {
     });
 
     it("detects MISSING_FIELD for empty email", () => {
-      const validateRow = (StudentSyncService.prototype as any).validateRow;
+      const validateRow = (row: Record<string, unknown>) =>
+        (
+          StudentSyncService.prototype as unknown as {
+            validateRow(row: Record<string, unknown>): {
+              valid: boolean;
+              errors?: string[];
+            };
+          }
+        ).validateRow(row);
 
       const result = validateRow({
         student_code: "STU001",
@@ -224,7 +670,15 @@ describe("StudentSyncService", () => {
     });
 
     it("detects INVALID_FORMAT for malformed email", () => {
-      const validateRow = (StudentSyncService.prototype as any).validateRow;
+      const validateRow = (row: Record<string, unknown>) =>
+        (
+          StudentSyncService.prototype as unknown as {
+            validateRow(row: Record<string, unknown>): {
+              valid: boolean;
+              errors?: string[];
+            };
+          }
+        ).validateRow(row);
 
       const result = validateRow({
         student_code: "STU001",
@@ -239,7 +693,15 @@ describe("StudentSyncService", () => {
     });
 
     it("detects MISSING_FIELD for empty full_name", () => {
-      const validateRow = (StudentSyncService.prototype as any).validateRow;
+      const validateRow = (row: Record<string, unknown>) =>
+        (
+          StudentSyncService.prototype as unknown as {
+            validateRow(row: Record<string, unknown>): {
+              valid: boolean;
+              errors?: string[];
+            };
+          }
+        ).validateRow(row);
 
       const result = validateRow({
         student_code: "STU001",
@@ -251,12 +713,64 @@ describe("StudentSyncService", () => {
     });
 
     it("returns valid for a correct row", () => {
-      const validateRow = (StudentSyncService.prototype as any).validateRow;
+      const validateRow = (row: Record<string, unknown>) =>
+        (
+          StudentSyncService.prototype as unknown as {
+            validateRow(row: Record<string, unknown>): {
+              valid: boolean;
+              errors?: string[];
+            };
+          }
+        ).validateRow(row);
 
       const result = validateRow(validRow);
 
       expect(result.valid).toBe(true);
       expect(result.errors).toBeUndefined();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // resolveErrorReason — prefix-based error reason mapping
+  // -----------------------------------------------------------------------
+  describe("resolveErrorReason", () => {
+    function callResolveErrorReason(errorMessage?: string) {
+      return (
+        StudentSyncService.prototype as unknown as {
+          resolveErrorReason(errorMessage?: string): string | undefined;
+        }
+      ).resolveErrorReason(errorMessage);
+    }
+
+    it('maps MISSING_FIELD prefix to "MISSING_FIELD"', () => {
+      const result = callResolveErrorReason(
+        "MISSING_FIELD: student_code is required"
+      );
+      expect(result).toBe("MISSING_FIELD");
+    });
+
+    it('maps INVALID_FORMAT prefix to "INVALID_FORMAT"', () => {
+      const result = callResolveErrorReason(
+        "INVALID_FORMAT: student_code exceeds 20 characters"
+      );
+      expect(result).toBe("INVALID_FORMAT");
+    });
+
+    it('maps DUPLICATE prefix to "DUPLICATE"', () => {
+      const result = callResolveErrorReason(
+        "DUPLICATE: student_code already exists"
+      );
+      expect(result).toBe("DUPLICATE");
+    });
+
+    it('falls back to "UNKNOWN" for unrecognized messages', () => {
+      const result = callResolveErrorReason("UNEXPECTED: something went wrong");
+      expect(result).toBe("UNKNOWN");
+    });
+
+    it("returns undefined when errorMessage is not provided", () => {
+      const result = callResolveErrorReason(undefined);
+      expect(result).toBeUndefined();
     });
   });
 
@@ -286,7 +800,7 @@ describe("StudentSyncService", () => {
 
     it("returns FailResult when repo fails", async () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail(systemErrors.internal(new Error("DB down")))
       );
 
       const result = await service.getJob("job-001");

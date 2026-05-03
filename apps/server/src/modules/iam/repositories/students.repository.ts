@@ -78,24 +78,35 @@ export class StudentsRepository {
     emailEdu: string;
     faculty: string;
     classYear: number | null;
+    userId?: string;
   }): Promise<Result<Student>> {
     return tryCatch(
       async () => {
+        const insertValues = {
+          studentCode: data.studentCode,
+          fullName: data.fullName,
+          emailEdu: data.emailEdu,
+          faculty: data.faculty,
+          classYear: data.classYear,
+          lastSyncedAt: new Date(),
+          ...(data.userId ? { userId: data.userId } : {}),
+        };
+
+        const updateValues = {
+          fullName: data.fullName,
+          emailEdu: data.emailEdu,
+          faculty: data.faculty,
+          classYear: data.classYear,
+          lastSyncedAt: new Date(),
+          ...(data.userId ? { userId: data.userId } : {}),
+        };
+
         const [result] = await this.db
           .insert(this.schema.students)
-          .values({
-            ...data,
-            lastSyncedAt: new Date(),
-          })
+          .values(insertValues)
           .onConflictDoUpdate({
             target: this.schema.students.studentCode,
-            set: {
-              fullName: data.fullName,
-              emailEdu: data.emailEdu,
-              faculty: data.faculty,
-              classYear: data.classYear,
-              lastSyncedAt: new Date(),
-            },
+            set: updateValues,
           })
           .returning();
         return result;

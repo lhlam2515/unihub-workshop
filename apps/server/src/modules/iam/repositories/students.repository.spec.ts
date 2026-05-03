@@ -12,18 +12,32 @@ describe("StudentsRepository", () => {
 
   function setupDbResolve(value: unknown) {
     const promise = Promise.resolve(value);
+    const thenHandler: PromiseLike<unknown>["then"] = (
+      onfulfilled,
+      onrejected
+    ) => promise.then(onfulfilled, onrejected);
+    const catchHandler: Promise<unknown>["catch"] = (onrejected) =>
+      promise.catch(onrejected);
+
     Object.assign(mockDb, {
-      then: promise.then.bind(promise),
-      catch: promise.catch.bind(promise),
+      then: thenHandler,
+      catch: catchHandler,
     });
   }
 
   function setupDbReject(error: unknown) {
     const promise = Promise.reject(error);
     promise.catch(() => {}); // suppress unhandled rejection
+    const thenHandler: PromiseLike<unknown>["then"] = (
+      onfulfilled,
+      onrejected
+    ) => promise.then(onfulfilled, onrejected);
+    const catchHandler: Promise<unknown>["catch"] = (onrejected) =>
+      promise.catch(onrejected);
+
     Object.assign(mockDb, {
-      then: promise.then.bind(promise),
-      catch: promise.catch.bind(promise),
+      then: thenHandler,
+      catch: catchHandler,
     });
   }
 
@@ -37,6 +51,7 @@ describe("StudentsRepository", () => {
       offset: jest.fn().mockReturnThis(),
       insert: jest.fn().mockReturnThis(),
       values: jest.fn().mockReturnThis(),
+      onConflictDoUpdate: jest.fn().mockReturnThis(),
       returning: jest.fn().mockReturnThis(),
       update: jest.fn().mockReturnThis(),
       set: jest.fn().mockReturnThis(),
@@ -164,6 +179,94 @@ describe("StudentsRepository", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error).toEqual(systemErrors.internal(dbError));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // upsertByStudentCode
+  // -------------------------------------------------------------------------
+  describe("upsertByStudentCode", () => {
+    it("upserts a student and links the user when userId is provided", async () => {
+      const student = {
+        studentId: "stu-3",
+        userId: "usr-3",
+        studentCode: "20210003",
+        fullName: "Alice Doe",
+        faculty: "Business",
+        classYear: 2023,
+        emailEdu: "alice@edu.test",
+        lastSyncedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      setupDbResolve([student]);
+
+      const result = await repository.upsertByStudentCode({
+        studentCode: "20210003",
+        fullName: "Alice Doe",
+        emailEdu: "alice@edu.test",
+        faculty: "Business",
+        classYear: 2023,
+        userId: "usr-3",
+      });
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data).toEqual(student);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          studentCode: "20210003",
+          userId: "usr-3",
+        })
+      );
+      const [upsertArgs] = mockDb.onConflictDoUpdate.mock.calls as Array<
+        [
+          {
+            target: unknown;
+            set: { userId?: string };
+          },
+        ]
+      >;
+
+      expect(upsertArgs[0].target).toBe(mockSchema.students.studentCode);
+      expect(upsertArgs[0].set.userId).toBe("usr-3");
+    });
+
+    it("upserts a student without linking a user when userId is omitted", async () => {
+      const student = {
+        studentId: "stu-4",
+        userId: null,
+        studentCode: "20210004",
+        fullName: "Bob Doe",
+        faculty: "Arts",
+        classYear: 2022,
+        emailEdu: "bob@edu.test",
+        lastSyncedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      setupDbResolve([student]);
+
+      const result = await repository.upsertByStudentCode({
+        studentCode: "20210004",
+        fullName: "Bob Doe",
+        emailEdu: "bob@edu.test",
+        faculty: "Arts",
+        classYear: 2022,
+      });
+
+      expect(result.isSuccess).toBe(true);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.not.objectContaining({ userId: expect.anything() })
+      );
+      const [upsertArgs] = mockDb.onConflictDoUpdate.mock.calls as Array<
+        [
+          {
+            target: unknown;
+            set: Record<string, unknown>;
+          },
+        ]
+      >;
+      expect(upsertArgs[0].set.userId).toBeUndefined();
     });
   });
 });
