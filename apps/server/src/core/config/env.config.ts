@@ -49,6 +49,12 @@ export const envSchema = z.object({
   // Payment Gateway
   PAYMENT_GATEWAY_SECRETS: z.string().optional(),
 
+  // AI Summary
+  DEEPSEEK_API_KEY: z
+    .string()
+    .min(1, { message: "DEEPSEEK_API_KEY is required" }),
+  AI_SUMMARY_MODEL: z.string().default("deepseek-v4-pro"),
+
   // Logging
   LOG_LEVEL: z.string().default("info"),
 
@@ -128,4 +134,10 @@ export const loggingConfig = registerAs("logging", () => ({
 
 export const corsConfig = registerAs("cors", () => ({
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
+}));
+
+export const aiConfig = registerAs("ai", () => ({
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY!,
+  summaryModel: process.env.AI_SUMMARY_MODEL ?? "deepseek-v4-pro",
+  baseUrl: "https://api.deepseek.com/anthropic",
 }));

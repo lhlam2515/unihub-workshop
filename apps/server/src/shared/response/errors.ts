@@ -696,6 +696,56 @@ export const notificationErrors = {
 } as const;
 
 /**
+ * Group AI summary pipeline error factories
+ */
+export const aiSummaryErrors = {
+  /**
+   * Create an error when PDF text extraction fails
+   *
+   * @param cause - Original extraction error for internal diagnostics
+   * @returns External dependency error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  pdfExtractionFailed: (cause?: unknown): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "PDF_EXTRACTION_FAILED",
+      message: "Failed to extract text from PDF document.",
+      cause,
+    }),
+  /**
+   * Create an error when the LLM call times out
+   *
+   * @param modelUsed - AI model identifier used for diagnostics
+   * @returns External dependency error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  llmTimeout: (modelUsed: string): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "LLM_TIMEOUT",
+      message: "AI summarisation timed out. The document may be too long.",
+      context: { modelUsed },
+    }),
+  /**
+   * Create an error when the LLM API returns an error
+   *
+   * @param modelUsed - AI model identifier used for diagnostics
+   * @param cause - Original API error for internal logging
+   * @returns External dependency error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  llmApiError: (modelUsed: string, cause?: unknown): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "LLM_API_ERROR",
+      message: "AI summarisation service returned an error.",
+      context: { modelUsed },
+      cause,
+    }),
+} as const;
+
+/**
  * Group system-level error factories
  */
 export const systemErrors = {
