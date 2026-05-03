@@ -17,6 +17,7 @@ function createMockDb() {
     values: jest.fn().mockReturnThis(),
     returning: jest.fn().mockReturnThis(),
     onConflictDoUpdate: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
     update: jest.fn().mockReturnThis(),
     set: jest.fn().mockReturnThis(),
   };

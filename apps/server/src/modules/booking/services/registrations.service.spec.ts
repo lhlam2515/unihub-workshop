@@ -1,15 +1,14 @@
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import type { Registration } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import { NotificationPublisher } from "@/shared/queues/notification-publisher";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { RegistrationsService } from "./registrations.service";
-import { RegistrationResponseBuilder } from "../dto/registration-response.dto";
+import { TicketsService } from "./tickets.service";
 import { GlobalRateLimitMechanic } from "../mechanics/global-rate-limit.mechanic";
 import { RateLimiterMechanic } from "../mechanics/rate-limiter.mechanic";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
@@ -58,6 +57,7 @@ describe("RegistrationsService", () => {
     registeredAt: new Date(),
     confirmedAt: new Date(),
     cancelledAt: null,
+    cancellationReason: null,
     updatedAt: new Date(),
   };
 
@@ -105,9 +105,15 @@ describe("RegistrationsService", () => {
           useValue: { getPublishedById: jest.fn() },
         },
         {
-          provide: getQueueToken(NOTIFICATION_QUEUE),
+          provide: TicketsService,
           useValue: {
-            add: jest.fn().mockResolvedValue({ id: "job-1" } as any),
+            signAndUpdateQrToken: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: NotificationPublisher,
+          useValue: {
+            fire: jest.fn(),
           },
         },
       ],
@@ -349,6 +355,7 @@ describe("RegistrationsService", () => {
       registeredAt: new Date(),
       confirmedAt: new Date(),
       cancelledAt: null,
+      cancellationReason: null,
       updatedAt: new Date(),
     };
 
@@ -356,6 +363,7 @@ describe("RegistrationsService", () => {
       ...mockConfirmedRegistration,
       status: "PENDING_PAYMENT",
       confirmedAt: null,
+      cancellationReason: null,
     };
 
     function setupConfirmed() {

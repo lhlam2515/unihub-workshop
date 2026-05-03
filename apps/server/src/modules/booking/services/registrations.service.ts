@@ -1,18 +1,16 @@
 import crypto from "node:crypto";
 
-import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
-import { Queue } from "bullmq";
-import jwt from "jsonwebtoken";
 
 import type { Registration } from "@/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import type { RegistrationEventData } from "@/shared/queues/event-contracts";
+import { NotificationPublisher } from "@/shared/queues/notification-publisher";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
+import { TicketsService } from "./tickets.service";
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { RegistrationResponseBuilder } from "../dto/registration-response.dto";
 import { GlobalRateLimitMechanic } from "../mechanics/global-rate-limit.mechanic";
@@ -33,8 +31,8 @@ export class RegistrationsService {
     private readonly seatLock: SeatLockMechanic,
     private readonly seatCounter: SeatCounterService,
     private readonly workshopsService: WorkshopsService,
-    @InjectQueue(NOTIFICATION_QUEUE)
-    private readonly notificationQueue: Queue
+    private readonly ticketsService: TicketsService,
+    private readonly notificationPublisher: NotificationPublisher
   ) {}
 
   /**
@@ -155,22 +153,11 @@ export class RegistrationsService {
       });
       // Ticket failure is non-fatal for registration; log and continue
       if (ticketResult.isSuccess) {
-        // Replace placeholder QR with signed JWT containing ticket metadata
-        const signedQrToken = jwt.sign(
-          {
-            ticket_id: ticketResult.data.ticketId,
-            workshop_id: dto.workshop_id,
-            student_id: studentId,
-          },
-          process.env.JWT_SECRET!,
-          { expiresIn: "30d" }
-        );
-        await this.ticketsRepo.updateQrToken(
+        await this.ticketsService.signAndUpdateQrToken(
           ticketResult.data.ticketId,
-          signedQrToken
+          dto.workshop_id,
+          studentId
         );
-      } else {
-        // TODO: Log warning — ticket creation failed but registration succeeded
       }
     }
 
@@ -364,9 +351,7 @@ export class RegistrationsService {
       workshopId,
       eventType,
     };
-    this.notificationQueue.add(eventType, eventData).catch(() => {
-      // Silently ignore queue failures per ADR-11
-    });
+    this.notificationPublisher.fire(eventType, eventData);
   }
 
   /**

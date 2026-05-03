@@ -49,12 +49,7 @@ import { SeatCounterService } from "@/modules/catalog/services/seat-counter.serv
 import { WorkshopNotificationPublisher } from "@/modules/catalog/services/workshop-notification-publisher.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
-import {
-  paymentErrors,
-  registrationErrors,
-  seatErrors,
-  workshopErrors,
-} from "@/shared/response/errors";
+import { paymentErrors, seatErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------
@@ -631,12 +626,12 @@ describe("Booking Module — Integration", () => {
 
     describe("createPayment — FR-F05-001, FR-F05-002", () => {
       it("creates a payment and returns redirect URL", async () => {
-        mockPaymentsRepo.transaction = jest.fn(async (cb: any) => {
+        mockPaymentsRepo.transaction = jest.fn((cb: any) => {
           const tx = {};
           return cb(tx);
         });
 
-        const result = await paymentsController.createPayment(
+        await paymentsController.createPayment(
           { registration_id: "reg-002", gateway: "VNPAY" },
           "idem-001",
           studentUser
@@ -702,7 +697,7 @@ describe("Booking Module — Integration", () => {
       });
 
       it("uses student ID from JWT (never from body) — IDOR prevention", async () => {
-        mockPaymentsRepo.transaction = jest.fn(async (cb: any) => {
+        mockPaymentsRepo.transaction = jest.fn((cb: any) => {
           const tx = {};
           return cb(tx);
         });
@@ -720,7 +715,7 @@ describe("Booking Module — Integration", () => {
 
     describe("handleWebhook — FR-F05-003", () => {
       it("processes a SUCCESS webhook and updates payment", async () => {
-        mockPaymentsRepo.transaction = jest.fn(async (cb: any) => {
+        mockPaymentsRepo.transaction = jest.fn((cb: any) => {
           const tx = {};
           // Mock the inner calls made inside the transaction
           mockPaymentsRepo.findByIdempotencyKeyWithLock = jest
@@ -755,7 +750,7 @@ describe("Booking Module — Integration", () => {
       });
 
       it("processes a FAILED webhook and releases seat", async () => {
-        mockPaymentsRepo.transaction = jest.fn(async (cb: any) => {
+        mockPaymentsRepo.transaction = jest.fn((cb: any) => {
           const tx = {};
           mockPaymentsRepo.findByIdempotencyKeyWithLock = jest
             .fn()
@@ -781,7 +776,7 @@ describe("Booking Module — Integration", () => {
       });
 
       it("returns PAYMENT_ALREADY_SUCCESS for duplicate webhook", async () => {
-        mockPaymentsRepo.transaction = jest.fn(async (cb: any) => {
+        mockPaymentsRepo.transaction = jest.fn((cb: any) => {
           const tx = {};
           mockPaymentsRepo.findByIdempotencyKeyWithLock = jest
             .fn()

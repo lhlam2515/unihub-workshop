@@ -315,11 +315,11 @@ describe("PaymentsRepository", () => {
   describe("transaction", () => {
     it("should execute callback within a transaction", async () => {
       const tx = {};
-      mockDb.transaction.mockImplementation(
-        async (cb: (tx: any) => Promise<any>) => cb(tx)
+      mockDb.transaction.mockImplementation((cb: (tx: any) => Promise<any>) =>
+        cb(tx)
       );
 
-      const result = await repo.transaction(async (t) => {
+      const result = await repo.transaction((t) => {
         expect(t).toBe(tx);
         return "ok";
       });

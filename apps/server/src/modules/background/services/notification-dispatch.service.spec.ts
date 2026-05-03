@@ -1,12 +1,13 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { Result } from "@/shared/response/result";
+
+import { NotificationDispatchService } from "./notification-dispatch.service";
+import { AppChannel } from "../channels/app.channel";
 import { EmailChannel } from "../channels/email.channel";
 import { TelegramChannel } from "../channels/telegram.channel";
-import { AppChannel } from "../channels/app.channel";
 import { NotificationChannelConfigsRepository } from "../repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "../repositories/notification-logs.repository";
-import { NotificationDispatchService } from "./notification-dispatch.service";
 
 // ---------------------------------------------------------------------------
 // Mocks

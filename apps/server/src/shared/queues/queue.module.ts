@@ -1,6 +1,8 @@
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
+import { NotificationPublisher } from "./notification-publisher";
 import {
   NOTIFICATION_QUEUE,
   AI_SUMMARY_QUEUE,
@@ -32,8 +34,9 @@ import {
 @Module({
   imports: [
     BullModule.forRootAsync({
-      useFactory: () => ({
-        connection: { url: process.env.REDIS_URL },
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: { url: config.getOrThrow<string>("redis.url") },
         defaultJobOptions: DEFAULT_JOB_OPTIONS,
       }),
     }),
@@ -59,6 +62,7 @@ import {
       { name: STUDENT_SYNC_QUEUE }
     ),
   ],
-  exports: [BullModule],
+  providers: [NotificationPublisher],
+  exports: [BullModule, NotificationPublisher],
 })
 export class SharedQueueModule {}

@@ -76,7 +76,7 @@ export class RegistrationResponseBuilder {
     registration: Registration,
     workshop?: WorkshopSummaryDto,
     ticket?: Ticket,
-    payment?: any,
+    payment?: Record<string, unknown>,
     paymentInfo?: PaymentDeadlineInfo
   ): RegistrationWithDetailsDto {
     const base = this.from(registration, paymentInfo);

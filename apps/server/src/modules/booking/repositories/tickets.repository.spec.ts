@@ -69,7 +69,7 @@ describe("TicketsRepository", () => {
         insert: jest.fn().mockReturnThis(),
         values: jest.fn().mockReturnThis(),
         returning: jest.fn().mockResolvedValue([mockTicket]),
-      };
+      } as any;
 
       const result = await repo.create({} as any, tx);
 

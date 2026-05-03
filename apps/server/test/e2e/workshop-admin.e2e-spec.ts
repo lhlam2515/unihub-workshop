@@ -13,12 +13,7 @@
 import crypto from "node:crypto";
 
 import { getQueueToken } from "@nestjs/bullmq";
-import {
-  type ArgumentMetadata,
-  type INestApplication,
-  Injectable,
-  type PipeTransform,
-} from "@nestjs/common";
+import { type INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import jwt from "jsonwebtoken";
 import request from "supertest";
@@ -84,29 +79,6 @@ const mockStorageService = {
   getSignedUrl: jest.fn(),
   delete: jest.fn(),
 };
-
-@Injectable()
-class PassThroughPipe implements PipeTransform {
-  transform(value: any, _metadata: ArgumentMetadata): any {
-    return this.coerceDates(value);
-  }
-
-  private coerceDates(v: any): any {
-    if (
-      typeof v === "string" &&
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)
-    ) {
-      return new Date(v);
-    }
-    if (Array.isArray(v)) return v.map((i) => this.coerceDates(i));
-    if (v && typeof v === "object") {
-      return Object.fromEntries(
-        Object.entries(v).map(([k, val]) => [k, this.coerceDates(val)])
-      );
-    }
-    return v;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // JWT helpers

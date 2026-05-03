@@ -43,6 +43,6 @@ import { UsersService } from "./services/users.service";
     StudentsRepository,
     CheckinStaffAssignmentsRepository,
   ],
-  exports: [AuthService, TokenService, UsersService],
+  exports: [AuthService, TokenService, UsersService, StudentsRepository],
 })
 export class IamModule {}

@@ -8,11 +8,10 @@
  * All methods return Result<T, AppError> following the project's
  * Railway Oriented Programming pattern.
  */
-import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { Injectable } from "@nestjs/common";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
+import { PaymentsService } from "@/modules/booking/services/payments.service";
+import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { RedisService } from "@/shared/redis/redis.service";
 import { systemErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -36,10 +35,8 @@ const DISCREPANCY_THRESHOLD = 5;
 @Injectable()
 export class SystemMonitorService {
   constructor(
-    @Inject(DATABASE_CONNECTION)
-    private readonly db: DatabaseClient,
-    @Inject(DATABASE_SCHEMA)
-    private readonly schema: DatabaseSchema,
+    private readonly paymentsService: PaymentsService,
+    private readonly workshopsService: WorkshopsService,
     private readonly redisService: RedisService
   ) {}
 
@@ -54,41 +51,28 @@ export class SystemMonitorService {
   async getPaymentTimeoutJobStatus(): Promise<
     Result<PaymentTimeoutJobStatusDto>
   > {
-    try {
-      const [pendingResult] = await this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(this.schema.payments)
-        .where(eq(this.schema.payments.status, "PENDING"));
+    const pendingResult = await this.paymentsService.countPending();
+    if (pendingResult.isFailure) return Result.fail(pendingResult.error);
 
-      const [overdueResult] = await this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(this.schema.payments)
-        .where(
-          and(
-            eq(this.schema.payments.status, "PENDING"),
-            sql`${this.schema.payments.timeoutAt} < NOW()`
-          )
-        );
+    const overdueResult = await this.paymentsService.countOverdue();
+    if (overdueResult.isFailure) return Result.fail(overdueResult.error);
 
-      const now = new Date();
-      const nextRun = new Date(now.getTime() + 60_000);
-      const paymentLastRunStr = await this.redisService.get(
-        "cron:last_run:payment-timeout"
-      );
-      const paymentLastRun = paymentLastRunStr
-        ? new Date(paymentLastRunStr)
-        : now;
+    const now = new Date();
+    const nextRun = new Date(now.getTime() + 60_000);
+    const paymentLastRunStr = await this.redisService.get(
+      "cron:last_run:payment-timeout"
+    );
+    const paymentLastRun = paymentLastRunStr
+      ? new Date(paymentLastRunStr)
+      : now;
 
-      return Result.ok({
-        pending_count: Number(pendingResult?.count ?? 0),
-        timeout_count: Number(overdueResult?.count ?? 0),
-        last_run: paymentLastRun,
-        next_run: nextRun,
-        job_status: "IDLE",
-      });
-    } catch (error) {
-      return Result.fail(systemErrors.internal(error));
-    }
+    return Result.ok({
+      pending_count: pendingResult.data,
+      timeout_count: overdueResult.data,
+      last_run: paymentLastRun,
+      next_run: nextRun,
+      job_status: "IDLE",
+    });
   }
 
   /**
@@ -103,56 +87,49 @@ export class SystemMonitorService {
   async getReconciliationJobStatus(): Promise<
     Result<ReconciliationJobStatusDto>
   > {
-    try {
-      const workshops = await this.db
-        .select({
-          workshopId: this.schema.workshops.workshopId,
-          capacity: this.schema.workshops.capacity,
-        })
-        .from(this.schema.workshops)
-        .where(eq(this.schema.workshops.status, "PUBLISHED"));
+    const workshopsResult =
+      await this.workshopsService.getPublishedWorkshopsBasic();
+    if (workshopsResult.isFailure) return Result.fail(workshopsResult.error);
 
-      let discrepanciesFound = 0;
+    const workshops = workshopsResult.data;
+    let discrepanciesFound = 0;
 
-      for (const workshop of workshops) {
-        const key = `seat:available:${workshop.workshopId}`;
-        const redisValueStr = await this.redisService.get(key);
-        const redisValue = redisValueStr
-          ? parseInt(redisValueStr, 10)
-          : Number(workshop.capacity);
+    for (const workshop of workshops) {
+      const key = `seat:available:${workshop.workshopId}`;
+      const redisValueStr = await this.redisService.get(key);
+      const redisValue = redisValueStr
+        ? parseInt(redisValueStr, 10)
+        : Number(workshop.capacity);
 
-        const [slot] = await this.db
-          .select()
-          .from(this.schema.workshopSlots)
-          .where(eq(this.schema.workshopSlots.workshopId, workshop.workshopId))
-          .limit(1);
-
-        const confirmedCount = slot?.confirmedCount ?? 0;
-        const lockedCount = slot?.lockedCount ?? 0;
-        const expectedValue =
-          Number(workshop.capacity) - confirmedCount - lockedCount;
-
-        if (Math.abs(redisValue - expectedValue) > DISCREPANCY_THRESHOLD) {
-          discrepanciesFound++;
-        }
-      }
-
-      const now = new Date();
-      const nextRun = new Date(now.getTime() + 600_000);
-      const reconLastRunStr = await this.redisService.get(
-        "cron:last_run:reconciliation"
+      const slotResult = await this.workshopsService.getSlotByWorkshopId(
+        workshop.workshopId
       );
-      const reconLastRun = reconLastRunStr ? new Date(reconLastRunStr) : now;
+      if (slotResult.isFailure) continue;
 
-      return Result.ok({
-        total_workshops: workshops.length,
-        discrepancies_found: discrepanciesFound,
-        last_run: reconLastRun,
-        next_run: nextRun,
-      });
-    } catch (error) {
-      return Result.fail(systemErrors.internal(error));
+      const slot = slotResult.data;
+      const confirmedCount = slot?.confirmedCount ?? 0;
+      const lockedCount = slot?.lockedCount ?? 0;
+      const expectedValue =
+        Number(workshop.capacity) - confirmedCount - lockedCount;
+
+      if (Math.abs(redisValue - expectedValue) > DISCREPANCY_THRESHOLD) {
+        discrepanciesFound++;
+      }
     }
+
+    const now = new Date();
+    const nextRun = new Date(now.getTime() + 600_000);
+    const reconLastRunStr = await this.redisService.get(
+      "cron:last_run:reconciliation"
+    );
+    const reconLastRun = reconLastRunStr ? new Date(reconLastRunStr) : now;
+
+    return Result.ok({
+      total_workshops: workshops.length,
+      discrepancies_found: discrepanciesFound,
+      last_run: reconLastRun,
+      next_run: nextRun,
+    });
   }
 
   /**
@@ -191,7 +168,7 @@ export class SystemMonitorService {
         }
 
         statuses.push({
-          gateway: gateway as CircuitBreakerStatusDto["gateway"],
+          gateway: gateway,
           state: currentState,
           failure_count: failureCount,
           opened_at: openedAt,

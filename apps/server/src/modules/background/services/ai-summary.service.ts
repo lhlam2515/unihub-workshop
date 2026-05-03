@@ -225,4 +225,37 @@ export class AiSummaryService {
       (err) => systemErrors.internal(err)
     );
   }
+
+  /**
+   * Marks a document's summary as FAILED due to LLM timeout.
+   *
+   * @param documentId - The UUID of the document whose summary timed out.
+   */
+  async handleTimeout(documentId: string): Promise<Result<void>> {
+    this.logger.warn(
+      `LLM timeout for document ${documentId}, marking as FAILED`
+    );
+
+    const summaryResult =
+      await this.aiSummariesRepo.findByDocumentId(documentId);
+    if (summaryResult.isFailure || !summaryResult.data) {
+      this.logger.error(
+        `No summary record found for timed-out document ${documentId}`
+      );
+      return Result.ok();
+    }
+
+    const updateResult = await this.aiSummariesRepo.updateStatus(
+      summaryResult.data.summaryId,
+      "FAILED",
+      "LLM_TIMEOUT"
+    );
+    if (updateResult.isFailure) {
+      this.logger.error(
+        `Failed to mark summary FAILED for document ${documentId}`
+      );
+    }
+
+    return Result.ok();
+  }
 }

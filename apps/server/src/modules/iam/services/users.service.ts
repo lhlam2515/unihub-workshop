@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 
+import { RedisService } from "@/shared/redis/redis.service";
 import { Result } from "@/shared/response/result";
 
-import { TokenService } from "./token.service";
 import { UserResponseBuilder } from "../dto/user-response.dto";
 import { UsersRepository } from "../repositories/users.repository";
 
@@ -12,7 +12,7 @@ import type { UserResponseDto } from "../dto/user-response.dto";
 export class UsersService {
   constructor(
     private readonly usersRepo: UsersRepository,
-    private readonly tokenService: TokenService
+    private readonly redisService: RedisService
   ) {}
 
   /**
@@ -77,13 +77,11 @@ export class UsersService {
    *
    * @param id - The target user's UUID.
    * @param status - New status: ACTIVE or SUSPENDED.
-   * @param currentJti - The admin's token jti, used to revoke the session on SUSPEND.
    * @returns OkResult with updated UserResponseDto, or FailResult with USER_NOT_FOUND.
    */
   async updateUserStatus(
     id: string,
-    status: "ACTIVE" | "SUSPENDED",
-    currentJti?: string
+    status: "ACTIVE" | "SUSPENDED"
   ): Promise<Result<UserResponseDto>> {
     const result = await this.usersRepo.updateStatus(id, status);
     if (result.isFailure) return Result.fail(result.error);
@@ -97,8 +95,14 @@ export class UsersService {
       });
     }
 
-    if (status === "SUSPENDED" && currentJti) {
-      await this.tokenService.blacklistToken(currentJti, 900);
+    if (status === "SUSPENDED") {
+      await this.redisService.set(
+        `user:suspended:${id}`,
+        "true",
+        604_800 // 7 days
+      );
+    } else if (status === "ACTIVE") {
+      await this.redisService.del(`user:suspended:${id}`);
     }
 
     return Result.ok(UserResponseBuilder.from(user));
@@ -124,9 +128,15 @@ export class UsersService {
       });
     }
 
+    // Set Redis suspension flag — checked by JwtAuthGuard on every request
+    await this.redisService.set(
+      `user:suspended:${userId}`,
+      "true",
+      604_800 // 7 days
+    );
+
     return Result.ok({
-      message:
-        "Token revocation triggered. The user will need to re-authenticate.",
+      message: "All active sessions revoked. The user must re-authenticate.",
     });
   }
 }

@@ -32,6 +32,8 @@ import { RedisService } from "@/shared/redis/redis.service";
 import { authErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
+import type { Request, Response } from "express";
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -134,6 +136,8 @@ describe("IAM Module — Integration", () => {
   let authController: AuthController;
   let usersAdminController: UsersAdminController;
   let checkinStaffAdminController: CheckinStaffAdminController;
+  let mockResponse: Response;
+  let mockRequest: Request;
 
   beforeAll(() => {
     process.env = {
@@ -149,6 +153,9 @@ describe("IAM Module — Integration", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+
+    mockResponse = { cookie: jest.fn() } as unknown as Response;
+    mockRequest = { cookies: {} } as unknown as Request;
 
     const module = await Test.createTestingModule({
       controllers: [
@@ -190,11 +197,14 @@ describe("IAM Module — Integration", () => {
       mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
 
-      const result = await authController.login({
-        email: "student@university.edu",
-        password: "password123",
-        platform: "WEB",
-      });
+      const result = await authController.login(
+        {
+          email: "student@university.edu",
+          password: "password123",
+          platform: "WEB",
+        },
+        mockResponse
+      );
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.access_token).toBe(mockAccessToken);
@@ -210,11 +220,14 @@ describe("IAM Module — Integration", () => {
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(mockRefreshToken);
 
-      const result = await authController.login({
-        email: "student@university.edu",
-        password: "password123",
-        platform: "MOBILE",
-      });
+      const result = await authController.login(
+        {
+          email: "student@university.edu",
+          password: "password123",
+          platform: "MOBILE",
+        },
+        mockResponse
+      );
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.access_token).toBe(mockAccessToken);
@@ -229,11 +242,14 @@ describe("IAM Module — Integration", () => {
     it("returns INVALID_CREDENTIALS for wrong password", async () => {
       mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
 
-      const result = await authController.login({
-        email: "student@university.edu",
-        password: "wrong-password",
-        platform: "WEB",
-      });
+      const result = await authController.login(
+        {
+          email: "student@university.edu",
+          password: "wrong-password",
+          platform: "WEB",
+        },
+        mockResponse
+      );
 
       expect(result.isSuccess).toBe(false);
       expect(result.error.code).toBe("INVALID_CREDENTIALS");
@@ -242,11 +258,14 @@ describe("IAM Module — Integration", () => {
     it("returns INVALID_CREDENTIALS for inactive user (prevents enumeration)", async () => {
       mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(suspendedUser));
 
-      const result = await authController.login({
-        email: "suspended@university.edu",
-        password: "password123",
-        platform: "WEB",
-      });
+      const result = await authController.login(
+        {
+          email: "suspended@university.edu",
+          password: "password123",
+          platform: "WEB",
+        },
+        mockResponse
+      );
 
       expect(result.isSuccess).toBe(false);
       expect(result.error.code).toBe("INVALID_CREDENTIALS");
@@ -261,11 +280,14 @@ describe("IAM Module — Integration", () => {
         })
       );
 
-      const result = await authController.login({
-        email: "nonexistent@university.edu",
-        password: "password123",
-        platform: "WEB",
-      });
+      const result = await authController.login(
+        {
+          email: "nonexistent@university.edu",
+          password: "password123",
+          platform: "WEB",
+        },
+        mockResponse
+      );
 
       expect(result.isSuccess).toBe(false);
       expect(result.error.code).toBe("USER_NOT_FOUND");
@@ -278,11 +300,14 @@ describe("IAM Module — Integration", () => {
       );
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
 
-      const result = await authController.login({
-        email: "staff@university.edu",
-        password: "password123",
-        platform: "WEB",
-      });
+      const result = await authController.login(
+        {
+          email: "staff@university.edu",
+          password: "password123",
+          platform: "WEB",
+        },
+        mockResponse
+      );
 
       expect(result.isSuccess).toBe(true);
       expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
@@ -306,13 +331,15 @@ describe("IAM Module — Integration", () => {
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(mockRefreshToken);
 
-      const result = await authController.refresh({
-        refresh_token: "valid-refresh-token",
-      });
+      const result = await authController.refresh(
+        { refresh_token: "valid-refresh-token", platform: "WEB" },
+        mockResponse,
+        mockRequest
+      );
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.access_token).toBe(mockAccessToken);
-      expect(result.data.refresh_token).toBe(mockRefreshToken);
+      expect(result.data.accessToken).toBe(mockAccessToken);
+      expect(result.data.refreshToken).toBeUndefined();
       // Old refresh token should be blacklisted (rotation)
       expect(mockTokenService.blacklistToken).toHaveBeenCalledWith(
         "old-jti",
@@ -325,9 +352,11 @@ describe("IAM Module — Integration", () => {
         Result.fail(authErrors.refreshTokenInvalid())
       );
 
-      const result = await authController.refresh({
-        refresh_token: "expired-refresh-token",
-      });
+      const result = await authController.refresh(
+        { refresh_token: "expired-refresh-token", platform: "WEB" },
+        mockResponse,
+        mockRequest
+      );
 
       expect(result.isSuccess).toBe(false);
       expect(result.error.code).toBe("REFRESH_TOKEN_INVALID");
@@ -339,9 +368,11 @@ describe("IAM Module — Integration", () => {
       );
       mockUsersRepo.findById.mockResolvedValue(Result.ok(suspendedUser));
 
-      const result = await authController.refresh({
-        refresh_token: "valid-refresh-token",
-      });
+      const result = await authController.refresh(
+        { refresh_token: "valid-refresh-token", platform: "WEB" },
+        mockResponse,
+        mockRequest
+      );
 
       expect(result.isSuccess).toBe(false);
       expect(result.error.code).toBe("REFRESH_TOKEN_INVALID");
@@ -495,16 +526,9 @@ describe("IAM Module — Integration", () => {
       it("updates user status and blacklists admin token", async () => {
         mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
 
-        const result = await usersAdminController.updateUserStatus(
-          "usr-001",
-          { status: "SUSPENDED" },
-          {
-            sub: "admin-001",
-            role: "ORGANIZER",
-            jti: "admin-jti",
-            allowed_workshop_ids: [],
-          }
-        );
+        const result = await usersAdminController.updateUserStatus("usr-001", {
+          status: "SUSPENDED",
+        });
 
         expect(result.isSuccess).toBe(true);
         expect(mockUsersRepo.updateStatus).toHaveBeenCalledWith(
@@ -515,12 +539,14 @@ describe("IAM Module — Integration", () => {
     });
 
     describe("revokeUserTokens", () => {
-      it("revokes all tokens for a user", async () => {
+      it("revokes all tokens for a user by setting Redis suspension flag", async () => {
         const result = await usersAdminController.revokeUserTokens("usr-001");
 
         expect(result.isSuccess).toBe(true);
-        expect(mockTokenService.revokeAllUserTokens).toHaveBeenCalledWith(
-          "usr-001"
+        expect(mockRedisService.set).toHaveBeenCalledWith(
+          "user:suspended:usr-001",
+          "true",
+          604800
         );
       });
     });

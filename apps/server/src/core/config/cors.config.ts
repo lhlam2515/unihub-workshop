@@ -1,10 +1,10 @@
 import { CorsOptions } from "@nestjs/common/interfaces/external/cors-options.interface";
 
-export const getCorsConfig = (): CorsOptions => {
+export const getCorsConfig = (frontendUrl?: string): CorsOptions => {
   const allowedWebOrigins = [
     "http://localhost:5173", // Vite Dev Server
     "http://localhost:4173", // Vite Preview
-    process.env.FRONTEND_URL, // Production Web Portal
+    frontendUrl, // Production Web Portal (from ConfigService)
   ].filter(Boolean) as string[];
 
   return {

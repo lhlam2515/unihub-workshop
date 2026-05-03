@@ -1,3 +1,4 @@
+import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import jwt from "jsonwebtoken";
 
@@ -24,6 +25,30 @@ describe("TokenService", () => {
     process.env = OLD_ENV;
   });
 
+  const mockConfigService = {
+    get: jest.fn((key: string, defaultValue?: unknown) => {
+      const configs: Record<string, unknown> = {
+        "jwt.secret": "test-jwt-secret-for-unit-tests",
+        "jwt.refreshSecret": "test-refresh-secret-for-unit-tests",
+        "jwt.accessExpiry.WEB": 900,
+        "jwt.accessExpiry.MOBILE": 28800,
+        "jwt.refreshExpiry": 604800,
+      };
+      return configs[key] ?? defaultValue ?? null;
+    }),
+    getOrThrow: jest.fn((key: string) => {
+      const configs: Record<string, unknown> = {
+        "jwt.secret": "test-jwt-secret-for-unit-tests",
+        "jwt.refreshSecret": "test-refresh-secret-for-unit-tests",
+        "jwt.accessExpiry.WEB": 900,
+        "jwt.accessExpiry.MOBILE": 28800,
+        "jwt.refreshExpiry": 604800,
+      };
+      if (!(key in configs)) throw new Error(`Config ${key} not found`);
+      return configs[key];
+    }),
+  };
+
   beforeEach(async () => {
     mockRedisService = {
       set: jest.fn(),
@@ -34,6 +59,7 @@ describe("TokenService", () => {
       providers: [
         TokenService,
         { provide: RedisService, useValue: mockRedisService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 

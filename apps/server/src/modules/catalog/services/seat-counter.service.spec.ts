@@ -1,9 +1,11 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { RedisService } from "@/shared/redis/redis.service";
 import { seatErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
-import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
+
 import { SeatCounterService } from "./seat-counter.service";
+import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
 
 // ---------------------------------------------------------------------------
 // Suite

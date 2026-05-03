@@ -1,8 +1,8 @@
 import { Test } from "@nestjs/testing";
 
+import { RedisService } from "@/shared/redis/redis.service";
 import { Result } from "@/shared/response/result";
 
-import { TokenService } from "./token.service";
 import { UsersService } from "./users.service";
 import { UserResponseBuilder } from "../dto/user-response.dto";
 import { UsersRepository } from "../repositories/users.repository";
@@ -10,7 +10,7 @@ import { UsersRepository } from "../repositories/users.repository";
 describe("UsersService", () => {
   let usersService: UsersService;
   let mockUsersRepo: Record<string, jest.Mock>;
-  let mockTokenService: Record<string, jest.Mock>;
+  let mockRedisService: Record<string, jest.Mock>;
 
   const rawUser = {
     userId: "usr-1",
@@ -31,15 +31,17 @@ describe("UsersService", () => {
       updateStatus: jest.fn(),
     };
 
-    mockTokenService = {
-      blacklistToken: jest.fn(),
+    mockRedisService = {
+      set: jest.fn(),
+      get: jest.fn(),
+      del: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: UsersRepository, useValue: mockUsersRepo },
-        { provide: TokenService, useValue: mockTokenService },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 
@@ -146,7 +148,22 @@ describe("UsersService", () => {
   // updateUserStatus
   // -------------------------------------------------------------------------
   describe("updateUserStatus", () => {
-    it("returns updated user when setting ACTIVE", async () => {
+    it("sets Redis suspension flag when SUSPENDED", async () => {
+      const updatedRaw = { ...rawUser, status: "SUSPENDED" as const };
+      mockUsersRepo.updateStatus.mockResolvedValue(Result.ok(updatedRaw));
+
+      const result = await usersService.updateUserStatus("usr-1", "SUSPENDED");
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.status).toBe("SUSPENDED");
+      expect(mockRedisService.set).toHaveBeenCalledWith(
+        "user:suspended:usr-1",
+        "true",
+        604800
+      );
+    });
+
+    it("clears Redis suspension flag when ACTIVE", async () => {
       const updatedRaw = { ...rawUser, status: "ACTIVE" as const };
       mockUsersRepo.updateStatus.mockResolvedValue(Result.ok(updatedRaw));
 
@@ -154,35 +171,7 @@ describe("UsersService", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.status).toBe("ACTIVE");
-      expect(mockTokenService.blacklistToken).not.toHaveBeenCalled();
-    });
-
-    it("blacklists currentJti when setting SUSPENDED and jti provided", async () => {
-      const updatedRaw = { ...rawUser, status: "SUSPENDED" as const };
-      mockUsersRepo.updateStatus.mockResolvedValue(Result.ok(updatedRaw));
-
-      const result = await usersService.updateUserStatus(
-        "usr-1",
-        "SUSPENDED",
-        "admin-jti"
-      );
-
-      expect(result.isSuccess).toBe(true);
-      expect(result.data.status).toBe("SUSPENDED");
-      expect(mockTokenService.blacklistToken).toHaveBeenCalledWith(
-        "admin-jti",
-        900
-      );
-    });
-
-    it("does not blacklist when setting SUSPENDED without jti", async () => {
-      const updatedRaw = { ...rawUser, status: "SUSPENDED" as const };
-      mockUsersRepo.updateStatus.mockResolvedValue(Result.ok(updatedRaw));
-
-      const result = await usersService.updateUserStatus("usr-1", "SUSPENDED");
-
-      expect(result.isSuccess).toBe(true);
-      expect(mockTokenService.blacklistToken).not.toHaveBeenCalled();
+      expect(mockRedisService.del).toHaveBeenCalledWith("user:suspended:usr-1");
     });
 
     it("returns FailResult with USER_NOT_FOUND when user does not exist", async () => {
@@ -223,7 +212,7 @@ describe("UsersService", () => {
       const result = await usersService.revokeUserTokens("usr-1");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.message).toContain("Token revocation triggered");
+      expect(result.data.message).toContain("All active sessions revoked");
     });
 
     it("returns FailResult with USER_NOT_FOUND when user does not exist", async () => {

@@ -1,13 +1,13 @@
-import { Test, type TestingModule } from "@nestjs/testing";
 import { getQueueToken } from "@nestjs/bullmq";
-import { Queue } from "bullmq";
+import { Test, type TestingModule } from "@nestjs/testing";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";
 import { Result } from "@/shared/response/result";
+
+import { StudentSyncService } from "./student-sync.service";
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";
-import { StudentSyncService } from "./student-sync.service";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -25,14 +25,8 @@ const mockStudentSyncErrorsRepo = {
   findByJobId: jest.fn(),
 };
 
-const mockDb = {
-  insert: jest.fn(),
-};
-
-const mockSchema = {
-  students: {
-    studentCode: "studentCode",
-  },
+const mockStudentsRepo = {
+  upsertByStudentCode: jest.fn(),
 };
 
 const mockQueue = {
@@ -85,8 +79,10 @@ describe("StudentSyncService", () => {
           provide: StudentSyncErrorsRepository,
           useValue: mockStudentSyncErrorsRepo,
         },
-        { provide: DATABASE_CONNECTION, useValue: mockDb },
-        { provide: DATABASE_SCHEMA, useValue: mockSchema },
+        {
+          provide: StudentsRepository,
+          useValue: mockStudentsRepo,
+        },
         { provide: getQueueToken(STUDENT_SYNC_QUEUE), useValue: mockQueue },
       ],
     }).compile();

@@ -72,7 +72,7 @@ export class IdempotencyMechanic {
         proceed: false,
         existingPaymentId: existingPaymentId ?? undefined,
       });
-    } catch (err) {
+    } catch {
       // Redis failure: allow proceed since DB UNIQUE is Layer 2
       return Result.ok({ proceed: true });
     }

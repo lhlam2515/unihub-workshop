@@ -1,9 +1,11 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { speakerErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+
+import { SpeakersService } from "./speakers.service";
 import { SpeakerResponseBuilder } from "../dto/speaker-response.dto";
 import { SpeakersRepository } from "../repositories/speakers.repository";
-import { SpeakersService } from "./speakers.service";
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -95,7 +97,7 @@ describe("SpeakersService", () => {
     it("creates a speaker and returns its DTO", async () => {
       speakersRepo.create.mockResolvedValue(Result.ok(mockSpeakerEntity));
 
-      const result = await service.createSpeaker(createDto as any);
+      const result = await service.createSpeaker(createDto);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -114,7 +116,7 @@ describe("SpeakersService", () => {
       speakersRepo.create.mockResolvedValue(Result.ok(mockSpeakerEntity));
       const dtoMinimal = { full_name: "John Doe" };
 
-      await service.createSpeaker(dtoMinimal as any);
+      await service.createSpeaker(dtoMinimal);
 
       expect(speakersRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -131,7 +133,7 @@ describe("SpeakersService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.createSpeaker(createDto as any);
+      const result = await service.createSpeaker(createDto);
 
       expect(result.isFailure).toBe(true);
     });
@@ -146,7 +148,7 @@ describe("SpeakersService", () => {
       speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeakerEntity));
       speakersRepo.update.mockResolvedValue(Result.ok(updatedEntity));
 
-      const result = await service.updateSpeaker("s-001", updateDto as any);
+      const result = await service.updateSpeaker("s-001", updateDto);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -157,10 +159,7 @@ describe("SpeakersService", () => {
     it("fails when speaker does not exist", async () => {
       speakersRepo.findById.mockResolvedValue(Result.ok(null));
 
-      const result = await service.updateSpeaker(
-        "nonexistent",
-        updateDto as any
-      );
+      const result = await service.updateSpeaker("nonexistent", updateDto);
 
       expect(result.isFailure).toBe(true);
       expect(result.error).toEqual(speakerErrors.notFound("nonexistent"));
@@ -171,7 +170,7 @@ describe("SpeakersService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.updateSpeaker("s-001", updateDto as any);
+      const result = await service.updateSpeaker("s-001", updateDto);
 
       expect(result.isFailure).toBe(true);
     });
@@ -182,7 +181,7 @@ describe("SpeakersService", () => {
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.updateSpeaker("s-001", updateDto as any);
+      const result = await service.updateSpeaker("s-001", updateDto);
 
       expect(result.isFailure).toBe(true);
     });

@@ -378,7 +378,6 @@ describe("Background Module — Integration", () => {
     describe("getPaymentTimeoutJobStatus", () => {
       it("returns payment timeout job status with counts", async () => {
         // mockDb.select chain
-        const mockFrom = jest.fn().mockReturnThis();
         const mockWhere = jest.fn().mockResolvedValue([{ count: 10 }]);
         mockDb.select.mockReturnValue({
           from: () => ({ where: mockWhere }),
@@ -450,7 +449,9 @@ describe("Background Module — Integration", () => {
         const result = await systemAdminController.getCircuitBreakerStatus();
 
         expect(result.isSuccess).toBe(true);
-        const vnpayStatus = result.data.find((s: any) => s.gateway === "VNPAY");
+        const vnpayStatus = result.data.find(
+          (s: any) => s.gateway === "VNPAY"
+        )!;
         expect(vnpayStatus.state).toBe("OPEN");
         expect(vnpayStatus.failure_count).toBe(5);
         expect(vnpayStatus.recovery_deadline).toBeDefined();

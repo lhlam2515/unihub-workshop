@@ -5,7 +5,7 @@ import { authErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { StudentProfileService } from "./student-profile.service";
-import { TokenService } from "./token.service";
+import { TokenService, ACCESS_EXPIRY } from "./token.service";
 import { AuthMeResponseBuilder } from "../dto/auth-me-response.dto";
 import { LoginResponseBuilder } from "../dto/login-response.dto";
 import { CheckinStaffAssignmentsRepository } from "../repositories/checkin-staff-assignments.repository";
@@ -105,7 +105,10 @@ export class AuthService {
    * @param refreshTokenStr - The raw JWT refresh token string.
    * @returns OkResult with new accessToken, refreshToken, and expiresIn, or FailResult with REFRESH_TOKEN_INVALID.
    */
-  async refreshToken(refreshTokenStr: string): Promise<
+  async refreshToken(
+    refreshTokenStr: string,
+    platform: "WEB" | "MOBILE" = "WEB"
+  ): Promise<
     Result<{
       accessToken: string;
       refreshToken?: string;
@@ -145,7 +148,7 @@ export class AuthService {
         role: user.role,
         allowedWorkshopIds,
       },
-      "WEB"
+      platform
     );
 
     const newRefreshToken = await this.tokenService.signRefreshToken(
@@ -155,7 +158,7 @@ export class AuthService {
     return Result.ok({
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      expiresIn: 900,
+      expiresIn: ACCESS_EXPIRY[platform],
     });
   }
 

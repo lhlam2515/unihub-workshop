@@ -1,11 +1,10 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { ticketErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
+
+import { CheckinService } from "./checkin.service";
 import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";
-import { CheckinStatusBuilder } from "../dto/checkin-status.dto";
-import { CheckinService } from "./checkin.service";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -67,17 +66,6 @@ const wrongWorkshopTicket = {
 const checkinRecord = {
   checkinId: "ci-001",
   checkedInAt: new Date("2026-06-01T10:00:00Z"),
-};
-
-const createCheckinInput = {
-  registrationId: "reg-001",
-  ticketId: "tkt-001",
-  studentId: "stu-001",
-  workshopId: "w-001",
-  checkedInAt: expect.any(Date),
-  checkedInBy: "staff-001",
-  source: "ONLINE",
-  deviceId: undefined,
 };
 
 // ---------------------------------------------------------------------------
@@ -172,7 +160,11 @@ describe("CheckinService", () => {
 
     it("propagates repo failure from ticket lookup", async () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.scanQR("qr-any", "w-001", "staff-001");
@@ -184,7 +176,11 @@ describe("CheckinService", () => {
     it("propagates repo failure from checkin creation", async () => {
       mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(validTicket));
       mockCheckinRecordsRepo.create.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.scanQR("qr-valid-123", "w-001", "staff-001");
@@ -234,7 +230,11 @@ describe("CheckinService", () => {
 
     it("returns FailResult when confirmed count query fails", async () => {
       mockCheckinRecordsRepo.countConfirmedRegistrationsByWorkshopId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getWorkshopCheckinStatus("w-001");
@@ -248,7 +248,11 @@ describe("CheckinService", () => {
         Result.ok(50)
       );
       mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getWorkshopCheckinStatus("w-001");
@@ -263,7 +267,11 @@ describe("CheckinService", () => {
       );
       mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(Result.ok(30));
       mockCheckinRecordsRepo.findByWorkshopId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getWorkshopCheckinStatus("w-001");

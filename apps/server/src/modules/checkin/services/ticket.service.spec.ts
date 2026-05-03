@@ -112,7 +112,11 @@ describe("TicketService", () => {
 
     it("returns FailResult when find fails", async () => {
       mockTicketsRepo.findByRegistrationId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.voidTicket("reg-001");
@@ -126,7 +130,11 @@ describe("TicketService", () => {
         Result.ok(mockTicketFlat)
       );
       mockTicketsRepo.updateStatus.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.voidTicket("reg-001");
@@ -167,7 +175,11 @@ describe("TicketService", () => {
 
     it("returns FailResult when repo query fails", async () => {
       mockTicketsRepo.findByStudentIdAndStatus.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getMyTickets("stu-001");
@@ -214,7 +226,11 @@ describe("TicketService", () => {
 
     it("returns FailResult when repo query fails", async () => {
       mockTicketsRepo.findById.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.getTicketDetail("stu-001", "tkt-001");
@@ -257,7 +273,11 @@ describe("TicketService", () => {
 
     it("returns FailResult when repo query fails", async () => {
       mockTicketsRepo.findByWorkshopIdAndStatus.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          category: "INTERNAL",
+          code: "INTERNAL_ERROR",
+          message: "DB down",
+        })
       );
 
       const result = await service.preloadActiveTickets("w-001");

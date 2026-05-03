@@ -4,7 +4,6 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
-import { AssignWorkshopsSchema } from "../dto/assign-workshops.dto";
 import { CheckinStaffAssignmentService } from "../services/checkin-staff-assignment.service";
 
 import type { AssignWorkshopsDto } from "../dto/assign-workshops.dto";
@@ -34,10 +33,9 @@ export class CheckinStaffAdminController {
     @Param("user_id") userId: string,
     @Body() assignDto: AssignWorkshopsDto
   ) {
-    const parsed = AssignWorkshopsSchema.parse(assignDto);
     return this.checkinStaffAssignmentService.assignWorkshops(
       userId,
-      parsed.workshop_ids
+      assignDto.workshop_ids
     );
   }
 

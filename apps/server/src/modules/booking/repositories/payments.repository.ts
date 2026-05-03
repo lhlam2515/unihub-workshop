@@ -17,6 +17,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
+import type { DrizzleTransaction } from "@/database/types/drizzle.types";
 import type { Payment, NewPayment } from "@/database/types/transaction.types";
 import { lockTimeoutMapper, systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
@@ -83,7 +84,10 @@ export class PaymentsRepository {
    * @param tx - Optional transaction context. Uses default db if omitted.
    * @returns OkResult with the created Payment entity, or FailResult with INTERNAL_ERROR.
    */
-  async create(data: NewPayment, tx?: any): Promise<Result<Payment>> {
+  async create(
+    data: NewPayment,
+    tx?: DrizzleTransaction
+  ): Promise<Result<Payment>> {
     const conn = tx ?? this.db;
     return tryCatch<Payment>(
       async () => {
@@ -116,7 +120,7 @@ export class PaymentsRepository {
     id: string,
     status: string,
     gatewayTxnId?: string,
-    tx?: any
+    tx?: DrizzleTransaction
   ): Promise<Result<Payment>> {
     const conn = tx ?? this.db;
     return tryCatch<Payment>(
@@ -196,7 +200,9 @@ export class PaymentsRepository {
    * @param callback - Async function receiving the transaction client.
    * @returns The value returned by the callback.
    */
-  async transaction<T>(callback: (tx: any) => Promise<T>): Promise<T> {
+  async transaction<T>(
+    callback: (tx: DrizzleTransaction) => Promise<T>
+  ): Promise<T> {
     return this.db.transaction(callback);
   }
 
@@ -214,7 +220,10 @@ export class PaymentsRepository {
    * @param tx - Required transaction context.
    * @returns OkResult(void) when lock acquired, or FailResult with DB_LOCK_TIMEOUT.
    */
-  async lockWorkshopSlot(workshopId: string, tx: any): Promise<Result<void>> {
+  async lockWorkshopSlot(
+    workshopId: string,
+    tx: DrizzleTransaction
+  ): Promise<Result<void>> {
     return tryCatch(async () => {
       await tx
         .select({ dummy: sql`1` })
@@ -241,7 +250,7 @@ export class PaymentsRepository {
    */
   async findByIdempotencyKeyWithLock(
     key: string,
-    tx: any
+    tx: DrizzleTransaction
   ): Promise<Result<Payment | null>> {
     return tryCatch(async () => {
       const [result] = await tx
@@ -274,6 +283,25 @@ export class PaymentsRepository {
               sql`${this.schema.payments.timeoutAt} < NOW()`
             )
           );
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Counts payments with a given status.
+   *
+   * @param status - Payment status to filter by.
+   * @returns OkResult with the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countPending(): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const [{ count }] = await this.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(this.schema.payments)
+          .where(eq(this.schema.payments.status, "PENDING"));
+        return count;
       },
       (err) => systemErrors.internal(err)
     );

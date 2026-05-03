@@ -29,14 +29,14 @@ import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import { Result } from "@/shared/response/result";
 
+import { SystemMonitorService } from "../services/system-monitor.service";
+
 import type {
   CircuitBreakerStatusArrayDto,
   CircuitBreakerStatusDto,
   PaymentTimeoutJobStatusDto,
   ReconciliationJobStatusDto,
 } from "../dto/system-monitor-response.dto";
-
-import { SystemMonitorService } from "../services/system-monitor.service";
 
 @Controller("/admin/system")
 @UseGuards(JwtAuthGuard, RolesGuard)

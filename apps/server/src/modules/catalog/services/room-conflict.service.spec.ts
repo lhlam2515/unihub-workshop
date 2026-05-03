@@ -1,8 +1,10 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
-import { RoomsRepository } from "../repositories/rooms.repository";
+
 import { RoomConflictService } from "./room-conflict.service";
+import { RoomsRepository } from "../repositories/rooms.repository";
 
 // ---------------------------------------------------------------------------
 // Suite

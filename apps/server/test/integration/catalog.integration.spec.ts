@@ -736,7 +736,7 @@ describe("Catalog Module — Integration", () => {
           Result.ok(publishedWorkshop)
         );
 
-        const result = await documentsAdminController.uploadDocument(
+        await documentsAdminController.uploadDocument(
           "wid-001",
           mockFile(),
           adminUser

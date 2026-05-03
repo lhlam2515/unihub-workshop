@@ -11,11 +11,8 @@ import {
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
-import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
-import type { JwtPayload } from "@/types/jwt-payload";
 
-import { UpdateUserStatusSchema } from "../dto/update-user-status.dto";
 import { UsersService } from "../services/users.service";
 
 import type { UpdateUserStatusDto } from "../dto/update-user-status.dto";
@@ -58,21 +55,18 @@ export class UsersAdminController {
   /**
    * PATCH /admin/users/{id}/status
    *
-   * Updates a user's account status. When set to SUSPENDED, the admin's
-   * current token is auto-blacklisted to terminate the suspended session.
+   * Updates a user's account status. When set to SUSPENDED, all active
+   * sessions for that user are revoked via a Redis suspension flag.
    *
    * @param id - The target user's UUID.
    * @param updateStatusDto - Validated { status: ACTIVE | SUSPENDED }.
-   * @param admin - The authenticated ORGANIZER's JWT payload (for token revocation).
    */
   @Patch(":id/status")
   async updateUserStatus(
     @Param("id") id: string,
-    @Body() updateStatusDto: UpdateUserStatusDto,
-    @CurrentUser() admin: JwtPayload
+    @Body() updateStatusDto: UpdateUserStatusDto
   ) {
-    const parsed = UpdateUserStatusSchema.parse(updateStatusDto);
-    return this.usersService.updateUserStatus(id, parsed.status, admin.jti);
+    return this.usersService.updateUserStatus(id, updateStatusDto.status);
   }
 
   /**

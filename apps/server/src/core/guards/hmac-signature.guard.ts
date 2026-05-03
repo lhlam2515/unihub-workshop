@@ -34,32 +34,35 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  RawBodyRequest,
   UnauthorizedException,
 } from "@nestjs/common";
-import { Request } from "express";
+import { ConfigService } from "@nestjs/config";
 
-/**
- * Loads gateway shared secrets from the `PAYMENT_GATEWAY_SECRETS` environment variable.
- *
- * The value must be a JSON-encoded object mapping gateway identifiers to their
- * corresponding HMAC shared secrets.
- *
- * @returns A map of gateway names to secrets, or an empty object if not configured.
- */
-function loadGatewaySecrets(): Record<string, string> {
-  const raw = process.env.PAYMENT_GATEWAY_SECRETS;
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-const GATEWAY_SECRETS: Record<string, string> = loadGatewaySecrets();
+import type { Request } from "express";
 
 @Injectable()
 export class HmacSignatureGuard implements CanActivate {
+  constructor(private readonly config: ConfigService) {}
+
+  /**
+   * Loads gateway shared secrets from the validated configuration.
+   *
+   * Reads `PAYMENT_GATEWAY_SECRETS` via ConfigService and parses the
+   * JSON-encoded map of gateway names to HMAC shared secrets.
+   *
+   * @returns A map of gateway names to secrets, or an empty object if not configured.
+   */
+  private loadGatewaySecrets(): Record<string, string> {
+    const raw = this.config.get<string>("payment.gatewaySecrets");
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+
   /**
    * Verifies the HMAC-SHA256 signature of an incoming payment webhook.
    *
@@ -75,7 +78,9 @@ export class HmacSignatureGuard implements CanActivate {
    *         is missing, or the computed signature does not match.
    */
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context
+      .switchToHttp()
+      .getRequest<RawBodyRequest<Request>>();
     const signature = request.headers["x-gateway-signature"] as string;
     const gateway = request.params.gateway as string;
 
@@ -87,13 +92,15 @@ export class HmacSignatureGuard implements CanActivate {
       throw new UnauthorizedException("Missing signature header");
     }
 
-    const secret = GATEWAY_SECRETS[gateway];
+    const secrets = this.loadGatewaySecrets();
+    const secret = secrets[gateway];
     if (!secret) {
       throw new UnauthorizedException("Unknown payment gateway");
     }
 
-    const rawBody =
-      typeof request.body === "string"
+    const rawBody = request.rawBody
+      ? request.rawBody.toString("utf-8")
+      : typeof request.body === "string"
         ? request.body
         : JSON.stringify(request.body);
 

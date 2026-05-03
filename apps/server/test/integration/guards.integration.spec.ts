@@ -9,6 +9,8 @@
  * - FR-F01-006: Enforce Workshop Scope for CheckinStaff (WorkshopScopeGuard)
  * - S-H04: Missing scope guard on sync and status endpoints (noted as omission)
  */
+import crypto from "node:crypto";
+
 import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
@@ -341,7 +343,6 @@ describe("HmacSignatureGuard", () => {
   describe("valid HMAC passes", () => {
     it("allows when signature matches computed HMAC", () => {
       const body = JSON.stringify({ status: "SUCCESS", txn_id: "txn-001" });
-      const crypto = require("node:crypto");
       const expectedSignature = crypto
         .createHmac("sha256", "vnpay-secret")
         .update(body)

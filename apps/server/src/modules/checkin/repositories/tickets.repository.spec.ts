@@ -1,7 +1,7 @@
 import { Test, type TestingModule } from "@nestjs/testing";
-import { desc, eq } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+
 import { TicketsRepository } from "./tickets.repository";
 
 // ---------------------------------------------------------------------------

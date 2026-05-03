@@ -1,14 +1,17 @@
 import { Readable } from "node:stream";
+
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 import { StorageService } from "@/shared/storage/storage.service";
+
+import { DocumentsService } from "./documents.service";
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
 import { DocumentResponseBuilder } from "../dto/document-response.dto";
 import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
 import { WorkshopsRepository } from "../repositories/workshops.repository";
-import { DocumentsService } from "./documents.service";
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -18,7 +21,7 @@ const mockWorkshopRow = {
   workshops: {
     workshopId: "w-001",
     title: "Test Workshop",
-    status: "PUBLISHED",
+    status: "PUBLISHED" as const,
   },
   speakers: null,
   rooms: null,
@@ -28,21 +31,24 @@ const mockDocumentEntity = {
   documentId: "doc-001",
   workshopId: "w-001",
   fileUrl: "https://storage.example.com/workshops/w-001/doc.pdf",
-  originalName: "presentation.pdf",
-  fileSizeBytes: 102400,
-  uploadStatus: "UPLOADED",
+  originalName: "presentation.pdf" as string | null,
+  fileSizeBytes: 102400 as number | null,
+  uploadStatus: "UPLOADED" as const,
   uploadedBy: "u-001",
   uploadedAt: new Date("2026-05-01T00:00:00Z"),
+  updatedAt: new Date(),
 };
 
 const mockAiSummaryEntity = {
   summaryId: "sum-001",
   documentId: "doc-001",
   workshopId: "w-001",
-  status: "DONE",
+  status: "DONE" as const,
   summaryText: "AI summary text",
   modelUsed: "gpt-4",
+  rawText: null,
   generatedAt: new Date("2026-05-01T00:00:00Z"),
+  createdAt: new Date(),
   errorMessage: null,
 };
 
@@ -340,7 +346,10 @@ describe("DocumentsService", () => {
   // ---------------------------------------------------------------------------
   describe("retryAiSummary", () => {
     it("resets status to PENDING when summary is FAILED", async () => {
-      const failedSummary = { ...mockAiSummaryEntity, status: "FAILED" };
+      const failedSummary = {
+        ...mockAiSummaryEntity,
+        status: "FAILED" as const,
+      };
       aiSummariesRepo.findByDocumentId.mockResolvedValue(
         Result.ok(failedSummary)
       );
@@ -358,7 +367,10 @@ describe("DocumentsService", () => {
     });
 
     it("no-op when summary status is not FAILED", async () => {
-      const processingSummary = { ...mockAiSummaryEntity, status: "PENDING" };
+      const processingSummary = {
+        ...mockAiSummaryEntity,
+        status: "PENDING" as const,
+      };
       aiSummariesRepo.findByDocumentId.mockResolvedValue(
         Result.ok(processingSummary)
       );
@@ -389,7 +401,10 @@ describe("DocumentsService", () => {
     });
 
     it("proxies update failure", async () => {
-      const failedSummary = { ...mockAiSummaryEntity, status: "FAILED" };
+      const failedSummary = {
+        ...mockAiSummaryEntity,
+        status: "FAILED" as const,
+      };
       aiSummariesRepo.findByDocumentId.mockResolvedValue(
         Result.ok(failedSummary)
       );

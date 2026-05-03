@@ -60,4 +60,47 @@ export class StudentsRepository {
       (err) => systemErrors.internal(err)
     );
   }
+
+  /**
+   * Upserts a student record by student_code.
+   *
+   * On conflict, updates the row. On insert, creates a new record.
+   *
+   * Side effects:
+   * - Inserts or updates a row in the students table.
+   *
+   * @param data - Student fields to upsert.
+   * @returns OkResult with the upserted Student record, or FailResult (INTERNAL_ERROR).
+   */
+  async upsertByStudentCode(data: {
+    studentCode: string;
+    fullName: string;
+    emailEdu: string;
+    faculty: string;
+    classYear: number | null;
+  }): Promise<Result<Student>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .insert(this.schema.students)
+          .values({
+            ...data,
+            lastSyncedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: this.schema.students.studentCode,
+            set: {
+              fullName: data.fullName,
+              emailEdu: data.emailEdu,
+              faculty: data.faculty,
+              classYear: data.classYear,
+              lastSyncedAt: new Date(),
+            },
+          })
+          .returning();
+        return result;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
 }

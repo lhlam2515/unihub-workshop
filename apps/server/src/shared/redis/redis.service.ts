@@ -20,11 +20,14 @@
  * Redis key blueprint reference: `docs/blueprint/data/redis-keys.md`
  */
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client!: Redis;
+
+  constructor(private readonly configService: ConfigService) {}
 
   /**
    * Initializes the ioredis client from the REDIS_URL environment variable.
@@ -37,7 +40,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    * Side effects: Opens a persistent TCP connection to the Redis server.
    */
   onModuleInit() {
-    this.client = new Redis(process.env.REDIS_URL!);
+    const url = this.configService.getOrThrow<string>("redis.url");
+    this.client = new Redis(url);
   }
 
   // ---------------------------------------------------------------------------

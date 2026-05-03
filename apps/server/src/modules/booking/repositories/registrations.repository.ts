@@ -3,6 +3,7 @@ import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import type { DatabaseClient, DatabaseSchema } from "@/database";
+import type { DrizzleTransaction } from "@/database/types/drizzle.types";
 import type {
   Registration,
   NewRegistration,
@@ -95,7 +96,7 @@ export class RegistrationsRepository {
    */
   async create(
     data: NewRegistration,
-    _tx?: any
+    _tx?: DrizzleTransaction
   ): Promise<Result<Registration>> {
     return tryCatch(
       async () => {
@@ -127,7 +128,7 @@ export class RegistrationsRepository {
   async updateStatus(
     id: string,
     status: string,
-    tx?: any
+    tx?: DrizzleTransaction
   ): Promise<Result<Registration>> {
     const conn = tx ?? this.db;
     return tryCatch(
@@ -240,7 +241,7 @@ export class RegistrationsRepository {
    */
   async cancelAllForWorkshop(
     workshopId: string,
-    _tx?: any
+    _tx?: DrizzleTransaction
   ): Promise<Result<CancelResult>> {
     return tryCatch(
       async () => {
@@ -263,6 +264,30 @@ export class RegistrationsRepository {
           .returning();
 
         return { cancelledCount: result.length };
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Counts CONFIRMED registrations for a workshop.
+   *
+   * @param workshopId - UUID of the workshop.
+   * @returns OkResult with the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countConfirmedByWorkshop(workshopId: string): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const [{ count }] = await this.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(this.schema.registrations)
+          .where(
+            and(
+              eq(this.schema.registrations.workshopId, workshopId),
+              eq(this.schema.registrations.status, "CONFIRMED")
+            )
+          );
+        return count;
       },
       (err) => systemErrors.internal(err)
     );

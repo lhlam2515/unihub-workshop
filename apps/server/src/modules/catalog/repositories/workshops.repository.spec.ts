@@ -1,6 +1,8 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import { systemErrors } from "@/shared/response/errors";
+
 import { WorkshopsRepository } from "./workshops.repository";
 
 // ---------------------------------------------------------------------------
@@ -18,7 +20,7 @@ const mockWorkshop = {
   capacity: 30,
   isPaid: false,
   price: null,
-  status: "PUBLISHED",
+  status: "PUBLISHED" as const,
   createdBy: "u-001",
   createdAt: new Date("2026-05-01T00:00:00Z"),
   updatedAt: new Date("2026-05-01T00:00:00Z"),
@@ -93,7 +95,7 @@ function createMockDb() {
         try {
           return Promise.resolve(resolver()).then(onFulfilled);
         } catch (err) {
-          return Promise.reject(err).then(undefined, onRejected);
+          return Promise.reject(err as Error).then(undefined, onRejected);
         }
       }
       return Promise.resolve(undefined).then(onFulfilled);

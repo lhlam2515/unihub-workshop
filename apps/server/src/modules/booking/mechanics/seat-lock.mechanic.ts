@@ -48,7 +48,7 @@ export class SeatLockMechanic {
     workshopId: string,
     registrationId: string,
     studentId: string,
-    amount: number
+    _amount: number
   ): Promise<Result<boolean>> {
     const key = this.buildKey(workshopId, registrationId);
     const payload: SeatLockPayload = {

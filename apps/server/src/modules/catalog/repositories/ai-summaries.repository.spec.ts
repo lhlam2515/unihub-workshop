@@ -1,6 +1,7 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import { systemErrors } from "@/shared/response/errors";
+
 import { AiSummariesRepository } from "./ai-summaries.repository";
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,7 @@ function createMockDb() {
     update: jest.fn().mockReturnThis(),
     set: jest.fn().mockReturnThis(),
     onConflictDoUpdate: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
     then: undefined,
   };
 
@@ -117,7 +119,7 @@ describe("AiSummariesRepository", () => {
   // ---------------------------------------------------------------------------
   describe("findByWorkshopId", () => {
     it("returns summaries for a workshop", async () => {
-      mockChain.where.mockResolvedValue([mockAiSummary]);
+      mockChain.orderBy.mockResolvedValue([mockAiSummary]);
 
       const result = await repo.findByWorkshopId("w-001");
 
@@ -128,7 +130,7 @@ describe("AiSummariesRepository", () => {
     });
 
     it("returns empty array when no summaries exist", async () => {
-      mockChain.where.mockResolvedValue([]);
+      mockChain.orderBy.mockResolvedValue([]);
 
       const result = await repo.findByWorkshopId("w-001");
 
@@ -139,7 +141,7 @@ describe("AiSummariesRepository", () => {
     });
 
     it("returns FailResult on DB error", async () => {
-      mockChain.where.mockRejectedValue(new Error("DB error"));
+      mockChain.orderBy.mockRejectedValue(new Error("DB error"));
 
       const result = await repo.findByWorkshopId("w-001");
 

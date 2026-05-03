@@ -30,19 +30,22 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { Request } from "express";
 import jwt from "jsonwebtoken";
 
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
 import { RedisService } from "@/shared/redis/redis.service";
+import { authErrors } from "@/shared/response/errors";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly config: ConfigService
   ) {}
 
   /**
@@ -79,7 +82,10 @@ export class JwtAuthGuard implements CanActivate {
 
     let payload: JwtPayload;
     try {
-      payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+      payload = jwt.verify(
+        token,
+        this.config.getOrThrow<string>("jwt.secret")
+      ) as JwtPayload;
     } catch {
       throw new UnauthorizedException("Invalid token");
     }
@@ -89,6 +95,15 @@ export class JwtAuthGuard implements CanActivate {
     );
     if (isBlacklisted !== null) {
       throw new UnauthorizedException("Token has been revoked");
+    }
+
+    const isSuspended = await this.redisService.get(
+      `user:suspended:${payload.sub}`
+    );
+    if (isSuspended !== null) {
+      throw new UnauthorizedException(
+        authErrors.userSuspended(payload.sub).message
+      );
     }
 
     request.user = payload;

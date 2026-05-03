@@ -25,6 +25,11 @@ export interface WorkshopDetailDto extends WorkshopSummaryDto {
   description?: string;
   room_name: string;
   ends_at: Date;
+  ai_summary?: {
+    status: string;
+    error_message?: string;
+    document_id?: string;
+  } | null;
 }
 
 export interface WorkshopAdminDetailDto extends WorkshopDetailDto {
@@ -88,8 +93,11 @@ export class WorkshopResponseBuilder {
     speakerName: string,
     roomName: string,
     availableSeats: number,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    aiSummary?: any
+    aiSummary?: {
+      status: string;
+      error_message?: string;
+      document_id?: string;
+    } | null
   ): WorkshopDetailDto {
     const summary = this.fromSummary(workshop, speakerName, availableSeats);
     return {
@@ -97,6 +105,7 @@ export class WorkshopResponseBuilder {
       description: workshop.description ?? undefined,
       room_name: roomName,
       ends_at: workshop.endsAt,
+      ai_summary: aiSummary ?? undefined,
     };
   }
 

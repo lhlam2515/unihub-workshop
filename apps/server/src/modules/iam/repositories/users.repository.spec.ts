@@ -2,7 +2,6 @@ import { Test } from "@nestjs/testing";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
 import { systemErrors } from "@/shared/response/errors";
-import { OkResult } from "@/shared/response/result";
 
 import { UsersRepository } from "./users.repository";
 
@@ -238,7 +237,7 @@ describe("UsersRepository", () => {
       // The list method runs Promise.all on two queries in sequence.
       // We override mockDb to resolve differently on each call.
       let callCount = 0;
-      const promise = new Promise((resolve) => {
+      const promise = new Promise(() => {
         /* controlled below */
       });
       const thenable: Record<string, unknown> = {
@@ -277,8 +276,7 @@ describe("UsersRepository", () => {
             onFulfilled
           );
         },
-        catch: (onRejected: (reason: unknown) => void) =>
-          Promise.reject(new Error("never")).catch(() => {}),
+        catch: () => Promise.reject(new Error("never")).catch(() => {}),
       };
       Object.assign(mockDb, thenable);
 
@@ -299,8 +297,7 @@ describe("UsersRepository", () => {
           }
           return Promise.resolve([{ count: 0 }]).then(onFulfilled);
         },
-        catch: (onRejected: (reason: unknown) => void) =>
-          Promise.reject(new Error("never")).catch(() => {}),
+        catch: () => Promise.reject(new Error("never")).catch(() => {}),
       };
       Object.assign(mockDb, thenable);
 
@@ -336,8 +333,7 @@ describe("UsersRepository", () => {
           }
           return Promise.resolve([{ count: 10 }]).then(onFulfilled);
         },
-        catch: (onRejected: (reason: unknown) => void) =>
-          Promise.reject(new Error("never")).catch(() => {}),
+        catch: () => Promise.reject(new Error("never")).catch(() => {}),
       };
       Object.assign(mockDb, thenable);
 

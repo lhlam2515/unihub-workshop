@@ -1,14 +1,9 @@
 import { InjectQueue } from "@nestjs/bullmq";
-import { Inject, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
 
-import {
-  DATABASE_CONNECTION,
-  DATABASE_SCHEMA,
-  type DatabaseClient,
-  type DatabaseSchema,
-} from "@/database";
 import type { NewStudentSyncError, StudentSyncJob } from "@/database/types";
+import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import type { StudentSyncJobData } from "@/shared/queues/event-contracts";
 import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";
 import { systemErrors } from "@/shared/response/errors";
@@ -28,8 +23,7 @@ export class StudentSyncService {
   constructor(
     private readonly studentSyncJobsRepo: StudentSyncJobsRepository,
     private readonly studentSyncErrorsRepo: StudentSyncErrorsRepository,
-    @Inject(DATABASE_CONNECTION) private readonly db: DatabaseClient,
-    @Inject(DATABASE_SCHEMA) private readonly schema: DatabaseSchema,
+    private readonly studentsRepo: StudentsRepository,
     @InjectQueue(STUDENT_SYNC_QUEUE)
     private readonly studentSyncQueue: Queue
   ) {}
@@ -349,29 +343,12 @@ export class StudentSyncService {
           ? Number(row.class_year)
           : null;
 
-    // Drizzle INSERT ON CONFLICT DO UPDATE pattern
-    return Result.ok(
-      await this.db
-        .insert(this.schema.students)
-        .values({
-          studentCode,
-          fullName,
-          emailEdu,
-          faculty,
-          classYear: Number.isNaN(classYear) ? null : classYear,
-          lastSyncedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: this.schema.students.studentCode,
-          set: {
-            fullName,
-            emailEdu,
-            faculty,
-            classYear: Number.isNaN(classYear) ? null : classYear,
-            lastSyncedAt: new Date(),
-          },
-        })
-        .returning()
-    );
+    return this.studentsRepo.upsertByStudentCode({
+      studentCode,
+      fullName,
+      emailEdu,
+      faculty,
+      classYear: Number.isNaN(classYear) ? null : classYear,
+    });
   }
 }

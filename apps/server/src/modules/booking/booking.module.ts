@@ -5,6 +5,7 @@ import { SharedQueueModule } from "@/shared/queues/queue.module";
 import { RedisModule } from "@/shared/redis/redis.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
+import { IamModule } from "../iam/iam.module";
 import { PaymentsController } from "./controllers/payments.controller";
 import { RegistrationsController } from "./controllers/registrations.controller";
 import { CircuitBreakerMechanic } from "./mechanics/circuit-breaker.mechanic";
@@ -18,6 +19,7 @@ import { TicketsRepository } from "./repositories/tickets.repository";
 import { PaymentGatewayService } from "./services/payment-gateway.service";
 import { PaymentsService } from "./services/payments.service";
 import { RegistrationsService } from "./services/registrations.service";
+import { TicketsService } from "./services/tickets.service";
 
 /**
  * Booking Module
@@ -42,13 +44,20 @@ import { RegistrationsService } from "./services/registrations.service";
  * - SeatLockMechanic — consumed by CatalogModule (workshop cancellation flow)
  */
 @Module({
-  imports: [DatabaseModule, RedisModule, CatalogModule, SharedQueueModule],
+  imports: [
+    DatabaseModule,
+    RedisModule,
+    CatalogModule,
+    SharedQueueModule,
+    IamModule,
+  ],
   controllers: [RegistrationsController, PaymentsController],
   providers: [
     // Services
     RegistrationsService,
     PaymentsService,
     PaymentGatewayService,
+    TicketsService,
     // Mechanics
     RateLimiterMechanic,
     SeatLockMechanic,

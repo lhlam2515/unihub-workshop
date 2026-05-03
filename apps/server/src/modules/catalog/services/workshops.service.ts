@@ -17,7 +17,6 @@
  */
 
 import { Injectable } from "@nestjs/common";
-import { Cron } from "@nestjs/schedule";
 
 import type {
   NewWorkshop,
@@ -155,7 +154,15 @@ export class WorkshopsService {
         workshopRow.speakers?.fullName ?? "Unknown",
         workshopRow.rooms?.name ?? "Unknown",
         availableSeats,
-        summaryResult.isSuccess ? summaryResult.data : undefined
+        summaryResult.isSuccess &&
+          summaryResult.data &&
+          summaryResult.data.length > 0
+          ? {
+              status: summaryResult.data[0].status,
+              error_message: summaryResult.data[0].errorMessage ?? undefined,
+              document_id: summaryResult.data[0].documentId,
+            }
+          : undefined
       )
     );
   }
@@ -697,7 +704,6 @@ export class WorkshopsService {
    *
    * @returns OkResult containing the count of completed workshops, or FailResult (INTERNAL_ERROR).
    */
-  @Cron("0 * * * *")
   async completePastWorkshops(): Promise<Result<number>> {
     return this.workshopsRepo.completePastPublished();
   }
@@ -733,15 +739,25 @@ export class WorkshopsService {
    */
   async reconcileSlot(
     workshopId: string,
-    capacity: number,
     lockedCount: number,
     confirmedCount: number
   ): Promise<Result<WorkshopSlot>> {
     return this.workshopSlotsRepo.reconcile(
       workshopId,
-      capacity,
       lockedCount,
       confirmedCount
     );
+  }
+
+  /**
+   * Retrieves a workshop slot by workshop ID.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with the WorkshopSlot, or null if not found.
+   */
+  async getSlotByWorkshopId(
+    workshopId: string
+  ): Promise<Result<WorkshopSlot | null>> {
+    return this.workshopSlotsRepo.findByWorkshopId(workshopId);
   }
 }

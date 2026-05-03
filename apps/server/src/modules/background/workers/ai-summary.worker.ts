@@ -2,7 +2,6 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 
-import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
 import type { AiSummaryJobData } from "@/shared/queues/event-contracts";
 import { AI_SUMMARY_QUEUE } from "@/shared/queues/queue.constants";
 
@@ -37,10 +36,7 @@ import { AiSummaryService } from "../services/ai-summary.service";
 export class AiSummaryWorker extends WorkerHost {
   private readonly logger = new Logger(AiSummaryWorker.name);
 
-  constructor(
-    private readonly aiSummaryService: AiSummaryService,
-    private readonly aiSummariesRepo: AiSummariesRepository
-  ) {
+  constructor(private readonly aiSummaryService: AiSummaryService) {
     super();
   }
 
@@ -93,16 +89,7 @@ export class AiSummaryWorker extends WorkerHost {
           `LLM timeout for document ${documentId}, marking as FAILED (no retry)`
         );
 
-        // Look up the summary record and mark as failed
-        const summaryResult =
-          await this.aiSummariesRepo.findByDocumentId(documentId);
-        if (summaryResult.isSuccess && summaryResult.data) {
-          await this.aiSummariesRepo.updateStatus(
-            summaryResult.data.summaryId,
-            "FAILED",
-            "LLM_TIMEOUT"
-          );
-        }
+        await this.aiSummaryService.handleTimeout(documentId);
 
         // Return without throwing — BullMQ will not retry
         return;

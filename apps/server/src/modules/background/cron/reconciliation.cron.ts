@@ -145,7 +145,6 @@ export class ReconciliationCron {
     // UPSERT workshop_slots with reconciled counts via service
     const slotResult = await this.workshopsService.reconcileSlot(
       workshopId,
-      capacity,
       lockedCount,
       confirmedCount
     );

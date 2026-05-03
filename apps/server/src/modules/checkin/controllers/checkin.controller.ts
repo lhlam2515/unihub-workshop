@@ -16,12 +16,11 @@ import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
+import { OfflineSyncDto } from "../dto/offline-sync.dto";
+import { ScanQRDto } from "../dto/scan-qr.dto";
 import { CheckinService } from "../services/checkin.service";
 import { OfflineSyncService } from "../services/offline-sync.service";
 import { TicketService } from "../services/ticket.service";
-
-import type { OfflineSyncDto } from "../dto/offline-sync.dto";
-import type { ScanQRDto } from "../dto/scan-qr.dto";
 
 @Controller("checkin")
 @UseGuards(JwtAuthGuard, RolesGuard)
