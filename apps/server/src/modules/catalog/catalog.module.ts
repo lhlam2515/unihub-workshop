@@ -76,6 +76,7 @@ import { WorkshopsService } from "./services/workshops.service";
     WorkshopsService,
     SeatCounterService,
     WorkshopNotificationPublisher,
+    AiSummariesRepository,
   ],
 })
 export class CatalogModule {}

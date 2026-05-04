@@ -16,6 +16,12 @@ import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
 import { WorkshopAutoCompleteCron } from "./cron/workshop-auto-complete.cron";
+import { LlmSummaryFilter } from "./pipeline/llm-summary.filter";
+import { PdfExtractionFilter } from "./pipeline/pdf-extraction.filter";
+import { PdfSummaryPipeline } from "./pipeline/pdf-summary.pipeline";
+import { PersistResultFilter } from "./pipeline/persist-result.filter";
+import { TextCleaningFilter } from "./pipeline/text-cleaning.filter";
+import { UpsertRecordFilter } from "./pipeline/upsert-record.filter";
 import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "./repositories/notification-logs.repository";
 import { StudentSyncErrorsRepository } from "./repositories/student-sync-errors.repository";
@@ -71,6 +77,14 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     SystemAdminController,
   ],
   providers: [
+    // Pipeline filters (Pipe-and-Filter architecture)
+    UpsertRecordFilter,
+    PdfExtractionFilter,
+    TextCleaningFilter,
+    LlmSummaryFilter,
+    PersistResultFilter,
+    PdfSummaryPipeline,
+
     NotificationsService,
     NotificationDispatchService,
     AiSummaryService,
