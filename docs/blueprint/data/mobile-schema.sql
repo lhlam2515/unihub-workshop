@@ -5,19 +5,20 @@
 -- ============================================================
 
 -- ============================================================
--- BẢNG 1: cached_tickets
--- Mục đích: Mirror danh sách Ticket ACTIVE từ server về local.
--- Nguồn:    GET /checkin/workshops/{id}/tickets (khi online)
--- Dùng để: Tra cứu qr_token khi offline — phải cực nhanh.
+-- BẢNG 1: cached_registrations
+-- Mục đích: Mirror danh sách registration có qr_code từ server.
+--           Server không có entity tickets riêng — qr_code nằm
+--           trực tiếp trên registrations (xem design.md ADR-02).
+-- Nguồn:    GET /checkin/workshops/{id}/registrations (khi online)
+-- Dùng để: Tra cứu qr_code khi offline — phải cực nhanh.
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS cached_tickets (
-    -- PK từ server, không tự sinh
-    ticket_id           TEXT PRIMARY KEY NOT NULL,
+CREATE TABLE IF NOT EXISTS cached_registrations (
+    -- PK từ server (registrations.id), không tự sinh
+    registration_id     TEXT PRIMARY KEY NOT NULL,
 
     -- Data để validate khi quét QR
-    qr_token            TEXT NOT NULL,
-    registration_id     TEXT NOT NULL,
+    qr_code             TEXT NOT NULL,
     workshop_id         TEXT NOT NULL,
 
     -- Hiển thị trên màn hình sau khi quét thành công
@@ -25,10 +26,10 @@ CREATE TABLE IF NOT EXISTS cached_tickets (
     student_code        TEXT NOT NULL,
     student_id          TEXT NOT NULL,
 
-    -- Trạng thái vé — chỉ cache ACTIVE, nhưng giữ field để
-    -- phát hiện nếu server trả về VOID trong lần sync sau
-    ticket_status       TEXT NOT NULL DEFAULT 'ACTIVE'
-                        CHECK (ticket_status IN ('ACTIVE', 'VOID')),
+    -- Trạng thái đăng ký — chỉ cache 'paid'/'pending', nhưng giữ field để
+    -- phát hiện nếu server trả về 'cancelled' trong lần sync sau
+    registration_status TEXT NOT NULL DEFAULT 'paid'
+                        CHECK (registration_status IN ('pending', 'paid', 'cancelled')),
 
     -- Metadata cache
     cached_at           INTEGER NOT NULL,   -- Unix timestamp (ms)
@@ -36,30 +37,32 @@ CREATE TABLE IF NOT EXISTS cached_tickets (
     workshop_title      TEXT
 );
 
--- Index chính — đây là query hot nhất: lookup bằng qr_token khi quét QR
+-- Index chính — đây là query hot nhất: lookup bằng qr_code khi quét QR
 -- Phải là UNIQUE để tránh cache duplicate khi re-fetch
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cached_tickets_qr_token
-    ON cached_tickets (qr_token);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cached_registrations_qr_code
+    ON cached_registrations (qr_code);
 
 -- Index phụ — lọc theo workshop khi pre-load/invalidate cache
-CREATE INDEX IF NOT EXISTS idx_cached_tickets_workshop
-    ON cached_tickets (workshop_id);
+CREATE INDEX IF NOT EXISTS idx_cached_registrations_workshop
+    ON cached_registrations (workshop_id);
 
 
 -- ============================================================
 -- BẢNG 2: checkin_queue
 -- Mục đích: Buffer lưu lượt check-in khi offline.
---           Khi online → batch POST lên /checkin/sync
---           Backend INSERT ON CONFLICT DO NOTHING.
+--           Khi online → batch POST lên /checkins/sync
+--           Server INSERT INTO checkins ON CONFLICT (registration_id) DO NOTHING.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS checkin_queue (
     -- UUID sinh trên device — dùng làm local idempotency key
     local_id            TEXT PRIMARY KEY NOT NULL,
 
-    -- Data đủ để server reconstruct checkin_record
-    qr_token            TEXT NOT NULL,
-    ticket_id           TEXT NOT NULL,
+    -- Data đủ để server reconstruct checkin record
+    -- Server resolve registration_id từ qr_code:
+    --   SELECT id FROM registrations WHERE qr_code = :code
+    qr_code             TEXT NOT NULL,
+    registration_id     TEXT NOT NULL,
     workshop_id         TEXT NOT NULL,
     student_id          TEXT NOT NULL,
     student_name        TEXT NOT NULL,
@@ -70,13 +73,13 @@ CREATE TABLE IF NOT EXISTS checkin_queue (
 
     -- Device context
     device_id           TEXT NOT NULL,
-    checked_in_by       TEXT NOT NULL,      -- user_id của CHECKIN_STAFF (từ JWT)
+    checked_in_by       TEXT NOT NULL,      -- staff.id của CHECKIN_STAFF (từ JWT)
 
     -- Sync lifecycle
     -- PENDING   → chưa sync lên server
     -- SYNCING   → đang trong batch request (tránh double-submit)
     -- SYNCED    → server đã nhận, ON CONFLICT DO NOTHING thành công
-    -- CONFLICT  → server báo vé đã VOID hoặc đã check-in bởi device khác
+    -- CONFLICT  → server báo registration đã check-in bởi device khác
     -- FAILED    → network/server error, sẽ retry
     sync_status         TEXT NOT NULL DEFAULT 'PENDING'
                         CHECK (sync_status IN (
@@ -109,10 +112,17 @@ CREATE INDEX IF NOT EXISTS idx_checkin_queue_checked_in_at
 CREATE INDEX IF NOT EXISTS idx_checkin_queue_workshop
     ON checkin_queue (workshop_id, sync_status);
 
--- Ràng buộc local idempotency: cùng vé không thể quét 2 lần
--- Mirror UNIQUE(ticket_id, workshop_id) của server
-CREATE UNIQUE INDEX IF NOT EXISTS idx_checkin_queue_ticket_workshop
-    ON checkin_queue (ticket_id, workshop_id);
+-- Ràng buộc local idempotency: cùng qr_code không thể quét 2 lần
+-- Mirror server-side UNIQUE(registration_id) trên checkins
+CREATE UNIQUE INDEX IF NOT EXISTS idx_checkin_queue_qr_workshop
+    ON checkin_queue (qr_code, workshop_id);
+
+-- SYNCING recovery:
+-- Nếu app crash giữa batch sync, rows sync_status='SYNCING' bị kẹt.
+-- Khi app restart, sweep tất cả SYNCING rows có synced_at IS NULL
+-- (hoặc queued > 5 phút) về PENDING để worker retry.
+-- Server ON CONFLICT (registration_id) DO NOTHING làm re-send an toàn
+-- — không tạo duplicate checkin record (idempotent).
 
 
 -- ============================================================
@@ -133,16 +143,13 @@ CREATE TABLE IF NOT EXISTS app_session (
     role                TEXT NOT NULL DEFAULT 'CHECKIN_STAFF',
 
     -- Scope — danh sách workshop được phân công (từ JWT payload)
-    -- Lưu dạng JSON string: ["wid-1", "wid-2"]
     allowed_workshop_ids TEXT NOT NULL DEFAULT '[]',
 
     -- Token expiry — dùng để check offline nếu còn hạn không
-    -- Không lưu raw token ở đây — lưu trong Expo SecureStore
     access_token_exp    INTEGER NOT NULL,   -- Unix timestamp (giây) — JWT exp claim
     refresh_token_exp   INTEGER NOT NULL,   -- Unix timestamp (giây)
 
     -- SecureStore keys — reference đến nơi lưu raw token
-    -- App dùng key này để gọi SecureStore.getItemAsync(key)
     access_token_key    TEXT NOT NULL DEFAULT 'unihub_access_token',
     refresh_token_key   TEXT NOT NULL DEFAULT 'unihub_refresh_token',
 
@@ -168,8 +175,8 @@ CREATE TABLE IF NOT EXISTS cache_metadata (
     -- Thời điểm fetch gần nhất từ server
     last_fetched_at     INTEGER NOT NULL,   -- Unix timestamp (ms)
 
-    -- Tổng số vé đã cache (để hiển thị progress)
-    ticket_count        INTEGER NOT NULL DEFAULT 0,
+    -- Tổng số registration đã cache (để hiển thị progress)
+    registration_count  INTEGER NOT NULL DEFAULT 0,
 
     -- Trạng thái cache
     -- FRESH      → mới fetch, tin cậy
@@ -179,7 +186,6 @@ CREATE TABLE IF NOT EXISTS cache_metadata (
                         CHECK (cache_status IN ('FRESH', 'STALE', 'INVALID')),
 
     -- ETag hoặc last_modified từ server (HTTP cache headers)
-    -- Dùng cho conditional request: If-None-Match để tiết kiệm bandwidth
     etag                TEXT
 );
 
