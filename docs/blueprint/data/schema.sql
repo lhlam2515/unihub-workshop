@@ -14,11 +14,14 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ENUMS — Centralized state definitions
 -- =============================================================================
 
--- Design.md dòng 79: status TEXT CHECK ('pending','paid','cancelled')
+-- Design.md ADR-02: status cho registrations
+-- 'confirmed' phân biệt free-workshop (không qua payment) với paid-workshop đang chờ thanh toán
+-- Gap fix: user-flow analysis cho thấy free workshop không có terminal state rõ ràng nếu thiếu 'confirmed'
 CREATE TYPE registration_status AS ENUM (
-    'pending',      -- Đang chờ thanh toán (nếu có phí) hoặc vừa đăng ký
-    'paid',         -- Đã xác nhận
-    'cancelled'     -- Đã hủy
+    'pending',      -- Chờ thanh toán (chỉ workshop có phí, price > 0)
+    'confirmed',    -- Hoàn tất đăng ký (workshop miễn phí, price = 0) — KHÔNG qua payment flow
+    'paid',         -- Thanh toán thành công (workshop có phí)
+    'cancelled'     -- Đã hủy (bởi student hoặc BTC cancel workshop)
 );
 
 -- Design.md dòng 97: status TEXT CHECK ('initiated','succeeded','failed','unresolved')
@@ -40,8 +43,9 @@ CREATE TYPE summary_status AS ENUM ('none', 'queued', 'processing', 'done', 'fai
 
 -- =============================================================================
 -- BOUNDED CONTEXT 1: IDENTITY
--- Entities: students, staff
+-- Entities: students, staff, device_tokens
 -- Design.md ADR-02 dòng 18-48: tách biệt students (TEXT PK) và staff (UUID PK)
+-- device_tokens (Gap fix): lưu FCM/APNs push token cho in-app notification (ADR-09)
 -- =============================================================================
 
 -- Design.md dòng 24-30
@@ -77,6 +81,48 @@ COMMENT ON TABLE staff IS
     'không dùng bảng users chung (xem ADR-02 rationale).';
 
 CREATE INDEX idx_staff_role ON staff(role) WHERE is_active = true;
+
+
+-- Gap fix: device_tokens — Push notification token cho in-app channel (ADR-09)
+-- User-flow: Sinh viên nhận thông báo qua app sau đăng ký → cần FCM/APNs token
+-- Tại sao tách bảng riêng (không cột trên students):
+--   1 student có thể có nhiều device (iOS + Android + tablet) → 1-to-many
+--   Token có lifecycle riêng (rotate khi app reinstall, expire sau 30 ngày không dùng)
+CREATE TABLE device_tokens (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id  TEXT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    -- ON DELETE CASCADE: khi student bị xóa/deactivated, tokens tự xóa — không có orphan tokens
+    token       TEXT NOT NULL,
+    -- FCM token (Android) hoặc APNs device token (iOS) — sinh bởi Firebase/Apple SDK
+    platform    TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
+    is_active   BOOLEAN NOT NULL DEFAULT true,
+    -- false khi: user logout, FCM trả "token_expired/unregistered", hoặc job đêm dọn stale tokens
+    last_seen   TIMESTAMPTZ DEFAULT now(),
+    -- Cập nhật mỗi khi app foreground → job đêm SET is_active=false nếu last_seen > 30 ngày
+    created_at  TIMESTAMPTZ DEFAULT now(),
+
+    UNIQUE (token)  -- FCM/APNs token là globally unique per device-app installation
+);
+
+COMMENT ON TABLE device_tokens IS
+    'FCM/APNs push token cho in-app notification (ADR-09 InAppChannel strategy). '
+    'Một student có nhiều device → 1-to-many với students. '
+    'UNIQUE(token) bảo vệ khỏi duplicate registration khi token bị re-issue cho cùng device. '
+    'ON DELETE CASCADE trên student_id: orphan token không tồn tại sau khi student bị xóa.';
+
+COMMENT ON COLUMN device_tokens.last_seen IS
+    'Update mỗi khi app mở (foreground event). Cleanup job đêm: '
+    'SET is_active=false WHERE last_seen < now() - interval ''30 days''. '
+    'Tránh gửi push đến stale devices (tốn FCM quota, trigger token_not_registered error).';
+
+COMMENT ON COLUMN device_tokens.is_active IS
+    'false khi: (1) user logout → DELETE /device-tokens/:token, '
+    '(2) FCM trả "token_not_registered" → InAppChannel tự SET false, '
+    '(3) cleanup job đêm (last_seen > 30d). '
+    'Không DELETE ngay để giữ lịch sử debug notification failures.';
+
+-- Partial index: query pattern "lấy tất cả active tokens của student X để dispatch push"
+CREATE INDEX idx_device_tokens_student ON device_tokens(student_id) WHERE is_active = true;
 
 
 -- =============================================================================
@@ -117,13 +163,27 @@ COMMENT ON TABLE rooms IS 'Phòng tổ chức sự kiện. Là entity riêng đ�
 CREATE INDEX idx_rooms_name ON rooms (name);
 
 
--- Design.md dòng 50-73: workshops thay vì old workshop_slots model
--- seats_total + seats_available trực tiếp trên workshops (xem ADR-02 rationale)
+-- Design.md ADR-02 dòng 50-73 (updated): workshops với room_id và speaker_id FKs
+-- Gap fix (user-flow):
+--   Flow 1 (sinh viên xem detail): cần "thông tin diễn giả" + "sơ đồ phòng" → speaker_id + room_id FK
+--   Flow 7 (BTC đổi phòng): cần FK reference, không phải text free-form → room_id FK
+--   location TEXT đã được thay bằng rooms entity (tách để tránh duplicate floor_plan_url)
 CREATE TABLE workshops (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title           TEXT NOT NULL,
     description     TEXT,
-    location        TEXT NOT NULL,               -- Địa điểm tổ chức (tên phòng, building)
+
+    -- Gap fix: FK thay cho location TEXT NOT NULL (ADR-02 original)
+    -- NULL cho phép ở status='draft' — BTC chưa cần chọn phòng khi tạo draft
+    -- Khi publish (draft → open): application layer enforce room_id IS NOT NULL
+    -- Lý do không dùng DB CHECK: không thể viết conditional NOT NULL đơn giản
+    --   theo status trong PostgreSQL mà không có trigger — app-layer validation rõ ràng hơn
+    room_id         UUID REFERENCES rooms(id),
+
+    -- Gap fix: FK đến speakers table (thay vì text free-form trong description)
+    -- NULL cho phép: BTC có thể tạo workshop trước khi confirm diễn giả
+    speaker_id      UUID REFERENCES speakers(id),
+
     starts_at       TIMESTAMPTZ NOT NULL,
     ends_at         TIMESTAMPTZ NOT NULL,
     seats_total     INT NOT NULL CHECK (seats_total > 0),
@@ -149,7 +209,18 @@ COMMENT ON TABLE workshops IS
     'Thực thể trung tâm. seats_total + seats_available trực tiếp trên workshops — '
     'không tách bảng workshop_slots riêng (xem ADR-02 Section 4 rationale). '
     'Optimistic Lock qua version column (xem ADR-03). '
-    'Summary + PDF fields gộp trực tiếp (xem ADR-14: "Không tách bảng 1-1").';
+    'Summary + PDF fields gộp trực tiếp (xem ADR-14: "Không tách bảng 1-1"). '
+    'room_id FK thay thế location TEXT — cho phép lưu floor_plan_url và hỗ trợ đổi phòng. '
+    'speaker_id FK — cho phép hiển thị thông tin diễn giả trên detail page.';
+
+COMMENT ON COLUMN workshops.room_id IS
+    'FK đến rooms.id. NULL được phép ở status=draft. '
+    'Application layer enforce NOT NULL khi publish (draft→open). '
+    'Cho phép JOIN rooms.floor_plan_url để hiển thị sơ đồ phòng cho sinh viên (Gap fix Flow 1).';
+
+COMMENT ON COLUMN workshops.speaker_id IS
+    'FK đến speakers.id. NULL được phép — BTC có thể tạo workshop trước khi confirm diễn giả. '
+    'Cho phép JOIN speakers.(full_name, title, bio, avatar_url) cho trang chi tiết workshop.';
 
 COMMENT ON COLUMN workshops.seats_available IS
     'Source of truth cho available seats (PostgreSQL). '
@@ -163,6 +234,9 @@ COMMENT ON COLUMN workshops.version IS
 -- Partial index: chỉ index workshop đang open để scan nhanh
 CREATE INDEX idx_workshops_status_starts ON workshops(status, starts_at) WHERE status = 'open';
 
+-- Gap fix: index cho lookup theo phòng (BTC xem lịch sử phòng, conflict detection)
+CREATE INDEX idx_workshops_room ON workshops(room_id, starts_at);
+
 
 -- =============================================================================
 -- BOUNDED CONTEXT 3: TRANSACTION
@@ -175,7 +249,14 @@ CREATE TABLE registrations (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workshop_id   UUID NOT NULL REFERENCES workshops(id),
     student_id    TEXT NOT NULL REFERENCES students(student_id),
-    status        TEXT NOT NULL CHECK (status IN ('pending', 'paid', 'cancelled')),
+    -- Gap fix: thêm 'confirmed' cho free workshop (price = 0)
+    -- State machine:
+    --   Free:  [INSERT] → 'confirmed' (terminal, không qua payment)
+    --   Paid:  [INSERT] → 'pending' → 'paid' (payment succeeded)
+    --                             → 'cancelled' (payment failed / BTC cancel)
+    -- Ảnh hưởng check-in (Flow 5): query WHERE status IN ('paid', 'confirmed')
+    --   Nếu chỉ check 'paid', free-workshop registrations bị từ chối check-in → bug nghiệp vụ
+    status        TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'paid', 'cancelled')),
     qr_code       TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
     registered_at TIMESTAMPTZ DEFAULT now(),
 
@@ -185,7 +266,15 @@ CREATE TABLE registrations (
 
 COMMENT ON TABLE registrations IS
     'Đơn đăng ký workshop. qr_code là UUID v4 độc lập (không dùng id) — '
-    'ngăn brute-force scan từ registration ID (xem design.md rationale dòng 186-187).';
+    'ngăn brute-force scan từ registration ID (xem design.md rationale dòng 186-187). '
+    'status=confirmed dành cho free workshops (price=0), status=paid cho paid workshops. '
+    'Check-in staff query: WHERE status IN (''paid'', ''confirmed'') — không thể chỉ check ''paid''.';
+
+COMMENT ON COLUMN registrations.status IS
+    'pending: chờ payment (chỉ paid workshop). '
+    'confirmed: đăng ký hoàn tất không qua payment (free workshop, price=0). '
+    'paid: payment gateway xác nhận thành công. '
+    'cancelled: hủy bởi student hoặc BTC cancel workshop.';
 
 CREATE INDEX idx_registrations_workshop ON registrations(workshop_id);
 CREATE INDEX idx_registrations_student  ON registrations(student_id);
@@ -347,6 +436,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Áp dụng trigger cho tất cả bảng có cột updated_at
+-- device_tokens KHÔNG có updated_at (last_seen thay vai trò đó — semantics khác nhau)
 DO $$
 DECLARE
     t TEXT;
@@ -370,21 +460,43 @@ $$;
 -- VIEWS — Convenience queries
 -- =============================================================================
 
--- Design.md ADR-02 dòng 72: computed từ PostgreSQL (sole source of truth)
+-- Gap fix: view mở rộng với room và speaker JOINs
+-- Trước đây không có room/speaker JOIN vì workshops dùng location TEXT thuần
+-- Sau khi thêm room_id FK và speaker_id FK, view có thể expose thông tin đầy đủ
+-- cho API GET /workshops (list view) mà không cần application-layer JOIN
 CREATE VIEW v_workshop_availability AS
 SELECT
     w.id,
     w.title,
     w.starts_at,
+    w.ends_at,
     w.status,
     w.seats_total,
     w.seats_available,
-    (w.seats_total - w.seats_available) AS reserved_count
+    (w.seats_total - w.seats_available) AS reserved_count,
+    w.price,
+    -- Room info (nullable: NULL nếu workshop ở status='draft' chưa assign phòng)
+    r.id            AS room_id,
+    r.name          AS room_name,
+    r.building      AS room_building,
+    r.floor         AS room_floor,
+    r.floor_plan_url AS room_map_url,  -- Sơ đồ phòng — hiển thị cho sinh viên (Flow 1)
+    -- Speaker info (nullable: NULL nếu chưa confirm diễn giả)
+    s.id            AS speaker_id,
+    s.full_name     AS speaker_name,
+    s.title         AS speaker_title,
+    s.bio           AS speaker_bio,
+    s.avatar_url    AS speaker_avatar_url
 FROM workshops w
+LEFT JOIN rooms    r ON w.room_id    = r.id
+LEFT JOIN speakers s ON w.speaker_id = s.id
 WHERE w.status = 'open';
 
 COMMENT ON VIEW v_workshop_availability IS
-    'Số chỗ còn lại tính từ PostgreSQL — đây là source of truth (xem ADR-02 dòng 14). '
+    'Workshop đang mở với thông tin phòng và diễn giả đầy đủ. '
+    'LEFT JOIN rooms: NULL nếu draft chưa assign phòng (không xuất hiện trong view vì WHERE status=open). '
+    'LEFT JOIN speakers: NULL nếu chưa confirm diễn giả — frontend hiển thị "TBA". '
+    'seats_available là source of truth từ PostgreSQL (xem ADR-02 dòng 14). '
     'Redis cache:workshop:{id}:seats là cache hint 10s TTL (cache-aside, xem ADR-13) — '
     'KHÔNG phải source of truth. Không dùng DECR trên Redis key này. '
     'Dùng cho cả reporting lẫn hiển thị real-time (qua Redis cache layer).';

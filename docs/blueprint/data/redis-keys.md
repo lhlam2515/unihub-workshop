@@ -25,9 +25,10 @@ TTL:  10 giây (xem ADR-13: co-designed với ADR-03 OL để cân bằng cache 
 
 **Stale data OK:** TTL 10s cân bằng cache hit rate vs OL collision rate. Cache stale dưới 10s → OL collision → retry → đọc DB → đúng (ADR-13 Section 8 rationale).
 
-**Write-Invalidate race condition:** COMMIT và DEL có竞争窗口 nhỏ. Thread đọc cache cũ → vào OL → DB `WHERE seats_available > 0` fail → an toàn. Race này chỉ gây thêm 1 DB round trip, không gây sai correctness (ADR-13 Section 9).
+**Write-Invalidate race condition:** COMMIT và DEL có cửa sổ race nhỏ. Thread đọc cache cũ → vào OL → DB `WHERE seats_available > 0` fail → an toàn. Race này chỉ gây thêm 1 DB round trip, không gây sai correctness (ADR-13 Section 9).
 
 **Thêm** — Workshop list cache:
+
 ```
 Key:  cache:workshop:list
 Type: String (JSON array)
@@ -43,6 +44,7 @@ Cmd:  GET / SET EX 60 / DEL
 **Loại cũ (Token Bucket) đã bị reject** — xem design.md ADR-06 Section 4: Token Bucket cho phép burst, Sliding Window phù hợp hơn cho registration flow.
 
 **Pipeline (MULTI/EXEC):**
+
 ```
 MULTI
   ZREMRANGEBYSCORE <key> 0 <window_start_timestamp>
@@ -53,7 +55,7 @@ EXEC
 → IF count > threshold → 429 Too Many Requests
 ```
 
-### 3-tier độc lập:
+### 3-tier độc lập
 
 | Tier | Key | Threshold | Window | Purpose |
 |------|-----|-----------|--------|---------|
@@ -62,6 +64,7 @@ EXEC
 | T3 — Per registration | `rl:reg:{user_id}:{workshop_id}` | 5 req | 60s | Per user per workshop — chặn retry loop tấn công hết chỗ |
 
 **Xử lý lỗi:** Nếu Redis down → rate limiting tắt — tất cả request đi qua. Acceptable vì:
+
 - OL (ADR-03) vẫn đảm bảo correctness (không double-booking)
 - Cache (ADR-13) cũng tắt → hệ thống đã ở degraded mode
 - (ADR-06 Section 8 rationale)
@@ -96,6 +99,12 @@ Cmd:  SET EX {remaining_ttl}   -- TTL = JWT.exp - Current_Time
 ⚠️ **Chưa implement trong scope hiện tại — chỉ là design placeholder.**
 
 JWT revocation via blacklist được defer đến Stage 5. Hiện tại dùng short-lived access tokens (15 phút web, 8 giờ mobile) với refresh token rotation (ADR-04).
+
+> **⚠️ Yêu cầu bắt buộc khi implement Stage 5:** Token Blacklist **phải** dùng DB1 (`noeviction`), **không phải DB0** (`allkeys-lru`).
+>
+> DB0 với policy `allkeys-lru` có thể evict bất kỳ key nào — kể cả key chưa hết TTL — khi Redis chịu memory pressure. Nếu `token:blacklist:{jti}` bị evict trước khi JWT hết hạn, token đã bị revoke sẽ tiếp tục pass validation như token hợp lệ. Đây là **security breach**, không phải cache miss thông thường.
+>
+> Với DB1 (`noeviction`), Redis trả `OOM command not allowed` thay vì silent evict — **fail-loud thay vì fail-silent**. Đây là behavior đúng cho security mechanism.
 
 ---
 
@@ -132,7 +141,9 @@ stream:notifications-dlq
 | `rl:ip:{ip}` | IP rate limit | 60s | ADR-06 |
 | `rl:user:{user_id}` | User rate limit | 60s | ADR-06 |
 | `rl:reg:{user_id}:{workshop_id}` | Per-registration rate limit | 60s | ADR-06 |
-| `token:blacklist:{jti}` | JWT revocation (out of scope) | TTL = JWT remaining | ADR-04 |
+| `token:blacklist:{jti}` | JWT revocation (out of scope — Stage 5, phải dùng DB1) | TTL = JWT remaining | ADR-04 |
 | `stream:ai-summary` | AI summary job queue | ∞ (cleaned nightly) | ADR-10/14 |
 | `stream:notifications` | Notification dispatch queue | ∞ (cleaned nightly) | ADR-09/10 |
 | `stream:payments-expiry` | Payment timeout job queue | ∞ (cleaned nightly) | ADR-08/10 |
+| `stream:ai-summary-dlq` | AI summary dead-letter queue | ∞ (cleaned nightly) | ADR-10/14 |
+| `stream:notifications-dlq` | Notification dead-letter queue | ∞ (cleaned nightly) | ADR-09/10 |

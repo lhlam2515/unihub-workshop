@@ -10,7 +10,7 @@ Hệ thống UniHub Workshop đối mặt với hai thái cực dữ liệu: m�
 
 **A. Dữ liệu Giao dịch Cốt lõi (Core Transactional Data)**
 
-- **Thực thể:** Users (Students, Staff), Speakers, Rooms, Workshops, Registrations, Payments, Check-ins, Idempotency Keys, Import Logs, Notification Logs.
+- **Thực thể:** Users (Students, Staff), Device Tokens, Speakers, Rooms, Workshops, Registrations, Payments, Check-ins, Idempotency Keys, Import Logs, Notification Logs.
 - **Đặc điểm & Yêu cầu:** Có cấu trúc quan hệ chặt chẽ. Yêu cầu tính toàn vẹn dữ liệu (ACID) tuyệt đối. Sai lệch dữ liệu sẽ dẫn đến lỗi nghiệp vụ nghiêm trọng (như bán vượt số chỗ - Overselling, hoặc trừ tiền hai lần - Double-charging).
 - **Công nghệ Lựa chọn:** **PostgreSQL** (Hệ quản trị CSDL quan hệ - RDBMS / SQL).
 - **Lý do (Trade-offs):** Hỗ trợ Transaction mạnh mẽ. Cung cấp cơ chế **Optimistic Locking** thông qua cột `version` + `UPDATE ... WHERE version = ? AND seats_available > 0` (xem ADR-03). Các ràng buộc (Constraints như CHECK, UNIQUE, FOREIGN KEY) bảo vệ tính đúng đắn của dữ liệu ở mức vật lý. `ON CONFLICT` (PostgreSQL native upsert) cho phép idempotent insert cho cả registration (ADR-03) và payment (ADR-08).
@@ -52,66 +52,94 @@ Dưới đây là cấu trúc các thực thể chính theo `design.md` ADR-02 v
 - **Kiểu dữ liệu:** UUID, TEXT, TEXT, TEXT, TEXT CHECK (role IN ('btc', 'checkin_staff')), BOOLEAN, TIMESTAMPTZ.
 - **Vai trò & Ràng buộc:** Tách biệt khỏi `students` vì lifecycle khác nhau — staff được provision thủ công bởi admin, không qua CSV import. `idx_staff_role` partial index WHERE `is_active = true`.
 
-**3. Bảng speakers (Diễn giả — Event Core Context)**
+**3. Bảng device_tokens (Push Token — Identity Context)**
+
+- **Cột quan trọng:** `id` (PK, UUID), `student_id` (FK → students, ON DELETE CASCADE), `token` (UNIQUE), `platform`, `is_active`, `last_seen`, `created_at`.
+- **Kiểu dữ liệu:** UUID, TEXT, TEXT, TEXT CHECK (platform IN ('ios', 'android')), BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ.
+- **Vai trò & Ràng buộc:**
+  - Lưu FCM token (Android) hoặc APNs device token (iOS) để gửi push notification qua in-app channel (ADR-09).
+  - User-flow: sinh viên nhận thông báo xác nhận đăng ký qua app → InAppChannel cần token.
+  - Một student có nhiều device (1-to-many) — tách bảng riêng, không thêm cột vào `students`.
+  - `UNIQUE (token)`: FCM/APNs token là globally unique per device-app installation.
+  - `ON DELETE CASCADE` trên `student_id`: orphan token tự xóa khi student bị deactivate.
+  - `last_seen`: cập nhật khi app foreground; cleanup job đêm SET `is_active = false` nếu `last_seen > 30 ngày`.
+  - `is_active = false` (không DELETE): giữ lịch sử để debug notification failures.
+- **Indexes:** `idx_device_tokens_student` partial index WHERE `is_active = true` — pattern query: "lấy tất cả active tokens của student X để dispatch push".
+- **Token lifecycle (ADR-09 InAppChannel):**
+  - App start: `UPSERT ON CONFLICT (token) DO UPDATE SET last_seen=now(), is_active=true`
+  - App logout: `UPDATE SET is_active=false WHERE token=:token`
+  - FCM trả `token_not_registered`: InAppChannel tự SET `is_active=false`
+
+**4. Bảng speakers (Diễn giả — Event Core Context)**
 
 - **Cột quan trọng:** `id` (PK, UUID), `full_name`, `title`, `bio`, `avatar_url`.
 - **Vai trò:** Diễn giả của workshop. Có thể xuất hiện ở nhiều workshop. `avatar_url` trỏ tới Object Storage.
 
-**4. Bảng rooms (Phòng tổ chức — Event Core Context)**
+**5. Bảng rooms (Phòng tổ chức — Event Core Context)**
 
-- **Cột quan trọng:** `id` (PK, UUID), `name`, `building`, `floor`, `capacity`, `floor_plan_url`, `facilities` (JSONB).
-- **Vai trò:** Phòng tổ chức sự kiện. Là entity riêng để hỗ trợ đổi phòng và conflict detection. `capacity` là sức chứa vật lý của phòng (khác `seats_total` của workshop — một phòng có thể tổ chức nhiều workshop).
+- **Cột quan trọng:** `id` (PK, UUID), `name` (UNIQUE), `building`, `floor`, `capacity`, `floor_plan_url`, `facilities` (JSONB).
+- **Vai trò:** Phòng tổ chức sự kiện. Là entity riêng để hỗ trợ đổi phòng và conflict detection. `capacity` là sức chứa vật lý của phòng (khác `seats_total` của workshop). `floor_plan_url` trỏ tới Object Storage — là nguồn cung cấp "sơ đồ phòng" mà spec yêu cầu hiển thị cho sinh viên.
 
-**5. Bảng workshops (Thông tin sự kiện — Event Core Context)**
+**6. Bảng workshops (Thông tin sự kiện — Event Core Context)**
 
-- **Cột quan trọng:** `id` (PK, UUID), `title`, `description`, `location`, `starts_at`, `ends_at`, `seats_total`, `seats_available`, `price`, `status`, `pdf_url`, `summary_text`, `summary_status`, `created_by`, `version`, `created_at`, `updated_at`.
-- **Kiểu dữ liệu:** UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT, NUMERIC(10,2), TEXT CHECK (...), TEXT, TEXT, TEXT CHECK (...), UUID (FK → staff), BIGINT, TIMESTAMPTZ.
+- **Cột quan trọng:** `id` (PK, UUID), `title`, `description`, `room_id` (FK → rooms), `speaker_id` (FK → speakers), `starts_at`, `ends_at`, `seats_total`, `seats_available`, `price`, `status`, `pdf_url`, `summary_text`, `summary_status`, `created_by`, `version`, `created_at`, `updated_at`.
+- **Kiểu dữ liệu:** UUID, TEXT, TEXT, UUID (nullable FK), UUID (nullable FK), TIMESTAMPTZ, TIMESTAMPTZ, INT, INT, NUMERIC(10,2), TEXT CHECK (...), TEXT, TEXT, TEXT CHECK (...), UUID (FK → staff), BIGINT, TIMESTAMPTZ.
 - **Vai trò & Ràng buộc:**
+  - `room_id FK` thay thế `location TEXT NOT NULL` (gap fix): cho phép JOIN `rooms.floor_plan_url` để hiển thị sơ đồ phòng, và hỗ trợ "đổi phòng" của BTC bằng cách cập nhật FK thay vì text.
+  - `speaker_id FK` thay thế thông tin diễn giả inline (gap fix): cho phép JOIN `speakers.(full_name, title, bio, avatar_url)` cho trang chi tiết — đúng với spec "thông tin diễn giả".
+  - Cả `room_id` và `speaker_id` đều **nullable**: BTC có thể tạo draft workshop trước khi confirm phòng và diễn giả. Application layer enforce NOT NULL khi publish (status: `draft → open`).
   - `seats_total` và `seats_available` lưu trực tiếp trên workshops (không tách bảng `workshop_slots` riêng) — xem ADR-02 Section 4 rationale.
   - `seats_available` là **source of truth** cho available seats. Redis cache chỉ là hint TTL 10s (xem ADR-13).
   - `version` là Optimistic Lock counter, tăng mỗi khi UPDATE. BIGINT tránh overflow dưới spike đăng ký (ADR-03).
   - `summary_status` enum đầy đủ: `none`/`queued`/`processing`/`done`/`failed`.
   - CHECK constraints: `seats_total > 0`, `seats_available >= 0 AND seats_available <= seats_total`, `ends_at > starts_at`.
-- **Indexes:** `idx_workshops_status_starts` partial index WHERE `status = 'open'` — chỉ workshop đang mở mới được query bởi sinh viên, giảm size index xuống 1/4.
+- **Indexes:**
+  - `idx_workshops_status_starts` partial index WHERE `status = 'open'` — chỉ workshop đang mở mới được query bởi sinh viên, giảm size index xuống 1/4.
+  - `idx_workshops_room` trên `(room_id, starts_at)` — BTC xem lịch sử phòng, phát hiện room conflict.
 
-**6. Bảng registrations (Đơn đăng ký — Transaction Context)**
+**7. Bảng registrations (Đơn đăng ký — Transaction Context)**
 
 - **Cột quan trọng:** `id` (PK, UUID), `workshop_id` (FK → workshops), `student_id` (FK → students), `status`, `qr_code` (UNIQUE), `registered_at`.
-- **Kiểu dữ liệu:** UUID, UUID, TEXT, TEXT CHECK (status IN ('pending', 'paid', 'cancelled')), TEXT, TIMESTAMPTZ.
+- **Kiểu dữ liệu:** UUID, UUID, TEXT, TEXT CHECK (status IN ('pending', **'confirmed'**, 'paid', 'cancelled')), TEXT, TIMESTAMPTZ.
 - **Vai trò & Ràng buộc:**
   - `UNIQUE (workshop_id, student_id)` — DB constraint ngăn 1 SV đăng ký 2 lần, kể cả khi idempotency logic có bug.
   - `qr_code` là UUID v4 độc lập (KHÔNG dùng `id`) — ngăn brute-force scan từ registration ID.
-  - `status`: `pending` (chờ thanh toán nếu có phí), `paid` (đã xác nhận), `cancelled` (đã hủy).
+  - **State machine (Gap fix — thêm `'confirmed'`):**
+    - `pending`: chờ payment — chỉ dùng cho workshop có phí (`price > 0`).
+    - `confirmed`: đăng ký hoàn tất không qua payment — chỉ dùng cho workshop miễn phí (`price = 0`). *Trước đây không có state này → free workshop không có terminal state rõ ràng.*
+    - `paid`: payment gateway xác nhận thành công (workshop có phí).
+    - `cancelled`: hủy bởi student hoặc BTC cancel workshop.
+  - **Ảnh hưởng check-in (Flow 5):** staff app validate `WHERE status IN ('paid', 'confirmed')` — không thể chỉ check `'paid'` vì free workshop registrations sẽ bị từ chối sai.
 
-**7. Bảng payments (Lịch sử giao dịch — Transaction Context)**
+**8. Bảng payments (Lịch sử giao dịch — Transaction Context)**
 
 - **Cột quan trọng:** `id` (PK, UUID), `registration_id` (FK → registrations), `amount`, `currency`, `gateway_charge_id`, `status`, `idempotency_key` (FK → idempotency_keys), `created_at`, `resolved_at`.
 - **Kiểu dữ liệu:** UUID, UUID, NUMERIC(10,2), TEXT DEFAULT 'VND', TEXT, TEXT CHECK (...), TEXT, TIMESTAMPTZ, TIMESTAMPTZ.
 - **Vai trò & Ràng buộc:** `idempotency_key` có FK đến `idempotency_keys(key)` — không thể tạo payment record mà không có idempotency key entry tương ứng. `idx_payments_status_created` partial index WHERE status IN ('initiated', 'unresolved') cho reconciliation job.
 
-**8. Bảng idempotency_keys (Khóa lũy đẳng — Transaction Context)**
+**9. Bảng idempotency_keys (Khóa lũy đẳng — Transaction Context)**
 
 - **Cột quan trọng:** `key` (PK, TEXT), `resource_type`, `status`, `response_body` (JSONB), `status_code`, `created_at`, `expires_at`, `locked_until`.
 - **Kiểu dữ liệu:** TEXT, TEXT CHECK (...), TEXT CHECK (status IN ('in_progress', 'completed', 'unresolved')), JSONB, INT, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ.
 - **Vai trò & Ràng buộc:** Dùng chung cho cả registration (ADR-03) và payment (ADR-08), phân biệt bằng `resource_type` ('registration'/'payment'). 3-state lifecycle: `in_progress` → `completed` (terminal) | `unresolved` (non-terminal, cho phép retry). `locked_until` là deadline cho crash recovery (~30s). Redis KHÔNG dùng làm idempotency store (xem ADR-08 Section 4).
 
-**9. Bảng checkins (Ghi nhận điểm danh — Transaction Context)**
+**10. Bảng checkins (Ghi nhận điểm danh — Transaction Context)**
 
 - **Cột quan trọng:** `id` (PK, UUID), `registration_id` (FK, UNIQUE), `checked_in_at`, `received_at`, `checked_by` (FK → staff), `client_local_id`.
 - **Kiểu dữ liệu:** UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ DEFAULT now(), UUID, TEXT.
 - **Vai trò & Ràng buộc:** `UNIQUE (registration_id)` — first check-in wins. `client_local_id` lưu local_id từ mobile SQLite — dùng để dedup sync batch (ADR-11).
 
-**10. Bảng import_logs (Audit CSV import — Async Context)**
+**11. Bảng import_logs (Audit CSV import — Async Context)**
 
 - **Cột quan trọng:** `id` (PK, UUID), `run_at`, `total_rows`, `success_count`, `failed_count`, `error_file_path`, `triggered_by`, `status`.
 - **Vai trò:** Log cho mỗi lần chạy CSV import pipeline (ADR-12). `triggered_by` CHECK ('cron', 'manual'). Concurrent run protection: check có row `status='in_progress'` trước khi start.
 
-**11. Bảng notification_logs (Audit Notification — Async Context)**
+**12. Bảng notification_logs (Audit Notification — Async Context)**
 
 - **Cột quan trọng:** `id` (PK, UUID), `user_id` (TEXT), `event_type`, `channel`, `status`, `error_msg`, `payload` (JSONB).
-- **Vai trò:** Audit trail cho mọi thông báo (ADR-09). `idx_notif_logs_failed` partial index WHERE status IN ('failed', 'timeout').
+- **Vai trò:** Audit trail cho mọi thông báo (ADR-09). `idx_notif_logs_failed` partial index WHERE status IN ('failed', 'timeout'). `user_id` là TEXT để chứa cả `student_id` (TEXT) lẫn `staff.id` (UUID dạng string). Channel in-app dispatch đọc `device_tokens` của student trước khi gửi push — kết quả (sent/failed) ghi vào đây.
 
-**12. Bảng notification_channel_configs (Cấu hình kênh — Async Context)**
+**13. Bảng notification_channel_configs (Cấu hình kênh — Async Context)**
 
 - **Cột quan trọng:** `id` (PK, UUID), `channel_type` (UNIQUE), `is_active`, `config_json` (JSONB).
 - **Vai trò:** Externalize channel config để hỗ trợ mở rộng kênh mới (Telegram, Zalo, SMS) mà không cần thay đổi code notification core.
@@ -144,7 +172,7 @@ Redis đóng **3 vai trò** độc lập, mỗi vai trò trên một logical dat
 
    | Tier | Key | Threshold | Window | Purpose |
    |------|-----|-----------|--------|---------|
-   | T1 — IP | `rl:ip:{ip}` | 60 req | 60s | Bảo vệ unauthenticated endpoints |
+   | T1 — IP | `rl:ip:{ip_address}` | 60 req | 60s | Bảo vệ unauthenticated endpoints |
    | T2 — User | `rl:user:{user_id}` | 30 req | 60s | Per-user fairness (authenticated) |
    | T3 — Reg | `rl:reg:{user_id}:{workshop_id}` | 5 req | 60s | Chống spam click một workshop (giảm hot-row contention ADR-03) |
 
@@ -163,6 +191,7 @@ Redis đóng **3 vai trò** độc lập, mỗi vai trò trên một logical dat
    - **Key:** `token:blacklist:{jti}`
    - **TTL:** Thời gian còn lại của JWT
    - **Hành vi:** Revoke JWT trước hạn (ví dụ: admin kick user). Deferred đến Stage 5.
+   - **⚠️ Yêu cầu bắt buộc khi implement Stage 5:** Token Blacklist **phải** dùng DB1 (`noeviction`), **không phải DB0** (`allkeys-lru`). DB0 với policy `allkeys-lru` có thể evict key chưa hết TTL dưới memory pressure — token đã revoke sẽ pass validation như token hợp lệ (security breach). Với `noeviction`, Redis trả OOM error thay vì silent evict — fail-loud thay vì fail-silent. Xem chi tiết tại `redis-keys.md` Section 4.
 
 2. **Circuit Breaker (In-memory, KHÔNG Redis — ADR-07)**
    - Circuit breaker state được lưu **in-process memory** (process variable), không phải Redis.
