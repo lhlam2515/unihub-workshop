@@ -2,10 +2,9 @@
 
 ## 1. Mô hình phân quyền
 
-Hệ thống chọn **RBAC (Role-Based Access Control)** với 3 roles cứng, không có role hierarchy, không có attribute-level condition trong phạm vi đồ án. Permission được gắn với role tại deployment time — không lưu trong DB, không thay đổi trong runtime.
+**RBAC (Role-Based Access Control)** với 3 roles cứng, không có role hierarchy, không có attribute-level condition trong phạm vi đồ án. Permission được gắn với role tại deployment time — không lưu trong DB, không thay đổi trong runtime.
 
-**Lý do chọn RBAC thay vì ABAC:**  
-Permission matrix của UniHub có ranh giới rõ ràng theo nhóm người dùng: sinh viên dùng hệ thống, BTC quản lý hệ thống, check-in staff chỉ thao tác tại cửa. Không có bài toán "cùng role nhưng khác quyền theo attribute của resource" (ví dụ: BTC chỉ sửa được workshop của mình — bài toán này đã được phân tích và defer đến attribute check tại query layer nếu cần, không làm phức tạp RBAC core).
+> **Quyết định RBAC và so sánh với ABAC:** Xem ADR-05. Tài liệu này mô tả **HOW** ba lớp enforcement kiểm soát truy cập, không phải WHY lựa chọn RBAC.
 
 **Nguồn dữ liệu roles:**
 
@@ -439,18 +438,3 @@ Mobile app offline chỉ tin tưởng local data tạm thời — server là nơ
 **Mobile app không enforce RBAC phía client:** Enforcement thực sự là server. Nếu một checkin_staff tìm cách gọi admin API từ công cụ ngoài app → Lớp ① và ② từ chối ngay. App chỉ cung cấp UI đúng cho role đúng.
 
 ---
-
-## 8. Tiêu chí Chấp nhận
-
-| # | Tiêu chí | Cách kiểm tra |
-|---|---|---|
-| AC-01 | Student không thể gọi bất kỳ endpoint `/admin/*` nào | Dùng token role `student` gọi `POST /admin/workshops` → phải nhận 403 |
-| AC-02 | BTC không thể đăng ký workshop | Dùng token role `btc` gọi `POST /workshops/:id/registrations` → phải nhận 403 |
-| AC-03 | checkin_staff không thể xem danh sách registrations | Dùng token role `checkin_staff` gọi `GET /admin/workshops/:id/registrations` → phải nhận 403 |
-| AC-04 | Student A không thể xem QR của Student B | Dùng token Student A gọi `GET /registrations/:id_of_B/qr` → phải nhận 403/404 |
-| AC-05 | Token hết hạn bị từ chối đúng | Dùng token đã hết hạn (exp < now) → phải nhận 401 `TOKEN_EXPIRED` |
-| AC-06 | Request không có token bị từ chối | Gọi protected endpoint không có Authorization header → phải nhận 401 `MISSING_TOKEN` |
-| AC-07 | Mobile verify token offline | Tắt mạng, mở app với token còn hạn → nút Quét phải enabled |
-| AC-08 | Mobile disable nút khi token hết hạn offline | Tắt mạng, dùng token hết hạn → nút Quét phải disabled với thông báo rõ |
-| AC-09 | Trang admin ẩn đúng menu theo role | Login với `checkin_staff` vào web admin → không thấy menu "Quản lý Workshop" |
-| AC-10 | Sync batch bị từ chối nếu token invalid | Gọi `POST /checkin/sync` với token hết hạn → 401, batch không được lưu |
