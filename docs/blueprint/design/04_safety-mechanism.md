@@ -50,10 +50,7 @@ T3 — User × Workshop (authenticated, per-resource)
   Key:    rl:reg:{user_id}:{workshop_id}
   Limit:  5 req / 60s
   Scope:  POST /workshops/:id/register và POST /payments
-  Lý do:  Vòng ngoài cùng của defense-in-depth cho seat contention;
-          giảm hot-row contention tại workshops.version (ADR-03);
-          giảm OL retry rate — nếu user spam 5 lần/giây thay vì 5 lần/phút,
-          OL retry sẽ liên tục thất bại và tiêu thụ DB connection vô ích
+  (Reasoning for 3-tier structure: see ADR-06)
 ```
 
 **Thuật toán chi tiết (áp dụng cho từng tier):**
