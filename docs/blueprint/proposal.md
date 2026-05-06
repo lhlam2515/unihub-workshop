@@ -1,82 +1,106 @@
 # UniHub Workshop — Project Proposal
 
-## Vấn đề
+---
 
-Hiện tại, ban tổ chức sự kiện "Tuần lễ kỹ năng và nghề nghiệp" đang quản lý quy trình đăng ký tham dự thông qua Google Form và đối soát email thủ công. Khi quy mô sự kiện tăng lên (8-12 workshop mỗi ngày, diễn ra song song), phương pháp này bộc lộ những điểm yếu nghiêm trọng:
+## 1. Vấn đề
 
-1. **Mất kiểm soát số lượng (Overselling):** Google Form không có khả năng tự động dừng nhận phản hồi ngay tại thời điểm số lượng đăng ký đạt mức giới hạn sức chứa của phòng. Hậu quả là sinh viên vẫn đăng ký thành công dù đã hết chỗ, gây bức xúc và làm vỡ kế hoạch tổ chức.
+"Tuần lễ kỹ năng và nghề nghiệp" tổ chức hàng năm tại Trường Đại học A, quy mô 5 ngày × 8–12 workshop/ngày, thu hút hàng chục nghìn lượt đăng ký. Ban tổ chức hiện quản lý bằng Google Form và thông báo qua email thủ công — quy trình này tạo ra bốn điểm đau cụ thể:
 
-2. **Độ trễ thông tin và Nút thắt vận hành:** Việc xác nhận đăng ký và gửi mã QR thủ công qua email tạo ra một khoảng thời gian chờ đợi mù mờ cho sinh viên. Tại hiện trường, việc điểm danh bằng giấy hoặc đối chiếu màn hình mắt thường dẫn đến hàng chờ kéo dài, làm chậm tiến độ chương trình.
+1. **Đăng ký trùng chỗ.** Google Form không kiểm soát số chỗ theo thời gian thực. Workshop 60 chỗ nhưng người thứ 61 vẫn đăng ký được — ban tổ chức phải xử lý thủ công sau sự kiện.
+2. **Check-in tốn nhân lực.** Không có QR code, nhân sự kiểm tra danh sách tay, trung bình 2–3 phút/người, tạo hàng đợi tại cửa.
+3. **Thông báo chậm và rời rạc.** Email thủ công, không nhất quán, không có xác nhận tức thời sau khi đăng ký.
+4. **Không có điểm truy cập chung.** Sinh viên tìm thông tin qua nhiều kênh khác nhau — không có trang tổng hợp lịch workshop.
 
-3. **Sự rời rạc trong xác thực dữ liệu:** Dữ liệu sinh viên trên hệ thống cũ của trường không được kết nối với danh sách đăng ký mới. Ban tổ chức không có cách nào tự động xác thực xem một người đăng ký có thực sự là sinh viên hợp lệ của trường hay không tại thời điểm họ điền form.
+Vấn đề trở nên cấp thiết khi quy mô dự kiến đạt **12,000 sinh viên truy cập trong 10 phút đầu khi mở đăng ký**, với 60% dồn vào 3 phút đầu tiên. Google Form không được thiết kế để xử lý tải đột biến này, và không có cơ chế nào ngăn hàng trăm người tranh cùng một chỗ cuối.
 
-## Mục tiêu
+---
 
-Dự án nhằm xây dựng một nền tảng quản lý hội thảo tập trung (UniHub Workshop), số hóa toàn bộ quy trình từ khâu công bố sự kiện đến lúc điểm danh.
+## 2. Mục tiêu
 
-**Mục tiêu định lượng và hiệu năng:**
+Xây dựng hệ thống **UniHub Workshop** số hóa toàn bộ quy trình từ đăng ký đến check-in, đạt các tiêu chí đo lường được sau:
 
-- **Khả năng chịu tải:** Hệ thống có khả năng tiếp nhận và xử lý ổn định 12.000 lượt truy cập trong 10 phút đầu tiên mở cổng đăng ký, trong đó đảm bảo phục vụ thông suốt 7.200 lượt yêu cầu dồn dập trong 3 phút đầu.
-- **Tính nhất quán dữ liệu:** Cam kết 100% không xảy ra tình trạng cấp phát vượt quá số lượng chỗ ngồi quy định tại bất kỳ workshop nào.
-- **Hiệu suất điểm danh:** Rút ngắn thời gian quét mã QR và phản hồi trạng thái "Đã check-in" xuống dưới 1 giây cho mỗi lượt kiểm tra tại cửa.
+| Tiêu chí | Ngưỡng chấp nhận |
+|---|---|
+| Throughput | 12,000 sinh viên trong 10 phút đầu; 7,200 trong 3 phút đầu; ≥ 95% request đăng ký hợp lệ (không vượt rate limit cá nhân) trả về kết quả thành công hoặc "hết chỗ" trong SLO latency — không trả 5xx |
+| Latency — trang danh sách | p95 < 1 giây (tải bình thường) |
+| Latency — đăng ký | p95 < 2 giây (tải bình thường); p99 < 5 giây (3 phút đầu giờ mở đăng ký) |
+| Tính nhất quán ghế ngồi | 0 trường hợp 2 sinh viên cùng nhận chỗ cuối trong mọi điều kiện |
+| Idempotency thanh toán | 0 trường hợp trừ tiền 2 lần dù client retry nhiều lần |
+| Thời gian check-in | ≤ 10 giây trung bình/sinh viên (từ quét QR đến xác nhận) |
+| Cách ly lỗi payment | Xem lịch và thông tin workshop vẫn hoạt động bình thường khi payment gateway sự cố |
 
-**Mục tiêu chức năng cốt lõi:**
+---
 
-- Cung cấp đầy đủ 6 nhóm tính năng nghiệp vụ: (1) Xem và đăng ký workshop, (2) Hệ thống thông báo đa kênh, (3) Quản trị nội dung sự kiện, (4) Tự động tóm tắt nội dung bằng AI, (5) Đồng bộ dữ liệu sinh viên từ hệ thống cũ, và (6) Ứng dụng di động để quét QR check-in.
+## 3. Người dùng và nhu cầu
 
-## Người dùng và nhu cầu
+### Sinh viên (~12,000 người)
 
-Hệ thống được thiết kế để phục vụ 3 nhóm đối tượng chính, mỗi nhóm có các nhu cầu và ưu tiên riêng biệt:
+Xem danh sách workshop, đăng ký (free hoặc có phí), thanh toán, nhận mã QR xác nhận, check-in khi tham dự.
 
-1. **Sinh viên (End-User):**
-   - _Họ cần làm gì:_ Xem lịch diễn ra các workshop, đọc tóm tắt nội dung nhanh, đăng ký giữ chỗ (miễn phí hoặc có phí) và nhận mã xác nhận (QR code).
-   - _Điều gì quan trọng nhất:_ Trải nghiệm đăng ký phải cực kỳ mượt mà và công bằng. Thông tin về "số chỗ còn lại" phải chính xác tuyệt đối. Khi thanh toán có lỗi, họ cần biết rõ tiền của mình có bị trừ oan hay không.
+**Điều quan trọng nhất với họ:** Biết ngay kết quả đăng ký và không lo mất chỗ do hệ thống chậm hay lỗi. Mã QR phải sẵn sàng trước ngày diễn ra.
 
-2. **Ban tổ chức (Admin):**
-   - _Họ cần làm gì:_ Tạo mới và chỉnh sửa thông tin workshop, thiết lập sức chứa phòng, tải lên tài liệu mô tả, chạy tiến trình nhập dữ liệu sinh viên và theo dõi báo cáo đăng ký.
-   - _Điều gì quan trọng nhất:_ Giảm thiểu tối đa thao tác thủ công. Công cụ quản lý cần cung cấp cái nhìn tổng quan theo thời gian thực về tình trạng lấp đầy của các sự kiện.
+### Ban tổ chức (nội bộ)
 
-3. **Nhân sự Check-in (Operator):**
-   - _Họ cần làm gì:_ Sử dụng thiết bị di động quét mã QR của sinh viên tại cửa ra vào để ghi nhận sự có mặt.
-   - _Điều gì quan trọng nhất:_ Ứng dụng quét mã phải hoạt động cực nhanh và đặc biệt là không bị gián đoạn hay mất dữ liệu khi mạng wifi/4G tại hội trường bị mất kết nối.
+Tạo và quản lý workshop, cập nhật thông tin, theo dõi số lượng đăng ký theo thời gian thực, upload tài liệu PDF để tạo AI summary.
 
-## Phạm vi
+**Điều quan trọng nhất với họ:** Không phải xử lý thủ công sau sự kiện — hệ thống tự quản lý đăng ký, thông báo, và đồng bộ dữ liệu sinh viên hằng đêm.
 
-Với nguồn lực là 2 sinh viên (1 phụ trách Web/Backend, 1 phụ trách Mobile) thực hiện trong 14 ngày, việc xác định ranh giới dự án là yếu tố quyết định để nghiệm thu thành công.
+### Nhân sự check-in
 
-**Thuộc phạm vi đồ án (In-Scope):**
+Quét mã QR của sinh viên tại cửa phòng bằng mobile app.
 
-- Phát triển Backend API cung cấp các dịch vụ xử lý logic đăng ký, đồng bộ dữ liệu và tích hợp dịch vụ tóm tắt AI.
-- Xây dựng Web Portal phục vụ giao diện hiển thị cho Sinh viên và bảng điều khiển cho Ban tổ chức.
-- Phát triển Mobile App với tính năng cốt lõi là quét QR code và lưu trữ trạng thái check-in.
-- Thiết kế kiến trúc và luồng xử lý (trên lý thuyết và có cài đặt cơ bản) cho các bài toán: kiểm soát tranh chấp dữ liệu, giới hạn lưu lượng, và cơ chế bảo vệ khi thanh toán lỗi.
+**Điều quan trọng nhất với họ:** Check-in phải hoạt động kể cả khi kết nối mạng không ổn định — không bị gián đoạn vì sóng yếu trong tòa nhà.
 
-**KHÔNG thuộc phạm vi đồ án (Out-of-Scope):**
+---
 
-- **Tích hợp hạ tầng thực tế:** Không yêu cầu tích hợp cổng thanh toán (Payment Gateway) thực tế của ngân hàng/ví điện tử, cũng như không yêu cầu gửi Email/SMS thực tế. Các chức năng này sẽ được giả lập (Mock) hành vi thành công/thất bại để chứng minh tính đúng đắn của luồng thiết kế.
-- **Triển khai quy mô lớn (Production Infrastructure):** Không yêu cầu thiết lập các hệ thống cân bằng tải (Load Balancer) vật lý, kiến trúc triển khai đa vùng (Multi-region) hay các cụm máy chủ phân tán. Hệ thống sẽ được đánh giá dựa trên kiến trúc phần mềm và mã nguồn.
-- **Phát triển Model AI riêng:** Sử dụng các dịch vụ AI có sẵn thông qua API thay vì tự huấn luyện mô hình tóm tắt văn bản.
+## 4. Phạm vi
 
-## Rủi ro và ràng buộc
+### 4.1 Trong phạm vi
 
-Quá trình thiết kế và phát triển hệ thống phải đối mặt và đưa ra giải pháp cụ thể cho 5 vấn đề kỹ thuật lớn sau:
+- Xem danh sách và chi tiết workshop; số chỗ còn lại cập nhật theo thời gian thực
+- Đăng ký workshop: miễn phí và có phí (thanh toán online)
+- Phát mã QR sau khi đăng ký thành công
+- Check-in bằng mobile app: hoạt động online và offline, tự đồng bộ khi kết nối phục hồi
+- Thông báo xác nhận qua in-app và email; hệ thống được thiết kế để bổ sung kênh mới (ví dụ: Telegram) mà không cần sửa code hiện tại
+- Trang admin: tạo, sửa, hủy workshop; xem thống kê đăng ký
+- Phân quyền 3 nhóm: Sinh viên / Ban tổ chức / Nhân sự check-in
+- AI Summary: upload PDF → hệ thống tự xử lý và hiển thị bản tóm tắt trên trang chi tiết workshop
+- Đồng bộ dữ liệu sinh viên từ file CSV ban đêm (validate, xử lý lỗi, upsert idempotent)
+- Bảo vệ API: Rate Limiting chống spam và Circuit Breaker cho payment gateway
 
-1. **Tranh chấp chỗ ngồi (Race Condition):**
-   - **Vấn đề:** Một số workshop giới hạn chỉ 60 chỗ, nhưng dự kiến sẽ có hàng trăm sinh viên cố gắng nhấn nút đăng ký cùng một phần nghìn giây khi cổng vừa mở.
-   - **Ràng buộc thiết kế:** Hệ thống bắt buộc phải có cơ chế kiểm soát đồng thời (Concurrency Control) tại tầng lưu trữ dữ liệu để đảm bảo tính nguyên tử (Atomicity). Không được phép xảy ra trường hợp hai sinh viên cùng nhận được xác nhận thành công cho slot cuối cùng.
+### 4.2 Ngoài phạm vi
 
-2. **Tải trọng đột biến (Traffic Spikes):**
-   - **Vấn đề:** Lưu lượng truy cập dồn dập (12.000 sinh viên/10 phút) có thể vắt kiệt tài nguyên xử lý của máy chủ, gây ra hiện tượng từ chối dịch vụ (DDoS tự nhiên).
-   - **Ràng buộc thiết kế:** Kiến trúc phải bao gồm các cơ chế bảo vệ như giới hạn tốc độ truy cập (Rate Limiting) để từ chối các yêu cầu spam từ cùng một client, và thiết kế các lớp đệm (Caching) để giảm tải các truy vấn đọc dữ liệu lặp đi lặp lại.
+| Hạng mục | Lý do loại trừ |
+|---|---|
+| Payment gateway thật | Không có tài khoản production; dùng mock/sandbox |
+| Deploy cloud production | Không yêu cầu; chạy Docker Compose |
+| SLA availability ≥ 99.9% | Không có infrastructure phù hợp |
+| Refund / hoàn tiền | Quy trình nghiệp vụ chưa được định nghĩa |
+| Analytics nâng cao | Ngoài yêu cầu; chỉ thống kê số đăng ký cơ bản |
+| OAuth / SSO với hệ thống trường | Không có thông tin tích hợp LDAP/CAS |
+| Đa ngôn ngữ | Không yêu cầu |
+| GDPR / data retention policy | Ngoài phạm vi môn học |
+| Push notification native (APNs/FCM) | Chỉ in-app notification và email |
 
-3. **Thanh toán không ổn định và Trừ tiền hai lần:**
-   - **Vấn đề:** Cổng thanh toán bên thứ ba có thể bị gián đoạn (timeout) do quá tải mạng. Sinh viên bấm F5 hoặc nhấn thanh toán lại khi chưa thấy thông báo.
-   - **Ràng buộc thiết kế:** Luồng đăng ký phải áp dụng cơ chế tự phục hồi (Resilience). Các tính năng xem lịch và đăng ký miễn phí không được phép "chết" theo cổng thanh toán. Hệ thống phải sinh ra các mã định danh giao dịch duy nhất (Idempotency Key) để nhận diện yêu cầu lặp lại, tuyệt đối ngăn chặn việc trừ tiền hai lần.
+---
 
-4. **Check-in offline và Mất đồng bộ:**
-   - **Vấn đề:** Hạ tầng mạng tại khu vực check-in có thể chập chờn hoặc rớt hoàn toàn.
-   - **Ràng buộc thiết kế:** Ứng dụng di động phải có khả năng xác thực mã QR thông qua cơ sở dữ liệu lưu trữ cục bộ (Local Storage). Khi mạng phục hồi, dữ liệu đã check-in phải được đồng bộ hóa ngược lên máy chủ trung tâm thông qua các cơ chế giải quyết xung đột (Conflict Resolution), đảm bảo không ghi đè sai lệch dữ liệu mới nhất.
+## 5. Rủi ro và ràng buộc
 
-5. **Tích hợp một chiều với dữ liệu không sạch (CSV Sync):**
-   - **Vấn đề:** Hệ thống quản lý sinh viên hiện hữu đóng kín, chỉ cung cấp file CSV xuất tự động vào ban đêm. File này có thể chứa dữ liệu trùng lặp, thiếu trường bắt buộc hoặc sai định dạng.
-   - **Ràng buộc thiết kế:** Module đồng bộ không được làm treo hệ thống chính khi đang xử lý hàng chục ngàn dòng dữ liệu. Cần thiết kế một luồng xử lý theo lô (Batch Processing) có khả năng tự động xác thực tính hợp lệ của dữ liệu, bỏ qua các bản ghi lỗi (có lưu log) và tiến hành cập nhật/chèn mới (Upsert) một cách trơn tru.
+### 5.1 Rủi ro kỹ thuật
+
+**R1 — Tranh chấp chỗ ngồi:** Ưu tiên cao — bắt buộc đúng, không có phương án degrade. Khi hàng trăm sinh viên tranh cùng một workshop trong vài giây, hệ thống phải tuyệt đối không bán trùng. Xử lý bằng Optimistic Locking ở tầng database kết hợp Rate Limiting để kiểm soát lượng request đến DB.
+
+**R2 — Tải đột biến:** Ưu tiên cao. 7,200 sinh viên trong 3 phút đầu có thể áp đảo backend nếu không có lớp bảo vệ. Xử lý bằng Rate Limiting (per-user và per-workshop) và Redis cache cho dữ liệu đọc nhiều; sinh viên vượt ngưỡng nhận phản hồi yêu cầu chờ thay vì làm hệ thống sập.
+
+**R3 — Thanh toán không ổn định:** Ưu tiên cao — bắt buộc đúng ở hai điểm độc lập. (a) Khi payment gateway sự cố kéo dài, các tính năng không liên quan vẫn chạy bình thường — xử lý bằng Circuit Breaker. (b) Client retry nhiều lần không gây trừ tiền 2 lần — xử lý bằng Idempotency Key lưu trong database. Cả hai không có phương án degrade.
+
+**R4 — Check-in offline:** Ưu tiên cao về tiến độ. Là tính năng duy nhất đòi cài đặt đồng thời trên mobile, backend, và sync protocol — chi phí implementation cao nhất trong dự án. Prototype trong 2 tuần đầu giai đoạn cài đặt; nếu không đạt go/no-go trước tuần 4, degrade thành check-in online-only và ghi nhận hạn chế rõ ràng.
+
+**R5 — Tích hợp CSV một chiều:** Ưu tiên trung bình. File CSV từ hệ thống sinh viên có thể chứa dữ liệu lỗi hoặc trùng lặp; pipeline phải xử lý được mà không gián đoạn hệ thống đang chạy. Xử lý bằng batch pipeline ban đêm với error quarantine (file lỗi được cách ly, không xóa) và import idempotent (chạy lại nhiều lần ra cùng kết quả). Khi pipeline lỗi, hệ thống tiếp tục chạy với dữ liệu sinh viên của lần import gần nhất; admin được thông báo để xử lý file lỗi thủ công.
+
+### 5.2 Ràng buộc team và môi trường
+
+- **Nhân sự:** 2 thành viên, ~2 tuần. Không có dedicated mobile developer — R4 là rủi ro tiến độ cao nhất và sẽ được prototype sớm nhất.
+- **Môi trường:** Docker Compose local hoặc VPS đơn giản; không dùng Kubernetes hay cloud managed services.
+- **Payment:** Chỉ mock/sandbox — cần tự dựng mock server (Wiremock hoặc tương đương) để kiểm thử failure mode.
+- **Dữ liệu sinh viên:** File CSV là nguồn duy nhất; không có API backup khi file lỗi hoặc export muộn.
