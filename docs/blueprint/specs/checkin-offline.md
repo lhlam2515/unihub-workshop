@@ -1,81 +1,379 @@
-# Đặc tả: Check-in tại sự kiện (Offline-First)
+# Spec: Check-in Offline (`checkin-offline`)
 
-## Mô tả
+> **ASR hiện thực hóa:** ASR-6 (Offline Availability), ASR-9 (Authorization)
+>
+> **ADR tham chiếu:** ADR-11 (SQLite Offline + Outbox Sync), ADR-02 (Schema — checkins, registrations), ADR-04 (JWT offline validation), ADR-05 (RBAC — checkin_staff role)
+>
+> **Trade-off chủ đạo:** AP — Availability được ưu tiên cho luồng check-in: staff có thể quét QR và nhận xác nhận ngay cả khi mất mạng. Eventual Consistency: kết quả sync lên server khi kết nối phục hồi. Strong Consistency không áp dụng cho luồng này vì đây là operational tracking, không phải financial transaction.
 
-Ứng dụng Mobile App dành riêng cho nhân sự (`CHECKIN_STAFF`) dùng để quét mã QR điểm danh tại cửa hội trường. Hệ thống được thiết kế theo kiến trúc Offline-First, đảm bảo việc quét mã QR diễn ra tức thì (không độ trễ) ngay cả khi thiết bị mất kết nối mạng hoàn toàn, và tự động đồng bộ dữ liệu an toàn lên Server khi có mạng trở lại.
+---
 
-Mỗi ticket được phát hành dưới dạng **QR token là Signed JWT**: `{ ticket_id, workshop_id, student_id, exp }` — được ký số (HMAC hoặc RSA) để mobile có thể xác thực tính hợp lệ ngay khi offline mà không cần gọi Server, đảm bảo chống giả mạo mã QR.
+## 1. Mô tả
 
-## Luồng chính
+Check-in staff dùng mobile app để quét QR code từ thẻ đăng ký của student. Luồng có hai mode:
 
-1. **Tiền tải dữ liệu vé (Pre-load — Online):**
-   - Nhân sự đăng nhập khi thiết bị có mạng.
-   - JWT Access Token (cấu hình hạn đặc biệt 8 giờ) được lưu vào Keychain/Secure Storage của thiết bị.
-   - App gọi `GET /checkin/workshops/:id/tickets` để tải danh sách ticket có trạng thái `ACTIVE` (chưa điểm danh) thuộc quyền `allowed_workshop_ids` trong JWT.
-   - Endpoint bị kiểm soát bởi **WorkshopScopeGuard** — nếu workshop_id không nằm trong danh sách được phân quyền, trả về 403.
-   - Cache metadata tại mobile có **ngưỡng STALE 30 phút**: nếu dữ liệu đã tải quá 30 phút, App tự động refresh ngầm khi có mạng.
-   - Hỗ trợ **ETag**: Server trả về ETag trong header, mobile gửi `If-None-Match` ở lần yêu cầu sau. Nếu dữ liệu không thay đổi, Server trả về 304 Not Modified, giảm băng thông.
-   - Nếu workshop không có registration nào, endpoint trả về mảng rỗng (không phải 404).
+**Mode Online:** App có kết nối mạng. Ghi local ngay lập tức → sync ngay khi ghi xong → nhận kết quả trong cùng session.
 
-2. **Xác thực QR Token ngoại tuyến (Offline Validation):**
-   - Khi mất mạng, App tự giải mã Signed JWT cục bộ để xác thực:
-     - Chữ ký số (signature) còn hợp lệ.
-     - `exp` chưa hết hạn.
-     - `workshop_id` trong token khớp với workshop đang quét.
-   - Nhân sự dùng Camera quét QR. App tra cứu với danh sách ticket đã tải trong SQLite.
-   - Nếu hợp lệ, ghi nhận lượt check-in vào bảng `offline_checkin_queue` của SQLite (trạng thái `PENDING`).
+**Mode Offline:** App mất kết nối. Ghi local ngay lập tức → status = `pending` → sync tự động khi mạng phục hồi (trigger: network change listener HOẶC timer 30s).
 
-3. **Check-in trực tuyến (Online Check-in):**
-   - Khi thiết bị có mạng, nhân sự có thể quét QR và điểm danh trực tiếp qua API.
-   - App gọi `POST /checkin/scan` với body `{ qr_token, workshop_id }`.
-   - **WorkshopScopeGuard** kiểm tra quyền truy cập workshop trước khi vào Service.
-   - Backend tra cứu ticket theo `qr_token`, kiểm tra:
-     - Ticket tồn tại và có trạng thái `ACTIVE`.
-     - Ticket thuộc đúng workshop_id.
-   - Nếu hợp lệ, ghi `checkin_records` với `source = ONLINE`, `checked_in_at = now()`, `checked_in_by = jwt.sub`.
-   - Phản hồi kèm thông tin ticket và student (tên, email, avatar) để nhân sự đối chiếu.
+Trong cả hai mode, staff nhận xác nhận ngay lập tức từ local DB. Server là source of truth cho conflict resolution: **first check-in wins** (first received at server, không phải first scanned offline).
 
-4. **Đồng bộ hàng loạt (Offline Sync):**
-   - Khi thiết bị kết nối mạng trở lại, App gom các bản ghi `PENDING` trong `offline_checkin_queue` thành một Batch và gọi `POST /checkin/sync`.
-   - Backend nhận batch, tra cứu từng `qr_token`:
-     - Nếu ticket còn hiệu lực (`ACTIVE`) và chưa có `checkin_records` → INSERT với `source = OFFLINE_SYNC`.
-     - Nếu `checkin_records` đã tồn tại (UNIQUE(ticket_id, workshop_id)) → `ON CONFLICT DO NOTHING`, bỏ qua, đếm vào `skipped_count`.
-     - Nếu ticket đã bị `VOID` sau khi quét offline → đếm vào `conflicts_count`, không INSERT.
-   - Phản hồi trả về 3 chỉ số: `{ synced_count, skipped_count, conflicts_count }`.
+---
 
-5. **Xem trạng thái workshop (Status Dashboard):**
-   - Nhân sự gọi `GET /checkin/workshops/:id/status` để xem thông tin tổng quan:
-     - `confirmed_count`: tổng số registration đã xác nhận.
-     - `checked_in_count`: số lượng đã điểm danh.
-     - `pending_count`: số lượng chưa điểm danh.
-     - `recent_checkins`: 20 check-in gần nhất (sắp xếp theo `checked_in_at DESC`).
-   - Endpoint áp dụng **WorkshopScopeGuard** — chỉ nhân sự được phân quyền mới xem được.
+## 2. Luồng chính
 
-## Kịch bản lỗi
+### 2.1 Luồng quét QR (tại device)
 
-- **Trùng lặp (Duplicate Sync):** Nhân sự bấm đồng bộ 2 lần hoặc App tự trigger nhiều lần. CSDL PostgreSQL loại bỏ bản ghi trùng nhờ ràng buộc `UNIQUE(ticket_id, workshop_id)`. Batch lần hai trả về `synced_count = 0, skipped_count = N`.
-- **Lỗi nghiệp vụ Offline:** Nhân sự quét mã QR của Workshop A tại cửa Workshop B, hoặc quét vé đã bị hủy (`VOID`). App báo lỗi ngay trên màn hình do thông tin trong Signed JWT không khớp với workshop hiện tại.
-- **Vé bị hủy trong lúc mất mạng:** Batch sync gửi lên chứa ticket đã bị VOID sau khi quét offline. Bản ghi đó được đếm vào `conflicts_count` và không được INSERT vào `checkin_records`. Các vé khác trong batch vẫn được xử lý bình thường.
-- **JWT hết hạn lúc Sync:** Server trả lỗi `401 Unauthorized`. App tự động lấy Refresh Token trong Keychain để đổi lấy Access Token mới và chạy tiếp luồng Sync ngầm (Silent Sync) mà không bắt nhân sự đăng nhập lại.
-- **QR Token không tồn tại (Online Check-in):** `POST /checkin/scan` với `qr_token` không hợp lệ → Server trả 404.
-- **Ticket đã điểm danh (Online Check-in):** `POST /checkin/scan` với ticket đã có `checkin_records` → Server trả lỗi báo vé đã được sử dụng.
-- **Vi phạm quyền workshop (Scope Violation):** Nhân sự cố tình quét QR của workshop không thuộc `allowed_workshop_ids` → WorkshopScopeGuard chặn với 403 trước khi vào Service.
-- **ETag Not Modified:** Dữ liệu pre-load không thay đổi giữa các lần tải → Server trả 304, mobile giữ nguyên cache, tiết kiệm băng thông.
+```
+Preconditions:
+  - Staff đã đăng nhập, có JWT access token lưu trong secure storage
+  - JWT còn hạn HOẶC app đang offline (token verify bằng public key local)
+  - App ở màn hình "Scan QR"
 
-## Ràng buộc
+Action: Staff quét QR code của student
+```
 
-- **Hiệu năng Offline:** Thời gian xử lý từ lúc Camera nhận diện mã QR đến khi lưu thành công vào SQLite nội bộ phải dưới 200ms để không gây ùn tắc tại cửa kiểm soát.
-- **Tính nhất quán cuối (Eventual Consistency):** Chấp nhận việc dữ liệu báo cáo trên Server bị trễ so với thực tế cho đến khi thiết bị của nhân sự có Internet khôi phục.
-- **Bảo mật JWT trên Mobile:** JWT Token được lưu trong **Keychain/Secure Storage** (iOS Keychain / Android Encrypted SharedPreferences). KHÔNG BAO GIỜ lưu JWT vào SQLite hoặc AsyncStorage.
-- **Cache Metadata STALE:** Ngưỡng làm mới cache metadata là 30 phút. Nếu quá ngưỡng, App tự động refresh ngầm khi có mạng. Dữ liệu ticket trong SQLite chỉ được xóa khi có phản hồi 304 (không thay đổi).
-- **TTL của QR Token (JWT exp):** Token có thời gian sống hữu hạn (ví dụ 30 ngày hoặc đến khi workshop kết thúc). Khi hết hạn, mobile phải gọi API để lấy token mới.
-- **Ký số QR Token:** JWT phải được ký bằng secret/key riêng (không dùng chung với Access Token) để mobile có thể xác thực offline mà không cần gọi Server.
+**Bước 1 — Decode QR:**
+```
+QR code chứa: qr_code (UUID v4 random, không phải registration.id)
+Validate format: UUID v4 — nếu không đúng format, hiển thị lỗi ngay
+```
 
-## Tiêu chí chấp nhận
+**Bước 2 — Kiểm tra duplicate local (tránh ghi 2 lần cho cùng scan):**
+```
+SELECT * FROM local_checkins
+WHERE qr_code = :qr_code
+  AND status IN ('pending', 'synced');
 
-- Ứng dụng Mobile tiếp tục quét và lưu trữ thành công 500 QR code liên tiếp khi điện thoại đang bật chế độ Máy bay (Airplane mode).
-- Sau khi có mạng và đồng bộ, Dashboard hệ thống không ghi nhận bất kỳ lượt check-in đúp (duplicate) nào cho cùng một vé tại một sự kiện.
-- Batch sync gửi 100 bản ghi trong đó có 10 vé đã VOID: Server trả về `{ synced_count: 90, skipped_count: 0, conflicts_count: 10 }`.
-- Check-in online với QR token hợp lệ thành công trong < 500ms (bao gồm network latency).
-- Mobile tự động refresh JWT khi nhận 401 mà không làm gián đoạn luồng quét QR.
-- Workshop status endpoint trả về đúng `confirmed_count`, `checked_in_count`, `pending_count` và tối đa 20 bản ghi `recent_checkins`.
+Nếu tồn tại:
+  → Hiển thị: "QR này đã được quét [status: đã sync / chờ sync]"
+  → Dừng (không ghi thêm)
+
+Nếu không tồn tại → Tiếp tục Bước 3
+```
+
+**Bước 3 — Ghi vào SQLite local (immediate, không cần network):**
+```
+INSERT INTO local_checkins
+  (local_id, qr_code, checked_at, status, created_at)
+VALUES
+  (UUID.v4(),           -- sinh offline, KHÔNG dùng server ID
+   :qr_code,
+   now_device_iso8601,  -- lưu timezone của device
+   'pending',
+   now_device_iso8601);
+
+→ Hiển thị ngay: "✓ Check-in ghi nhận, đang đồng bộ..."
+-- UX không bị block bởi network latency
+```
+
+**Bước 4 — Trigger sync (không chặn UI):**
+```
+Nếu có kết nối mạng:
+  → Gọi sync flow (Section 2.2) trong background
+  → UI update khi nhận kết quả từ server
+
+Nếu không có kết nối:
+  → Hiển thị: "✓ Check-in ghi nhận (offline). Sẽ đồng bộ khi có mạng."
+  → Sync sẽ tự chạy khi mạng phục hồi
+```
+
+---
+
+### 2.2 Luồng Sync lên Server
+
+```
+Trigger:
+  (a) Network Change Listener: kết nối mạng phục hồi
+  (b) Timer: mỗi 30 giây nếu có row status='pending'
+  (c) Sau mỗi lần ghi local_checkin thành công (nếu có mạng)
+```
+
+**Bước 1 — Thu thập batch pending:**
+```
+SELECT local_id, qr_code, checked_at
+FROM local_checkins
+WHERE status = 'pending'
+ORDER BY created_at ASC
+LIMIT 50;   -- max 50 records per request
+
+Nếu empty → skip, không gọi API
+```
+
+**Bước 2 — Gửi batch lên server:**
+```
+POST /checkins/sync
+Headers: Authorization: Bearer <access_token>
+Body: [
+  { "local_id": "...", "qr_code": "...", "checked_at": "2025-05-06T10:30:00+07:00" },
+  ...
+]
+Timeout: 10 giây
+```
+
+**Bước 3 — Xử lý response:**
+```
+Server response:
+[
+  { "local_id": "...", "result": "ok",        "server_id": "uuid" },
+  { "local_id": "...", "result": "duplicate", "first_checkin_at": "...",
+                                               "first_staff_name": "Staff Nguyễn" },
+  { "local_id": "...", "result": "rejected",  "reason": "qr_invalid" | "workshop_cancelled"
+                                                       | "not_paid" }
+]
+
+FOR EACH item in response:
+  UPDATE local_checkins
+    SET status            = CASE item.result
+                              WHEN 'ok'        THEN 'synced'
+                              WHEN 'duplicate' THEN 'duplicate'
+                              WHEN 'rejected'  THEN 'rejected'
+                            END,
+        server_id         = item.server_id,       -- NULL nếu không phải 'ok'
+        sync_error        = item.reason,           -- NULL nếu 'ok'
+        first_checkin_info = item.first_checkin_at || ' by ' || item.first_staff_name
+                             -- chỉ populated nếu 'duplicate'
+  WHERE local_id = item.local_id;
+
+→ UI update từng item (real-time feedback cho staff đang xem danh sách)
+```
+
+---
+
+### 2.3 Server-side Sync Endpoint
+
+```
+Endpoint: POST /checkins/sync
+Auth: JWT với role = 'checkin_staff'
+Rate limit: 30 req/60s per user (T2 — xem ADR-06)
+```
+
+**Xử lý mỗi item trong batch:**
+```
+FOR EACH item IN request_body:
+
+  -- Lookup registration bằng QR code
+  SELECT r.id AS registration_id, r.student_id, r.status AS reg_status,
+         w.id AS workshop_id, w.status AS workshop_status,
+         w.title AS workshop_title
+  FROM registrations r
+  JOIN workshops w ON w.id = r.workshop_id
+  WHERE r.qr_code = :qr_code;
+
+  Nếu không tìm thấy:
+    → append { local_id, result: "rejected", reason: "qr_invalid" }
+    CONTINUE
+
+  Nếu r.status != 'paid':
+    → append { local_id, result: "rejected", reason: "not_paid" }
+    CONTINUE
+
+  Nếu w.status = 'cancelled':
+    → append { local_id, result: "rejected", reason: "workshop_cancelled" }
+    CONTINUE
+
+  -- Attempt insert: first check-in wins
+  INSERT INTO checkins
+    (id, registration_id, checked_in_at, received_at, checked_by, client_local_id)
+  SELECT
+    gen_random_uuid(),
+    :registration_id,
+    :checked_at,     -- timestamp từ device (có thể lệch giờ)
+    now(),           -- server-side timestamp (luôn đúng, dùng cho audit)
+    :staff_id,       -- từ JWT
+    :local_id
+  ON CONFLICT (registration_id) DO NOTHING;
+
+  IF rowsAffected = 1:
+    → append { local_id, result: "ok", server_id: <new_checkin_id> }
+    CONTINUE
+
+  -- rowsAffected = 0: đã có check-in trước (first-wins conflict)
+  SELECT c.checked_in_at, s.full_name AS staff_name
+  FROM checkins c
+  JOIN staff s ON s.id = c.checked_by
+  WHERE c.registration_id = :registration_id;
+
+  → append {
+      local_id,
+      result: "duplicate",
+      first_checkin_at:   <checked_in_at>,
+      first_staff_name:   <staff_name>
+    }
+
+RETURN results_array
+```
+
+---
+
+## 3. Kịch bản lỗi
+
+### E-01: QR code không tồn tại trong DB
+```
+Điều kiện: Không có registration nào có qr_code khớp
+Hành vi server: Trả result = "rejected", reason = "qr_invalid"
+Hành vi mobile: local_checkins.status = 'rejected', sync_error = 'qr_invalid'
+UI: "QR code không hợp lệ hoặc đã hết hiệu lực"
+```
+
+### E-02: Student chưa thanh toán
+```
+Điều kiện: registrations.status = 'pending' (chưa thanh toán)
+Hành vi server: Trả result = "rejected", reason = "not_paid"
+UI: "Sinh viên này chưa hoàn tất thanh toán"
+```
+
+### E-03: Workshop đã bị hủy
+```
+Điều kiện: workshops.status = 'cancelled'
+Hành vi server: Trả result = "rejected", reason = "workshop_cancelled"
+UI: "Workshop này đã bị hủy"
+```
+
+### E-04: Duplicate — hai staff quét cùng QR offline
+```
+Điều kiện:
+  Staff A (offline) quét QR lúc 10:30
+  Staff B (offline) quét cùng QR lúc 10:31
+  Staff A sync trước → checkins INSERT thành công
+  Staff B sync sau → INSERT ON CONFLICT DO NOTHING → rowsAffected = 0
+
+Hành vi server:
+  B nhận: result = "duplicate",
+           first_checkin_at = "10:30:00",
+           first_staff_name = "Staff Nguyễn Văn A"
+
+UI Staff B: "QR này đã được check-in lúc 10:30:00 bởi Staff Nguyễn Văn A"
+Action: Staff B ghi nhận và tiếp tục (không phải lỗi — là expected race condition)
+```
+
+### E-05: Mạng không phục hồi trong thời gian sự kiện (extreme case)
+```
+Điều kiện: Device không kết nối lại trong suốt sự kiện
+Hành vi: local_checkins.status = 'pending' mãi mãi
+Hậu quả: Check-in data không được sync lên server
+Mitigation: Đây là acceptable loss — check-in là operational tracking, không phải financial transaction.
+            BTC dùng danh sách backup in ra giấy cho audit nếu cần.
+```
+
+### E-06: JWT hết hạn khi offline
+```
+Điều kiện: Đang offline, access_token.exp < now()
+Hành vi: Mobile verify token bằng public key local → token expired
+         Ghi local_checkins vẫn chạy (không cần validate với server)
+         Khi sync (khi có mạng): server trả 401
+         Mobile: cần refresh token trước khi sync (POST /auth/refresh)
+Operational note: Staff refresh token khi về khu vực có sóng trước khi sync
+```
+
+### E-07: Sync timeout (10s không nhận response)
+```
+Điều kiện: Server quá tải, response > 10s
+Hành vi: Batch không được update status
+         Timer 30s trigger sync lại
+         local_checkins.status = 'pending' vẫn giữ nguyên cho đến khi sync thành công
+```
+
+### E-08: Đồng hồ device lệch giờ
+```
+Điều kiện: Device clock bị set sai (ví dụ: device clock = UTC thay vì UTC+7)
+Hành vi: checked_in_at lưu theo device clock → timestamp sai
+         Không ảnh hưởng logic "đã check-in hay chưa" (ON CONFLICT check theo registration_id)
+         Ảnh hưởng: report thống kê check-in theo giờ bị sai
+Mitigation: Server lưu received_at = now() (server time, luôn đúng) trong bảng checkins.
+            Audit dùng received_at, không dùng checked_in_at.
+```
+
+### E-09: QR bị scan 2 lần trên cùng device (staff bấm nhầm)
+```
+Điều kiện: Cùng qr_code đã có trong local_checkins với status != 'rejected'
+Hành vi: Bước 2 của luồng quét QR phát hiện → dừng, KHÔNG ghi thêm
+UI: "QR này đã được quét [trạng thái: synced / chờ sync]"
+```
+
+### E-10: Degrade Mode — Online-only (nếu prototype SQLite thất bại)
+```
+Điều kiện: Week 4 deadline — SQLite/offline sync không hoàn thành
+
+Hành vi thay thế:
+  POST /checkins/scan (thay vì /checkins/sync)
+  Body: { qr_code, checked_at }
+  Server xử lý đồng bộ, trả kết quả ngay
+
+Operational impact:
+  - Staff ở khu vực mất sóng KHÔNG thể check-in
+  - BTC chuẩn bị sẵn danh sách đăng ký in ra giấy trước sự kiện
+  - Document hạn chế rõ ràng trong user guide
+
+Không cần code path mới cho degrade — chỉ là endpoint khác, không có SQLite layer.
+```
+
+---
+
+## 4. Ràng buộc (Invariants)
+
+**INV-01 — First Check-in Wins:**
+Mỗi `registration_id` chỉ có tối đa 1 row trong `checkins`.
+Enforcement: `UNIQUE (registration_id)` trên bảng `checkins`.
+Check-in thứ 2 cho cùng student tại cùng workshop nhận `duplicate`, không phải error.
+
+**INV-02 — Server Wins Conflicts:**
+Khi hai thiết bị sync cùng qr_code, request nào đến server trước thì thắng.
+Device time KHÔNG được dùng để resolve conflict — server received_at là tie-breaker.
+
+**INV-03 — Local ID Không Phải Server ID:**
+`local_checkins.local_id` là UUID v4 sinh offline — không được dùng làm `checkins.id` trên server.
+Server luôn gen mới `checkins.id` khi insert.
+
+**INV-04 — Status Chỉ Tiến Không Lùi:**
+`local_checkins.status` chỉ được transition theo hướng:
+`pending` → `synced` | `duplicate` | `rejected`
+Không có transition ngược lại (đã sync không thể về pending).
+
+**INV-05 — Ghi Local Không Phụ Thuộc Network:**
+`INSERT INTO local_checkins` phải thành công không phụ thuộc vào trạng thái mạng hoặc server.
+Staff không bao giờ thấy "Error: Cannot scan — no connection".
+
+**INV-06 — QR Code Là Random UUID, Không Phải Registration ID:**
+QR code là `registrations.qr_code` (UUID v4 riêng), không phải `registrations.id`.
+Ngăn attacker brute-force registration ID để fake check-in.
+
+---
+
+## 5. Tiêu chí chấp nhận
+
+**AC-01 — Happy path online:**
+Staff quét QR hợp lệ, có mạng.
+Then: UI hiển thị "✓" ngay (< 100ms — từ local write). Server nhận check-in. checkins +1 row.
+
+**AC-02 — Happy path offline:**
+Staff quét QR hợp lệ, không có mạng.
+Then: UI hiển thị "✓ (offline)" ngay. local_checkins.status = 'pending'.
+When mạng phục hồi: sync tự động. local_checkins.status = 'synced'. checkins +1 row.
+
+**AC-03 — First check-in wins (concurrent offline):**
+Staff A và B cùng quét QR X offline. A sync trước.
+Then: A → synced. B → duplicate với thông tin "checked-in lúc HH:MM bởi Staff A".
+DB: checkins chỉ có 1 row cho registration này.
+
+**AC-04 — Rejected invalid QR:**
+Staff quét QR không tồn tại trong DB.
+Then: local write với status='pending'. Sau sync: status='rejected', sync_error='qr_invalid'.
+UI: "QR code không hợp lệ".
+
+**AC-05 — Batch sync:**
+Staff offline 5 phút, quét 15 QR.
+When mạng phục hồi: một POST /checkins/sync gửi tất cả 15 items.
+Then: tất cả 15 items được xử lý, status update tương ứng.
+
+**AC-06 — No double-write local:**
+Staff quét cùng QR 2 lần (bấm nhầm).
+Then: local_checkins chỉ có 1 row. Lần 2 bị chặn ở Bước 2 kiểm tra local.
+
+**AC-07 — JWT offline validation:**
+Staff ở khu vực mất mạng, token còn hạn.
+Then: Có thể quét QR và ghi local. Không gọi server để validate JWT.
+
+**AC-08 — Timer trigger:**
+Sau 30 giây có row 'pending' và có mạng.
+Then: Sync tự động chạy mà không cần staff thao tác.
