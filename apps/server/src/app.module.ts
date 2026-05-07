@@ -5,8 +5,10 @@ import { ZodValidationPipe } from "nestjs-zod";
 
 import {
   appConfig,
+  aiProviderConfig,
   corsConfig,
   dbConfig,
+  gatewayConfig,
   jwtConfig,
   loggingConfig,
   paymentConfig,
@@ -20,6 +22,7 @@ import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { DatabaseModule } from "./infra/database/database.module";
+import { HttpClientModule } from "./infra/http-client/http-client.module";
 import { MessagingModule } from "./infra/messaging/messaging.module";
 import { RedisModule } from "./infra/redis/redis.module";
 import { StorageModule } from "./infra/storage/storage.module";
@@ -67,6 +70,8 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
         paymentConfig,
         loggingConfig,
         corsConfig,
+        gatewayConfig,
+        aiProviderConfig,
       ],
     }),
     DatabaseModule,
@@ -84,6 +89,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
           config.get<number>("r2.maxFileSizeBytes") ?? 52_428_800,
       }),
     }),
+    HttpClientModule,
     MessagingModule,
     RateLimitModule,
     IamModule,
