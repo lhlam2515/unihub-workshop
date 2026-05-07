@@ -139,7 +139,7 @@ export class AuthController {
    * Returns the authenticated user's profile with role-specific fields:
    * - STUDENT: includes student_code, full_name, faculty.
    * - CHECKIN_STAFF: includes allowed_workshop_ids.
-   * - ORGANIZER: base fields only.
+   * - BTC: base fields only.
    *
    * Requires valid JWT. Any authenticated role can access.
    */

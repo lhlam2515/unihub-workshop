@@ -184,9 +184,9 @@ export class AuthService {
    * Retrieves the authenticated user's profile with role-specific fields.
    *
    * Business rules:
-   * - STUDENT users receive additional student profile fields (student_code, full_name, faculty).
+   * - STUDENT users receive additional student profile fields (student_id, full_name).
    * - CHECKIN_STAFF users receive their assigned workshop IDs.
-   * - ORGANIZER users receive only base fields.
+   * - BTC users receive only base fields.
    *
    * Side effects: Queries the users table. For STUDENT, also queries the students table.
    * For CHECKIN_STAFF, also queries the checkin_staff_assignments table.
@@ -210,7 +210,7 @@ export class AuthService {
 
     const user = userResult.data;
     let studentProfile:
-      | { studentCode: string; fullName: string; faculty: string | null }
+      | { studentId: string; fullName: string }
       | undefined;
     let allowedWorkshopIds: string[] | undefined;
 
@@ -219,9 +219,8 @@ export class AuthService {
         await this.studentProfileService.getProfileByUserId(userId);
       if (profileResult.isSuccess && profileResult.data) {
         studentProfile = {
-          studentCode: profileResult.data.studentCode,
+          studentId: profileResult.data.studentId,
           fullName: profileResult.data.fullName,
-          faculty: profileResult.data.faculty,
         };
       }
     }
