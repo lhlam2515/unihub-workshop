@@ -32,10 +32,10 @@ import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
 import { TicketsRepository } from "@/modules/booking/repositories/tickets.repository";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
-import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { RoomsRepository } from "@/modules/catalog/repositories/rooms.repository";
 import { SpeakersRepository } from "@/modules/catalog/repositories/speakers.repository";
-import { WorkshopDocumentsRepository } from "@/modules/catalog/repositories/workshop-documents.repository";
+import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
 import { WorkshopSlotsRepository } from "@/modules/catalog/repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { RoomConflictService } from "@/modules/catalog/services/room-conflict.service";

@@ -28,6 +28,7 @@ import { BackgroundModule } from "./modules/background/background.module";
 import { BookingModule } from "./modules/booking/booking.module";
 import { CatalogModule } from "./modules/catalog/catalog.module";
 import { CheckinModule } from "./modules/checkin/checkin.module";
+import { CsvSyncModule } from "./modules/csv-sync/csv-sync.module";
 import { IamModule } from "./modules/iam/iam.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { PaymentModule } from "./modules/payment/payment.module";
@@ -89,6 +90,7 @@ import { PaymentModule } from "./modules/payment/payment.module";
     PaymentModule,
     CheckinModule,
     AiSummaryModule,
+    CsvSyncModule,
     NotificationModule,
     BackgroundModule,
   ],
