@@ -1,9 +1,8 @@
-import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
-import { Job } from "bullmq";
 
 import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
-import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { FatalJobError } from "@/infra/messaging/messaging.errors";
+import type { IJobHandler } from "@/infra/messaging/messaging.interfaces";
 import { RedisService } from "@/infra/redis/redis.service";
 import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
 
@@ -20,38 +19,36 @@ import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.ser
  * - Lock TTL: 3600 seconds (estimated max job duration)
  *
  * Job lifecycle:
- * - Acquires distributed lock before processing
- * - Delegates to StudentSyncService.processJob()
- * - Releases lock on completion in a finally block
- * - Does NOT throw on failure (data sync jobs should not retry)
+ * - Acquires distributed lock before processing.
+ * - Delegates to StudentSyncService.processJob().
+ * - Releases lock on completion in a finally block.
+ * - Throws {@link FatalJobError} on failure (no retry — reconcile on next cron tick).
  */
 @Injectable()
-@Processor(STUDENT_SYNC_QUEUE, { concurrency: 1 })
-export class StudentSyncWorker extends WorkerHost {
+export class StudentSyncWorker implements IJobHandler<StudentSyncJobData> {
   private readonly logger = new Logger(StudentSyncWorker.name);
 
   constructor(
     private readonly studentSyncService: StudentSyncService,
     private readonly redisService: RedisService
-  ) {
-    super();
-  }
+  ) {}
 
   /**
-   * Process a student sync job from the queue
+   * Processes a student sync job.
    *
    * Acquires a Redis distributed lock before delegating to the service.
    * If another worker is already processing the same job, this invocation
    * is silently skipped.
    *
    * Side effects:
-   * - Creates a Redis key `student-sync:job:{jobId}:lock` with TTL
-   * - Removes the Redis key on completion
+   * - Creates a Redis key `student-sync:job:{jobId}:lock` with TTL.
+   * - Removes the Redis key on completion.
    *
-   * @param job - BullMQ job containing jobId and sourceFileName
+   * @param payload - Job payload containing jobId and sourceFileName.
+   * @throws {FatalJobError} If the job fails (terminal — no retry).
    */
-  async process(job: Job<StudentSyncJobData>): Promise<void> {
-    const { jobId } = job.data;
+  async handle(payload: StudentSyncJobData): Promise<void> {
+    const { jobId } = payload;
 
     this.logger.log(`Processing sync job ${jobId}`);
 
@@ -69,8 +66,10 @@ export class StudentSyncWorker extends WorkerHost {
 
       if (result.isFailure) {
         this.logger.error(`Sync job ${jobId} failed: ${result.error.message}`);
-        // Data sync jobs should not retry — failure is final
-        return;
+        throw new FatalJobError(
+          `Sync job ${jobId} failed: ${result.error.message}`,
+          result.error.code
+        );
       }
 
       this.logger.log(`Sync job ${jobId} completed successfully`);
@@ -80,15 +79,15 @@ export class StudentSyncWorker extends WorkerHost {
   }
 
   /**
-   * Acquire a distributed Redis lock for a sync job
+   * Acquire a distributed Redis lock for a sync job.
    *
    * Uses Redis SET NX to atomically create a lock key only if it does
    * not already exist. Prevents multiple workers from processing the
    * same job concurrently.
    *
-   * @param jobId - Sync job UUID
-   * @param ttlSeconds - Lock TTL in seconds (default 3600)
-   * @returns true if the lock was acquired, false if already locked
+   * @param jobId - Sync job UUID.
+   * @param ttlSeconds - Lock TTL in seconds (default 3600).
+   * @returns true if the lock was acquired, false if already locked.
    */
   private async acquireLock(
     jobId: string,
@@ -100,13 +99,13 @@ export class StudentSyncWorker extends WorkerHost {
   }
 
   /**
-   * Release a distributed Redis lock for a sync job
+   * Release a distributed Redis lock for a sync job.
    *
    * Deletes the lock key so other workers can process the job.
    *
    * Side effects: Removes the Redis key `student-sync:job:{jobId}:lock`.
    *
-   * @param jobId - Sync job UUID
+   * @param jobId - Sync job UUID.
    */
   private async releaseLock(jobId: string): Promise<void> {
     const lockKey = `student-sync:job:${jobId}:lock`;

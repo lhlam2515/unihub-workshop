@@ -1,9 +1,8 @@
 import { Readable } from "node:stream";
 
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import { StorageService } from "@/infra/storage/storage.service";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
@@ -43,7 +42,7 @@ const mockStorageService = {
 };
 
 const mockQueue = {
-  add: jest.fn(),
+  enqueue: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -106,7 +105,7 @@ describe("StudentSyncService", () => {
           provide: StorageService,
           useValue: mockStorageService,
         },
-        { provide: getQueueToken(STUDENT_SYNC_QUEUE), useValue: mockQueue },
+        { provide: MESSAGING_TOKEN.STUDENT_SYNC_QUEUE, useValue: mockQueue },
       ],
     }).compile();
 
@@ -121,7 +120,7 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.create.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockQueue.add.mockResolvedValue({});
+      mockQueue.enqueue.mockResolvedValue({});
 
       const result = await service.triggerSync("students-2026-06-01.csv");
 
@@ -131,11 +130,10 @@ describe("StudentSyncService", () => {
       expect(mockStudentSyncJobsRepo.create).toHaveBeenCalledWith({
         sourceFileName: "students-2026-06-01.csv",
       });
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        "student-sync",
-        { jobId: "job-001", sourceFileName: "students-2026-06-01.csv" },
-        { jobId: "job-001" }
-      );
+      expect(mockQueue.enqueue).toHaveBeenCalledWith("student-sync.execute", {
+        jobId: "job-001",
+        sourceFileName: "students-2026-06-01.csv",
+      });
     });
 
     it("returns FailResult when job creation fails", async () => {
@@ -147,14 +145,14 @@ describe("StudentSyncService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
-      expect(mockQueue.add).not.toHaveBeenCalled();
+      expect(mockQueue.enqueue).not.toHaveBeenCalled();
     });
 
     it("marks the job as FAILED when queue enqueue fails", async () => {
       mockStudentSyncJobsRepo.create.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockQueue.add.mockRejectedValue(new Error("Redis down"));
+      mockQueue.enqueue.mockRejectedValue(new Error("Redis down"));
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
         Result.ok({ ...mockJobRecord, status: "FAILED" })
       );

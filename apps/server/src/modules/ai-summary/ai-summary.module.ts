@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
 import { RedisModule } from "@/infra/redis/redis.module";
 import { StorageModule } from "@/infra/storage/storage.module";
 
@@ -18,7 +17,7 @@ import { AiSummaryService } from "./services/ai-summary.service";
 import { DocumentsService } from "./services/workshop-documents.service";
 
 @Module({
-  imports: [DatabaseModule, RedisModule, StorageModule, SharedQueueModule],
+  imports: [DatabaseModule, RedisModule, StorageModule],
   controllers: [DocumentsAdminController],
   providers: [
     // Services
