@@ -1,9 +1,9 @@
 import { Readable } from "node:stream";
 
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { BullMQAdapter } from "@/infra/messaging/bullmq.adapter";
+import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import { StorageService } from "@/infra/storage/storage.service";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
@@ -42,9 +42,8 @@ const mockStorageService = {
   getFileStream: jest.fn(),
 };
 
-const mockQueue = {
-  add: jest.fn(),
-};
+const mockQueue = { add: jest.fn() };
+let adapter: BullMQAdapter;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -82,6 +81,8 @@ describe("StudentSyncService", () => {
     jest.clearAllMocks();
     mockStudentSyncErrorsRepo.createBatch.mockResolvedValue(Result.ok([]));
     mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+    adapter = new BullMQAdapter(mockQueue as any);
+    jest.spyOn(adapter, "enqueue");
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -106,7 +107,7 @@ describe("StudentSyncService", () => {
           provide: StorageService,
           useValue: mockStorageService,
         },
-        { provide: getQueueToken(STUDENT_SYNC_QUEUE), useValue: mockQueue },
+        { provide: MESSAGING_TOKEN.STUDENT_SYNC_QUEUE, useValue: adapter },
       ],
     }).compile();
 
@@ -121,8 +122,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.create.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockQueue.add.mockResolvedValue({});
-
       const result = await service.triggerSync("students-2026-06-01.csv");
 
       expect(result.isSuccess).toBe(true);
@@ -131,11 +130,10 @@ describe("StudentSyncService", () => {
       expect(mockStudentSyncJobsRepo.create).toHaveBeenCalledWith({
         sourceFileName: "students-2026-06-01.csv",
       });
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        "student-sync",
-        { jobId: "job-001", sourceFileName: "students-2026-06-01.csv" },
-        { jobId: "job-001" }
-      );
+      expect(adapter.enqueue).toHaveBeenCalledWith("student-sync", {
+        jobId: "job-001",
+        sourceFileName: "students-2026-06-01.csv",
+      });
     });
 
     it("returns FailResult when job creation fails", async () => {
@@ -147,7 +145,7 @@ describe("StudentSyncService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
-      expect(mockQueue.add).not.toHaveBeenCalled();
+      expect(adapter.enqueue).not.toHaveBeenCalled();
     });
 
     it("marks the job as FAILED when queue enqueue fails", async () => {
