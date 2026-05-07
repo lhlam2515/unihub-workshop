@@ -118,7 +118,7 @@ Nếu registrations.student_id ≠ JWT.sub:
 ```
 POST /payments { registration_id, payment_key }
 
-Server verify trước: registrations.student_id = JWT.sub AND status='pending'
+Server verify trước: registrations.student_id = JWT.sub AND status='PENDING'
 
 Nếu không khớp:
   → 403 { "error": "REGISTRATION_NOT_OWNED",
@@ -161,10 +161,10 @@ Frontend guard là **UX protection**, không phải security boundary. API backe
 ```
 Route /admin/* được bảo vệ bởi AdminGuard:
   - Đọc role từ JWT đã parse trong memory
-  - Nếu role ≠ 'btc': redirect về /login
-  - Nếu role = 'btc': render AdminLayout
+  - Nếu role ≠ 'BTC': redirect về /login
+  - Nếu role = 'BTC': render AdminLayout
 
-checkin_staff đăng nhập tại cùng /auth/login nhưng role='checkin_staff'
+checkin_staff đăng nhập tại cùng /auth/login nhưng role='CHECKIN_STAFF'
   → AdminGuard redirect về /login
   → checkin_staff dùng mobile app, không phải web admin
 ```
@@ -211,23 +211,23 @@ HTTP/1.1 403 Forbidden
 ### E-01: Student gọi admin endpoint
 
 ```
-POST /admin/workshops với token role='student'
-Layer ② check: 'student' ∉ ['btc'] → 403 INSUFFICIENT_PERMISSION
+POST /admin/workshops với token role='STUDENT'
+Layer ② check: 'STUDENT' ∉ ['BTC'] → 403 INSUFFICIENT_PERMISSION
 Business logic không chạy.
 ```
 
 ### E-02: BTC cố đăng ký workshop
 
 ```
-POST /registrations với token role='btc'
-Layer ②: 'btc' ∉ ['student'] → 403 INSUFFICIENT_PERMISSION
+POST /registrations với token role='BTC'
+Layer ②: 'BTC' ∉ ['STUDENT'] → 403 INSUFFICIENT_PERMISSION
 ```
 
 ### E-03: Student lấy QR của student khác (IDOR attempt)
 
 ```
 GET /registrations/{reg_id_of_B}/qr với token student A
-Layer ②: 'student' ∈ ['student'] → PASS
+Layer ②: 'STUDENT' ∈ ['STUDENT'] → PASS
 Layer ③: WHERE student_id = A → 0 rows → 404 Not Found
 Không lộ: (a) resource có tồn tại không, (b) student B là ai
 ```
@@ -235,8 +235,8 @@ Không lộ: (a) resource có tồn tại không, (b) student B là ai
 ### E-04: checkin_staff gọi admin endpoint
 
 ```
-GET /admin/workshops/:id/registrations với token role='checkin_staff'
-Layer ②: 'checkin_staff' ∉ ['btc'] → 403 INSUFFICIENT_PERMISSION
+GET /admin/workshops/:id/registrations với token role='CHECKIN_STAFF'
+Layer ②: 'CHECKIN_STAFF' ∉ ['BTC'] → 403 INSUFFICIENT_PERMISSION
 Note: Mobile app không hiển thị UI để gọi endpoint này — UX guard đã ẩn.
       Nhưng nếu attacker dùng curl → vẫn bị từ chối đúng.
 ```
@@ -245,7 +245,7 @@ Note: Mobile app không hiển thị UI để gọi endpoint này — UX guard �
 
 ```
 POST /payments { registration_id: <id_of_B> } với token student A
-Layer ②: 'student' ∈ ['student'] → PASS
+Layer ②: 'STUDENT' ∈ ['STUDENT'] → PASS
 Layer ③: SELECT WHERE id=:id AND student_id=A → 0 rows
 → 403 { "error": "REGISTRATION_NOT_OWNED" }
 Note: Trả 403 (không phải 404) vì đây là write action có explicit error message.
@@ -254,9 +254,9 @@ Note: Trả 403 (không phải 404) vì đây là write action có explicit erro
 ### E-06: Attacker gọi API trực tiếp bypass frontend
 
 ```
-Attacker biết URL /admin/workshops và có token role='student'
-→ POST /admin/workshops với valid JWT role='student'
-Layer ②: 'student' ∉ ['btc'] → 403
+Attacker biết URL /admin/workshops và có token role='STUDENT'
+→ POST /admin/workshops với valid JWT role='STUDENT'
+Layer ②: 'STUDENT' ∉ ['BTC'] → 403
 Frontend guard irrelevant — API enforce đúng.
 ```
 
@@ -294,15 +294,15 @@ Nếu cần immediate revoke → implement `specs/auth-revocation.md`.
 ## 10. Tiêu chí chấp nhận
 
 **AC-01 — Student không vào admin:**
-Given: Token role='student', POST /admin/workshops.
+Given: Token role='STUDENT', POST /admin/workshops.
 Then: 403 `INSUFFICIENT_PERMISSION`. Workshop không được tạo.
 
 **AC-02 — BTC không đăng ký workshop:**
-Given: Token role='btc', POST /registrations.
+Given: Token role='BTC', POST /registrations.
 Then: 403 `INSUFFICIENT_PERMISSION`.
 
 **AC-03 — checkin_staff không xem registrations:**
-Given: Token role='checkin_staff', GET /admin/workshops/:id/registrations.
+Given: Token role='CHECKIN_STAFF', GET /admin/workshops/:id/registrations.
 Then: 403 `INSUFFICIENT_PERMISSION`.
 
 **AC-04 — Student A không xem QR của Student B (IDOR):**
@@ -314,11 +314,11 @@ Given: Student A có 3 registrations. Student B có 5 registrations.
 Then: GET /registrations với token A → trả đúng 3, không trả 5 của B.
 
 **AC-06 — Admin web guard:**
-Given: Login với role='checkin_staff', navigate đến /admin.
+Given: Login với role='CHECKIN_STAFF', navigate đến /admin.
 Then: Redirect về /login. Không render bất kỳ admin component nào.
 
 **AC-07 — Conditional UI BTC:**
-Given: Login với role='btc' vào web admin.
+Given: Login với role='BTC' vào web admin.
 Then: Menu "Quản lý Workshop" hiển thị. Menu "Quét QR" ẩn.
 
 **AC-08 — Conditional UI checkin_staff trên web:**
@@ -326,7 +326,7 @@ Given: checkin_staff access web admin (nếu không bị redirect).
 Then: Menu "Quản lý Workshop" ẩn. Menu "Quét QR" hiển thị.
 
 **AC-09 — API enforce khi bypass frontend:**
-Given: Attacker gọi POST /admin/workshops với token role='student' (bypass frontend).
+Given: Attacker gọi POST /admin/workshops với token role='STUDENT' (bypass frontend).
 Then: 403. Không có side effect trong DB.
 
 **AC-10 — Layer ③ owner check — payment:**

@@ -189,7 +189,7 @@ Hệ quả quan trọng: restart process reset CB về CLOSED. Đây là behavio
 POST /payments đến server
 
 ① Idempotency check (ADR-08) — PHẢI TRƯỚC CB check
-   Lý do: Nếu key K đã completed (success/failure), client phải nhận
+   Lý do: Nếu key K đã COMPLETED (success/failure), client phải nhận
    cached response kể cả khi CB đang OPEN.
    Đảo thứ tự: CB OPEN → từ chối 503 → client không biết request trước
    đã thành công → client tiếp tục retry → UX tệ + tăng tải lúc CB phục hồi.
@@ -197,12 +197,12 @@ POST /payments đến server
 ② CB check — SAU idempotency, TRƯỚC khi claim key
    IF OPEN → trả 503 WITHOUT claiming idempotency key
    Lý do: Nếu claim key trước CB check, rồi CB check thấy OPEN → trả 503,
-   key bị kẹt in_progress 30 giây → client retry trong 30s gặp 409 "Processing"
+   key bị kẹt IN_PROGRESS 30 giây → client retry trong 30s gặp 409 "Processing"
    dù request không được xử lý gì. Đây là bug xác nhận tại review round.
 
-③ Claim idempotency key (in_progress)
+③ Claim idempotency key (IN_PROGRESS)
 ④ Gọi gateway với 5s timeout
-⑤ Finalize key: completed hoặc unresolved (nếu timeout)
+⑤ Finalize key: COMPLETED hoặc UNRESOLVED (nếu timeout)
 ```
 
 **Graceful degradation — tác động phân biệt theo loại workshop:**
@@ -225,7 +225,7 @@ Các tính năng khác → Xem workshop, AI summary, check-in QR: hoàn toàn kh
 
 **Xử lý timeout là loại lỗi đặc biệt:**
 
-Khi gateway timeout sau 5 giây: CB ghi nhận là failure (đóng góp vào threshold). Idempotency key được mark `unresolved` — KHÔNG `completed`. Lý do: gateway có thể đã charge hoặc chưa — server không biết. `unresolved` cho phép client retry với cùng key để gateway dedup. Xem chi tiết tại phần Idempotency bên dưới.
+Khi gateway timeout sau 5 giây: CB ghi nhận là failure (đóng góp vào threshold). Idempotency key được mark  — KHÔNG `COMPLETED`. Lý do: gateway có thể đã charge hoặc chưa — server không biết. `unresolved` cho phép client retry với cùng key để gateway dedup. Xem chi tiết tại phần Idempotency bên dưới.
 
 ---
 
@@ -267,27 +267,27 @@ Key lưu trong bảng `idempotency_keys` (PostgreSQL), không phải Redis:
 
 - Redis là volatile: crash mất toàn bộ idempotency state → in-progress key biến mất → request đang xử lý mất crash recovery
 - PostgreSQL với PRIMARY KEY trên `key` (TEXT) + B-tree index: lookup O(log n), với vài nghìn payment/ngày không đo được khác biệt so với Redis O(1)
-- PostgreSQL durability: crash recovery còn nguyên — server restart sau crash có thể query key `in_progress` với `locked_until` đã quá hạn để tự phục hồi
+- PostgreSQL durability: crash recovery còn nguyên — server restart sau crash có thể query key `IN_PROGRESS` với `locked_until` đã quá hạn để tự phục hồi
 
 **3 trạng thái và ý nghĩa phân biệt:**
 
 ```
-in_progress  — Request đang được xử lý. locked_until = now() + 30s.
+`IN_PROGRESS` — Request đang được xử lý. `locked_until` = now() + 30s.
                Concurrent request với cùng key → 409 "Request đang xử lý"
-               Nếu locked_until hết hạn (crash): crash recovery — coi như chưa xử lý
+               Nếu `locked_until` hết hạn (crash): crash recovery — coi như chưa xử lý
 
-completed    — Kết quả xác định đã nhận (200 OK, 402 Declined, 4xx client error).
-               response_body đã populate.
+`COMPLETED` — Kết quả xác định đã nhận (200 OK, 402 Declined, 4xx client error).
+               `response_body` đã populate.
                Idempotency check → trả cached response ngay, KHÔNG gọi gateway lại.
                Terminal state — không chuyển sang trạng thái khác.
 
-unresolved   — Đã gọi gateway nhưng timeout/network drop — không biết kết quả.
+`UNRESOLVED` — Đã gọi gateway nhưng timeout/network drop — không biết kết quả.
                response_body = NULL (không có gì để cache).
                Idempotency check KHÔNG trả cache — cho phép retry tiếp cận gateway.
                NOT terminal — retry với cùng key để gateway dedup.
 ```
 
-Sự khác biệt then chốt giữa `completed` và `unresolved`: khi idempotency check thấy `unresolved`, nó không trả 409 và không trả cached response — thay vào đó, cho phép request tiếp tục đến gateway. Gateway sẽ dedup vì nhận cùng `Idempotency-Key` header. Nếu mark `unresolved` là `completed` với response 504: client nhận 504 được cache → không bao giờ biết tiền đã trừ hay chưa → bắt buộc dùng key mới → double-charge.
+Sự khác biệt then chốt giữa `COMPLETED` và `UNRESOLVED`: khi idempotency check thấy `UNRESOLVED`, nó không trả 409 và không trả cached response — thay vào đó, cho phép request tiếp tục đến gateway. Gateway sẽ dedup vì nhận cùng `Idempotency-Key` header. Nếu mark  là `COMPLETED` với response 504: client nhận 504 được cache → không bao giờ biết tiền đã trừ hay chưa → bắt buộc dùng key mới → double-charge.
 
 **Cơ chế forward key đến gateway — điểm phân biệt quan trọng:**
 
@@ -318,16 +318,16 @@ POST /payments {registration_id, amount, payment_key}
    CASE:
    key KHÔNG TỒN TẠI              → tiếp tục ③ (flow bình thường)
    
-   status = 'completed'            → RETURN response_body với status_code đã lưu
+   status = 'COMPLETED'            → RETURN response_body với status_code đã lưu
                                       (true duplicate: client nhận kết quả xác định)
    
-   status = 'unresolved'           → tiếp tục ③ (retry xuyên qua để gateway dedup)
+   status = 'UNRESOLVED'           → tiếp tục ③ (retry xuyên qua để gateway dedup)
    
-   status = 'in_progress'
+   status = 'IN_PROGRESS'
      AND locked_until > now()      → RETURN 409 {message: "Request đang xử lý,
                                       thử lại sau", retry_after: seconds}
    
-   status = 'in_progress'
+   status = 'IN_PROGRESS'
      AND locked_until <= now()     → crash recovery: server cũ đã crash
                                      tiếp tục ③ (cập nhật locked_until)
 
@@ -338,14 +338,14 @@ POST /payments {registration_id, amount, payment_key}
      INSERT INTO idempotency_keys
        (key, resource_type, status, locked_until, created_at)
      VALUES
-       (:payment_key, 'payment', 'in_progress', now()+30s, now())
+       (:payment_key, 'payment', 'IN_PROGRESS', now()+30s, now())
    
-   ELSE (status = 'unresolved' hoặc in_progress expired):
+   ELSE (status = 'UNRESOLVED' hoặc IN_PROGRESS expired):
      UPDATE idempotency_keys
-       SET status = 'in_progress', locked_until = now() + 30s
+       SET status = 'IN_PROGRESS', locked_until = now() + 30s
      WHERE key = :payment_key
-       AND (status = 'unresolved'
-            OR (status = 'in_progress' AND locked_until <= now()))
+       AND (status = 'UNRESOLVED'
+            OR (status = 'IN_PROGRESS' AND locked_until <= now()))
      -- IF rowsAffected = 0: race condition — re-check ① logic
 
 ④ Gọi gateway:
@@ -354,16 +354,16 @@ POST /payments {registration_id, amount, payment_key}
    Timeout: 5s
 
    CASE:
-   200 OK (charged)    → ⑤ completed; payment.status = 'succeeded'
-   402 (declined)      → ⑤ completed; payment.status = 'failed'
-   4xx client error    → ⑤ completed; payment.status = 'failed'
-   5xx / timeout       → CB ghi failure; ⑤ unresolved; payment.status = 'unresolved'
+   200 OK (charged)    → ⑤ COMPLETED; payment.status = 'SUCCEEDED'
+   402 (declined)      → ⑤ COMPLETED; payment.status = 'FAILED'
+   4xx client error    → ⑤ COMPLETED; payment.status = 'FAILED'
+   5xx / timeout       → CB ghi failure; ⑤ UNRESOLVED; payment.status = 'UNRESOLVED'
 
 ⑤ Finalize (PostgreSQL transaction):
    BEGIN;
      UPDATE idempotency_keys
-       SET status = :new_status,     -- 'completed' hoặc 'unresolved'
-           response_body = :body,    -- NULL nếu unresolved
+       SET status = :new_status,     -- 'COMPLETED' hoặc 'UNRESOLVED'
+           response_body = :body,    -- NULL nếu UNRESOLVED
            status_code = :code,
            expires_at = now() + 24h,
            locked_until = NULL
@@ -377,8 +377,8 @@ POST /payments {registration_id, amount, payment_key}
    COMMIT;
 
 RETURN:
-   Nếu completed:   response_body với status_code thực
-   Nếu unresolved:  504 + body {error: "payment_timeout",
+   Nếu COMPLETED:   response_body với status_code thực
+   Nếu UNRESOLVED:  504 + body {error: "payment_timeout",
                                 retry_with_same_key: true,
                                 payment_key: payment_key,
                                 retry_after: 30}
@@ -393,7 +393,7 @@ DELETE FROM idempotency_keys
 WHERE expires_at < now()
   AND key NOT IN (
     -- skip key vẫn đang được reference bởi payments chưa resolved
-    SELECT idempotency_key FROM payments WHERE status = 'unresolved'
+    SELECT idempotency_key FROM payments WHERE status = 'UNRESOLVED'
   );
 ```
 
@@ -403,19 +403,19 @@ Lý do giữ 24 giờ: workshop registration diễn ra trong ngày, client retry
 
 Nếu client nhận 504 rồi đóng app, không retry trong 24 giờ:
 
-- `idempotency_keys.status = 'unresolved'` (sẽ bị xóa sau 24h, nhưng FK constraint bảo vệ)
-- `payments.status = 'unresolved'` (KHÔNG bị xóa — payment record tồn tại vĩnh viễn đến khi resolved)
+- `idempotency_keys.status = 'UNRESOLVED'` (sẽ bị xóa sau 24h, nhưng FK constraint bảo vệ)
+- `payments.status = 'UNRESOLVED'` (KHÔNG bị xóa — payment record tồn tại vĩnh viễn đến khi resolved)
 - Tiền có thể đã bị trừ ở gateway
 
 Recovery: **Reconciliation job** chạy mỗi 5 phút query:
 
 ```sql
 SELECT * FROM payments
-WHERE status = 'unresolved'
+WHERE status = 'UNRESOLVED'
   AND created_at < now() - interval '5 minutes'  -- đủ thời gian cho client retry
 ```
 
-Với mỗi payment `unresolved`, job gọi gateway API `GET /charges/{gateway_charge_id}` để biết trạng thái thực, update `payments.status` và `registrations.status` tương ứng. Chi tiết spec tại `specs/payment-reconciliation.md` (Stage 5).
+Với mỗi payment `UNRESOLVED`, job gọi gateway API `GET /charges/{gateway_charge_id}` để biết trạng thái thực, update `payments.status` và `registrations.status` tương ứng. Chi tiết spec tại `specs/payment-reconciliation.md` (Stage 5).
 
 ---
 

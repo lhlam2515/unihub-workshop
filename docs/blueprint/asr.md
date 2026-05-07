@@ -52,7 +52,7 @@ FR và ASR có thể đến từ cùng một câu trong đề bài. Ví dụ: *"
 | **Trích dẫn gốc** | *"Hệ thống cần thiết kế để dễ dàng bổ sung kênh thông báo mới (ví dụ: Telegram) trong các học kỳ sau mà không cần thay đổi lớn"* |
 | **Đặc tính chất lượng** | Extensibility · Maintainability (Open/Closed Principle) |
 | **Hàm ý kiến trúc** | Kiến trúc notification phải có điểm mở rộng tường minh. "Không cần thay đổi lớn" dịch thành: thêm channel không được chạm vào code xử lý business event. Buộc phải có abstraction layer giữa event producer và channel adapter |
-| **ADR đáp ứng** | ADR-09 (Strategy Pattern — `NotificationChannel` interface), ADR-10 (Redis Streams cho async dispatch) |
+| **ADR đáp ứng** | ADR-09 (Strategy Pattern — `NotificationChannel` interface), ADR-10 (BullMQs cho async dispatch) |
 | **Mức độ critical** | 🟡 Trung — không ảnh hưởng MVP nhưng là requirement tường minh của đề bài |
 
 ---
@@ -102,7 +102,7 @@ FR và ASR có thể đến từ cùng một câu trong đề bài. Ví dụ: *"
 | **Đặc tính chất lượng** | Responsiveness · UX Non-blocking |
 | **Nguồn gốc** | ⚠️ **NFR suy diễn** — spec nói "tự động xử lý" không nói "async". Tính async là hệ quả bắt buộc khi đối mặt với processing time 30s–2 phút: block HTTP response = reverse proxy timeout = UX fail. Đây là architectural inference từ đặc điểm kỹ thuật, không phải trích dẫn trực tiếp |
 | **Hàm ý kiến trúc** | Mọi tác vụ có latency không xác định (AI API call, heavy computation) không được nằm trong synchronous HTTP path. Buộc phải có async processing pattern và trạng thái polling cho client |
-| **ADR đáp ứng** | ADR-14 (AI Summary Pipeline — 202 Accepted + polling), ADR-10 (Redis Streams làm job queue) |
+| **ADR đáp ứng** | ADR-14 (AI Summary Pipeline — 202 Accepted + polling), ADR-10 (BullMQs làm job queue) |
 | **Mức độ critical** | 🟡 Trung — ảnh hưởng UX nhưng không ảnh hưởng correctness |
 
 ---
@@ -187,7 +187,7 @@ FR và ASR có thể đến từ cùng một câu trong đề bài. Ví dụ: *"
 | **ADR-07** | Circuit Breaker: in-memory 3-state | ASR-04 | 🔴 Cao |
 | **ADR-08** | Idempotency Key: client-generated, 3-state | ASR-05 | 🟡 Trung |
 | **ADR-09** | Notification: Strategy Pattern in-process | ASR-03 | 🟡 Trung |
-| **ADR-10** | Message Queue: Redis Streams | ASR-07, **ASR-03**² | 🟡 Trung |
+| **ADR-10** | Message Queue: BullMQs | ASR-07, **ASR-03**² | 🟡 Trung |
 | **ADR-11** | Mobile Offline: SQLite + Outbox + Server-wins | ASR-06 | 🔴 Cao |
 | **ADR-12** | CSV Pipeline: Batch Sequential + Error Quarantine | ASR-08 | 🟢 Thấp hơn |
 | **ADR-13** | Cache: Cache-Aside + Write-Invalidate, TTL 10s | ASR-01, ASR-02, **ASR-11**³ | 🟡 Trung |
@@ -195,7 +195,7 @@ FR và ASR có thể đến từ cùng một câu trong đề bài. Ví dụ: *"
 
 > ¹ ADR-04 dùng RS256 (asymmetric) một phần để hỗ trợ mobile offline verify — liên quan ASR-06
 >
-> ² **Đính chính:** Bảng phân tích gốc ghi "ADR-10 → ASR-7, **9**" — sai. ASR-9 là Authorization, không liên quan message queue. Đúng phải là ASR-07 (responsiveness) + ASR-03 (notification worker là consumer của Redis Streams)
+> ² **Đính chính:** Bảng phân tích gốc ghi "ADR-10 → ASR-7, **9**" — sai. ASR-9 là Authorization, không liên quan message queue. Đúng phải là ASR-07 (responsiveness) + ASR-03 (notification worker là consumer của BullMQs)
 >
 > ³ ADR-13 là ADR đầu tiên giải quyết ASR-11 (data freshness) — không có trong bảng gốc
 
@@ -242,8 +242,8 @@ ASR-04 (Fault Isolation): CB OPEN → reject payment ngay → gateway được b
 ASR-05 (Idempotent): retry phải hoạt động đúng kể cả khi CB OPEN
 
 Giải pháp: Idempotency check TRƯỚC CB check (ADR-07 + ADR-08)
-  - Key đã 'completed': trả cached response NGAY, kể cả khi CB OPEN
-  - Key 'unresolved': cho phép retry đến gateway (không bị CB chặn)
+  - Key đã 'COMPLETED': trả cached response NGAY, kể cả khi CB OPEN
+  - Key 'UNRESOLVED': cho phép retry đến gateway (không bị CB chặn)
   - Key không tồn tại: CB check → OPEN → reject (không pollute idempotency table)
 ```
 
@@ -277,7 +277,7 @@ Checklist kiểm tra mỗi ADR có gốc từ ít nhất 1 ASR:
 | ADR-07 Circuit Breaker | ✅ | ASR-04 trực tiếp |
 | ADR-08 Idempotency | ✅ | ASR-05 trực tiếp |
 | ADR-09 Strategy Pattern | ✅ | ASR-03 trực tiếp |
-| ADR-10 Redis Streams | ✅ | ASR-07, ASR-03 |
+| ADR-10 BullMQs | ✅ | ASR-07, ASR-03 |
 | ADR-11 SQLite Offline | ✅ | ASR-06 trực tiếp |
 | ADR-12 CSV Pipeline | ✅ | ASR-08 trực tiếp |
 | ADR-13 Cache | ✅ | ASR-01, ASR-11 |

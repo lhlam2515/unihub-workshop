@@ -4,7 +4,7 @@
 >
 > **ADR tham chiếu:** ADR-08 (Idempotency Key — unresolved state), ADR-02 (Schema — payments, idempotency_keys)
 >
-> **Boundary:** Job này chỉ xử lý payments với status='unresolved'. Payments 'failed' hoặc 'succeeded' không được touch. Reconciliation không trigger refund — chỉ update trạng thái. Refund là quy trình nghiệp vụ riêng (ngoài scope).
+> **Boundary:** Job này chỉ xử lý payments với status='UNRESOLVED'. Payments 'FAILED' hoặc 'SUCCEEDED' không được touch. Reconciliation không trigger refund — chỉ update trạng thái. Refund là quy trình nghiệp vụ riêng (ngoài scope).
 
 ---
 
@@ -39,7 +39,7 @@ SELECT p.id, p.idempotency_key, p.registration_id,
        ik.key AS gateway_key
 FROM payments p
 JOIN idempotency_keys ik ON ik.key = p.idempotency_key
-WHERE p.status = 'unresolved'
+WHERE p.status = 'UNRESOLVED'
   AND p.created_at < now() - interval '5 minutes'  -- không reconcile quá sớm
   AND p.created_at > now() - interval '24 hours'   -- không reconcile quá cũ
 ORDER BY p.created_at ASC
@@ -53,14 +53,14 @@ FOR EACH payment:
 
   CASE response:
     200 { status: "succeeded", charge_id: "..." }:
-      → update_payment_resolved(payment.id, 'succeeded', charge_id)
+      → update_payment_resolved(payment.id, 'SUCCEEDED', charge_id)
 
     200 { status: "failed", decline_code: "..." }:
-      → update_payment_resolved(payment.id, 'failed', NULL)
+      → update_payment_resolved(payment.id, 'FAILED', NULL)
 
     200 { status: "not_found" } (gateway không biết key này):
       -- Gateway chưa nhận request → payment chưa bao giờ được charge
-      → update_payment_resolved(payment.id, 'failed', NULL)
+      → update_payment_resolved(payment.id, 'FAILED', NULL)
          -- Treat as failed: tiền không bị trừ, student cần retry với key mới
 
     4xx client error:
@@ -83,38 +83,38 @@ update_payment_resolved(payment_id, final_status, gateway_charge_id):
   BEGIN TRANSACTION;
 
     UPDATE payments
-      SET status            = :final_status,   -- 'succeeded' hoặc 'failed'
+      SET status            = :final_status,   -- 'SUCCEEDED' hoặc 'FAILED'
           gateway_charge_id = :gateway_charge_id,
           resolved_at       = now()
     WHERE id         = :payment_id
-      AND status     = 'unresolved';   -- guard: không overwrite final state
+      AND status     = 'UNRESOLVED';   -- guard: không overwrite final state
 
-    Nếu final_status = 'succeeded':
+    Nếu final_status = 'SUCCEEDED':
       UPDATE registrations
-        SET status = 'paid'
+        SET status = 'PAID'
       WHERE id = (SELECT registration_id FROM payments WHERE id = :payment_id);
 
-      XADD stream:notifications * {
+      addJob notification * {
         event_type: 'payment_confirmed_late',
         user_id:    :student_id,
         payload:    { workshop_title, amount, receipt_id: gateway_charge_id,
                       note: "Thanh toán đã được xác nhận (xử lý chậm)" }
       }
 
-    Nếu final_status = 'failed' (bao gồm not_found):
+    Nếu final_status = 'FAILED' (bao gồm not_found):
       -- Student cần được thông báo để retry
-      XADD stream:notifications * {
+      addJob notification * {
         event_type: 'payment_failed_reconciled',
         user_id:    :student_id,
         payload:    { workshop_title, amount,
                       message: "Thanh toán không thành công. Vui lòng thử lại." }
       }
-      -- Note: registrations.status vẫn = 'pending' — student có thể retry
+      -- Note: registrations.status vẫn = 'PENDING' — student có thể retry
 
     UPDATE idempotency_keys
-      SET status = 'completed'          -- đóng vòng đời key
+      SET status = 'COMPLETED'          -- đóng vòng đời key
     WHERE key = :payment.idempotency_key
-      AND status = 'unresolved';
+      AND status = 'UNRESOLVED';
 
   COMMIT;
 ```
@@ -126,11 +126,11 @@ update_payment_resolved(payment_id, final_status, gateway_charge_id):
 
 DELETE FROM idempotency_keys
 WHERE expires_at < now()
-  AND status = 'completed'
+  AND status = 'COMPLETED'
   AND NOT EXISTS (
     SELECT 1 FROM payments
     WHERE idempotency_key = idempotency_keys.key
-      AND status = 'unresolved'
+      AND status = 'UNRESOLVED'
   );
 -- Không xóa key còn FK reference với payment unresolved
 -- Không xóa key chưa expired
@@ -144,9 +144,9 @@ WHERE expires_at < now()
 ```
 Điều kiện: Gateway timeout ở lần charge đầu → payment unresolved.
            Reconciliation query: gateway không nhận được request ban đầu
-Hành vi: Treat as 'failed'. Tiền không bị trừ.
+Hành vi: Treat as 'FAILED'. Tiền không bị trừ.
          Student nhận notification "thử lại".
-         registrations.status = 'pending' → student có thể mở payment flow lại.
+         registrations.status = 'PENDING' → student có thể mở payment flow lại.
 Note: Student phải tạo payment_key MỚI (key cũ đã closed).
 ```
 
@@ -154,7 +154,7 @@ Note: Student phải tạo payment_key MỚI (key cũ đã closed).
 ```
 Điều kiện: Lần charge đầu: gateway nhận, trừ tiền, response lost trong network
            Reconciliation xác nhận: charge_id có thật
-Hành vi: payment.status = 'succeeded', registration.status = 'paid'
+Hành vi: payment.status = 'SUCCEEDED', registration.status = 'PAID'
          Student nhận notification "Thanh toán đã được xác nhận (xử lý chậm)"
 Note: Student không bị charge 2 lần nhờ forward idempotency key (ADR-08)
 ```
@@ -164,9 +164,9 @@ Note: Student không bị charge 2 lần nhờ forward idempotency key (ADR-08)
 Điều kiện: Student không retry, key sắp hết TTL (24h)
 Hành vi: Reconciliation job bỏ qua (WHERE created_at > now() - 24h)
          idempotency_key hết expires_at → job cleanup xóa key
-         payments record vẫn còn với status='unresolved'
+         payments record vẫn còn với status='UNRESOLVED'
          (FK payments → idempotency_keys: ON DELETE là behavior cần handle)
-Recovery: Admin query payments WHERE status='unresolved' AND created_at < 24h ago
+Recovery: Admin query payments WHERE status='UNRESOLVED' AND created_at < 24h ago
           Manual investigation với gateway team
 ```
 
@@ -174,7 +174,7 @@ Recovery: Admin query payments WHERE status='unresolved' AND created_at < 24h ag
 ```
 Điều kiện: gateway query timeout trong 10 giây
 Hành vi: LOG WARNING. CONTINUE sang payment tiếp theo.
-         Payment giữ nguyên status='unresolved'.
+         Payment giữ nguyên status='UNRESOLVED'.
          Lần chạy tiếp theo (5 phút sau) retry.
 ```
 
@@ -183,9 +183,9 @@ Hành vi: LOG WARNING. CONTINUE sang payment tiếp theo.
 ## 4. Ràng buộc (Invariants)
 
 **INV-01 — Never Touch Final States:**
-Job chỉ update payments với `status='unresolved'`.
-`status='succeeded'` và `status='failed'` KHÔNG BAO GIỜ bị overwrite.
-Enforcement: `WHERE status='unresolved'` trong UPDATE guard.
+Job chỉ update payments với `status='UNRESOLVED'`.
+`status='SUCCEEDED'` và `status='FAILED'` KHÔNG BAO GIỜ bị overwrite.
+Enforcement: `WHERE status='UNRESOLVED'` trong UPDATE guard.
 
 **INV-02 — Single Job Instance:**
 Không có 2 reconciliation jobs chạy cùng lúc.
@@ -205,17 +205,17 @@ Student không nên phải tự kiểm tra — hệ thống push kết quả.
 
 **AC-01 — Unresolved → succeeded:**
 Payment unresolved. Gateway query → succeeded.
-Then: payments.status='succeeded', registrations.status='paid'. Student nhận notification.
+Then: payments.status='SUCCEEDED', registrations.status='PAID'. Student nhận notification.
 
 **AC-02 — Unresolved → not_found:**
 Payment unresolved. Gateway query → not_found.
-Then: payments.status='failed'. registration.status='pending' (có thể retry).
+Then: payments.status='FAILED'. registration.status='PENDING' (có thể retry).
 Student nhận notification "thử lại".
 
 **AC-03 — Job idempotency:**
 Run job 2 lần cho cùng unresolved payment (gateway trả succeeded cả 2 lần).
-Then: Chỉ 1 update thành công (guard `WHERE status='unresolved'`).
-registration.status chỉ set 'paid' 1 lần.
+Then: Chỉ 1 update thành công (guard `WHERE status='UNRESOLVED'`).
+registration.status chỉ set 'PAID' 1 lần.
 
 **AC-04 — Concurrent job prevention:**
 Run 2 instances cùng lúc.

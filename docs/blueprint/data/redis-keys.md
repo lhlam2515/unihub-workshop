@@ -108,27 +108,27 @@ JWT revocation via blacklist được defer đến Stage 5. Hiện tại dùng s
 
 ---
 
-## 5. Redis Streams (Message Queue — ADR-10)
+## 5. BullMQ (Message Queue — ADR-10)
 
-Dùng Redis Streams cho async processing pipeline. Three stream groups:
+Dùng BullMQ cho async processing pipeline. Three stream groups:
 
 ```
-stream:ai-summary          → AISummaryConsumer (workshop document → AI summary)
-stream:notifications       → NotificationConsumer (email/push/telegram dispatch)
-stream:payments-expiry     → PaymentTimeoutConsumer (timeout unresolved payments)
+Queue: ai-summary          → AISummaryConsumer (workshop document → AI summary)
+Queue: notification       → NotificationConsumer (email/push/telegram dispatch)
+Queue: payment-timeout     → PaymentTimeoutConsumer (timeout unresolved payments)
 
 DLQ (Dead Letter Queue — retries exhausted):
-stream:ai-summary-dlq
-stream:notifications-dlq
+Queue: ai-summary-dlq
+Queue: notification-dlq
 ```
 
-**Pattern:** Consumer Group với XREADGROUP + XACK + PEL.
+**Pattern:** Job queue với `@Processor` decorator + auto-ack. Stalled job detection built-in reclaim job khi worker crash.
 
-**Crash recovery:** XAUTOCLAIM sau 60s — pending message bị claim bởi consumer khác (hoặc cùng consumer sau restart).
+**Crash recovery:** BullMQ stalled job detection — job bị crash (worker không ack) tự động được reclaim sau `stalledInterval` (mặc định 30s).
 
-**DLQ:** Retry 3 lần → XADD vào DLQ. DLQ có consumer riêng (alert admin, manual retry qua admin UI).
+**DLQ:** Retry 3 lần → job chuyển vào DLQ (failed event). DLQ có consumer riêng (alert admin, manual retry qua admin UI).
 
-**TTL:** Stream không có TTL mặc định. Job đêm dọn message > 7 ngày từ cả main stream và DLQ (XDEL / XTRIM MAXLEN).
+**TTL:** Job tự động cleanup sau khi complete/fail qua `removeOnComplete` và `removeOnFail`.
 
 ---
 
@@ -142,8 +142,8 @@ stream:notifications-dlq
 | `rl:user:{user_id}` | User rate limit | 60s | ADR-06 |
 | `rl:reg:{user_id}:{workshop_id}` | Per-registration rate limit | 60s | ADR-06 |
 | `token:blacklist:{jti}` | JWT revocation (out of scope — Stage 5, phải dùng DB1) | TTL = JWT remaining | ADR-04 |
-| `stream:ai-summary` | AI summary job queue | ∞ (cleaned nightly) | ADR-10/14 |
-| `stream:notifications` | Notification dispatch queue | ∞ (cleaned nightly) | ADR-09/10 |
-| `stream:payments-expiry` | Payment timeout job queue | ∞ (cleaned nightly) | ADR-08/10 |
-| `stream:ai-summary-dlq` | AI summary dead-letter queue | ∞ (cleaned nightly) | ADR-10/14 |
-| `stream:notifications-dlq` | Notification dead-letter queue | ∞ (cleaned nightly) | ADR-09/10 |
+| `Queue: ai-summary` | AI summary job queue | ∞ (cleaned nightly) | ADR-10/14 |
+| `Queue: notification` | Notification dispatch queue | ∞ (cleaned nightly) | ADR-09/10 |
+| `Queue: payment-timeout` | Payment timeout job queue | ∞ (cleaned nightly) | ADR-08/10 |
+| `Queue: ai-summary-dlq` | AI summary dead-letter queue | ∞ (cleaned nightly) | ADR-10/14 |
+| `Queue: notification-dlq` | Notification dead-letter queue | ∞ (cleaned nightly) | ADR-09/10 |

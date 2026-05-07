@@ -53,7 +53,7 @@ package "Identity" #EEF4FF {
         email : TEXT <<UQ>>
         full_name : TEXT
         password_hash : TEXT
-        role : TEXT CHECK(btc, checkin_staff)
+        role : TEXT CHECK(BTC, CHECKIN_STAFF)
         is_active : BOOLEAN DEFAULT true
         created_at : TIMESTAMPTZ
         --
@@ -106,12 +106,12 @@ package "Event Core" #EEFFEE {
         seats_total : INT
         seats_available : INT
         price : NUMERIC(10,2) DEFAULT 0
-        status : TEXT CHECK(draft, open, closed, cancelled)
+        status : TEXT CHECK(DRAFT, OPEN, CLOSED, CANCELLED)
         ~ created_by : UUID <<FK>>
         -- ADR-14: summary + PDF gộp trực tiếp
         pdf_url : TEXT
         summary_text : TEXT
-        summary_status : TEXT CHECK(none, queued, processing, done, failed)
+        summary_status : TEXT CHECK(NONE, QUEUED, PROCESSING, DONE, FAILED)
         -- ADR-03: Optimistic Lock
         version : BIGINT DEFAULT 0
         created_at : TIMESTAMPTZ
@@ -120,7 +120,7 @@ package "Event Core" #EEFFEE {
         chk: ends_at > starts_at
         chk: seats_total > 0
         chk: seats_available >= 0 AND <= seats_total
-        idx: (status, starts_at) WHERE status='open'
+        idx: (status, starts_at) WHERE status='OPEN'
     }
 }
 
@@ -136,7 +136,7 @@ package "Transaction" #FFFBEE {
         --
         ~ workshop_id : UUID <<FK>>
         ~ student_id : TEXT <<FK>>
-        status : TEXT CHECK(pending, paid, cancelled)
+        status : TEXT CHECK(PENDING, PAID, CANCELLED)
         qr_code : TEXT <<UQ>> -- UUID v4 độc lập
         registered_at : TIMESTAMPTZ
         --
@@ -153,13 +153,13 @@ package "Transaction" #FFFBEE {
         amount : NUMERIC(10,2)
         currency : TEXT DEFAULT 'VND'
         gateway_charge_id : TEXT
-        status : TEXT CHECK(initiated, succeeded, failed, unresolved)
+        status : TEXT CHECK(INITIATED, SUCCEEDED, FAILED, UNRESOLVED)
         ~ idempotency_key : TEXT <<FK>> -- REFERENCES idempotency_keys(key)
         created_at : TIMESTAMPTZ
         resolved_at : TIMESTAMPTZ
         --
         chk: amount > 0
-        idx: (status, created_at) WHERE status IN ('initiated','unresolved')
+        idx: (status, created_at) WHERE status IN ('INITIATED','UNRESOLVED')
     }
 
     class checkins <<Transaction>> {
@@ -178,8 +178,8 @@ package "Transaction" #FFFBEE {
     class idempotency_keys <<Transaction>> {
         + key : TEXT <<PK>>
         --
-        resource_type : TEXT CHECK(registration, payment)
-        status : TEXT CHECK(in_progress, completed, unresolved)
+        resource_type : TEXT CHECK(REGISTRATION, PAYMENT)
+        status : TEXT CHECK(IN_PROGRESS, COMPLETED, UNRESOLVED)
         response_body : JSONB
         status_code : INT
         created_at : TIMESTAMPTZ
@@ -204,8 +204,8 @@ package "Async" #F8EEFF {
         success_count : INT
         failed_count : INT
         error_file_path : TEXT -- errors/YYYY-MM-DD.csv
-        triggered_by : TEXT CHECK(cron, manual)
-        status : TEXT CHECK(in_progress, success, failed)
+        triggered_by : TEXT CHECK(CRON, MANUAL)
+        status : TEXT CHECK(IN_PROGRESS, SUCCESS, FAILED)
     }
 
     class notification_logs <<Async>> {
@@ -214,12 +214,12 @@ package "Async" #F8EEFF {
         user_id : TEXT -- student_id hoặc staff.id
         event_type : TEXT
         channel : TEXT
-        status : TEXT CHECK(sent, failed, timeout)
+        status : TEXT CHECK(SENT, FAILED, TIMEOUT)
         error_msg : TEXT
         payload : JSONB
         created_at : TIMESTAMPTZ
         --
-        idx: (status, created_at) WHERE status IN ('failed','timeout')
+        idx: (status, created_at) WHERE status IN ('FAILED','TIMEOUT')
     }
 
     class notification_channel_configs <<Async>> {
@@ -281,19 +281,20 @@ package "Redis (Auxiliary)" #FFF0F0 {
         Threshold: 5 req / 60s
     }
 
-    class "stream:ai-summary" <<Redis>> {
-        Key: stream:ai-summary
-        Type: Redis Stream
+    class "Queue: ai-summary" <<Redis>> {
+        Key: Queue: ai-summary
+        Type: BullMQ
         --
-        Consumer Group with XREADGROUP + XACK
-        DLQ: stream:ai-summary-dlq
+        @Processor + auto-ack
+        DLQ: Queue: ai-summary-dlq
     }
 
-    class "stream:notifications" <<Redis>> {
-        Key: stream:notifications
-        Type: Redis Stream
+    class "Queue: notification" <<Redis>> {
+        Key: Queue: notification
+        Type: BullMQ
         --
-        DLQ: stream:notifications-dlq
+        @Processor + auto-ack
+        DLQ: Queue: notification-dlq
     }
 }
 
