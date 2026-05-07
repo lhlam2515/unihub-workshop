@@ -1,9 +1,8 @@
-import { Inject } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
+import { Queue } from "bullmq";
 
-import { MESSAGING_TOKEN } from "./messaging.constants";
-
-import type { IMessageQueue } from "./messaging.interfaces";
+import { NOTIFICATION_QUEUE } from "./queue.constants";
 
 /**
  * Notification Publisher
@@ -25,8 +24,8 @@ export class NotificationPublisher {
   private readonly logger = new Logger(NotificationPublisher.name);
 
   constructor(
-    @Inject(MESSAGING_TOKEN.NOTIFICATION_QUEUE)
-    private readonly queue: IMessageQueue
+    @InjectQueue(NOTIFICATION_QUEUE)
+    private readonly queue: Queue
   ) {}
 
   /**
@@ -36,7 +35,7 @@ export class NotificationPublisher {
    * @param eventData - The event payload (specific to each domain event).
    */
   fire(eventType: string, eventData: object): void {
-    this.queue.enqueue(eventType, eventData).catch((cause) => {
+    this.queue.add(eventType, eventData).catch((cause) => {
       this.logger.warn(`[${eventType}] Failed to enqueue notification`, cause);
     });
   }

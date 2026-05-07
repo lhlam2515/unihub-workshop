@@ -22,24 +22,24 @@
  * - Enqueues a BullMQ job to the notification queue on each call.
  */
 
-import { Inject } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
+import { Queue } from "bullmq";
 
 import type { Workshop } from "@/infra/database/types/event-core.types";
 import type {
   WorkshopCancelledEventData,
   WorkshopUpdatedEventData,
 } from "@/infra/messaging/event-contracts";
-import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
-import type { IMessageQueue } from "@/infra/messaging/messaging.interfaces";
+import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 
 @Injectable()
 export class WorkshopNotificationPublisher {
   private readonly logger = new Logger(WorkshopNotificationPublisher.name);
 
   constructor(
-    @Inject(MESSAGING_TOKEN.NOTIFICATION_QUEUE)
-    private readonly notificationQueue: IMessageQueue
+    @InjectQueue(NOTIFICATION_QUEUE)
+    private readonly notificationQueue: Queue
   ) {}
 
   /**
@@ -64,7 +64,7 @@ export class WorkshopNotificationPublisher {
     };
 
     try {
-      await this.notificationQueue.enqueue("workshop.cancelled", event);
+      await this.notificationQueue.add("workshop.cancelled", event);
     } catch (error) {
       this.logger.error(
         `[WORKSHOP_CANCELLED] Failed to enqueue: ${(error as Error).message}`
@@ -104,7 +104,7 @@ export class WorkshopNotificationPublisher {
     };
 
     try {
-      await this.notificationQueue.enqueue("workshop.emergency-update", event);
+      await this.notificationQueue.add("workshop.emergency-update", event);
     } catch (error) {
       this.logger.error(
         `[WORKSHOP_UPDATED] Failed to enqueue: ${(error as Error).message}`

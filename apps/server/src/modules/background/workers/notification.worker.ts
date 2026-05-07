@@ -1,10 +1,12 @@
+import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
 
 import type { NotificationJobData } from "@/infra/messaging/event-contracts";
-import { FatalJobError } from "@/infra/messaging/messaging.errors";
-import type { IJobHandler } from "@/infra/messaging/messaging.interfaces";
+import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 import { NotificationDispatchService } from "@/modules/notification/services/notification-dispatch.service";
 import type { ErrorCode } from "@/shared/response/types";
+
+import type { Job } from "bullmq";
 
 /**
  * Error codes that represent terminal failures — the job should NOT be retried.
@@ -27,33 +29,36 @@ const TERMINAL_ERROR_CODES: ReadonlySet<ErrorCode> = new Set([
  *
  * Retry strategy (configured via queue defaultJobOptions):
  * - 5 attempts with exponential backoff: 5s, 10s, 20s, 40s, 80s
- * - Terminal failures throw {@link FatalJobError} (no retry).
- * - Channel send failures throw a plain Error (triggers BullMQ retry).
+ * - Terminal failures (missing log, inactive channel) return without throwing
+ * - Channel send failures throw to trigger BullMQ retry
  *
  * Job lifecycle:
- * - Completed jobs auto-removed after 1 hour.
- * - Failed jobs auto-removed after 24 hours.
+ * - Completed jobs auto-removed after 1 hour
+ * - Failed jobs auto-removed after 24 hours
  */
 @Injectable()
-export class NotificationWorker implements IJobHandler<NotificationJobData> {
+@Processor(NOTIFICATION_QUEUE, { concurrency: 5 })
+export class NotificationWorker extends WorkerHost {
   private readonly logger = new Logger(NotificationWorker.name);
 
-  constructor(private readonly dispatchService: NotificationDispatchService) {}
+  constructor(private readonly dispatchService: NotificationDispatchService) {
+    super();
+  }
 
   /**
-   * Processes a notification dispatch job.
+   * Process a notification job from the queue
    *
-   * Extracts notificationId from the payload and delegates to the dispatch
-   * service. Terminal failures throw {@link FatalJobError} so the
-   * {@link WorkerHost} skips retry. Channel adapter failures throw a plain
-   * Error so BullMQ retries with exponential backoff.
+   * Extracts notificationId from the job data and delegates
+   * to the dispatch service. Terminal failures (inactive channel,
+   * missing config, unknown channel, missing log) return silently
+   * without retry. Channel adapter failures throw to trigger
+   * BullMQ's built-in exponential backoff retry.
    *
-   * @param payload - Job payload containing notificationId and metadata.
-   * @throws {FatalJobError} If the error code is in TERMINAL_ERROR_CODES.
-   * @throws {Error} If a channel adapter fails (transient, retryable).
+   * @param job - BullMQ job containing notificationId and metadata
+   * @throws Error when a channel adapter fails, triggering BullMQ retry
    */
-  async handle(payload: NotificationJobData): Promise<void> {
-    const { notificationId } = payload;
+  async process(job: Job<NotificationJobData>): Promise<void> {
+    const { notificationId } = job.data;
 
     this.logger.log(`Processing notification ${notificationId}`);
 
@@ -65,15 +70,10 @@ export class NotificationWorker implements IJobHandler<NotificationJobData> {
         { code: result.error.code }
       );
 
-      // Terminal failures — throw FatalJobError so WorkerHost skips retry
-      if (TERMINAL_ERROR_CODES.has(result.error.code)) {
-        throw new FatalJobError(
-          `Notification ${notificationId} failed: ${result.error.message}`,
-          result.error.code
-        );
-      }
+      // Terminal failures — don't retry (inactive channel, missing config, etc.)
+      if (TERMINAL_ERROR_CODES.has(result.error.code)) return;
 
-      // Channel adapter failure — throw plain Error to trigger BullMQ retry
+      // Channel adapter failure — throw to trigger BullMQ retry
       throw new Error(result.error.message);
     }
 
