@@ -8,51 +8,41 @@ export const API_ROUTES = {
     ME: path("/auth/me"),
   },
 
+  DEVICE_TOKENS: {
+    REGISTER: path("/device-tokens"),
+    DEACTIVATE: (token: string) => path(`/device-tokens/${token}`),
+  },
+
   WORKSHOPS: {
     LIST: path("/workshops"),
     DETAIL: (workshopId: string) => path(`/workshops/${workshopId}`),
+    AVAILABILITY: (workshopId: string) =>
+      path(`/workshops/${workshopId}/availability`),
   },
 
   REGISTRATIONS: {
     CREATE: path("/registrations"),
     CANCEL: (registrationId: string) =>
       path(`/registrations/${registrationId}`),
-    MY_LIST: path("/students/me/registrations"),
+    MY_LIST: path("/registrations"),
     MY_DETAIL: (registrationId: string) =>
-      path(`/students/me/registrations/${registrationId}`),
+      path(`/registrations/${registrationId}`),
   },
 
   PAYMENTS: {
     CREATE: path("/payments"),
-    WEBHOOK: (gateway: string) => path(`/webhooks/payment/${gateway}`),
-    MY_LIST: path("/students/me/payments"),
-    MY_DETAIL: (paymentId: string) =>
-      path(`/students/me/payments/${paymentId}`),
-  },
-
-  TICKETS: {
-    MY_LIST: path("/students/me/tickets"),
-    MY_DETAIL: (ticketId: string) => path(`/students/me/tickets/${ticketId}`),
+    WEBHOOK: (gateway: string) => path(`/payments/webhook/${gateway}`),
+    DETAIL: (paymentId: string) => path(`/payments/${paymentId}`),
   },
 
   CHECKIN: {
-    PRELOAD_TICKETS: (workshopId: string) =>
-      path(`/checkin/workshops/${workshopId}/tickets`),
-    SCAN: path("/checkin/scan"),
-    SYNC: path("/checkin/sync"),
-    STATUS: (workshopId: string) =>
-      path(`/checkin/workshops/${workshopId}/status`),
+    PRELOAD: (workshopId: string) =>
+      path(`/checkin/workshops/${workshopId}/registrations`),
+    ONLINE: path("/checkins"),
+    SYNC: path("/checkins/sync"),
   },
 
   ADMIN: {
-    USERS: {
-      LIST: path("/admin/users"),
-      DETAIL: (userId: string) => path(`/admin/users/${userId}`),
-      UPDATE_STATUS: (userId: string) => path(`/admin/users/${userId}/status`),
-      REVOKE_TOKEN: (userId: string) =>
-        path(`/admin/users/${userId}/revoke-token`),
-    },
-
     WORKSHOPS: {
       LIST: path("/admin/workshops"),
       CREATE: path("/admin/workshops"),
@@ -60,67 +50,59 @@ export const API_ROUTES = {
       UPDATE: (workshopId: string) => path(`/admin/workshops/${workshopId}`),
       PUBLISH: (workshopId: string) =>
         path(`/admin/workshops/${workshopId}/publish`),
-      EMERGENCY_UPDATE: (workshopId: string) =>
-        path(`/admin/workshops/${workshopId}/emergency-update`),
       CANCEL: (workshopId: string) =>
         path(`/admin/workshops/${workshopId}/cancel`),
+      REGISTRATIONS: (workshopId: string) =>
+        path(`/admin/workshops/${workshopId}/registrations`),
       STATS: (workshopId: string) =>
         path(`/admin/workshops/${workshopId}/stats`),
-      DOCUMENTS: (workshopId: string) =>
-        path(`/admin/workshops/${workshopId}/documents`),
+      SUMMARY: (workshopId: string) =>
+        path(`/admin/workshops/${workshopId}/summary`),
+      SUMMARY_RETRY: (workshopId: string) =>
+        path(`/admin/workshops/${workshopId}/summary/retry`),
     },
 
     ROOMS: {
       LIST: path("/admin/rooms"),
       CREATE: path("/admin/rooms"),
-      EDIT: (roomId: string) => path(`/admin/rooms/${roomId}/edit`),
-      NEW: path("/admin/rooms/new"),
+      DETAIL: (roomId: string) => path(`/admin/rooms/${roomId}`),
+      UPDATE: (roomId: string) => path(`/admin/rooms/${roomId}`),
     },
 
     SPEAKERS: {
       LIST: path("/admin/speakers"),
       CREATE: path("/admin/speakers"),
-      EDIT: (speakerId: string) => path(`/admin/speakers/${speakerId}/edit`),
-      NEW: path("/admin/speakers/new"),
+      DETAIL: (speakerId: string) => path(`/admin/speakers/${speakerId}`),
+      UPDATE: (speakerId: string) => path(`/admin/speakers/${speakerId}`),
+      DELETE: (speakerId: string) => path(`/admin/speakers/${speakerId}`),
     },
 
-    DOCUMENTS: {
-      DELETE: (documentId: string) => path(`/admin/documents/${documentId}`),
-      SUMMARY: (documentId: string) =>
-        path(`/admin/documents/${documentId}/summary`),
-      AI_RETRY: (documentId: string) =>
-        path(`/admin/documents/${documentId}/ai-retry`),
+    IMPORTS: {
+      LIST: path("/admin/imports"),
+      DETAIL: (importId: string) => path(`/admin/imports/${importId}`),
+      ERRORS: (importId: string) => path(`/admin/imports/${importId}/errors`),
+      TRIGGER: path("/admin/imports/trigger"),
     },
 
     NOTIFICATIONS: {
+      CHANNELS: path("/admin/notification-channels"),
+      CHANNEL: (channelId: string) =>
+        path(`/admin/notification-channels/${channelId}`),
       LOGS: path("/admin/notifications/logs"),
-      LOG_DETAIL: (notificationId: string) =>
-        path(`/admin/notifications/logs/${notificationId}`),
-      CHANNELS: path("/admin/notifications/channels"),
-      CHANNEL: (channelType: string) =>
-        path(`/admin/notifications/channels/${channelType}`),
-    },
-
-    STUDENT_SYNC: {
-      CREATE: path("/admin/student-sync"),
-      LIST: path("/admin/student-sync"),
-      DETAIL: (jobId: string) => path(`/admin/student-sync/${jobId}`),
-      ERRORS: (jobId: string) => path(`/admin/student-sync/${jobId}/errors`),
-    },
-
-    STAFF: {
-      ASSIGN_WORKSHOPS: (userId: string) =>
-        path(`/admin/checkin-staff/${userId}/assign-workshops`),
-      WORKSHOPS: (userId: string) =>
-        path(`/admin/checkin-staff/${userId}/workshops`),
     },
 
     SYSTEM: {
-      PAYMENT_TIMEOUT_JOB: path("/admin/system/jobs/payment-timeout"),
-      RECONCILIATION_JOB: path("/admin/system/jobs/reconciliation"),
       CIRCUIT_BREAKERS: path("/admin/system/circuit-breaker"),
       RESET_CIRCUIT_BREAKER: (gateway: string) =>
         path(`/admin/system/circuit-breaker/${gateway}/reset`),
+      PAYMENTS_RECONCILE: path("/admin/payments/reconcile"),
+    },
+
+    STATS: {
+      OVERVIEW: path("/admin/stats/overview"),
+      CHECKINS: path("/admin/stats/checkins"),
+      REVENUE: path("/admin/stats/revenue"),
+      EXPORT: path("/admin/stats/export"),
     },
   },
 } as const;
