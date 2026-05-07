@@ -4,8 +4,6 @@ import type { Registration } from "@/infra/database/types/transaction.types";
 import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
-import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -23,8 +21,6 @@ describe("RegistrationsService", () => {
   });
   let registrationsRepo: jest.Mocked<RegistrationsRepository>;
   let ticketsRepo: jest.Mocked<TicketsRepository>;
-  let rateLimiter: jest.Mocked<RateLimiterMechanic>;
-  let globalRateLimit: jest.Mocked<GlobalRateLimitMechanic>;
   let seatLock: jest.Mocked<SeatLockMechanic>;
   let seatCounter: jest.Mocked<SeatCounterService>;
   let workshopsService: jest.Mocked<WorkshopsService>;
@@ -58,6 +54,7 @@ describe("RegistrationsService", () => {
     confirmedAt: new Date(),
     cancelledAt: null,
     cancellationReason: null,
+    version: 0,
     updatedAt: new Date(),
   };
 
@@ -83,14 +80,6 @@ describe("RegistrationsService", () => {
             findByRegistrationId: jest.fn(),
             updateQrToken: jest.fn(),
           },
-        },
-        {
-          provide: RateLimiterMechanic,
-          useValue: { consumeToken: jest.fn() },
-        },
-        {
-          provide: GlobalRateLimitMechanic,
-          useValue: { check: jest.fn() },
         },
         {
           provide: SeatLockMechanic,
@@ -122,8 +111,6 @@ describe("RegistrationsService", () => {
     service = module.get<RegistrationsService>(RegistrationsService);
     registrationsRepo = module.get(RegistrationsRepository);
     ticketsRepo = module.get(TicketsRepository);
-    rateLimiter = module.get(RateLimiterMechanic);
-    globalRateLimit = module.get(GlobalRateLimitMechanic);
     seatLock = module.get(SeatLockMechanic);
     seatCounter = module.get(SeatCounterService);
     workshopsService = module.get(WorkshopsService);
@@ -136,8 +123,6 @@ describe("RegistrationsService", () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockFreeWorkshop)
       );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(Result.ok(true));
       seatCounter.decrement.mockResolvedValue(Result.ok());
       registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
         Result.ok(null)
@@ -171,8 +156,6 @@ describe("RegistrationsService", () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockPaidWorkshop)
       );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(Result.ok(true));
       seatCounter.decrement.mockResolvedValue(Result.ok());
       registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
         Result.ok(null)
@@ -212,41 +195,10 @@ describe("RegistrationsService", () => {
       expect(result.error.code).toBe("REGISTRATION_NOT_FOUND");
     });
 
-    it("should fail when global rate limit exceeded (FR-F04-001)", async () => {
-      workshopsService.getPublishedById.mockResolvedValue(
-        Result.ok(mockFreeWorkshop)
-      );
-      globalRateLimit.check.mockResolvedValue(
-        Result.fail({ code: "RATE_LIMIT_EXCEEDED" } as any)
-      );
-
-      const result = await service.register(STUDENT_ID, dto);
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("RATE_LIMIT_EXCEEDED");
-    });
-
-    it("should fail when per-user rate limit exceeded (FR-F04-001)", async () => {
-      workshopsService.getPublishedById.mockResolvedValue(
-        Result.ok(mockFreeWorkshop)
-      );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(
-        Result.fail({ code: "RATE_LIMIT_EXCEEDED" } as any)
-      );
-
-      const result = await service.register(STUDENT_ID, dto);
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("RATE_LIMIT_EXCEEDED");
-    });
-
     it("should return SEAT_UNAVAILABLE with seat rollback when sold out", async () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockFreeWorkshop)
       );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(Result.ok(true));
       seatCounter.decrement.mockResolvedValue(
         Result.fail({ code: "SEAT_UNAVAILABLE" } as any)
       );
@@ -261,8 +213,6 @@ describe("RegistrationsService", () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockFreeWorkshop)
       );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(Result.ok(true));
       seatCounter.decrement.mockResolvedValue(Result.ok());
       registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
         Result.ok(mockRegistration)
@@ -280,8 +230,6 @@ describe("RegistrationsService", () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockFreeWorkshop)
       );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(Result.ok(true));
       seatCounter.decrement.mockResolvedValue(Result.ok());
       registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
         Result.fail({ code: "INTERNAL_ERROR" } as any)
@@ -297,8 +245,6 @@ describe("RegistrationsService", () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockPaidWorkshop)
       );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(Result.ok(true));
       seatCounter.decrement.mockResolvedValue(Result.ok());
       registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
         Result.ok(null)
@@ -326,8 +272,6 @@ describe("RegistrationsService", () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockFreeWorkshop)
       );
-      globalRateLimit.check.mockResolvedValue(Result.ok(true));
-      rateLimiter.consumeToken.mockResolvedValue(Result.ok(true));
       seatCounter.decrement.mockResolvedValue(Result.ok());
       registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
         Result.ok(null)
@@ -356,6 +300,7 @@ describe("RegistrationsService", () => {
       confirmedAt: new Date(),
       cancelledAt: null,
       cancellationReason: null,
+      version: 0,
       updatedAt: new Date(),
     };
 

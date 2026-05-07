@@ -20,7 +20,7 @@ export class TokenService {
   ) {}
 
   /**
-   * Signs a JWT access token with platform-specific expiry.
+   * Signs a JWT access token with platform-specific expiry using RS256.
    *
    * Business rules:
    * - WEB tokens expire in 15 minutes; MOBILE tokens expire in 8 hours.
@@ -50,17 +50,17 @@ export class TokenService {
           jti,
           allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
         },
-        this.config.getOrThrow<string>("jwt.secret"),
-        { expiresIn: ACCESS_EXPIRY[platform] }
+        this.config.getOrThrow<string>("jwt.privateKey"),
+        { algorithm: "RS256", expiresIn: ACCESS_EXPIRY[platform] }
       )
     );
   }
 
   /**
-   * Signs a JWT refresh token with a 7-day expiry.
+   * Signs a JWT refresh token with a 7-day expiry using RS256.
    *
    * Business rules:
-   * - Signed with a separate `JWT_REFRESH_SECRET` to limit blast radius.
+   * - Signed with the RSA private key (same keypair as access tokens).
    * - Consumed refresh tokens are blacklisted in Redis (rotation).
    *
    * @param userId - The user's system ID embedded as `sub`.
@@ -71,10 +71,8 @@ export class TokenService {
     return Promise.resolve(
       jwt.sign(
         { sub: userId, jti },
-        this.config.getOrThrow<string>("jwt.refreshSecret"),
-        {
-          expiresIn: REFRESH_EXPIRY_SECONDS,
-        }
+        this.config.getOrThrow<string>("jwt.privateKey"),
+        { algorithm: "RS256", expiresIn: REFRESH_EXPIRY_SECONDS }
       )
     );
   }
@@ -85,7 +83,8 @@ export class TokenService {
    * Business rules:
    * - Token contains the ticket_id, workshop_id, and student_id.
    * - Expires in 30 days, matching the workshop event lifecycle.
-   * - Signed with the same JWT secret as access tokens for validation simplicity.
+   * - Signed with HS256 (JWT_SECRET) — QR tokens are verified by mobile
+   *   devices that may not have the RSA public key.
    *
    * @param payload.ticket_id - The ticket UUID from the database.
    * @param payload.workshop_id - The workshop UUID the ticket grants access to.
@@ -103,7 +102,7 @@ export class TokenService {
   }
 
   /**
-   * Verifies a JWT access token's signature and expiration.
+   * Verifies a JWT access token's signature and expiration using RS256.
    *
    * @param token - The raw JWT string from the Authorization header.
    * @returns OkResult containing the decoded JwtPayload, or FailResult with:
@@ -114,10 +113,9 @@ export class TokenService {
     return tryCatch(
       () =>
         Promise.resolve(
-          jwt.verify(
-            token,
-            this.config.getOrThrow<string>("jwt.secret")
-          ) as JwtPayload
+          jwt.verify(token, this.config.getOrThrow<string>("jwt.publicKey"), {
+            algorithms: ["RS256"],
+          }) as JwtPayload
         ),
       (err) => {
         if (err instanceof jwt.TokenExpiredError) {
@@ -129,7 +127,7 @@ export class TokenService {
   }
 
   /**
-   * Verifies a JWT refresh token's signature and expiration.
+   * Verifies a JWT refresh token's signature and expiration using RS256.
    *
    * @param token - The raw JWT string from the refresh request.
    * @returns OkResult containing `{ sub, jti }`, or FailResult with REFRESH_TOKEN_INVALID.
@@ -140,10 +138,9 @@ export class TokenService {
     return tryCatch(
       () =>
         Promise.resolve(
-          jwt.verify(
-            token,
-            this.config.getOrThrow<string>("jwt.refreshSecret")
-          ) as { sub: string; jti: string }
+          jwt.verify(token, this.config.getOrThrow<string>("jwt.publicKey"), {
+            algorithms: ["RS256"],
+          }) as { sub: string; jti: string }
         ),
       (err) => authErrors.refreshTokenInvalid(err)
     );

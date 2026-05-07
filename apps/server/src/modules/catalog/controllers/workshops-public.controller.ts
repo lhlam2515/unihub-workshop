@@ -15,6 +15,7 @@ import { Public } from "@/shared/decorators/public.decorator";
 
 import { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
 import { WorkshopsService } from "../services/workshops.service";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 @Controller("workshops")
 export class WorkshopsPublicController {
@@ -31,6 +32,7 @@ export class WorkshopsPublicController {
    * @param query - Query parameters for filtering and pagination (faculty, date_from, date_to, is_paid, page, limit).
    * @returns Paginated list of published workshops with available seat counts.
    */
+  @RateLimit([{ tier: 'T1', limit: 60, windowMs: 60000 }])
   @Get()
   @Public()
   async listPublished(@Query() query: ListWorkshopsQueryDto) {

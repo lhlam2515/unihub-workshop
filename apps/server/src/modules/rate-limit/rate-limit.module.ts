@@ -1,13 +1,14 @@
 import { Module } from "@nestjs/common";
+import { DiscoveryModule } from "@nestjs/core";
 
 import { RedisModule } from "@/infra/redis/redis.module";
 
-import { GlobalRateLimitMechanic } from "./services/global-rate-limit.service";
-import { RateLimiterMechanic } from "./services/rate-limiter.service";
+import { RateLimitGuard } from "./guards/rate-limit.guard";
+import { SlidingWindowService } from "./services/sliding-window.service";
 
 @Module({
-  imports: [RedisModule],
-  providers: [RateLimiterMechanic, GlobalRateLimitMechanic],
-  exports: [RateLimiterMechanic, GlobalRateLimitMechanic],
+  imports: [RedisModule, DiscoveryModule],
+  providers: [SlidingWindowService, RateLimitGuard],
+  exports: [SlidingWindowService, RateLimitGuard],
 })
 export class RateLimitModule {}

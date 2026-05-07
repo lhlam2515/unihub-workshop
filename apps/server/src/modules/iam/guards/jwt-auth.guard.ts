@@ -11,7 +11,7 @@
  * Verification flow:
  * 1. Skip if the route is decorated with `@Public()`.
  * 2. Extract the Bearer token from the `Authorization` header.
- * 3. Verify the JWT signature and expiration using `jsonwebtoken`.
+ * 3. Verify the JWT signature and expiration using TokenService (RS256).
  * 4. Check the token's `jti` against the Redis blacklist (`token:blacklist:{jti}`).
  * 5. Attach the decoded `JwtPayload` to `request.user` for downstream guards and decorators.
  *
@@ -30,22 +30,22 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { Request } from "express";
-import jwt from "jsonwebtoken";
 
 import { RedisService } from "@/infra/redis/redis.service";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
 import { authErrors } from "@/shared/response/errors";
 import type { JwtPayload } from "@/types/jwt-payload";
 
+import { TokenService } from "../services/token.service";
+
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly redisService: RedisService,
-    private readonly config: ConfigService
+    private readonly tokenService: TokenService,
+    private readonly redisService: RedisService
   ) {}
 
   /**
@@ -54,7 +54,7 @@ export class JwtAuthGuard implements CanActivate {
    * Business rules:
    * - Routes marked with `@Public()` bypass authentication entirely.
    * - The token must be present in the `Authorization: Bearer <token>` header.
-   * - The JWT signature and expiration are verified with `JWT_SECRET`.
+   * - The JWT signature and expiration are verified using TokenService (RS256).
    * - If the token's `jti` is found in the Redis blacklist, the request is rejected
    *   even if the JWT is structurally valid.
    *
@@ -80,15 +80,12 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing authorization token");
     }
 
-    let payload: JwtPayload;
-    try {
-      payload = jwt.verify(
-        token,
-        this.config.getOrThrow<string>("jwt.secret")
-      ) as JwtPayload;
-    } catch {
+    const verifyResult = await this.tokenService.verifyAccessToken(token);
+    if (verifyResult.isFailure) {
       throw new UnauthorizedException("Invalid token");
     }
+
+    const payload = verifyResult.data;
 
     const isBlacklisted = await this.redisService.get(
       `token:blacklist:${payload.jti}`

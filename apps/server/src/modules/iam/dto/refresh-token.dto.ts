@@ -2,17 +2,17 @@
  * Refresh Token DTO
  *
  * Request: POST /auth/refresh
- * Body optional: { refresh_token? }
+ * Body optional: { refreshToken? }
  *
- * Note: Mobile requires refresh_token in body, Web uses cookies/headers
+ * Note: Mobile sends refreshToken in body; Web sends via HttpOnly cookie.
+ * Platform is inferred by the controller based on token source.
  */
 
 import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const RefreshTokenSchema = z.object({
-  refresh_token: z.string().optional(),
-  platform: z.enum(["WEB", "MOBILE"]).optional().default("WEB"),
+  refreshToken: z.string().optional(),
 });
 
 export class RefreshTokenDto extends createZodDto(RefreshTokenSchema) {}

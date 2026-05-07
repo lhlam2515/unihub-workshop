@@ -2,17 +2,17 @@
  * Current user profile returned by GET /auth/me.
  *
  * Fields vary by role:
- * - STUDENT: includes student_id, full_name.
- * - CHECKIN_STAFF: includes allowed_workshop_ids.
+ * - STUDENT: includes studentId, fullName.
+ * - CHECKIN_STAFF: includes allowedWorkshopIds.
  * - BTC: base fields only.
  */
 export interface AuthMeResponseDto {
-  user_id: string;
+  userId: string;
   email: string;
   role: string;
-  student_id?: string;
-  full_name?: string;
-  allowed_workshop_ids?: string[];
+  studentId?: string;
+  fullName?: string;
+  allowedWorkshopIds?: string[];
 }
 
 /**
@@ -32,7 +32,7 @@ export class AuthMeResponseBuilder {
     }
   ): AuthMeResponseDto {
     const base = {
-      user_id: user.userId,
+      userId: user.userId,
       email: user.email,
       role: user.role,
     };
@@ -40,15 +40,15 @@ export class AuthMeResponseBuilder {
     if (user.role === "STUDENT" && studentProfile) {
       return {
         ...base,
-        student_id: studentProfile.studentId,
-        full_name: studentProfile.fullName,
+        studentId: studentProfile.studentId,
+        fullName: studentProfile.fullName,
       };
     }
 
     if (user.role === "CHECKIN_STAFF") {
       return {
         ...base,
-        allowed_workshop_ids: user.allowedWorkshopIds ?? [],
+        allowedWorkshopIds: user.allowedWorkshopIds ?? [],
       };
     }
 

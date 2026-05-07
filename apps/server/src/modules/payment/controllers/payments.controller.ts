@@ -40,6 +40,7 @@ import type { JwtPayload } from "@/types/jwt-payload";
 import { CreatePaymentDto } from "../dto/create-payment.dto";
 import { PaymentWebhookDto } from "../dto/payment-webhook.dto";
 import { PaymentsService } from "../services/payments.service";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -64,6 +65,7 @@ export class PaymentsController {
    * - REGISTRATION_NOT_FOUND (404)
    * - INTERNAL_ERROR (500)
    */
+  @RateLimit([{ tier: 'T2', limit: 30, windowMs: 60000 }, { tier: 'T3', limit: 5, windowMs: 60000 }])
   @Post("payments")
   @HttpCode(HttpStatus.CREATED)
   async createPayment(

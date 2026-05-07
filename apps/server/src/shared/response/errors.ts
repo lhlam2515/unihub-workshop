@@ -520,14 +520,85 @@ export const validationError = (fieldErrors: FieldError[]): AppError =>
  */
 export const rateLimitError = (
   limit: number,
-  retryAfterSeconds: number
+  retryAfterSeconds: number,
+  tier: string
 ): AppError =>
   createError({
     category: "RATE_LIMIT",
     code: "RATE_LIMIT_EXCEEDED",
     message: "Too many requests. Please try again later.",
-    context: { limit, retryAfterSeconds },
+    context: { limit, retryAfterSeconds, tier },
   });
+
+/**
+ * Create a concurrency conflict error for optimistic locking version mismatches
+ *
+ * @param resource - Resource type that was modified (e.g. "Workshop")
+ * @param id - Unique identifier of the modified resource
+ * @param expectedVersion - Version expected by the client that caused the conflict
+ * @returns Conflict error payload
+ * @throws Never. Returns an error object instead of throwing
+ */
+export const concurrentModification = (
+  resource: string,
+  id: string,
+  expectedVersion: number
+): AppError =>
+  createError({
+    category: "CONFLICT",
+    code: "CONCURRENT_MODIFICATION",
+    message: `${resource} has been modified by another request. Please refresh and try again.`,
+    context: { resource, id, expectedVersion },
+  });
+
+/**
+ * Create an idempotency conflict error when a request with the same key is in progress
+ *
+ * @param key - Idempotency key that caused the conflict
+ * @returns Conflict error payload
+ * @throws Never. Returns an error object instead of throwing
+ */
+export const idempotencyConflict = (key: string): AppError =>
+  createError({
+    category: "CONFLICT",
+    code: "IDEMPOTENCY_CONFLICT",
+    message: "A request with this idempotency key is already in progress.",
+    context: { idempotencyKey: key },
+  });
+
+/**
+ * Group device token error factories
+ */
+export const deviceTokenErrors = {
+  /**
+   * Create an error when a device token is not found
+   *
+   * @param token - Device token value that was looked up
+   * @returns Not found error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  notFound: (token: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "DEVICE_TOKEN_NOT_FOUND",
+      message: "Device token not found or already deactivated.",
+      context: { token },
+    }),
+  /**
+   * Create an error when a caller tries to modify another user's device token
+   *
+   * @param token - Device token value that caused the violation
+   * @returns Forbidden error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  ownershipMismatch: (token: string): AppError =>
+    createError({
+      category: "FORBIDDEN",
+      code: "CHECKIN_SCOPE_DENIED",
+      message: "Device token does not belong to the current user.",
+      context: { token },
+    }),
+} as const;
 
 /**
  * Group storage error factories for S3-compatible object storage operations

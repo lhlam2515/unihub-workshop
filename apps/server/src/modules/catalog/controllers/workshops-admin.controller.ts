@@ -25,12 +25,15 @@ import {
   Param,
   Query,
   UseGuards,
+  Headers,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import { parseIfMatch } from "@/shared/utils/etag.utils";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateWorkshopDto } from "../dto/create-workshop.dto";
@@ -42,6 +45,7 @@ import { WorkshopsService } from "../services/workshops.service";
 @Controller("admin/workshops")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class WorkshopsAdminController {
   constructor(private readonly workshopsService: WorkshopsService) {}
 
@@ -109,9 +113,11 @@ export class WorkshopsAdminController {
   @Put(":id")
   async updateWorkshop(
     @Param("id") id: string,
-    @Body() dto: UpdateWorkshopDto
+    @Body() dto: UpdateWorkshopDto,
+    @Headers("if-match") ifMatch?: string
   ) {
-    return this.workshopsService.updateWorkshop(id, dto);
+    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
+    return this.workshopsService.updateWorkshop(id, dto, expectedVersion);
   }
 
   /**
@@ -145,9 +151,11 @@ export class WorkshopsAdminController {
   @Patch(":id/emergency-update")
   async emergencyUpdate(
     @Param("id") id: string,
-    @Body() dto: EmergencyUpdateWorkshopDto
+    @Body() dto: EmergencyUpdateWorkshopDto,
+    @Headers("if-match") ifMatch?: string
   ) {
-    return this.workshopsService.emergencyUpdate(id, dto);
+    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
+    return this.workshopsService.emergencyUpdate(id, dto, expectedVersion);
   }
 
   /**
