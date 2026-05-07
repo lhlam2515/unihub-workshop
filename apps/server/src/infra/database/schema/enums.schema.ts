@@ -2,9 +2,16 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", [
   "STUDENT",
-  "ORGANIZER",
+  "BTC",
   "CHECKIN_STAFF",
 ]);
+
+export const staffRoleEnum = pgEnum("staff_role", [
+  "BTC",
+  "CHECKIN_STAFF",
+]);
+
+export const platformEnum = pgEnum("platform", ["IOS", "ANDROID"]);
 
 export const userStatusEnum = pgEnum("user_status", [
   "ACTIVE",
