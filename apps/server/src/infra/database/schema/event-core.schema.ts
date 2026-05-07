@@ -97,7 +97,7 @@ export const workshops = pgTable(
     index("idx_workshops_room_id").on(table.roomId),
     uniqueIndex("uq_workshops_room_time_slot")
       .on(table.roomId, table.startsAt, table.endsAt)
-      .where(sql`${table.status} = 'PUBLISHED'`),
+      .where(sql`${table.status} = 'OPEN'`),
   ]
 );
 

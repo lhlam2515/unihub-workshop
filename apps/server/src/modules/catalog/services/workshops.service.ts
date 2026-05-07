@@ -340,7 +340,7 @@ export class WorkshopsService {
    * - If no WorkshopSlot exists, one is created during publishing.
    *
    * Side effects:
-   * - Updates workshop status to 'PUBLISHED'.
+   * - Updates workshop status to 'OPEN'.
    * - Creates/updates the WorkshopSlot record if needed.
    * - Sets `seat:available:{workshopId}` key in Redis.
    *

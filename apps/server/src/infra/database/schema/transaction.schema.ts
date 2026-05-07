@@ -31,7 +31,7 @@ export const registrations = pgTable(
       .references(() => workshops.workshopId),
     status: registrationStatusEnum("status")
       .notNull()
-      .default("PENDING_PAYMENT"),
+      .default("PENDING"),
     registeredAt: t
       .timestamp("registered_at", { withTimezone: true })
       .notNull()
@@ -97,7 +97,7 @@ export const payments = pgTable(
     amount: t.numeric("amount", { precision: 12, scale: 2 }).notNull(),
     currency: t.char("currency", { length: 3 }).notNull().default("VND"),
     gateway: paymentGatewayEnum("gateway").notNull(),
-    status: paymentStatusEnum("status").notNull().default("PENDING"),
+    status: paymentStatusEnum("status").notNull().default("INITIATED"),
     idempotencyKey: t.varchar("idempotency_key", { length: 255 }).notNull(),
     gatewayTxnId: t.varchar("gateway_txn_id", { length: 255 }),
     initiatedAt: t
@@ -119,7 +119,7 @@ export const payments = pgTable(
     index("idx_payments_gateway").on(table.gateway),
     index("idx_payments_pending")
       .on(table.initiatedAt)
-      .where(sql`${table.status} = 'PENDING'`),
+      .where(sql`${table.status} = 'INITIATED'`),
   ]
 );
 

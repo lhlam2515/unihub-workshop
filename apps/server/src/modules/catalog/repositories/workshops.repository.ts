@@ -305,7 +305,7 @@ export class WorkshopsRepository {
    *   are excluded by the WHERE clause.
    *
    * Side effects:
-   * - Executes UPDATE workshops SET status = 'COMPLETED' WHERE status = 'PUBLISHED' AND endsAt < now().
+   * - Executes UPDATE workshops SET status = 'COMPLETED' WHERE status = 'OPEN' AND endsAt < now().
    *
    * @returns OkResult containing the count of workshops transitioned, or FailResult (INTERNAL_ERROR).
    */
