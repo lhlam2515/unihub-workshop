@@ -9,7 +9,7 @@ export const NotificationLogResponseSchema = z.object({
   workshop_id: z.string().uuid().optional(),
   type: z.string(),
   channel: z.enum(["APP", "EMAIL", "TELEGRAM"]),
-  status: z.enum(["PENDING", "SENT", "FAILED"]),
+  status: z.enum(["PENDING", "SENT", "FAILED", "TIMEOUT"]),
   payload: z.record(z.string(), z.any()),
   sent_at: z.date().optional(),
   error_message: z.string().optional(),
