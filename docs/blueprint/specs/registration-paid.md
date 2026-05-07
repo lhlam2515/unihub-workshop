@@ -26,8 +26,8 @@ Hai phase được tách biệt bởi trạng thái `registrations.status`: Phas
 
 ```
 Preconditions:
-  - Student đã xác thực JWT hợp lệ (role = 'student')
-  - Workshop tồn tại, status = 'open'
+  - Student đã xác thực JWT hợp lệ (role = 'STUDENT')
+  - Workshop tồn tại, status = 'OPEN'
   - Student chưa có registration cho workshop này
 
 Request:
@@ -61,7 +61,7 @@ Nếu cache hit = "0":
   → Kết thúc (tiết kiệm 1 DB round-trip)
 
 Nếu cache miss:
-  SELECT seats_available FROM workshops WHERE id = :workshop_id AND status = 'open'
+  SELECT seats_available FROM workshops WHERE id = :workshop_id AND status = 'OPEN'
   SET cache:workshop:{workshop_id}:seats {value} EX 10
   Nếu seats_available = 0 → 422 như trên
 
@@ -74,7 +74,7 @@ Nếu cache hit > "0" hoặc DB read > 0 → tiếp tục Bước 2
 INSERT INTO idempotency_keys
   (key, resource_type, status, locked_until)
 VALUES
-  (:idempotency_key, 'registration', 'in_progress', now() + interval '30 seconds')
+  (:idempotency_key, 'registration', 'IN_PROGRESS', now() + interval '30 seconds')
 ON CONFLICT (key) DO NOTHING
 RETURNING key;
 
@@ -83,20 +83,20 @@ Nếu không có row trả về (conflict):
   FROM idempotency_keys WHERE key = :idempotency_key;
 
   CASE status:
-    'completed':
+    'COMPLETED':
       → Trả response_body đã cache (true duplicate request)
       → Kết thúc
 
-    'in_progress' AND locked_until > now():
+    'IN_PROGRESS' AND locked_until > now():
       → 409 { "error": "request_in_progress",
                "retry_after": <seconds_until_locked_until> }
       → Kết thúc
 
-    'in_progress' AND locked_until <= now():
+    'IN_PROGRESS' AND locked_until <= now():
       -- Crash recovery
       UPDATE idempotency_keys
         SET locked_until = now() + interval '30 seconds'
-        WHERE key = :idempotency_key AND status = 'in_progress'
+        WHERE key = :idempotency_key AND status = 'IN_PROGRESS'
       → Tiếp tục Bước 3
 
 Nếu có row trả về (INSERT thành công) → Tiếp tục Bước 3
@@ -135,7 +135,7 @@ WHILE attempts <= MAX_RETRIES:
     INSERT INTO registrations
       (id, workshop_id, student_id, status, qr_code)
     VALUES
-      (gen_random_uuid(), :workshop_id, :student_id, 'pending',
+      (gen_random_uuid(), :workshop_id, :student_id, 'PENDING',
        gen_random_uuid()::text)
     ON CONFLICT (workshop_id, student_id) DO NOTHING;
 
@@ -156,7 +156,7 @@ IF attempts > MAX_RETRIES:
 
 ```
 UPDATE idempotency_keys
-  SET status        = 'completed',
+  SET status        = 'COMPLETED',
       response_body = :result_json,
       status_code   = :http_status,
       expires_at    = now() + interval '24 hours',
@@ -174,7 +174,7 @@ DEL cache:workshop:{workshop_id}:seats
 **Bước 6 — Kích hoạt Notification (async):**
 
 ```
-XADD stream:notifications * {
+addJob notification * {
   event_type: 'registration_confirmed',
   user_id:    :student_id,
   payload:    { workshop_id, workshop_title, starts_at, qr_code }
@@ -195,9 +195,9 @@ XADD stream:notifications * {
 
 ```
 Preconditions:
-  - registrations.status = 'pending' và thuộc về student hiện tại
+  - registrations.status = 'PENDING' và thuộc về student hiện tại
   - workshops.price > 0
-  - Student đã xác thực JWT hợp lệ (role = 'student')
+  - Student đã xác thực JWT hợp lệ (role = 'STUDENT')
 
 Request:
   POST /payments
@@ -219,15 +219,15 @@ SELECT status, response_body, status_code
 FROM idempotency_keys
 WHERE key = :payment_key AND resource_type = 'payment';
 
-Nếu status = 'completed':
+Nếu status = 'COMPLETED':
   → Trả response_body đã cache — kể cả khi CB đang OPEN
   → Kết thúc
 
-Nếu status = 'unresolved':
+Nếu status = 'UNRESOLVED':
   → KHÔNG trả cache (kết quả chưa xác định)
   → Tiếp tục ② để retry với gateway dedup
 
-Nếu status = 'in_progress' AND locked_until > now():
+Nếu status = 'IN_PROGRESS' AND locked_until > now():
   → 409 { "error": "payment_in_progress" }
   → Kết thúc
 
@@ -257,18 +257,18 @@ IF state = CLOSED → Tiếp tục ③
 Case A — key chưa tồn tại:
   INSERT INTO idempotency_keys
     (key, resource_type, status, locked_until)
-  VALUES (:payment_key, 'payment', 'in_progress', now() + interval '30s');
+  VALUES (:payment_key, 'payment', 'IN_PROGRESS', now() + interval '30s');
 
-Case B — key tồn tại với status = 'unresolved' hoặc 'in_progress' expired:
+Case B — key tồn tại với status = 'UNRESOLVED' hoặc 'IN_PROGRESS' expired:
   UPDATE idempotency_keys
-    SET status       = 'in_progress',
+    SET status       = 'IN_PROGRESS',
         locked_until = now() + interval '30s'
   WHERE key = :payment_key
-    AND (status = 'unresolved'
-         OR (status = 'in_progress' AND locked_until <= now()));
+    AND (status = 'UNRESOLVED'
+         OR (status = 'IN_PROGRESS' AND locked_until <= now()));
 
   IF rowsAffected = 0:
-    -- Race condition: key đã chuyển 'completed' bởi request concurrent
+    -- Race condition: key đã chuyển 'COMPLETED' bởi request concurrent
     → Re-execute Bước ① logic → trả cached response
     → Kết thúc
 ```
@@ -279,20 +279,20 @@ Case B — key tồn tại với status = 'unresolved' hoặc 'in_progress' expi
 INSERT INTO payments
   (id, registration_id, amount, currency, idempotency_key, status)
 VALUES
-  (gen_random_uuid(), :registration_id, :amount, 'VND', :payment_key, 'initiated');
+  (gen_random_uuid(), :registration_id, :amount, 'VND', :payment_key, 'INITIATED');
 
 POST https://gateway/charge
 Headers: Idempotency-Key: {payment_key}   ← FORWARD key đến gateway
 Timeout: 5 giây
 
 CASE kết quả:
-  200 OK          → ⑤ resolved='completed', pmt_status='succeeded'
-  402 declined    → ⑤ resolved='completed', pmt_status='failed'
+  200 OK          → ⑤ resolved='COMPLETED', pmt_status='SUCCEEDED'
+  402 declined    → ⑤ resolved='COMPLETED', pmt_status='FAILED'
                      CB: KHÔNG ghi failure (đây là client error)
-  4xx khác        → ⑤ resolved='completed', pmt_status='failed'
+  4xx khác        → ⑤ resolved='COMPLETED', pmt_status='FAILED'
                      CB: KHÔNG ghi failure
   5xx / timeout   → CB ghi 1 failure
-                     ⑤ resolved='unresolved', pmt_status='unresolved'
+                     ⑤ resolved='UNRESOLVED', pmt_status='UNRESOLVED'
 ```
 
 **Bước ⑤ — Finalize Key và Payment (atomic):**
@@ -300,7 +300,7 @@ CASE kết quả:
 ```
 BEGIN TRANSACTION;
   UPDATE idempotency_keys
-    SET status        = :resolved,           -- 'completed' hoặc 'unresolved'
+    SET status        = :resolved,           -- 'COMPLETED' hoặc 'UNRESOLVED'
         status_code   = :http_status,        -- NULL nếu unresolved
         response_body = :response_json,      -- NULL nếu unresolved
         expires_at    = now() + interval '24h',
@@ -318,19 +318,19 @@ COMMIT;
 **Bước ⑥ — Post-commit:**
 
 ```
-Nếu pmt_status = 'succeeded':
-  UPDATE registrations SET status = 'paid' WHERE id = :registration_id;
-  XADD stream:notifications * { event_type: 'payment_confirmed', ... }
+Nếu pmt_status = 'SUCCEEDED':
+  UPDATE registrations SET status = 'PAID' WHERE id = :registration_id;
+  addJob notification * { event_type: 'payment_confirmed', ... }
   → 200 { status: "succeeded", receipt_id: :charge_id }
 
-Nếu pmt_status = 'unresolved':
+Nếu pmt_status = 'UNRESOLVED':
   → 504 { "error": "payment_timeout",
            "retry_same_key": true,
            "idempotency_key": :payment_key,
            "retry_after": 30 }
   -- Client PHẢI dùng lại payment_key này, KHÔNG sinh key mới
 
-Nếu pmt_status = 'failed':
+Nếu pmt_status = 'FAILED':
   → 402 { "error": "payment_declined",
            "gateway_reason": :decline_code }
 ```
@@ -343,36 +343,36 @@ Nếu pmt_status = 'failed':
 |---|---|---|---|---|
 | E-01: Hết chỗ (cache) | cache = "0" | 422 | `workshop_full` | Không tạo idempotency key |
 | E-02: Hết chỗ (DB) | seats_available = 0 | 422 | `workshop_full` | Cache set "0" |
-| E-03: OL conflict exhausted | 2 attempts đều conflict | 503 | `high_contention`, Retry-After: 2 | Key finalized 'completed' |
+| E-03: OL conflict exhausted | 2 attempts đều conflict | 503 | `high_contention`, Retry-After: 2 | Key finalized 'COMPLETED' |
 | E-04: Duplicate registration | UNIQUE bắt, ROLLBACK | 422 | `already_registered` | seats_available không thay đổi |
-| E-05: True duplicate request | Key status='completed' | (cached) | response_body cũ | Không ghi thêm |
+| E-05: True duplicate request | Key status='COMPLETED' | (cached) | response_body cũ | Không ghi thêm |
 | E-06: Key in_progress | locked_until chưa hết | 409 | `request_in_progress` | Không thay đổi |
 | E-07: CB OPEN | State = OPEN | 503 | `payment_unavailable` | Key KHÔNG được claim |
-| E-08: Gateway timeout | 5s không response | 504 | `payment_timeout`, retry_same_key=true | payment='unresolved', key='unresolved' |
-| E-09: Gateway 5xx | HTTP 5xx | 502 | `gateway_error` | payment='failed', CB ghi failure |
+| E-08: Gateway timeout | 5s không response | 504 | `payment_timeout`, retry_same_key=true | payment='UNRESOLVED', key='UNRESOLVED' |
+| E-09: Gateway 5xx | HTTP 5xx | 502 | `gateway_error` | payment='FAILED', CB ghi failure |
 | E-10: JWT expired | exp < now() | 401 | `token_expired` | Không thay đổi |
-| E-11: Server crash mid-flow | Process kill sau Bước 2 | — | Timeout cho client | Key kẹt 'in_progress' đến locked_until |
+| E-11: Server crash mid-flow | Process kill sau Bước 2 | — | Timeout cho client | Key kẹt 'IN_PROGRESS' đến locked_until |
 
 ### Chi tiết E-08 — Gateway Timeout (kịch bản phức tạp nhất)
 
 ```
 T=0s:   Client gửi POST /payments với Idempotency-Key: K
-T=0.1s: Server claim K='in_progress'
-T=0.1s: Server INSERT payments (status='initiated')
+T=0.1s: Server claim K='IN_PROGRESS'
+T=0.1s: Server INSERT payments (status='INITIATED')
 T=0.1s: Server gọi gateway với header Idempotency-Key: K
 T=5s:   Timeout (không nhận response)
 T=5s:   Server: CB ghi 1 failure
-T=5s:   Server: UPDATE payments SET status='unresolved'
-T=5s:   Server: UPDATE idempotency_keys SET status='unresolved'
+T=5s:   Server: UPDATE payments SET status='UNRESOLVED'
+T=5s:   Server: UPDATE idempotency_keys SET status='UNRESOLVED'
 T=5s:   Server: Trả 504 + { retry_same_key: true, payment_key: K }
 
 Client retry T=35s với cùng key K:
-  Bước ①: status='unresolved' → KHÔNG trả cache, tiếp tục
+  Bước ①: status='UNRESOLVED' → KHÔNG trả cache, tiếp tục
   Bước ②: CB check (có thể đã HALF-OPEN sau 30s)
-  Bước ③: UPDATE key về 'in_progress' (case B)
+  Bước ③: UPDATE key về 'IN_PROGRESS' (case B)
   Bước ④: Gọi gateway với header Idempotency-Key: K
            Gateway nhận K đã xử lý → trả kết quả đã cache (200 hoặc 402)
-  Bước ⑤: Finalize key='completed', payment='succeeded'/'failed'
+  Bước ⑤: Finalize key='COMPLETED', payment='SUCCEEDED'/'FAILED'
 ```
 
 ---
@@ -380,7 +380,7 @@ Client retry T=35s với cùng key K:
 ## 4. Ràng buộc (Invariants)
 
 **INV-01 — No Double Booking:**
-S�� lượng `registrations` với `(workshop_id=X, status IN ('pending','paid'))` ≤ `workshops.seats_total`.
+S�� lượng `registrations` với `(workshop_id=X, status IN ('PENDING','PAID'))` ≤ `workshops.seats_total`.
 Enforcement: `WHERE seats_available > 0` trong OL UPDATE + `UNIQUE(workshop_id, student_id)`.
 
 **INV-02 — No Phantom Seat Loss:**
@@ -416,11 +416,11 @@ Given workshop còn 1 chỗ, student gửi request với valid idempotency_key.
 Then: 201 + registration_id + qr_code. DB: registrations +1, seats_available -1, version +1. Cache: DEL'd.
 
 **AC-02 — Happy path thanh toán:**
-Given registration status='pending', gateway mock trả 200.
-Then: 200 + receipt_id. DB: payments.status='succeeded', registrations.status='paid'.
+Given registration status='PENDING', gateway mock trả 200.
+Then: 200 + receipt_id. DB: payments.status='SUCCEEDED', registrations.status='PAID'.
 
 **AC-03 — Idempotency registration (header):**
-Given cùng `Idempotency-Key` header (đã 'completed').
+Given cùng `Idempotency-Key` header (đã 'COMPLETED').
 Then: response giống lần 1. DB: KHÔNG có row mới.
 
 **AC-04 — Idempotency payment — retry sau timeout (header):**
@@ -438,7 +438,7 @@ And: GET /workshops → 200 bình thường.
 
 **AC-07 — Free workshop skip Phase B:**
 Given workshop.price = 0, Phase A thành công.
-Then: registration.status = 'paid' ngay. Không có payment record.
+Then: registration.status = 'PAID' ngay. Không có payment record.
 
 **AC-08 — Rate limiting T3:**
 Given student gửi 6 registration requests cho cùng workshop trong 60s.

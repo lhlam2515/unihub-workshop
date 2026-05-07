@@ -79,10 +79,10 @@ Hệ thống được tổ chức thành 5 lớp (layer) xuyên suốt từ clie
 ┌─────────────────────────┼────────────────────────────────────┐
 │  4. Asynchronous Messaging Layer                             │
 │  ┌──────────────────────────────────────────────────────────┐│
-│  │  Redis Streams (qua BullMQ)                              ││
-│  │  • stream:ai-summary   — AI PDF processing queue         ││
-│  │  • stream:notifications — Batch notification dispatch    ││
-│  │  • DLQ streams cho retry-exhausted jobs                  ││
+│  │  BullMQ (qua BullMQ)                              ││
+│  │  • Queue: ai-summary   — AI PDF processing queue         ││
+│  │  • Queue: notification — Batch notification dispatch    ││
+│  │  • DLQ queues cho retry-exhausted jobs                  ││
 │  └──────────────────────────────────────────────────────────┘│
 └─────────────────────────┼────────────────────────────────────┘
                           │
@@ -106,7 +106,7 @@ Hệ thống được tổ chức thành 5 lớp (layer) xuyên suốt từ clie
 | Client — Mobile | Expo SDK, React Native, SQLite (expo-sqlite + Drizzle ORM), NativeWind | Check-in offline-first |
 | Gateway | Node.js HTTP proxy hoặc Nginx; CDN cho Next.js static assets | TLS termination, rate limiting, serve tĩnh |
 | Application | NestJS 11, Drizzle ORM, Zod v4, ioredis, BullMQ | Business logic, API endpoints, async workers |
-| Messaging | Redis Streams (qua BullMQ) | Job queue cho AI summary + notification |
+| Messaging | BullMQ (qua BullMQ) | Job queue cho AI summary + notification |
 | Storage — Primary | PostgreSQL (Neon Serverless) | ACID, source of truth, upsert idempotent |
 | Storage — Cache | Redis (Upstash) | Cache-aside, sliding window, queue |
 | Storage — File | Local Docker volume | PDF upload, CSV input, error quarantine |
@@ -119,7 +119,7 @@ Hệ thống gồm **8 thành phần chính**:
 2. **Mobile App (Expo + SQLite):** Giao diện dành riêng cho nhân sự check-in. Hoạt động offline: quét QR → ghi local → sync khi có mạng.
 3. **Backend API (NestJS Monolith):** Xử lý toàn bộ logic nghiệp vụ — đăng ký, thanh toán, xác thực, AI summary, CSV sync. Một process duy nhất với 9 module nội bộ.
 4. **PostgreSQL:** Lưu trữ chính — sinh viên, staff, workshop, registration, payment, check-in, idempotency keys, audit logs. Single source of truth.
-5. **Redis:** Ba vai trò — cache (workshop list, seats_available), rate limiting (sliding window counters), job queue (Redis Streams cho AI + notification).
+5. **Redis:** Ba vai trò — cache (workshop list, seats_available), rate limiting (sliding window counters), job queue (BullMQ cho AI + notification).
 6. **File Storage (Docker volume):** Lưu PDF workshop upload, CSV đầu vào từ hệ thống sinh viên, file lỗi quarantine.
 7. **Hệ thống ngoài — Payment Gateway (Mock):** Xử lý thanh toán. Dùng mock server (Wiremock) để kiểm thử failure mode.
 8. **Hệ thống ngoài — AI Provider (OpenAI API):** Tạo summary từ PDF. Abstract qua `AIProvider` interface để dễ swap.
@@ -141,7 +141,7 @@ Hệ thống gồm **8 thành phần chính**:
 **Nguyên tắc giao tiếp:**
 
 - Giao tiếp đồng bộ (HTTP REST) cho các luồng cần kết quả tức thời: xem workshop, đăng ký, thanh toán, xác thực
-- Giao tiếp bất đồng bộ (Redis Streams) cho các tác vụ không real-time: AI summary, batch notification
+- Giao tiếp bất đồng bộ (BullMQ) cho các tác vụ không real-time: AI summary, batch notification
 - Giao tiếp một chiều (file polling) cho tích hợp với legacy system — không có API để gọi ngược
 
 ### 1.6 Khi một thành phần gặp sự cố?
@@ -150,7 +150,7 @@ Hệ thống gồm **8 thành phần chính**:
 |-----------------|----------|----------------------|
 | **Payment Gateway** | Thanh toán không thực hiện được | Circuit Breaker mở sau 5 lỗi (ADR-07). Tính năng không liên quan (xem workshop, check-in, AI summary) vẫn hoạt động. Workshop miễn phí không bị ảnh hưởng. |
 | **Redis** | Cache miss, rate limiting tắt, job queue bị treo | Cache miss → đọc từ DB (correctness vẫn đúng, chỉ chậm hơn). Rate limiting tắt → OL ở DB vẫn bảo vệ seat contention. Job queue treo → AI summary không xử lý, workshop vẫn hoạt động. |
-| **AI Provider (OpenAI)** | AI summary không tạo được | `summary_status = 'failed'`. Workshop và registration hoàn toàn không bị ảnh hưởng — summary là enrichment, không phải critical path. |
+| **AI Provider (OpenAI)** | AI summary không tạo được | `summary_status = 'FAILED'`. Workshop và registration hoàn toàn không bị ảnh hưởng — summary là enrichment, không phải critical path. |
 | **PostgreSQL** | Toàn bộ hệ thống ngừng hoạt động | Single-node, không có replica. Nếu DB down, toàn bộ API không thể xử lý request. Đây là SPOF được chấp nhận (theo ràng buộc — không Kubernetes, không cloud managed services). |
 | **Email Server (SMTP)** | Notification không gửi được | Notification là best-effort (ADR-09). Business flow không phụ thuộc vào kết quả gửi. Lỗi được log vào `notification_logs` để BTC truy vấn và retry thủ công. |
 | **Mạng mobile (tòa nhà)** | Mobile app mất kết nối | Offline check-in với SQLite local (ADR-11). Staff quét QR → ghi local → sync batch khi có mạng. Dữ liệu không mất. |
@@ -288,7 +288,7 @@ Container ở đây là **đơn vị triển khai độc lập** — mỗi conta
 | Vai trò | Xử lý toàn bộ logic nghiệp vụ. Modular Monolith với 9 module nội bộ (booking, catalog, payment, notification, checkin, ai-summary, csv-sync, iam, rate-limit, background) |
 | Giao tiếp với client | HTTPS REST (JSON) |
 | Giao tiếp với PostgreSQL | TCP — Drizzle ORM connection pool (singleton, max 20 connections) |
-| Giao tiếp với Redis | TCP — ioredis client, 3 logical databases (DB0: cache LRU, DB1: streams noeviction, DB2: rate limit volatile-ttl) |
+| Giao tiếp với Redis | TCP — ioredis client, 3 logical databases (DB0: cache LRU, DB1: queues noeviction, DB2: rate limit volatile-ttl) |
 | Giao tiếp với File System | Local filesystem — đọc/ghi PDF, CSV |
 | Giao tiếp với external | HTTPS — Payment Gateway, AI Provider; SMTP — Email Server |
 | Không giao tiếp với | Không gọi ngược Legacy System (one-way CSV only) |
@@ -314,7 +314,7 @@ Container ở đây là **đơn vị triển khai độc lập** — mỗi conta
 | Công nghệ | Upstash/Redis 7+ |
 | Vai trò | Ba nhiệm vụ độc lập trên 3 logical databases |
 | DB0 — Cache | Cache-Aside, TTL 10s (seats_available), TTL 60s (workshop list). `maxmemory-policy: allkeys-lru` |
-| DB1 — Job Queue | Redis Streams cho AI summary + notification workers. `maxmemory-policy: noeviction` |
+| DB1 — Job Queue | BullMQ cho AI summary + notification workers. `maxmemory-policy: noeviction` |
 | DB2 — Rate Limiting | Sliding Window Sorted Set. `maxmemory-policy: volatile-ttl` |
 | Số lượng instance | 1 (single-node — degrade có kiểm soát khi mất Redis) |
 

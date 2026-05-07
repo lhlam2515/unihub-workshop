@@ -137,16 +137,16 @@ Client gửi POST với header Idempotency-Key: K
         │
         ▼
 SELECT * FROM idempotency_keys WHERE key = K
-  ┌─ status='completed'
+  ┌─ status='COMPLETED'
   │    → trả lại response_body đã cache (idempotent replay, kể cả khi CB đang OPEN)
-  ├─ status='in_progress' AND locked_until > now()
+  ├─ status='IN_PROGRESS' AND locked_until > now()
   │    → 409 { "error": "request_in_progress", "retryAfter": <seconds> }
-  ├─ status='in_progress' AND locked_until <= now()
+  ├─ status='IN_PROGRESS' AND locked_until <= now()
   │    → crash recovery: UPDATE locked_until = now+30s → tiếp tục xử lý
-  ├─ status='unresolved'  [chỉ payment]
+  ├─ status='UNRESOLVED'  [chỉ payment]
   │    → gateway forward (gọi lại gateway với cùng key, không tạo charge mới)
   └─ không có row
-       → INSERT (key, 'in_progress', locked_until=now+30s) → xử lý
+       → INSERT (key, 'IN_PROGRESS', locked_until=now+30s) → xử lý
 ```
 
 **Client KHÔNG sinh key mới khi retry** — tái sử dụng đúng key cũ. Với payment timeout (504), server embed key vào response body như một hint:
@@ -503,15 +503,15 @@ Bước 1: Pre-check seats_available qua Redis cache (fail-fast, không chạm D
 Bước 2: Claim idempotency_key (3-state, crash recovery với locked_until)
 Bước 3: OL retry loop (MAX_RETRIES=1, tổng 2 attempts):
   BEGIN
-    INSERT registrations (status='pending' hoặc 'confirmed') ON CONFLICT DO NOTHING
+    INSERT registrations (status='PENDING' hoặc 'CONFIRMED') ON CONFLICT DO NOTHING
     IF rowsAffected=0 → ROLLBACK, trả existing registration (idempotent)
     UPDATE workshops SET seats_available-=1, version+=1
            WHERE id=? AND version=? AND seats_available>0
     IF rowsAffected=0 → ROLLBACK, retry (OL conflict)
   COMMIT
-Bước 4: Finalize idempotency key → 'completed'
+Bước 4: Finalize idempotency key → 'COMPLETED'
 Bước 5: DEL cache key (fire-and-forget)
-Bước 6: XADD stream:notifications (async, không block response)
+Bước 6: enqueue notification job (async, không block response)
 ```
 
 **Response 201 (free):**
@@ -536,7 +536,7 @@ Bước 6: XADD stream:notifications (async, không block response)
 
 | HTTP | `error` | Trigger |
 |---|---|---|
-| 400 | `registration.workshop_not_open` | status ≠ 'open' |
+| 400 | `registration.workshop_not_open` | status ≠ 'OPEN' |
 | 409 | `request_in_progress` | key đang `in_progress`, locked_until chưa hết |
 | 422 | `registration.workshop_full` | seats=0 (cache pre-check hoặc OL confirm) |
 | 422 | `registration.already_registered` | UNIQUE(workshop_id, student_id) hit |
@@ -577,13 +577,13 @@ Hủy đăng ký (trước khi workshop bắt đầu N giờ — chính sách tr
 
 ```
 BEGIN
-  UPDATE registrations SET status='cancelled' WHERE id=? AND student_id=? AND status IN ('confirmed','paid','pending')
+  UPDATE registrations SET status='CANCELLED' WHERE id=? AND student_id=? AND status IN ('CONFIRMED','PAID','PENDING')
   IF rowsAffected = 0 → 409 không thể hủy (đã hủy / sai trạng thái)
   UPDATE workshops SET seats_available = seats_available + 1, version = version + 1 WHERE id = ?
 COMMIT
 ```
 
-Nếu là paid → đẩy job hoàn tiền vào Redis Streams.
+Nếu là paid → đẩy job hoàn tiền vào BullMQs.
 
 **Response 200** với registration đã update.
 
@@ -592,7 +592,7 @@ Nếu là paid → đẩy job hoàn tiền vào Redis Streams.
 ## 4. Module **Payment**
 
 > **Bounded context:** Transaction. **Tables:** `payments`, `idempotency_keys`, `registrations`.
-> **Liên quan ADR:** ADR-07 (Circuit Breaker), ADR-08 (idempotency 3-state với 'unresolved').
+> **Liên quan ADR:** ADR-07 (Circuit Breaker), ADR-08 (idempotency 3-state với 'UNRESOLVED').
 > **Tham chiếu spec:** `specs/registration-paid.md`, `specs/payment-reconciliation.md`, `specs/circuit-breaker.md`.
 
 ### 4.1. `POST /payments`
@@ -623,21 +623,21 @@ Server forward giá trị `Idempotency-Key` header làm `Idempotency-Key` header
 
 ```
 Bước ①: Idempotency check (PHẢI TRƯỚC Circuit Breaker)
-  - status='completed' → trả cache, kể cả khi CB đang OPEN
-  - status='unresolved' → gateway forward (không tạo charge mới)
-  - status='in_progress' locked → 409 payment_in_progress
+  - status='COMPLETED' → trả cache, kể cả khi CB đang OPEN
+  - status='UNRESOLVED' → gateway forward (không tạo charge mới)
+  - status='IN_PROGRESS' locked → 409 payment_in_progress
   - không có → tiếp tục
 
 Bước ②: Circuit Breaker check (PHẢI SAU Idempotency)
   - OPEN → 503 PAYMENT_GATEWAY_OPEN, Retry-After: 30
 
-Bước ③: Claim/refresh idempotency key → 'in_progress'
-Bước ④: INSERT payment (status='initiated')
+Bước ③: Claim/refresh idempotency key → 'IN_PROGRESS'
+Bước ④: INSERT payment (status='INITIATED')
          POST gateway với header Idempotency-Key: {payment_key}, timeout 5s
 Bước ⑤: Finalize (atomic):
-  gateway 200  → payment='succeeded', key='completed', registration='paid' → 200
-  gateway 4xx  → payment='failed',    key='completed'                      → 402
-  timeout/5xx  → payment='unresolved', key='unresolved'                   → 504
+  gateway 200  → payment='SUCCEEDED', key='COMPLETED', registration='PAID' → 200
+  gateway 4xx  → payment='FAILED',    key='COMPLETED'                      → 402
+  timeout/5xx  → payment='UNRESOLVED', key='UNRESOLVED'                   → 504
 ```
 
 **Response 200 (success / idempotent replay):**
@@ -753,7 +753,7 @@ Check-in **online** (mạng ổn định) — single-record.
 ```
 1. SELECT id, status, workshop_id FROM registrations WHERE qr_code = ?
    - Không có → 404 checkin.qr_invalid
-   - status NOT IN ('paid','confirmed') → 403 checkin.registration_not_active
+   - status NOT IN ('PAID','CONFIRMED') → 403 checkin.registration_not_active
    - workshop_id mismatch → 422 checkin.wrong_workshop
 
 2. Verify staff được phân công workshop này (ADR-05 enforcement #3):
@@ -812,8 +812,8 @@ FOR EACH item:
   Lookup: SELECT ... FROM registrations JOIN workshops WHERE r.qr_code = item.qr_code
 
   Không tìm thấy → rejected, reason: "qr_invalid"
-  r.status ≠ 'paid' → rejected, reason: "not_paid"
-  w.status = 'cancelled' → rejected, reason: "workshop_cancelled"
+  r.status ≠ 'PAID' → rejected, reason: "not_paid"
+  w.status = 'CANCELLED' → rejected, reason: "workshop_cancelled"
 
   INSERT INTO checkins (registration_id, checked_in_at, received_at, checked_by, client_local_id)
   ON CONFLICT (registration_id) DO NOTHING
@@ -833,13 +833,13 @@ FOR EACH item:
 ]
 ```
 
-**Enum `result`:** `ok | duplicate | rejected` — phải đúng chính xác các giá trị này vì mobile schema mapping `local_checkins.status = 'synced' | 'duplicate' | 'rejected'` tương ứng. Đổi tên enum = mobile app broken.
+**Enum `result`:** `ok | duplicate | rejected` — phải đúng chính xác các giá trị này vì mobile schema mapping `local_checkins.status = 'SYNCED' | 'DUPLICATE' | 'REJECTED'` tương ứng. Đổi tên enum = mobile app broken.
 
 Mobile update từng row theo `local_id` (không theo thứ tự index):
 
-* `ok` → `local_checkins.status = 'synced'`, lưu `server_id`
-* `duplicate` → `local_checkins.status = 'duplicate'`, hiển thị "Đã check-in lúc {first_checkin_at} bởi {first_staff_name}"
-* `rejected` → `local_checkins.status = 'rejected'`, `sync_error = reason`
+* `ok` → `local_checkins.status = 'SYNCED'`, lưu `server_id`
+* `duplicate` → `local_checkins.status = 'DUPLICATE'`, hiển thị "Đã check-in lúc {first_checkin_at} bởi {first_staff_name}"
+* `rejected` → `local_checkins.status = 'REJECTED'`, `sync_error = reason`
 
 **Rate limit:** T2 — 30 req/60s per user.
 
@@ -881,14 +881,14 @@ Tạo workshop (mặc định status = `draft`).
   "startsAt": "...", "endsAt": "...",
   "seatsTotal": 60,
   "price": 0,
-  "status": "draft"            // hoặc 'open' nếu muốn publish luôn
+  "status": "DRAFT"            // hoặc 'OPEN' nếu muốn publish luôn
 }
 ```
 
 **Validation:**
 
 * `ends_at > starts_at` (DB CHECK).
-* Nếu `status='open'`: `room_id` và `speaker_id` phải có giá trị, và phòng không xung đột lịch (custom check).
+* Nếu `status='OPEN'`: `room_id` và `speaker_id` phải có giá trị, và phòng không xung đột lịch (custom check).
 * `seats_available = seats_total` (auto khởi tạo).
 
 **Response 201** với workshop full + `version: 0`.
@@ -939,7 +939,7 @@ RETURNING version;
 
 Promote draft → open. Tách action riêng để có validation chuyên biệt.
 
-**Behavior:** Verify `room_id`, `speaker_id`, room không xung đột lịch → UPDATE status='open'.
+**Behavior:** Verify `room_id`, `speaker_id`, room không xung đột lịch → UPDATE status='OPEN'.
 
 ---
 
@@ -957,9 +957,9 @@ Promote draft → open. Tách action riêng để có validation chuyên biệt.
 **Behavior (transaction):**
 
 ```
-UPDATE workshops SET status='cancelled', version = version + 1
-UPDATE registrations SET status='cancelled' WHERE workshop_id = ? AND status IN ('paid','confirmed','pending')
-FOR EACH paid registration → enqueue refund job (Redis Streams)
+UPDATE workshops SET status='CANCELLED', version = version + 1
+UPDATE registrations SET status='CANCELLED' WHERE workshop_id = ? AND status IN ('PAID','CONFIRMED','PENDING')
+FOR EACH paid registration → enqueue refund job (BullMQs)
 FOR EACH registration → enqueue notification (workshop_cancelled)
 ```
 
@@ -989,7 +989,7 @@ Danh sách sinh viên đã đăng ký workshop.
 
 ## 7. Module **AI Summary**
 
-> **Bounded context:** Async. **Liên quan ADR:** ADR-10 (Redis Streams worker), ADR-14 (summary fields trên `workshops`).
+> **Bounded context:** Async. **Liên quan ADR:** ADR-10 (BullMQs worker), ADR-14 (summary fields trên `workshops`).
 
 ### 7.1. `POST /admin/workshops/{id}/summary` — Upload PDF
 
@@ -1002,8 +1002,8 @@ Danh sách sinh viên đã đăng ký workshop.
 ```
 1. Validate: extension .pdf, size ≤ 10MB
 2. Lưu file vào object storage (hoặc local fs cho dev) → pdf_url
-3. UPDATE workshops SET pdf_url = ?, summary_status = 'queued', version = version + 1
-4. XADD vào stream summary_jobs với {workshop_id, pdf_url}
+3. UPDATE workshops SET pdf_url = ?, summary_status = 'QUEUED', version = version + 1
+4. addJob vào stream summary_jobs với {workshop_id, pdf_url}
 5. Return 202 Accepted với link polling
 ```
 
@@ -1026,9 +1026,9 @@ Polling status. Cũng public-readable (sinh viên xem summary trên trang worksh
 ```json
 {
   "status": "queued | processing | done | failed | none",
-  "text": "...",                      // null trừ khi 'done'
+  "text": "...",                      // null trừ khi 'DONE'
   "updatedAt": "...",
-  "errorDetail": "..."               // null trừ khi 'failed'
+  "errorDetail": "..."               // null trừ khi 'FAILED'
 }
 ```
 
@@ -1044,7 +1044,7 @@ Re-trigger sau failed (đã chạm DLQ).
 
 Override thủ công — BTC chỉnh sửa text AI generated.
 
-**Request:** `{ "text": "..." }`. Set `summary_status='done'`.
+**Request:** `{ "text": "..." }`. Set `summary_status='DONE'`.
 
 ---
 
@@ -1112,7 +1112,7 @@ Manual trigger — BTC kích hoạt import ngoài lịch (vd. khi nhận CSV b�
 }
 ```
 
-**Concurrency guard:** Reject 409 nếu có row `import_logs.status='in_progress'`.
+**Concurrency guard:** Reject 409 nếu có row `import_logs.status='IN_PROGRESS'`.
 
 ---
 
@@ -1204,7 +1204,7 @@ Trigger reconciliation job ngay lập tức thay vì chờ cron 5 phút.
 
 **Concurrency guard:** Job dùng PostgreSQL advisory lock — nếu cron đang chạy → `409 reconciliation.already_running`.
 
-**Scope:** Query `payments WHERE status='unresolved' AND created_at BETWEEN now()-24h AND now()-5min`, gọi gateway query API cho từng payment, update `payments.status` + `idempotency_keys.status` atomic.
+**Scope:** Query `payments WHERE status='UNRESOLVED' AND created_at BETWEEN now()-24h AND now()-5min`, gọi gateway query API cho từng payment, update `payments.status` + `idempotency_keys.status` atomic.
 
 **Response 202:**
 
@@ -1247,7 +1247,7 @@ Trigger reconciliation job ngay lập tức thay vì chờ cron 5 phút.
 | `GET /workshops` | ADR-13 | `v_workshop_availability`, Redis cache |
 | `GET /workshops/{id}/availability` | ADR-13 | Redis-only (cache hit), fallback PG |
 | `PATCH /admin/workshops/{id}` | ADR-03 | `workshops.version` |
-| `POST /admin/workshops/{id}/summary` | ADR-10, ADR-14 | `workshops.summary_status`, Redis Streams |
+| `POST /admin/workshops/{id}/summary` | ADR-10, ADR-14 | `workshops.summary_status`, BullMQs |
 | `POST /auth/login` | ADR-04 | `students`, `staff` |
 | `POST /auth/refresh` | ADR-04 | HttpOnly cookie (web), body (mobile) |
 | `GET /admin/imports/*` | ADR-12 | `import_logs` |
