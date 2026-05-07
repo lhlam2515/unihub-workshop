@@ -1,58 +1,56 @@
 const ROUTES = {
   HOME: "/",
 
-  // Auth
+  // Auth — Public
   LOGIN: "/login",
 
   // Public
   WORKSHOPS: "/workshops",
   WORKSHOP: (workshopId: string) => `/workshops/${workshopId}`,
+  PAYMENT_RESULT: "/payment-result",
 
-  // Student
-  ME_PROFILE: "/me/profile",
+  // Student (SCR-W04~W06)
   ME_REGISTRATIONS: "/me/registrations",
   ME_REGISTRATION: (registrationId: string) =>
     `/me/registrations/${registrationId}`,
-  ME_TICKETS: "/me/tickets",
-  ME_TICKET: (ticketId: string) => `/me/tickets/${ticketId}`,
-  ME_PAYMENTS: "/me/payments",
-  ME_PAYMENT: (paymentId: string) => `/me/payments/${paymentId}`,
-  PAYMENT_RESULT: "/payments/result",
-  PAYMENT_CHECKOUT: (registrationId: string) =>
-    `/payments/checkout/${registrationId}`,
+  ME_REGISTRATION_PAY: (registrationId: string) =>
+    `/me/registrations/${registrationId}/pay`,
 
-  // Admin
+  // Admin — Auth
+  ADMIN_LOGIN: "/admin/login",
+
+  // Admin — Dashboard (SCR-A02)
   ADMIN: "/admin",
+
+  // Admin — Workshops (SCR-A03~A08)
   ADMIN_WORKSHOPS: "/admin/workshops",
   ADMIN_WORKSHOP: (workshopId: string) => `/admin/workshops/${workshopId}`,
   ADMIN_WORKSHOP_NEW: "/admin/workshops/new",
-  ADMIN_WORKSHOP_EDIT: (workshopId: string) =>
-    `/admin/workshops/${workshopId}/edit`,
-  ADMIN_WORKSHOP_DOCUMENTS: (workshopId: string) =>
-    `/admin/workshops/${workshopId}/documents`,
+  ADMIN_WORKSHOP_REGISTRATIONS: (workshopId: string) =>
+    `/admin/workshops/${workshopId}/registrations`,
   ADMIN_WORKSHOP_STATS: (workshopId: string) =>
     `/admin/workshops/${workshopId}/stats`,
+  ADMIN_WORKSHOP_SUMMARY: (workshopId: string) =>
+    `/admin/workshops/${workshopId}/summary`,
 
-  ADMIN_USERS: "/admin/users",
-  ADMIN_USER: (userId: string) => `/admin/users/${userId}`,
-  ADMIN_USER_ASSIGN_WORKSHOPS: (userId: string) =>
-    `/admin/users/${userId}/assign-workshops`,
-
-  ADMIN_SYSTEM: "/admin/system",
-  ADMIN_STUDENT_SYNC: "/admin/student-sync",
-  ADMIN_STUDENT_SYNC_JOB: (jobId: string) => `/admin/student-sync/${jobId}`,
-
+  // Admin — Speakers (SCR-A09~A11)
   ADMIN_SPEAKERS: "/admin/speakers",
   ADMIN_SPEAKER_NEW: "/admin/speakers/new",
-  ADMIN_SPEAKER_EDIT: (speakerId: string) =>
-    `/admin/speakers/${speakerId}/edit`,
+  ADMIN_SPEAKER: (speakerId: string) => `/admin/speakers/${speakerId}`,
 
+  // Admin — Rooms (SCR-A12~A13)
   ADMIN_ROOMS: "/admin/rooms",
-  ADMIN_ROOM_NEW: "/admin/rooms/new",
-  ADMIN_ROOM_EDIT: (roomId: string) => `/admin/rooms/${roomId}/edit`,
+  ADMIN_ROOM: (roomId: string) => `/admin/rooms/${roomId}`,
 
-  ADMIN_NOTIFICATIONS_LOGS: "/admin/notifications/logs",
-  ADMIN_NOTIFICATIONS_CHANNELS: "/admin/notifications/channels",
+  // Admin — Imports (SCR-A14~A15)
+  ADMIN_IMPORTS: "/admin/imports",
+  ADMIN_IMPORT: (importId: string) => `/admin/imports/${importId}`,
+
+  // Admin — Notifications (SCR-A16)
+  ADMIN_NOTIFICATIONS: "/admin/notifications",
+
+  // Admin — System (SCR-A17)
+  ADMIN_SYSTEM: "/admin/system",
 } as const;
 
 export default ROUTES;

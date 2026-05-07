@@ -1,12 +1,15 @@
-import React from "react";
+import { PublicHeaderWidget } from "@/widgets/PublicHeaderWidget";
 
-const PublicLayout = ({ children }: { children: React.ReactNode }) => {
+import type { ReactNode } from "react";
+
+const PublicLayout = ({ children }: { children: ReactNode }) => {
   return (
-    <main className="relative bg-white">
-      <nav className="border-b p-4">Public Navbar Placeholder</nav>
-      <section className="min-h-screen">{children}</section>
-      <footer className="border-t p-4 text-center">Footer Placeholder</footer>
-    </main>
+    <>
+      <PublicHeaderWidget user={null} />
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
+        {children}
+      </main>
+    </>
   );
 };
 
