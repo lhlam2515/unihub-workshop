@@ -1,4 +1,6 @@
-const AdminLoginPage = () => {
+import { AuthForm } from "@/features/auth/components/AuthForm";
+
+export default function StaffLoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
@@ -6,9 +8,8 @@ const AdminLoginPage = () => {
           <h1 className="text-2xl font-bold">Đăng nhập</h1>
           <p className="text-muted-foreground text-sm">Ban tổ chức</p>
         </div>
+        <AuthForm variant="staff" />
       </div>
     </div>
   );
-};
-
-export default AdminLoginPage;
+}
