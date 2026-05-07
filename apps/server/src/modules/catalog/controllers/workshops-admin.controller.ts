@@ -24,6 +24,7 @@ import {
   Body,
   Param,
   Query,
+  Headers,
   UseGuards,
 } from "@nestjs/common";
 
@@ -37,6 +38,7 @@ import { CreateWorkshopDto } from "../dto/create-workshop.dto";
 import { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
 import { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
 import { UpdateWorkshopDto } from "../dto/update-workshop.dto";
+import { parseIfMatch } from "@/shared/utils/etag.utils";
 import { WorkshopsService } from "../services/workshops.service";
 
 @Controller("admin/workshops")
@@ -101,17 +103,21 @@ export class WorkshopsAdminController {
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Only workshops in DRAFT status can be modified. Room time conflicts
    * are re-validated if room or time fields are changed.
+   * Requires If-Match header for optimistic concurrency control.
    *
    * @param id - The UUID of the workshop to update.
    * @param body - Partial workshop update payload.
+   * @param ifMatch - The If-Match header containing the expected version.
    * @returns The updated workshop admin detail DTO.
    */
   @Put(":id")
   async updateWorkshop(
     @Param("id") id: string,
-    @Body() dto: UpdateWorkshopDto
+    @Body() dto: UpdateWorkshopDto,
+    @Headers("if-match") ifMatch?: string
   ) {
-    return this.workshopsService.updateWorkshop(id, dto);
+    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
+    return this.workshopsService.updateWorkshop(id, dto, expectedVersion);
   }
 
   /**
@@ -137,17 +143,21 @@ export class WorkshopsAdminController {
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Allows modifying room, start time, or end time of an already published
    * workshop. Room time conflicts are re-validated against the new schedule.
+   * Requires If-Match header for optimistic concurrency control.
    *
    * @param id - The UUID of the workshop to update.
    * @param body - Emergency update payload (room_id?, starts_at?, ends_at?).
+   * @param ifMatch - The If-Match header containing the expected version.
    * @returns The updated workshop admin detail DTO.
    */
   @Patch(":id/emergency-update")
   async emergencyUpdate(
     @Param("id") id: string,
-    @Body() dto: EmergencyUpdateWorkshopDto
+    @Body() dto: EmergencyUpdateWorkshopDto,
+    @Headers("if-match") ifMatch?: string
   ) {
-    return this.workshopsService.emergencyUpdate(id, dto);
+    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
+    return this.workshopsService.emergencyUpdate(id, dto, expectedVersion);
   }
 
   /**

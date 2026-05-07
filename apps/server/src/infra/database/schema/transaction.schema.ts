@@ -72,6 +72,7 @@ export const registrations = pgTable(
     confirmedAt: t.timestamp("confirmed_at", { withTimezone: true }),
     cancelledAt: t.timestamp("cancelled_at", { withTimezone: true }),
     cancellationReason: t.text("cancellation_reason"),
+    version: t.bigint("version", { mode: "number" }).notNull().default(0),
     updatedAt: t
       .timestamp("updated_at", { withTimezone: true })
       .notNull()

@@ -7,7 +7,9 @@ import type {
   Speaker,
   Room,
 } from "@/infra/database/types/event-core.types";
-import { workshopErrors } from "@/shared/response/errors";
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
+import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
+import { concurrentModification, workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { RoomConflictService } from "./room-conflict.service";
@@ -165,7 +167,8 @@ export class WorkshopsService {
 
   async updateWorkshop(
     id: string,
-    dto: UpdateWorkshopDto
+    dto: UpdateWorkshopDto,
+    expectedVersion: number
   ): Promise<Result<WorkshopAdminDetailDto>> {
     const workshopResult = await this.workshopsRepo.findById(id);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
@@ -204,8 +207,11 @@ export class WorkshopsService {
       updateData.price = String(dto.price);
     }
 
-    const updateResult = await this.workshopsRepo.update(id, updateData);
+    const updateResult = await this.workshopsRepo.update(id, updateData, expectedVersion);
     if (updateResult.isFailure) return Result.fail(updateResult.error);
+    if (!updateResult.data) {
+      return Result.fail(concurrentModification("Workshop", id, expectedVersion));
+    }
 
     const [speakerResult, roomResult] = await Promise.all([
       this.speakersRepo.findById(workshop.speakerId ?? ""),
@@ -265,7 +271,8 @@ export class WorkshopsService {
 
   async emergencyUpdate(
     id: string,
-    dto: EmergencyUpdateWorkshopDto
+    dto: EmergencyUpdateWorkshopDto,
+    expectedVersion: number
   ): Promise<Result<WorkshopAdminDetailDto>> {
     const workshopResult = await this.workshopsRepo.findById(id);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
@@ -295,8 +302,11 @@ export class WorkshopsService {
     if (dto.starts_at !== undefined) updateData.startsAt = dto.starts_at;
     if (dto.ends_at !== undefined) updateData.endsAt = dto.ends_at;
 
-    const updateResult = await this.workshopsRepo.update(id, updateData);
+    const updateResult = await this.workshopsRepo.update(id, updateData, expectedVersion);
     if (updateResult.isFailure) return Result.fail(updateResult.error);
+    if (!updateResult.data) {
+      return Result.fail(concurrentModification("Workshop", id, expectedVersion));
+    }
 
     const changes: { roomId?: string; startsAt?: Date; endsAt?: Date } = {};
     if (dto.room_id !== undefined) changes.roomId = dto.room_id;

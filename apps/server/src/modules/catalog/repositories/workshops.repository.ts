@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, count, gte, lte, lt } from "drizzle-orm";
+import { eq, and, desc, count, gte, lte, lt, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -175,15 +175,42 @@ export class WorkshopsRepository {
     );
   }
 
-  async update(id: string, data: WorkshopUpdate): Promise<Result<Workshop>> {
+  /**
+   * Updates a workshop record with partial data using optimistic locking.
+   *
+   * Only applies the update if the current version matches expectedVersion.
+   * Atomically increments the version on success.
+   *
+   * Side effects:
+   * - Executes UPDATE on the workshops table for the given ID with version check.
+   *
+   * @param id - The UUID of the workshop to update.
+   * @param data - The partial workshop attributes to apply.
+   * @param expectedVersion - The version expected by the caller (from If-Match header).
+   * @returns OkResult containing the updated Workshop record, or null if version mismatch, or FailResult (INTERNAL_ERROR).
+   */
+  async update(
+    id: string,
+    data: WorkshopUpdate,
+    expectedVersion: number
+  ): Promise<Result<Workshop | null>> {
     return tryCatch(
       async () => {
         const [result] = await this.db
           .update(this.schema.workshops)
-          .set(data)
-          .where(eq(this.schema.workshops.workshopId, id))
+          .set({
+            ...data,
+            version: sql`${this.schema.workshops.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(this.schema.workshops.workshopId, id),
+              eq(this.schema.workshops.version, expectedVersion)
+            )
+          )
           .returning();
-        return result;
+        return result ?? null;
       },
       (err) => systemErrors.internal(err)
     );
