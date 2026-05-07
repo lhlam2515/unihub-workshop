@@ -5,4 +5,3 @@ export * from "./transaction.schema";
 export * from "./async.schema";
 export * from "./relations.schema";
 export * from "./idempotency.schema";
-export * from "./device.schema";
