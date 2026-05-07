@@ -37,26 +37,26 @@ describe("RolesGuard", () => {
   });
 
   it("allows when user role is in multiple required roles", () => {
-    reflector.getAllAndOverride.mockReturnValue(["STUDENT", "ORGANIZER"]);
-    expect(guard.canActivate(mockContext({ role: "ORGANIZER" }))).toBe(true);
+    reflector.getAllAndOverride.mockReturnValue(["STUDENT", "BTC"]);
+    expect(guard.canActivate(mockContext({ role: "BTC" }))).toBe(true);
   });
 
   it("throws ForbiddenException when user role does not match", () => {
-    reflector.getAllAndOverride.mockReturnValue(["ORGANIZER"]);
+    reflector.getAllAndOverride.mockReturnValue(["BTC"]);
     expect(() => guard.canActivate(mockContext({ role: "STUDENT" }))).toThrow(
       ForbiddenException
     );
   });
 
   it("throws ForbiddenException when user has no role", () => {
-    reflector.getAllAndOverride.mockReturnValue(["ORGANIZER"]);
+    reflector.getAllAndOverride.mockReturnValue(["BTC"]);
     expect(() => guard.canActivate(mockContext({}))).toThrow(
       ForbiddenException
     );
   });
 
   it("throws ForbiddenException when user is undefined", () => {
-    reflector.getAllAndOverride.mockReturnValue(["ORGANIZER"]);
+    reflector.getAllAndOverride.mockReturnValue(["BTC"]);
     expect(() => guard.canActivate(mockContext())).toThrow(ForbiddenException);
   });
 });

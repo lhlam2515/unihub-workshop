@@ -41,7 +41,7 @@ describe("AuthService", () => {
     userId: "usr-org",
     email: "org@test.com",
     passwordHash: "hashed-password",
-    role: "ORGANIZER" as const,
+    role: "BTC" as const,
     status: "ACTIVE" as const,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -415,7 +415,7 @@ describe("AuthService", () => {
   // getMe
   // -------------------------------------------------------------------------
   describe("getMe", () => {
-    it("returns base profile for ORGANIZER", async () => {
+    it("returns base profile for BTC", async () => {
       mockUsersRepo.findById.mockResolvedValue(Result.ok(organizerUser));
 
       const result = await authService.getMe(organizerUser.userId);
