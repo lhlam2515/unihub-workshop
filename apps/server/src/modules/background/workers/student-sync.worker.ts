@@ -3,7 +3,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 
 import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
-import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/messaging.constants";
+import type { IJobHandler } from "@/infra/messaging/messaging.interfaces";
 import { RedisService } from "@/infra/redis/redis.service";
 import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
 
@@ -27,7 +28,10 @@ import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.ser
  */
 @Injectable()
 @Processor(STUDENT_SYNC_QUEUE, { concurrency: 1 })
-export class StudentSyncWorker extends WorkerHost {
+export class StudentSyncWorker
+  extends WorkerHost
+  implements IJobHandler<StudentSyncJobData>
+{
   private readonly logger = new Logger(StudentSyncWorker.name);
 
   constructor(
@@ -37,8 +41,13 @@ export class StudentSyncWorker extends WorkerHost {
     super();
   }
 
+  /** BullMQ adapter — delegates to the typed handler. */
+  async process(job: Job<StudentSyncJobData>): Promise<void> {
+    return this.handle(job.data);
+  }
+
   /**
-   * Process a student sync job from the queue
+   * Process a student sync job from the queue.
    *
    * Acquires a Redis distributed lock before delegating to the service.
    * If another worker is already processing the same job, this invocation
@@ -48,10 +57,10 @@ export class StudentSyncWorker extends WorkerHost {
    * - Creates a Redis key `student-sync:job:{jobId}:lock` with TTL
    * - Removes the Redis key on completion
    *
-   * @param job - BullMQ job containing jobId and sourceFileName
+   * @param payload - Job data containing jobId and sourceFileName
    */
-  async process(job: Job<StudentSyncJobData>): Promise<void> {
-    const { jobId } = job.data;
+  async handle(payload: StudentSyncJobData): Promise<void> {
+    const { jobId } = payload;
 
     this.logger.log(`Processing sync job ${jobId}`);
 
@@ -80,7 +89,7 @@ export class StudentSyncWorker extends WorkerHost {
   }
 
   /**
-   * Acquire a distributed Redis lock for a sync job
+   * Acquire a distributed Redis lock for a sync job.
    *
    * Uses Redis SET NX to atomically create a lock key only if it does
    * not already exist. Prevents multiple workers from processing the
@@ -100,7 +109,7 @@ export class StudentSyncWorker extends WorkerHost {
   }
 
   /**
-   * Release a distributed Redis lock for a sync job
+   * Release a distributed Redis lock for a sync job.
    *
    * Deletes the lock key so other workers can process the job.
    *

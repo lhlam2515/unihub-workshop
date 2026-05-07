@@ -3,7 +3,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 
 import type { AiSummaryJobData } from "@/infra/messaging/event-contracts";
-import { AI_SUMMARY_QUEUE } from "@/infra/messaging/queue.constants";
+import { AI_SUMMARY_QUEUE } from "@/infra/messaging/messaging.constants";
+import type { IJobHandler } from "@/infra/messaging/messaging.interfaces";
 import { AiSummaryService } from "@/modules/ai-summary/services/ai-summary.service";
 
 /**
@@ -32,11 +33,19 @@ import { AiSummaryService } from "@/modules/ai-summary/services/ai-summary.servi
 @Processor(AI_SUMMARY_QUEUE, {
   concurrency: 1,
 })
-export class AiSummaryWorker extends WorkerHost {
+export class AiSummaryWorker
+  extends WorkerHost
+  implements IJobHandler<AiSummaryJobData>
+{
   private readonly logger = new Logger(AiSummaryWorker.name);
 
   constructor(private readonly aiSummaryService: AiSummaryService) {
     super();
+  }
+
+  /** BullMQ adapter — delegates to the typed handler. */
+  async process(job: Job<AiSummaryJobData>): Promise<any> {
+    return this.handle(job.data);
   }
 
   /**
@@ -51,12 +60,12 @@ export class AiSummaryWorker extends WorkerHost {
    * - All other errors: Re-throws the error to trigger BullMQ's built-in
    *   exponential backoff retry (3 attempts max).
    *
-   * @param job - BullMQ job containing documentId, workshopId, and fileUrl.
+   * @param payload - Job data containing documentId, workshopId, and fileUrl.
    * @returns The generated summary text on success, or undefined on LLM timeout.
    * @throws Error when a retryable failure occurs, triggering BullMQ retry.
    */
-  async process(job: Job<AiSummaryJobData>): Promise<any> {
-    const { documentId, workshopId, fileUrl } = job.data;
+  async handle(payload: AiSummaryJobData): Promise<any> {
+    const { documentId, workshopId, fileUrl } = payload;
 
     this.logger.log(`Processing AI summary for document ${documentId}`);
 

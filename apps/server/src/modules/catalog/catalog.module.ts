@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
 import { AiSummaryModule } from "@/modules/ai-summary/ai-summary.module";
 
@@ -33,7 +33,7 @@ import { WorkshopsService } from "./services/workshops.service";
  * Imports:
  * - DatabaseModule — PostgreSQL access via Drizzle ORM
  * - RedisModule — seat:available counter management
- * - SharedQueueModule — BullMQ notification queue for workshop lifecycle events
+ * - MessagingModule — BullMQ notification queue for workshop lifecycle events
  * - AiSummaryModule — document upload, storage, and AI summarization (extracted module)
  *
  * Exports:
@@ -42,7 +42,7 @@ import { WorkshopsService } from "./services/workshops.service";
  * - WorkshopNotificationPublisher — consumed by BackgroundModule (notification worker)
  */
 @Module({
-  imports: [DatabaseModule, RedisModule, SharedQueueModule, AiSummaryModule],
+  imports: [DatabaseModule, RedisModule, MessagingModule, AiSummaryModule],
   controllers: [
     WorkshopsPublicController,
     WorkshopsAdminController,

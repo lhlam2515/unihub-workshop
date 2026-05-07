@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { IamModule } from "@/modules/iam/iam.module";
 
 import { AiSummaryModule } from "../ai-summary/ai-summary.module";
@@ -34,14 +34,14 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
  * - Registers cron schedules via @nestjs/schedule.
  * - Exposes admin HTTP endpoints for manual job management.
  *
- * @requires SharedQueueModule — provides BullMQ queue registrations.
+ * @requires MessagingModule — provides BullMQ queue registrations.
  * @requires BookingModule — provides RegistrationsService (reconciliation).
  * @requires CsvSyncModule — provides StudentSyncService (data sync).
  */
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    SharedQueueModule,
+    MessagingModule,
     BookingModule,
     CatalogModule,
     PaymentModule,
