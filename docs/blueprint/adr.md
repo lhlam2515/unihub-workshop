@@ -401,9 +401,7 @@ Implementation detail và TypeScript interface → `access-control.md`. Behavior
 | AI PDF summary | `Queue: ai-summary` | 3 lần (exponential backoff) | `Queue: ai-summary-dlq` |
 | Batch notification | `Queue: notification` | 2 lần | `Queue: notification-dlq` |
 
-BullMQ xử lý job lifecycle tự động: job được đưa vào queue → `WorkerHost.registerHandlers()` gắn handler → auto-ack khi hoàn thành. Stalled job detection reclaim job khi worker crash. Failed job tự động retry với backoff, sau đó chuyển vào DLQ khi exhausted. DLQ chỉ lưu — admin can thiệp thủ công.
-
-**Abstraction layer (`infra/messaging/`):** Business modules không import BullMQ types trực tiếp. `BullMQAdapter` implement `ITypedMessageQueue` — producer chỉ gọi `queue.enqueue(name, payload)`. `WorkerHost` quản lý raw BullMQ `Worker` instances, phân biệt `FatalJobError` (không retry) và error thường (retry theo queue config).
+BullMQ xử lý job lifecycle tự động: job được đưa vào queue → worker nhận job qua `@Processor` decorator → auto-ack khi hoàn thành. Stalled job detection reclaim job khi worker crash. Failed job tự động retry với backoff, sau đó chuyển vào DLQ khi exhausted. DLQ chỉ lưu — admin can thiệp thủ công.
 
 Job và retry flow chi tiết → `specs/ai-summary.md` và `specs/notification.md`.
 
@@ -423,9 +421,7 @@ Job và retry flow chi tiết → `specs/ai-summary.md` và `specs/notification.
 
 **RabbitMQ:** Feature-rich nhưng thêm Docker container mới chỉ cho job queue khi Redis đã có sẵn. YAGNI.
 
-**Redis Streams raw:** Cho phép hiểu sâu Redis internals, nhưng thiếu built-in retry, backoff, job lifecycle management.
-
-**@nestjs/bullmq decorators:** `@Processor` và `@InjectQueue` tight-couple business logic vào NestJS queue abstraction. `WorkerHost.registerHandlers()` + `MESSAGING_TOKEN` symbols cho phép thay đổi queue implementation mà không chạm business module.
+**Redis Streams raw:** Cho phép hiểu sâu Redis internals, nhưng thiếu built-in retry, backoff, job lifecycle management. BullMQ giảm boilerplate code và production bugs.
 
 **In-memory queue (EventEmitter):** Zero persistence — không acceptable cho AI summary có thể mất vài phút xử lý.
 

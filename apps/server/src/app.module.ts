@@ -21,8 +21,7 @@ import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { DatabaseModule } from "./infra/database/database.module";
-import { MessagingModule } from "./infra/messaging/messaging.module";
-import { REDIS_QUEUE_CLIENT } from "./infra/redis/redis.constants";
+import { SharedQueueModule } from "./infra/messaging/queue.module";
 import { RedisModule } from "./infra/redis/redis.module";
 import { StorageModule } from "./infra/storage/storage.module";
 import { AiSummaryModule } from "./modules/ai-summary/ai-summary.module";
@@ -52,8 +51,8 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
  *   because BookingModule imports CatalogModule for SeatCounterService.
  * - PaymentModule follows BookingModule (BookingModule imports PaymentModule).
  * - NotificationModule is event-driven; placed after domain modules.
- * - MessagingModule.forRootAsync() sets up BullMQ queue infrastructure
- *   consumed by Catalog, Booking, Payment, Notification, and Background modules.
+ * - SharedQueueModule is a shared BullMQ infrastructure module consumed
+ *   by Catalog, Booking, Payment, Notification, and Background modules.
  */
 @Module({
   imports: [
@@ -87,12 +86,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
           config.get<number>("r2.maxFileSizeBytes") ?? 52_428_800,
       }),
     }),
-    MessagingModule.forRootAsync({
-      inject: [REDIS_QUEUE_CLIENT],
-      useFactory: (connection: import("ioredis").Redis) => ({
-        connection,
-      }),
-    }),
+    SharedQueueModule,
     RateLimitModule,
     IamModule,
     CatalogModule,

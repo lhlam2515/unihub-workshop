@@ -18,7 +18,6 @@ import {
   REDIS_CACHE,
   REDIS_QUEUE,
   REDIS_RATE_LIMIT,
-  REDIS_QUEUE_CLIENT,
 } from "./redis.constants";
 import { RedisService } from "./redis.service";
 
@@ -31,18 +30,7 @@ import { RedisService } from "./redis.service";
     { provide: REDIS_CACHE, useExisting: RedisService },
     { provide: REDIS_QUEUE, useExisting: RedisService },
     { provide: REDIS_RATE_LIMIT, useExisting: RedisService },
-    {
-      provide: REDIS_QUEUE_CLIENT,
-      inject: [RedisService],
-      useFactory: (svc: RedisService) => svc.queueClient,
-    },
   ],
-  exports: [
-    RedisService,
-    REDIS_CACHE,
-    REDIS_QUEUE,
-    REDIS_RATE_LIMIT,
-    REDIS_QUEUE_CLIENT,
-  ],
+  exports: [RedisService, REDIS_CACHE, REDIS_QUEUE, REDIS_RATE_LIMIT],
 })
 export class RedisModule {}
