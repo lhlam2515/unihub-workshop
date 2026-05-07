@@ -3,9 +3,8 @@ import { Injectable, Logger } from "@nestjs/common";
 
 import type { NotificationJobData } from "@/infra/messaging/event-contracts";
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
-import type { ErrorCode } from "@/shared/response/types";
-
 import { NotificationDispatchService } from "@/modules/notification/services/notification-dispatch.service";
+import type { ErrorCode } from "@/shared/response/types";
 
 import type { Job } from "bullmq";
 

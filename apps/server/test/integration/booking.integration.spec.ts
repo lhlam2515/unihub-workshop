@@ -22,26 +22,24 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
+import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
 import { RegistrationsController } from "@/modules/booking/controllers/registrations.controller";
-import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
-import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
 import { TicketsRepository } from "@/modules/booking/repositories/tickets.repository";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
-import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { RoomsRepository } from "@/modules/catalog/repositories/rooms.repository";
 import { SpeakersRepository } from "@/modules/catalog/repositories/speakers.repository";
-import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
 import { WorkshopSlotsRepository } from "@/modules/catalog/repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { RoomConflictService } from "@/modules/catalog/services/room-conflict.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopNotificationPublisher } from "@/modules/catalog/services/workshop-notification-publisher.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { PaymentsController } from "@/modules/payment/controllers/payments.controller";
 import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { CircuitBreakerMechanic } from "@/modules/payment/mechanics/circuit-breaker.mechanic";
@@ -49,6 +47,8 @@ import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mec
 import { PaymentsRepository } from "@/modules/payment/repositories/payments.repository";
 import { PaymentGatewayService } from "@/modules/payment/services/payment-gateway.service";
 import { PaymentsService } from "@/modules/payment/services/payments.service";
+import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
+import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
 import { paymentErrors, seatErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

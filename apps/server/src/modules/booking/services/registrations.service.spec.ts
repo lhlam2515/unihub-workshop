@@ -4,13 +4,13 @@ import type { Registration } from "@/infra/database/types/transaction.types";
 import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
+import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { RegistrationsService } from "./registrations.service";
 import { TicketsService } from "./tickets.service";
-import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
-import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "../repositories/registrations.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";

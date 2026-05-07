@@ -15,8 +15,6 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import {
   NOTIFICATION_QUEUE,
@@ -29,6 +27,8 @@ import { StudentSyncAdminController } from "@/modules/csv-sync/controllers/stude
 import { StudentSyncErrorsRepository } from "@/modules/csv-sync/repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "@/modules/csv-sync/repositories/student-sync-jobs.repository";
 import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { NotificationsAdminController } from "@/modules/notification/controllers/notifications-admin.controller";
 import { NotificationChannelConfigsRepository } from "@/modules/notification/repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "@/modules/notification/repositories/notification-logs.repository";

@@ -18,27 +18,27 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { AI_SUMMARY_QUEUE } from "@/infra/messaging/queue.constants";
 import { DocumentsAdminController } from "@/modules/ai-summary/controllers/documents-admin.controller";
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
+import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
+import { DocumentsService } from "@/modules/ai-summary/services/workshop-documents.service";
 import { RoomsAdminController } from "@/modules/catalog/controllers/rooms-admin.controller";
 import { SpeakersAdminController } from "@/modules/catalog/controllers/speakers-admin.controller";
 import { WorkshopsAdminController } from "@/modules/catalog/controllers/workshops-admin.controller";
 import { WorkshopsPublicController } from "@/modules/catalog/controllers/workshops-public.controller";
-import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { RoomsRepository } from "@/modules/catalog/repositories/rooms.repository";
 import { SpeakersRepository } from "@/modules/catalog/repositories/speakers.repository";
-import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
 import { WorkshopSlotsRepository } from "@/modules/catalog/repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
-import { DocumentsService } from "@/modules/ai-summary/services/workshop-documents.service";
 import { RoomConflictService } from "@/modules/catalog/services/room-conflict.service";
 import { RoomsService } from "@/modules/catalog/services/rooms.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { SpeakersService } from "@/modules/catalog/services/speakers.service";
 import { WorkshopNotificationPublisher } from "@/modules/catalog/services/workshop-notification-publisher.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

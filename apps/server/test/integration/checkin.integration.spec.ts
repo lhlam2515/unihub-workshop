@@ -18,8 +18,6 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 import { CheckinController } from "@/modules/checkin/controllers/checkin.controller";
 import { TicketsController } from "@/modules/checkin/controllers/tickets.controller";
@@ -28,6 +26,8 @@ import { TicketsRepository } from "@/modules/checkin/repositories/tickets.reposi
 import { CheckinService } from "@/modules/checkin/services/checkin.service";
 import { OfflineSyncService } from "@/modules/checkin/services/offline-sync.service";
 import { TicketService } from "@/modules/checkin/services/ticket.service";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------
