@@ -3,13 +3,12 @@ import { Module } from "@nestjs/common";
 import { DatabaseModule } from "@/infra/database/database.module";
 import { SharedQueueModule } from "@/infra/messaging/queue.module";
 import { RedisModule } from "@/infra/redis/redis.module";
+import { RateLimitModule } from "@/modules/rate-limit/rate-limit.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
 import { IamModule } from "../iam/iam.module";
 import { PaymentModule } from "../payment/payment.module";
 import { RegistrationsController } from "./controllers/registrations.controller";
-import { GlobalRateLimitMechanic } from "./mechanics/global-rate-limit.mechanic";
-import { RateLimiterMechanic } from "./mechanics/rate-limiter.mechanic";
 import { SeatLockMechanic } from "./mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "./repositories/registrations.repository";
 import { TicketsRepository } from "./repositories/tickets.repository";
@@ -24,7 +23,6 @@ import { TicketsService } from "./services/tickets.service";
  * Domain responsibilities:
  * - Workshop registration with seat locking (Redis)
  * - Ticket generation after registration confirmation
- * - Rate limiting (global + per-endpoint)
  *
  * Imports:
  * - DatabaseModule — PostgreSQL access via Drizzle ORM
@@ -32,6 +30,7 @@ import { TicketsService } from "./services/tickets.service";
  * - CatalogModule — SeatCounterService for seat availability checks
  * - SharedQueueModule — BullMQ queue definitions
  * - PaymentModule — payments, circuit breaker, idempotency
+ * - RateLimitModule — rate limiting (global + per-endpoint)
  *
  * Exports:
  * - RegistrationsService — consumed by BackgroundModule (reconciliation cron)
@@ -45,6 +44,7 @@ import { TicketsService } from "./services/tickets.service";
     SharedQueueModule,
     IamModule,
     PaymentModule,
+    RateLimitModule,
   ],
   controllers: [RegistrationsController],
   providers: [
@@ -52,9 +52,7 @@ import { TicketsService } from "./services/tickets.service";
     RegistrationsService,
     TicketsService,
     // Mechanics
-    RateLimiterMechanic,
     SeatLockMechanic,
-    GlobalRateLimitMechanic,
     // Repositories
     RegistrationsRepository,
     TicketsRepository,

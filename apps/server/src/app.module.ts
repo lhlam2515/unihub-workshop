@@ -32,6 +32,7 @@ import { CsvSyncModule } from "./modules/csv-sync/csv-sync.module";
 import { IamModule } from "./modules/iam/iam.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { PaymentModule } from "./modules/payment/payment.module";
+import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
 
 /**
  * Root application module for the UniHub Workshop backend.
@@ -84,6 +85,7 @@ import { PaymentModule } from "./modules/payment/payment.module";
       }),
     }),
     SharedQueueModule,
+    RateLimitModule,
     IamModule,
     CatalogModule,
     BookingModule,

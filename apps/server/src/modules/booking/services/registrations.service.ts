@@ -7,14 +7,14 @@ import type { RegistrationEventData } from "@/infra/messaging/event-contracts";
 import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
+import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { TicketsService } from "./tickets.service";
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { RegistrationResponseBuilder } from "../dto/registration-response.dto";
-import { GlobalRateLimitMechanic } from "../mechanics/global-rate-limit.mechanic";
-import { RateLimiterMechanic } from "../mechanics/rate-limiter.mechanic";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "../repositories/registrations.repository";
 import { TicketsRepository } from "../repositories/tickets.repository";
