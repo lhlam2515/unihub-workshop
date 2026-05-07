@@ -420,12 +420,10 @@ export class StudentSyncService {
       return Result.fail(userIdResult.error);
     }
 
-    return this.studentsRepo.upsertByStudentCode({
-      studentCode,
+    return this.studentsRepo.upsert({
+      studentId: studentCode,
       fullName,
-      emailEdu,
-      faculty,
-      classYear: Number.isNaN(classYear) ? null : classYear,
+      email: emailEdu,
       userId: userIdResult.data ?? undefined,
     });
   }
