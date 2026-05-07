@@ -1,6 +1,5 @@
-import { InjectQueue } from "@nestjs/bullmq";
+import { Inject } from "@nestjs/common";
 import { Injectable } from "@nestjs/common";
-import { Queue } from "bullmq";
 import { parse, CsvError } from "csv-parse";
 
 import type {
@@ -8,7 +7,8 @@ import type {
   StudentSyncJob,
 } from "@/infra/database/types";
 import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
-import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
+import type { ITypedMessageQueue } from "@/infra/messaging/messaging.interfaces";
 import { StorageService } from "@/infra/storage/storage.service";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
@@ -51,8 +51,8 @@ export class StudentSyncService {
     private readonly studentsRepo: StudentsRepository,
     private readonly usersRepo: UsersRepository,
     private readonly storageService: StorageService,
-    @InjectQueue(STUDENT_SYNC_QUEUE)
-    private readonly studentSyncQueue: Queue
+    @Inject(MESSAGING_TOKEN.STUDENT_SYNC_QUEUE)
+    private readonly studentSyncQueue: ITypedMessageQueue
   ) {}
 
   /**
@@ -85,11 +85,10 @@ export class StudentSyncService {
 
     // Enqueue for background processing
     try {
-      await this.studentSyncQueue.add(
-        "student-sync",
-        { jobId: job.jobId, sourceFileName } satisfies StudentSyncJobData,
-        { jobId: job.jobId }
-      );
+      await this.studentSyncQueue.enqueue("student-sync.execute", {
+        jobId: job.jobId,
+        sourceFileName,
+      });
     } catch (err) {
       await this.studentSyncJobsRepo.updateStatus(job.jobId, "FAILED");
       return Result.fail(passthroughOrInternal(err));

@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
 
 import { AppChannel } from "./channels/app.channel";
 import { EmailChannel } from "./channels/email.channel";
@@ -13,7 +12,7 @@ import { NotificationDispatchService } from "./services/notification-dispatch.se
 import { NotificationsService } from "./services/notifications.service";
 
 @Module({
-  imports: [DatabaseModule, SharedQueueModule],
+  imports: [DatabaseModule],
   controllers: [NotificationsAdminController],
   providers: [
     // Services
