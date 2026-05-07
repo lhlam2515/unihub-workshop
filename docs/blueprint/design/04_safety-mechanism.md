@@ -12,7 +12,7 @@
 
 #### Bối cảnh và vấn đề
 
-UniHub có spike tải đặc thù: 12.000 sinh viên có thể tranh giành đăng ký trong vòng 10 phút khi workshop mở. Điều này tạo ra áp lực tập trung lên một điểm duy nhất — endpoint `POST /workshops/:id/register` — thay vì tải phân tán đều như các hệ thống thương mại điện tử thông thường.
+UniHub có spike tải đặc thù: 12.000 sinh viên có thể tranh giành đăng ký trong vòng 10 phút khi workshop mở. Điều này tạo ra áp lực tập trung lên một điểm duy nhất — endpoint `POST /registrations` — thay vì tải phân tán đều như các hệ thống thương mại điện tử thông thường.
 
 Không có rate limiting, database connection pool (giới hạn ~100 connections) sẽ cạn trong vài giây đầu, và mọi request (kể cả xem danh sách workshop, check-in) đều bị block. Rate limiting không giải quyết *fairness* (ai được đăng ký), mà giải quyết *stability* (hệ thống tiếp tục hoạt động dưới tải đột biến).
 
@@ -49,7 +49,7 @@ T2 — User (authenticated, general)
 T3 — User × Workshop (authenticated, per-resource)
   Key:    rl:reg:{user_id}:{workshop_id}
   Limit:  5 req / 60s
-  Scope:  POST /workshops/:id/register và POST /payments
+  Scope:  POST /registrations và POST /payments
   (Reasoning for 3-tier structure: see ADR-06)
 ```
 
@@ -89,10 +89,10 @@ ELSE:
 
 **Thứ tự kiểm tra tier và behavior khi vi phạm:**
 
-Với một request đến `POST /workshops/:id/register`, server kiểm tra T1 → T2 → T3 theo thứ tự. Dừng ngay khi tier đầu tiên vi phạm và trả 429 — không kiểm tra các tier còn lại (tiết kiệm Redis round-trip). Response 429 phải bao gồm `Retry-After` để client không retry ngay lập tức và gây storm.
+Với một request đến `POST /registrations`, server kiểm tra T1 → T2 → T3 theo thứ tự. Dừng ngay khi tier đầu tiên vi phạm và trả 429 — không kiểm tra các tier còn lại (tiết kiệm Redis round-trip). Response 429 phải bao gồm `Retry-After` để client không retry ngay lập tức và gây storm.
 
 ```
-Request đến POST /workshops/:id/register (authenticated)
+Request đến POST /registrations (authenticated)
   ↓
 [T2] rl:user:{user_id} > 30?  → 429 Retry-After: N
   ↓ pass
@@ -424,7 +424,7 @@ Với mỗi payment `unresolved`, job gọi gateway API `GET /charges/{gateway_c
 Ba cơ chế không hoạt động song song mà theo thứ tự phòng thủ nhiều lớp (defense-in-depth):
 
 ```
-Request đến POST /workshops/:id/register hoặc POST /payments
+Request đến POST /registrations hoặc POST /payments
          │
          ▼
 ┌─────────────────────┐

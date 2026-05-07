@@ -25,7 +25,7 @@ Pipeline có 5 stage tuần tự. Stage 4 (Upsert) là idempotent: chạy cùng 
 ```
 Schedule: Cron 02:00 AM Asia/Ho_Chi_Minh hàng ngày
 Config bắt buộc: TZ=Asia/Ho_Chi_Minh (không dùng UTC mặc định của container)
-Trigger thủ công: POST /admin/import/trigger (BTC role) — dùng cho retry sau lỗi
+Trigger thủ công: POST /admin/imports/trigger (BTC role) — dùng cho retry sau lỗi
 
 Trước khi bắt đầu — Concurrent Run Protection:
   SELECT id FROM import_logs

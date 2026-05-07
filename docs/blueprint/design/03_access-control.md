@@ -10,9 +10,9 @@
 
 | Role | Bảng nguồn | Cách lấy |
 |---|---|---|
-| `student` | `students` | Hardcode khi tạo JWT tại `POST /auth/login/student` |
-| `btc` | `staff.role` | Đọc từ column `staff.role` tại `POST /auth/login/staff` |
-| `checkin_staff` | `staff.role` | Đọc từ column `staff.role` tại `POST /auth/login/staff` |
+| `student` | `students` | Hardcode khi tạo JWT tại `POST /auth/login` |
+| `btc` | `staff.role` | Đọc từ column `staff.role` tại `POST /auth/login` |
+| `checkin_staff` | `staff.role` | Đọc từ column `staff.role` tại `POST /auth/login` |
 
 Cả ba role được nhúng vào JWT payload dưới field `"role"`. Middleware RBAC đọc claim này trực tiếp — không có DB lookup trên mỗi request.
 
@@ -28,28 +28,28 @@ Cả ba role được nhúng vào JWT payload dưới field `"role"`. Middleware
 | Xem danh sách workshop (`GET /workshops`) | ✓ | ✓ | ✓ |
 | Xem chi tiết workshop + AI summary (`GET /workshops/:id`) | ✓ | ✓ | ✓ |
 | **WORKSHOP — Student** | | | |
-| Đăng ký workshop (`POST /workshops/:id/registrations`) | ✓ | — | — |
-| Xem danh sách đăng ký của chính mình (`GET /students/me/registrations`) | ✓ | — | — |
-| Xem QR code của chính mình (`GET /registrations/:id/qr`) | ◐¹ | — | — |
+| Đăng ký workshop (`POST /registrations`) | ✓ | — | — |
+| Xem danh sách đăng ký của chính mình (`GET /registrations`) | ✓ | — | — |
+| Xem QR code của chính mình (`GET /registrations/:id`) | ◐¹ | — | — |
 | **PAYMENT** | | | |
 | Tạo payment cho registration của chính mình (`POST /payments`) | ◐² | — | — |
 | **WORKSHOP — Admin** | | | |
 | Tạo workshop (`POST /admin/workshops`) | — | ✓ | — |
 | Sửa thông tin workshop (`PATCH /admin/workshops/:id`) | — | ✓ | — |
-| Thay đổi trạng thái workshop (`PATCH /admin/workshops/:id/status`) | — | ✓ | — |
+| Thay đổi trạng thái workshop (`PATCH /admin/workshops/:id/publish`) | — | ✓ | — |
 | Xóa / hủy workshop (`DELETE /admin/workshops/:id`) | — | ✓ | — |
 | Xem tất cả registrations của một workshop (`GET /admin/workshops/:id/registrations`) | — | ✓ | — |
 | Xem thống kê đăng ký (`GET /admin/workshops/:id/stats`) | — | ✓ | — |
-| Upload PDF tài liệu workshop (`POST /admin/workshops/:id/pdf`) | — | ✓ | — |
-| Xem trạng thái AI summary (`GET /admin/workshops/:id/summary-status`) | — | ✓ | — |
+| Upload PDF tài liệu workshop (`POST /admin/workshops/:id/summary`) | — | ✓ | — |
+| Xem trạng thái AI summary (`GET /admin/workshops/:id/summary`) | — | ✓ | — |
 | Retry AI summary thủ công (`POST /admin/workshops/:id/summary/retry`) | — | ✓ | — |
 | **CHECK-IN** | | | |
-| Quét QR và ghi nhận check-in (`POST /checkin/scan`) | — | — | ✓ |
-| Xem lịch sử check-in đã thực hiện bởi chính mình (`GET /checkin/history`) | — | — | ✓ |
-| Sync batch check-in offline (`POST /checkin/sync`) | — | — | ✓ |
+| Quét QR và ghi nhận check-in (`POST /checkins`) | — | — | ✓ |
+| Xem lịch sử check-in đã thực hiện bởi chính mình (`GET /checkins/history`) | — | — | ✓ |
+| Sync batch check-in offline (`POST /checkins/sync`) | — | — | ✓ |
 | **AUTH** | | | |
-| Đăng nhập sinh viên (`POST /auth/login/student`) | public | public | public |
-| Đăng nhập staff (`POST /auth/login/staff`) | public | public | public |
+| Đăng nhập sinh viên (`POST /auth/login`) | public | public | public |
+| Đăng nhập staff (`POST /auth/login`) | public | public | public |
 | Refresh token (`POST /auth/refresh`) | ✓ | ✓ | ✓ |
 | Đăng xuất (`POST /auth/logout`) | ✓ | ✓ | ✓ |
 
@@ -145,8 +145,7 @@ Request HTTP
 
 | Route | Lý do không cần token |
 |---|---|
-| `POST /auth/login/student` | Endpoint lấy token |
-| `POST /auth/login/staff` | Endpoint lấy token |
+| `POST /auth/login` | Endpoint lấy token |
 | `POST /auth/refresh` | Dùng refresh_token cookie, không phải access token |
 | `GET /workshops` | Public — sinh viên chưa đăng nhập vẫn xem được lịch |
 | `GET /workshops/:id` | Public — xem chi tiết không cần login |
@@ -185,8 +184,8 @@ function requireRole(...allowedRoles: Role[]): Middleware {
 // Áp dụng tại route definition:
 router.post('/admin/workshops',           requireRole('btc'),           createWorkshop);
 router.patch('/admin/workshops/:id',      requireRole('btc'),           updateWorkshop);
-router.post('/checkin/scan',             requireRole('checkin_staff'), scanQR);
-router.post('/workshops/:id/registrations', requireRole('student'),     registerWorkshop);
+router.post('/checkins',                  requireRole('checkin_staff'), scanQR);
+router.post('/registrations',             requireRole('student'),     registerWorkshop);
 ```
 
 **Mapping Route → Allowed Roles (exhaustive list):**
@@ -195,22 +194,22 @@ router.post('/workshops/:id/registrations', requireRole('student'),     register
 |---|---|---|---|
 | `/workshops` | GET | *(public, no JWT)* | — |
 | `/workshops/:id` | GET | *(public, no JWT)* | — |
-| `/students/me/registrations` | GET | `student` | requireRole('student') |
-| `/registrations/:id/qr` | GET | `student` | requireRole('student') + owner check |
-| `/workshops/:id/registrations` | POST | `student` | requireRole('student') |
+| `/registrations` | GET | `student` | requireRole('student') |
+| `/registrations/:id` | GET | `student` | requireRole('student') + owner check |
+| `/registrations` | POST | `student` | requireRole('student') |
 | `/payments` | POST | `student` | requireRole('student') + owner check |
 | `/admin/workshops` | POST | `btc` | requireRole('btc') |
 | `/admin/workshops/:id` | PATCH | `btc` | requireRole('btc') |
 | `/admin/workshops/:id` | DELETE | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/status` | PATCH | `btc` | requireRole('btc') |
+| `/admin/workshops/:id/publish` | PATCH | `btc` | requireRole('btc') |
 | `/admin/workshops/:id/registrations` | GET | `btc` | requireRole('btc') |
 | `/admin/workshops/:id/stats` | GET | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/pdf` | POST | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/summary-status` | GET | `btc` | requireRole('btc') |
+| `/admin/workshops/:id/summary` | POST | `btc` | requireRole('btc') |
+| `/admin/workshops/:id/summary` | GET | `btc` | requireRole('btc') |
 | `/admin/workshops/:id/summary/retry` | POST | `btc` | requireRole('btc') |
-| `/checkin/scan` | POST | `checkin_staff` | requireRole('checkin_staff') |
-| `/checkin/history` | GET | `checkin_staff` | requireRole('checkin_staff') |
-| `/checkin/sync` | POST | `checkin_staff` | requireRole('checkin_staff') |
+| `/checkins` | POST | `checkin_staff` | requireRole('checkin_staff') |
+| `/checkins/history` | GET | `checkin_staff` | requireRole('checkin_staff') |
+| `/checkins/sync` | POST | `checkin_staff` | requireRole('checkin_staff') |
 | `/auth/refresh` | POST | *(all authenticated)* | JWT only |
 | `/auth/logout` | POST | *(all authenticated)* | JWT only |
 
@@ -220,7 +219,7 @@ router.post('/workshops/:id/registrations', requireRole('student'),     register
 |---|---|---|
 | Role không đủ quyền | 403 | `{ "error": "INSUFFICIENT_PERMISSION" }` |
 
-**Boundary của Lớp ②:** Lớp này chỉ kiểm tra *"role có được vào route không"*, KHÔNG kiểm tra *"resource này có thuộc về user không"*. Ví dụ: `requireRole('student')` trên `GET /registrations/:id/qr` chỉ ngăn BTC và checkin_staff gọi endpoint đó — nó không ngăn student A xem QR của student B nếu student A biết registration ID. Đó là nhiệm vụ của Lớp ③.
+**Boundary của Lớp ②:** Lớp này chỉ kiểm tra *"role có được vào route không"*, KHÔNG kiểm tra *"resource này có thuộc về user không"*. Ví dụ: `requireRole('student')` trên `GET /registrations/:id` chỉ ngăn BTC và checkin_staff gọi endpoint đó — nó không ngăn student A xem QR của student B nếu student A biết registration ID. Đó là nhiệm vụ của Lớp ③.
 
 ---
 
@@ -329,7 +328,7 @@ const { user } = useAuth();
 {user.role === 'checkin_staff' && <CheckinMenu />}
 ```
 
-**Lưu ý thiết kế:** `checkin_staff` đăng nhập tại cùng endpoint `POST /auth/login/staff` nhưng nhận JWT với `role: "checkin_staff"`. Trang admin web có thể dùng cho cả hai — routing phân nhánh theo role sau login. Trong thực tế, checkin_staff chủ yếu dùng mobile app.
+**Lưu ý thiết kế:** `checkin_staff` đăng nhập tại cùng endpoint `POST /auth/login` nhưng nhận JWT với `role: "checkin_staff"`. Trang admin web có thể dùng cho cả hai — routing phân nhánh theo role sau login. Trong thực tế, checkin_staff chủ yếu dùng mobile app.
 
 ---
 
@@ -395,7 +394,7 @@ const { isOnline } = useNetwork();
 
 ### 5.3 Server-side Enforcement vẫn là source of truth
 
-Khi mobile sync batch check-in lên server (`POST /checkin/sync`), server thực hiện đầy đủ 3 lớp enforcement:
+Khi mobile sync batch check-in lên server (`POST /checkins/sync`), server thực hiện đầy đủ 3 lớp enforcement:
 
 ```
 Lớp ①: Verify JWT trong Authorization header

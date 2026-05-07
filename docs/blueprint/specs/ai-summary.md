@@ -24,14 +24,14 @@ Ba stage: (1) Upload và queue, (2) Worker xử lý async, (3) Frontend polling 
 
 ```
 Request:
-  POST /admin/workshops/:id/pdf
+  POST /admin/workshops/:id/summary
   Auth: Bearer <token> (role = 'btc')
   Body: multipart/form-data, file field = 'pdf'
-  Max file size: 50MB (configurable)
+  Max file size: 10MB (configurable)
 
 Validation upload:
   Content-Type phải là application/pdf
-  File size ≤ 50MB (nếu > 50MB → 413)
+  File size ≤ 10MB (nếu > 10MB → 413)
   Workshop phải tồn tại và status != 'cancelled'
 
 Xử lý:
@@ -178,7 +178,7 @@ Frontend polling logic:
     Dừng polling
     Hiển thị: "⚠️ Không thể tạo tóm tắt tự động"
     Nếu user là BTC: Hiển thị button "Thử lại"
-                      POST /admin/workshops/:id/pdf/retry → re-queue vào stream
+                      POST /admin/workshops/:id/summary/retry → re-queue vào stream
 
   IF summary_status = 'none':
     Không hiển thị gì (PDF chưa được upload)
@@ -295,7 +295,7 @@ Admin phải can thiệp thủ công.
 ## 5. Tiêu chí chấp nhận
 
 **AC-01 — Upload returns 202 immediately:**
-POST /admin/workshops/:id/pdf với file 5MB.
+POST /admin/workshops/:id/summary với file 5MB.
 Then: Response 202 trong < 1 giây. workshops.summary_status = 'queued'.
 
 **AC-02 — Happy path — summary generated:**

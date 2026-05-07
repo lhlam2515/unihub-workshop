@@ -32,14 +32,14 @@ Ba tier rate limiting độc lập, kiểm tra theo thứ tự T1 → T2 → T3.
 
 | Endpoint | T1 | T2 | T3 |
 |---|---|---|---|
-| POST /auth/login/\* | ✓ | — | — |
+| POST /auth/login/ | ✓ | — | — |
 | GET /workshops (public) | ✓ | — | — |
 | GET /workshops/:id | — | ✓ | — |
-| POST /workshops/:id/register | — | ✓ | ✓ |
+| POST /registrations | — | ✓ | ✓ |
 | POST /payments | — | ✓ | ✓ |
 | POST /checkins/sync | — | ✓ | — |
 | POST /admin/workshops | — | ✓ | — |
-| POST /admin/workshops/:id/pdf | — | ✓ | — |
+| POST /admin/workshops/:id/summary | — | ✓ | — |
 | GET /admin/\* | — | ✓ | — |
 
 **Lưu ý T1:** Sau khi authenticated, T1 không áp dụng nữa — T2 per `user_id` là binding. Điều này giải quyết vấn đề NAT (nhiều user sau cùng IP ký túc xá).
@@ -92,7 +92,7 @@ Server log warning. Request được xử lý bình thường. Rate limiting t�
 ### E-01: Spam cùng workshop (T3 vi phạm)
 
 ```
-Điều kiện: Student gửi 6 POST /register cho workshop X trong 60s
+Điều kiện: Student gửi 6 POST /registrations cho workshop X trong 60s
 Request 1–5: pass (count = 1, 2, 3, 4, 5)
 Request 6:   429, Retry-After chính xác
 ```
@@ -163,7 +163,7 @@ Không được block business logic khi Redis down.
 ## 7. Tiêu chí chấp nhận
 
 **AC-01 — T3 blocks spam:**
-Given: Student gửi 6 POST /register cho cùng workshop trong 60s.
+Given: Student gửi 6 POST /registrations cho cùng workshop trong 60s.
 Then: Request 1–5 → 2xx. Request 6 → 429 với `Retry-After` > 0.
 
 **AC-02 — Multi-workshop không bị chặn:**
@@ -182,7 +182,7 @@ Then: Sau đúng X giây, request tiếp theo → pass.
 
 **AC-05 — Fail-open:**
 Given: Redis down.
-Then: POST /register không nhận 429 hoặc 5xx từ rate limiter.
+Then: POST /registrations không nhận 429 hoặc 5xx từ rate limiter.
 And: Server log chứa warning về Redis unavailable.
 And: OL vẫn chặn oversell (AC tách biệt, test riêng).
 

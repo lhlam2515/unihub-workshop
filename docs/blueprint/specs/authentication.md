@@ -58,15 +58,15 @@ Signing algorithm: **RS256** (asymmetric — private key chỉ ở auth service,
 
 ## 3. Login Flow
 
-### Hai endpoint đăng nhập riêng biệt
+### Endpoint: `/auth/login` (public)
 
 ```
-POST /auth/login/student
-Body: { "student_id": "STU-20210001", "password": "..." }
+POST /auth/login
+Body: { account_type: "student", "student_id": "STU-20210001", "password": "..." }
 → Tra cứu trong bảng `students`
 
-POST /auth/login/staff
-Body: { "email": "btc01@unihub.edu", "password": "..." }
+POST /auth/login
+Body: { account_type: "staff", "email": "btc01@unihub.edu", "password": "..." }
 → Tra cứu trong bảng `staff`, đọc staff.role để xác định role token
 ```
 
@@ -133,8 +133,7 @@ Khi có mạng trở lại (trong vòng TTL refresh_token):
 
 | Route | Method | Lý do public |
 |---|---|---|
-| `/auth/login/student` | POST | Endpoint lấy token |
-| `/auth/login/staff` | POST | Endpoint lấy token |
+| `/auth/login` | POST | Endpoint lấy token |
 | `/auth/refresh` | POST | Dùng refresh_token cookie, không phải access token |
 | `/workshops` | GET | Sinh viên chưa login vẫn xem lịch được |
 | `/workshops/:id` | GET | Xem chi tiết không cần login |
@@ -185,7 +184,7 @@ Không có DB lookup — verify hoàn toàn bằng public key.
 ### E-03: Gọi protected endpoint không có header
 
 ```
-GET /students/me/registrations (không có Authorization header)
+GET /registrations (không có Authorization header)
 → 401 MISSING_TOKEN
 Không có business logic nào chạy.
 ```
@@ -251,7 +250,7 @@ Mobile offline state không phải authorization — chỉ là temporary UX.
 ## 9. Tiêu chí chấp nhận
 
 **AC-01 — Missing token:**
-Given: Request đến `/students/me/registrations` không có Authorization header.
+Given: Request đến `/registrations` không có Authorization header.
 Then: 401 `{ "error": "MISSING_TOKEN" }`.
 
 **AC-02 — Expired token:**
@@ -277,7 +276,7 @@ Given: Device offline, access_token đã hết hạn.
 Then: Nút "Quét QR" DISABLED. Badge hiển thị yêu cầu kết nối.
 
 **AC-07 — Sync rejected khi token invalid:**
-Given: POST /checkin/sync với access_token hết hạn.
+Given: POST /checkins/sync với access_token hết hạn.
 Then: 401 TOKEN_EXPIRED. Batch không được lưu vào server DB.
 
 **AC-08 — Public routes không cần token:**

@@ -32,25 +32,24 @@ Ba lớp enforcement theo thứ tự:
 | Danh sách workshop (`GET /workshops`) | ✓ | ✓ | ✓ |
 | Chi tiết + AI summary (`GET /workshops/:id`) | ✓ | ✓ | ✓ |
 | **WORKSHOP — Student** | | | |
-| Đăng ký workshop (`POST /workshops/:id/registrations`) | ✓ | — | — |
-| Danh sách đăng ký của mình (`GET /students/me/registrations`) | ✓ | — | — |
-| QR code của mình (`GET /registrations/:id/qr`) | ◐¹ | — | — |
+| Đăng ký workshop (`POST /registrations`) | ✓ | — | — |
+| Danh sách đăng ký của mình (`GET /registrations`) | ✓ | — | — |
+| QR code của mình (`GET /registrations/:id`) | ◐¹ | — | — |
 | **PAYMENT** | | | |
 | Thanh toán registration của mình (`POST /payments`) | ◐² | — | — |
 | **WORKSHOP — Admin** | | | |
 | Tạo workshop (`POST /admin/workshops`) | — | ✓ | — |
 | Sửa thông tin (`PATCH /admin/workshops/:id`) | — | ✓ | — |
-| Thay đổi status (`PATCH /admin/workshops/:id/status`) | — | ✓ | — |
-| Hủy workshop (`DELETE /admin/workshops/:id`) | — | ✓ | — |
+| Thay đổi status (`POST /admin/workshops/:id/publish`) | — | ✓ | — |
+| Hủy workshop (`POST /admin/workshops/:id/cancel`) | — | ✓ | — |
 | Xem tất cả registrations (`GET /admin/workshops/:id/registrations`) | — | ✓ | — |
 | Thống kê đăng ký (`GET /admin/workshops/:id/stats`) | — | ✓ | — |
-| Upload PDF (`POST /admin/workshops/:id/pdf`) | — | ✓ | — |
-| Trạng thái AI summary (`GET /admin/workshops/:id/summary-status`) | — | ✓ | — |
+| Upload PDF (`POST /admin/workshops/:id/summary`) | — | ✓ | — |
+| Trạng thái AI summary (`GET /admin/workshops/:id/summary`) | — | ✓ | — |
 | Retry AI summary (`POST /admin/workshops/:id/summary/retry`) | — | ✓ | — |
 | **CHECK-IN** | | | |
-| Quét QR + ghi nhận check-in (`POST /checkin/scan`) | — | — | ✓ |
-| Lịch sử check-in của mình (`GET /checkin/history`) | — | — | ✓ |
-| Sync batch offline (`POST /checkin/sync`) | — | — | ✓ |
+| Quét QR + ghi nhận check-in (`POST /checkins`) | — | — | ✓ |
+| Sync batch offline (`POST /checkins/sync`) | — | — | ✓ |
 
 **Chú thích:**
 
@@ -66,22 +65,23 @@ Ba lớp enforcement theo thứ tự:
 |---|---|---|
 | `/workshops` | GET | *(public — không cần JWT)* |
 | `/workshops/:id` | GET | *(public — không cần JWT)* |
-| `/students/me/registrations` | GET | `student` |
-| `/registrations/:id/qr` | GET | `student` + owner check |
-| `/workshops/:id/registrations` | POST | `student` |
+| `/registrations` | GET | `student` |
+| `/registrations/:id` | GET | `student` + owner check |
+| `/registrations` | POST | `student` |
 | `/payments` | POST | `student` + owner check |
 | `/admin/workshops` | POST | `btc` |
 | `/admin/workshops/:id` | PATCH | `btc` |
 | `/admin/workshops/:id` | DELETE | `btc` |
-| `/admin/workshops/:id/status` | PATCH | `btc` |
+| `/admin/workshops/:id/publish` | POST | `btc` |
+| `/admin/workshops/:id/cancel` | POST | `btc` |
 | `/admin/workshops/:id/registrations` | GET | `btc` |
 | `/admin/workshops/:id/stats` | GET | `btc` |
-| `/admin/workshops/:id/pdf` | POST | `btc` |
-| `/admin/workshops/:id/summary-status` | GET | `btc` |
+| `/admin/workshops/:id/summary` | POST | `btc` |
+| `/admin/workshops/:id/summary` | GET | `btc` |
 | `/admin/workshops/:id/summary/retry` | POST | `btc` |
-| `/checkin/scan` | POST | `checkin_staff` |
-| `/checkin/history` | GET | `checkin_staff` |
-| `/checkin/sync` | POST | `checkin_staff` |
+| `/checkins` | POST | `checkin_staff` |
+| `/checkins/history` | GET | `checkin_staff` |
+| `/checkins/sync` | POST | `checkin_staff` |
 | `/auth/refresh` | POST | *(tất cả đã authenticated)* |
 | `/auth/logout` | POST | *(tất cả đã authenticated)* |
 
@@ -96,7 +96,7 @@ Layer ③ là query-level filter bên trong handler — không phải middleware
 ### 4.1 Student xem registrations
 
 ```
-GET /students/me/registrations
+GET /registrations
 → Chỉ trả registrations có student_id = JWT.sub
 → KHÔNG bao giờ trả registrations của student khác
 ```
@@ -104,7 +104,7 @@ GET /students/me/registrations
 ### 4.2 Student lấy QR code
 
 ```
-GET /registrations/:id/qr
+GET /registrations/:id
 
 Nếu registrations.student_id = JWT.sub:
   → 200 { qr_code: "..." }
@@ -128,7 +128,7 @@ Nếu không khớp:
 ### 4.4 Check-in staff xem history
 
 ```
-GET /checkin/history
+GET /checkins/history
 → Chỉ trả checkins có checked_by = JWT.sub
 → Staff A không thấy check-ins của Staff B
 ```
@@ -143,7 +143,7 @@ Khi Layer ③ từ chối vì resource không thuộc user hiện tại, respons
 
 **Áp dụng cho:**
 
-- `GET /registrations/:id/qr` — student cố xem QR của người khác
+- `GET /registrations/:id` — student cố xem QR của người khác
 - `GET /registrations/:id` — bất kỳ access nào không phải owner
 
 **Ngoại lệ — trả 403 (không phải 404):**
@@ -164,7 +164,7 @@ Route /admin/* được bảo vệ bởi AdminGuard:
   - Nếu role ≠ 'btc': redirect về /login
   - Nếu role = 'btc': render AdminLayout
 
-checkin_staff đăng nhập tại cùng /auth/login/staff nhưng role='checkin_staff'
+checkin_staff đăng nhập tại cùng /auth/login nhưng role='checkin_staff'
   → AdminGuard redirect về /login
   → checkin_staff dùng mobile app, không phải web admin
 ```
@@ -219,7 +219,7 @@ Business logic không chạy.
 ### E-02: BTC cố đăng ký workshop
 
 ```
-POST /workshops/:id/registrations với token role='btc'
+POST /registrations với token role='btc'
 Layer ②: 'btc' ∉ ['student'] → 403 INSUFFICIENT_PERMISSION
 ```
 
@@ -298,7 +298,7 @@ Given: Token role='student', POST /admin/workshops.
 Then: 403 `INSUFFICIENT_PERMISSION`. Workshop không được tạo.
 
 **AC-02 — BTC không đăng ký workshop:**
-Given: Token role='btc', POST /workshops/:id/registrations.
+Given: Token role='btc', POST /registrations.
 Then: 403 `INSUFFICIENT_PERMISSION`.
 
 **AC-03 — checkin_staff không xem registrations:**
@@ -311,7 +311,7 @@ Then: 404 Not Found (không lộ existence của registration B).
 
 **AC-05 — Student chỉ thấy registrations của mình:**
 Given: Student A có 3 registrations. Student B có 5 registrations.
-Then: GET /students/me/registrations với token A → trả đúng 3, không trả 5 của B.
+Then: GET /registrations với token A → trả đúng 3, không trả 5 của B.
 
 **AC-06 — Admin web guard:**
 Given: Login với role='checkin_staff', navigate đến /admin.

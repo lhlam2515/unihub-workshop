@@ -296,7 +296,7 @@ UI: "QR này đã được quét [trạng thái: synced / chờ sync]"
 Điều kiện: Week 4 deadline — SQLite/offline sync không hoàn thành
 
 Hành vi thay thế:
-  POST /checkins/scan (thay vì /checkins/sync)
+  POST /checkins (thay vì /checkins/sync)
   Body: { qr_code, checked_at }
   Server xử lý đồng bộ, trả kết quả ngay
 
