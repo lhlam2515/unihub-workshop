@@ -1,8 +1,8 @@
 /**
  * Rooms Admin Controller
  *
- * Handles ORGANIZER-only room management endpoints.
- * All endpoints require JWT authentication and ORGANIZER role.
+ * Handles BTC-only room management endpoints.
+ * All endpoints require JWT authentication and BTC role.
  *
  * Endpoints:
  * - GET /admin/rooms — list all rooms
@@ -29,7 +29,7 @@ import { RoomsService } from "../services/rooms.service";
 
 @Controller("admin/rooms")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
 export class RoomsAdminController {
   constructor(private readonly roomsService: RoomsService) {}
 
@@ -39,7 +39,7 @@ export class RoomsAdminController {
    * Returns all rooms regardless of occupancy status. Room capacity
    * information is included for workshop scheduling validation.
    *
-   * Security context: Requires ORGANIZER role.
+   * Security context: Requires BTC role.
    *
    * @returns Array of room DTOs.
    */
@@ -53,7 +53,7 @@ export class RoomsAdminController {
    *
    * Validates input with CreateRoomSchema before persisting.
    *
-   * Security context: Requires ORGANIZER role.
+   * Security context: Requires BTC role.
    *
    * @param body - Room creation payload (name, building?, floor?, capacity, floor_plan_url?, facilities?).
    * @returns The newly created room DTO.
@@ -68,7 +68,7 @@ export class RoomsAdminController {
    *
    * Only provided fields are updated; omitted fields retain their existing values.
    *
-   * Security context: Requires ORGANIZER role.
+   * Security context: Requires BTC role.
    *
    * @param id - The UUID of the room to update.
    * @param body - Partial room update payload.
