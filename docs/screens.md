@@ -1,1034 +1,1802 @@
-# UniHub Workshop — Phân tích & Đặc tả Màn hình UI
+# UniHub Workshop — Screen Model
 
-## Tổng quan
-
-| Nền tảng | Nhóm Actor | Số màn hình |
-|:---|:---|:---:|
-| Web Portal | Công cộng / Xác thực | 3 |
-| Web Portal | Sinh viên (STUDENT) | 9 |
-| Web Portal | Ban tổ chức (ORGANIZER) | 19 |
-| Mobile App | Nhân sự điểm danh (CHECKIN_STAFF) | 8 |
-| **Tổng** | | **39** |
-
-**Nguyên tắc phân loại màn hình đã áp dụng:**
-Mỗi màn hình phải có: mục đích tương tác độc lập, phạm vi dữ liệu riêng, điểm điều hướng vào/ra rõ ràng. Các trạng thái (loading, empty, error), dialog xác nhận đơn giản (Yes/No), và thao tác inline không được tính là màn hình.
+> **Phạm vi:** Suy luận đầy đủ tập màn hình (Web + Mobile) từ user-flow đã phân tích, gắn chặt với `requirements.md`, `schema.sql`, `mobile-schema.sql`, và `api-design.md`.
+> **Phương pháp:** Interaction-boundary reasoning theo `use-case-to-screen-analyzer` handbook — không 1:1 use-case ↔ screen, không nhầm UI state với screen, không nhầm component với screen.
+> **Stack convention:** Next.js App Router (web) + Expo Router (mobile, file-based).
 
 ---
 
-## PHẦN I — WEB PORTAL
+## Section 1 — Executive Screen Summary
 
-**Nền tảng:** Next.js App Router | **Base path:** `/` (public), `/me` (student), `/admin` (organizer)
+```
+Total inferred screens:           31
+  ├─ Web (Sinh viên):              7
+  ├─ Web (BTC Admin):             17
+  └─ Mobile (Check-in Staff):      7
 
----
+Use cases / user-flows covered:   11 (Flow 1–11 từ user-flow analysis)
 
-### NHÓM 1 — Màn hình Công cộng & Xác thực
+Screen count rationale:
+  - Mỗi screen có purpose, data scope, và navigation entry độc lập.
+  - Không tách screen cho UI state (loading / empty / error / toast / confirm dialog).
+  - Không tách screen cho mỗi tab nội bộ trừ khi tab đó có URL riêng và data scope thực sự khác.
+  - Workshop admin được tách 4 sub-route (/[id], /registrations, /stats, /summary)
+    vì 4 data scope hoàn toàn khác nhau, có thể link trực tiếp, có "Back" boundary rõ.
+  - Scan + Result trên mobile gộp chung 1 screen — result là overlay state, không phải screen.
+  - Payment chia 2 screen: /pay (initiate) vs /payment-result (poll status) vì /payment-result
+    là return URL từ gateway, có entry point độc lập, hoàn toàn khác data scope.
 
----
-
-#### SCR-W01 — Màn hình Đăng nhập
-
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Login Screen |
-| **URL Path** | `/login` |
-| **Người dùng** | STUDENT, ORGANIZER, CHECKIN_STAFF (Web) |
-| **FR liên quan** | FR-F01-001, FR-F01-002 |
-
-**Mô tả chức năng:** Cổng vào duy nhất của Web Portal. Người dùng xác thực bằng email + mật khẩu. Hệ thống sinh Dual-Token (Access Token trả về body, Refresh Token set HttpOnly Cookie). Sau đăng nhập thành công, hệ thống redirect về trang phù hợp với role: STUDENT → `/workshops`, ORGANIZER → `/admin`. Lỗi xác thực không tiết lộ field nào sai (chống enumeration attack — BR-001).
-
-**Dữ liệu hiển thị:**
-
-- Form nhập email, mật khẩu
-- Thông báo lỗi chung khi sai credential (code `INVALID_CREDENTIALS`)
-- Thông báo tài khoản bị đình chỉ (code `USER_SUSPENDED`)
-- Logo/branding UniHub
-
-**Hành động chính:**
-
-- Submit đăng nhập → POST `/api/v1/auth/login` → redirect theo role
-- Không có link "Đăng ký" (student được tạo sẵn từ CSV import)
+Key assumptions (xem chi tiết trong Ambiguity Log):
+  - Forgot-password / change-password flow: không có trong requirements → bỏ qua.
+  - Self-registration cho sinh viên: không có (CSV import là source of truth, ADR-12).
+  - Web cho check-in staff: không có (mobile-only, theo mobile-schema và JWT allowedWorkshopIds).
+  - Web cho student là responsive web (PWA-compatible), không có app native riêng.
+  - Sinh viên không có trang profile/settings riêng — quản lý cá nhân tối thiểu, đủ /me/registrations.
+  - Một login screen riêng cho Admin (/admin/login) tách khỏi student (/login) — RBAC enforcement
+    rõ ràng hơn ở route level và post-login redirect cleaner.
+  - "Tab" trong workshop detail (admin) = sub-route, không phải client-side tab — hỗ trợ deep link.
+```
 
 ---
 
-#### SCR-W02 — Màn hình Danh sách Workshop (Công cộng)
+## Section 2 — Screen Inventory
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Public Workshop Listing Screen |
-| **URL Path** | `/workshops` |
-| **Người dùng** | PUBLIC (không cần đăng nhập), STUDENT, ORGANIZER |
-| **FR liên quan** | FR-F02-006 |
+### A. Web — Sinh viên (Next.js App Router)
 
-**Mô tả chức năng:** Trang duyệt danh sách workshop đã được publish. Là trang đích sau khi đăng nhập với role STUDENT. Hiển thị workshop card với số chỗ còn lại đọc trực tiếp từ Redis (`seat:available:{workshop_id}`) — dữ liệu real-time, không phải từ PostgreSQL. Hỗ trợ filter và phân trang phía client.
+| ID | Route | File path | Purpose |
+|---|---|---|---|
+| SCR-W01 | `/login` | `app/(public)/login/page.tsx` | Đăng nhập sinh viên (accountType=student) |
+| SCR-W02 | `/workshops` | `app/(public)/workshops/page.tsx` | Danh sách workshop công khai có filter |
+| SCR-W03 | `/workshops/[id]` | `app/(public)/workshops/[id]/page.tsx` | Chi tiết workshop + AI summary + nút đăng ký |
+| SCR-W04 | `/me/registrations` | `app/(student)/me/registrations/page.tsx` | Danh sách đăng ký của tôi |
+| SCR-W05 | `/me/registrations/[id]` | `app/(student)/me/registrations/[id]/page.tsx` | Chi tiết đăng ký + QR code |
+| SCR-W06 | `/me/registrations/[id]/pay` | `app/(student)/me/registrations/[id]/pay/page.tsx` | Khởi tạo thanh toán (paid workshop) |
+| SCR-W07 | `/payment-result` | `app/(public)/payment-result/page.tsx` | Trang return từ gateway, poll trạng thái |
 
-**Dữ liệu hiển thị:**
+### B. Web — BTC Admin (Next.js App Router, prefix `/admin`)
 
-- Danh sách `WorkshopSummary`: tên, diễn giả (tên + chức danh + avatar), phòng (tên + tòa nhà), thời gian bắt đầu/kết thúc, loại (miễn phí / có phí + giá), `available_seats` (từ Redis), badge trạng thái
-- Filter: theo khoa (`faculty`), ngày (`date_from`, `date_to`), loại (`is_paid`)
-- Phân trang: `page`, `limit`, `total`, `totalPages`
-- Trạng thái "Hết chỗ" khi `available_seats = 0`
-- Trạng thái "Bạn đã đăng ký" khi user đã có registration (chỉ khi đăng nhập)
+| ID | Route | File path | Purpose |
+|---|---|---|---|
+| SCR-A01 | `/admin/login` | `app/(admin)/admin/login/page.tsx` | Đăng nhập BTC (accountType=staff) |
+| SCR-A02 | `/admin` | `app/(admin)/admin/page.tsx` | Dashboard tổng quan (stats overview) |
+| SCR-A03 | `/admin/workshops` | `app/(admin)/admin/workshops/page.tsx` | Danh sách workshop (mọi status) |
+| SCR-A04 | `/admin/workshops/new` | `app/(admin)/admin/workshops/new/page.tsx` | Tạo workshop mới |
+| SCR-A05 | `/admin/workshops/[id]` | `app/(admin)/admin/workshops/[id]/page.tsx` | Edit workshop info + cancel/publish actions |
+| SCR-A06 | `/admin/workshops/[id]/registrations` | `app/(admin)/admin/workshops/[id]/registrations/page.tsx` | Danh sách sinh viên đã đăng ký workshop |
+| SCR-A07 | `/admin/workshops/[id]/stats` | `app/(admin)/admin/workshops/[id]/stats/page.tsx` | Thống kê workshop (fill rate, check-in rate, doanh thu) |
+| SCR-A08 | `/admin/workshops/[id]/summary` | `app/(admin)/admin/workshops/[id]/summary/page.tsx` | Quản lý AI Summary (upload PDF, retry, override) |
+| SCR-A09 | `/admin/speakers` | `app/(admin)/admin/speakers/page.tsx` | Danh sách diễn giả |
+| SCR-A10 | `/admin/speakers/new` | `app/(admin)/admin/speakers/new/page.tsx` | Tạo diễn giả mới |
+| SCR-A11 | `/admin/speakers/[id]` | `app/(admin)/admin/speakers/[id]/page.tsx` | Edit diễn giả |
+| SCR-A12 | `/admin/rooms` | `app/(admin)/admin/rooms/page.tsx` | Danh sách phòng |
+| SCR-A13 | `/admin/rooms/[id]` | `app/(admin)/admin/rooms/[id]/page.tsx` | Edit phòng + lịch sử workshop dùng phòng |
+| SCR-A14 | `/admin/imports` | `app/(admin)/admin/imports/page.tsx` | Lịch sử CSV import + manual trigger |
+| SCR-A15 | `/admin/imports/[id]` | `app/(admin)/admin/imports/[id]/page.tsx` | Chi tiết import run + download error CSV |
+| SCR-A16 | `/admin/notifications` | `app/(admin)/admin/notifications/page.tsx` | Cấu hình kênh + audit log notification |
+| SCR-A17 | `/admin/system` | `app/(admin)/admin/system/page.tsx` | Operations: Circuit Breaker monitor + Payment Reconciliation trigger |
 
----
+### C. Mobile — Check-in Staff (Expo Router)
 
-#### SCR-W03 — Màn hình Chi tiết Workshop (Công cộng)
-
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Public Workshop Detail Screen |
-| **URL Path** | `/workshops/[workshopId]` |
-| **Người dùng** | PUBLIC, STUDENT, ORGANIZER, CHECKIN_STAFF |
-| **FR liên quan** | FR-F02-007, FR-F04-003, FR-F04-004 |
-
-**Mô tả chức năng:** Trang chi tiết đầy đủ của một workshop đã PUBLISHED. Đây là điểm khởi đầu luồng đăng ký. Trang trả 404 nếu workshop không tồn tại hoặc không ở trạng thái PUBLISHED. Nút "Đăng ký" thực hiện POST /registrations và xử lý kết quả:
-
-- **Workshop miễn phí:** Hiện toast thành công → điều hướng đến `/me/tickets`
-- **Workshop có phí:** Điều hướng đến `/payments/checkout/[registrationId]`
-- **Hết chỗ:** Nút bị disable, hiển thị "Hết chỗ"
-- **Đã đăng ký:** Nút thay bằng "Xem vé của bạn" → link đến `/me/tickets/[ticketId]`
-
-**Dữ liệu hiển thị:**
-
-- `WorkshopDetail`: tên, mô tả đầy đủ, thời gian (bắt đầu/kết thúc, duration)
-- **Speaker section:** ảnh đại diện, tên, chức danh, tiểu sử
-- **Room section:** tên phòng, tòa nhà, tầng, sơ đồ phòng (`floor_plan_url` từ Object Storage), danh sách tiện ích (`facilities` JSONB)
-- `available_seats` (real-time từ Redis) + thanh tiến độ sức chứa
-- Giá (nếu `is_paid = TRUE`) + đơn vị tiền tệ
-- **AI Summary section:** chỉ hiển thị khi `ai_summary.status = DONE`, gồm `summary_text` và `model_used`
-- Countdown timer "Đăng ký mở" (nếu chưa đến giờ) hoặc "Kết thúc đăng ký"
-
----
-
-### NHÓM 2 — Màn hình Sinh viên (STUDENT)
-
-> Tất cả route trong nhóm này yêu cầu xác thực với `role = STUDENT`. IDOR protection được áp dụng: mọi query đều inject `WHERE student_id = jwt.sub`.
+| ID | Route | File path | Purpose |
+|---|---|---|---|
+| SCR-M01 | `/login` | `app/(auth)/login.tsx` | Đăng nhập staff |
+| SCR-M02 | `/` | `app/(app)/index.tsx` | Danh sách workshop được phân công (allowedWorkshopIds) |
+| SCR-M03 | `/workshops/[id]` | `app/(app)/workshops/[id]/index.tsx` | Workshop dashboard: cache status + scan/history actions |
+| SCR-M04 | `/workshops/[id]/scan` | `app/(app)/workshops/[id]/scan.tsx` | QR scanner (online + offline modes) |
+| SCR-M05 | `/workshops/[id]/history` | `app/(app)/workshops/[id]/history.tsx` | Lịch sử check-in cục bộ của workshop |
+| SCR-M06 | `/sync` | `app/(app)/sync.tsx` | Sync queue toàn cục (mọi workshop) |
+| SCR-M07 | `/settings` | `app/(app)/settings.tsx` | Profile + logout + app info |
 
 ---
 
-#### SCR-W04 — Màn hình Thanh toán (Checkout)
+### Justification — Interaction Boundary cho từng screen
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Payment Checkout Screen |
-| **URL Path** | `/payments/checkout/[registrationId]` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F05-001, FR-F05-002, FR-F05-005 |
+> Mỗi screen được khẳng định bằng **interaction boundary** — nơi user goal, data scope, hoặc navigation entry thực sự đổi. Đoạn dưới đây trả lời câu hỏi: tại sao IS a screen, KHÔNG phải state hay component.
 
-**Mô tả chức năng:** Màn hình hoàn tất thanh toán cho workshop có phí, sau khi Registration đã được tạo ở trạng thái `PENDING_PAYMENT`. Đây là màn hình quan trọng với ranh giới tương tác rõ ràng **Browse → Transaction** — người dùng chuyển từ bối cảnh xem sang bối cảnh giao dịch tài chính. Hiển thị **Countdown timer 15 phút** của SeatLock (`seat:lock:{wid}:{reg_id}`). Khi timer hết, nút thanh toán bị disable và hiển thị cảnh báo "Ghế đã được nhả, vui lòng đăng ký lại". Sau khi bấm "Thanh toán", hệ thống sinh `X-Idempotency-Key`, gọi POST `/api/v1/payments`, nhận `redirect_url` và chuyển hướng trình duyệt đến cổng thanh toán bên ngoài.
+**SCR-W01 `/login`** — *List → Auth → Detail* boundary; route entry độc lập (anonymous truy cập trực tiếp); data scope (credentials) khác với mọi screen authenticated; đăng nhập là một use case hoàn chỉnh. Không phải modal vì có URL riêng và có thể được link trực tiếp khi token hết hạn.
 
-**Dữ liệu hiển thị:**
+**SCR-W02 `/workshops`** — Browse boundary; data scope = collection của workshops (cache key Redis riêng theo query hash, ADR-13); là endpoint chịu tải lớn nhất trong spike; deep-link được. Filter bar / sort selector là **components** trong screen này, không phải sub-screen.
 
-- Tóm tắt đơn hàng: tên workshop, thời gian, phòng, diễn giả
-- Số tiền cần thanh toán (`amount`, `currency`)
-- Countdown timer trực quan (đếm ngược từ `payment_deadline`)
-- Lựa chọn cổng thanh toán: VNPAY / MOMO / STRIPE (radio buttons)
-- `registration_id`, `status = PENDING_PAYMENT`
-- Cảnh báo khi Circuit Breaker OPEN: "Dịch vụ thanh toán đang bảo trì..."
-- Lỗi `SEAT_LOCK_EXPIRED` khi SeatLock đã hết hạn
+**SCR-W03 `/workshops/[id]`** — *List → Detail* boundary kinh điển; data scope hẹp lại 1 workshop kèm AI summary, sơ đồ phòng, bio diễn giả; cache key Redis riêng (`workshop:{id}`). AI summary là **section** trong screen này (data đến cùng response 2.2), không phải screen riêng.
 
-**Hành động chính:**
+**SCR-W04 `/me/registrations`** — Browse boundary nhưng **scope đổi từ public → personal** (RBAC method-level: WHERE student_id = JWT.sub); data scope hoàn toàn khác /workshops; có thể link trực tiếp từ email thông báo.
 
-- Chọn cổng thanh toán → POST `/api/v1/payments` (với `X-Idempotency-Key` tự động sinh) → redirect đến `redirect_url`
-- Hủy đơn → DELETE `/api/v1/registrations/[registrationId]` → về `/workshops`
+**SCR-W05 `/me/registrations/[id]`** — *List → Detail* + sở hữu QR (asset trọng yếu cho check-in); cần authorize ownership; QR là dữ liệu read-only độc lập, không thuộc /workshops/[id]. Đây cũng là deep-link đích cho email xác nhận.
 
----
+**SCR-W06 `/me/registrations/[id]/pay`** — *Browse → Transaction* boundary (Principle 3 - Context Switch điển hình); data scope mới = chọn gateway + xác nhận amount; có business rule riêng (CB OPEN check, idempotency key sinh ở đây). Không gộp vào /workshops/[id] vì paid flow yêu cầu registration đã tạo trước (nextStep từ POST /registrations) — registration_id phải có trong path.
 
-#### SCR-W05 — Màn hình Kết quả Thanh toán
+**SCR-W07 `/payment-result`** — Là **return URL** từ payment gateway (xem `returnUrl` trong POST /payments body); entry độc lập từ external; data scope = trạng thái 1 payment, polling endpoint. Bắt buộc tách khỏi /pay vì gateway redirect không thể trả về cùng path đã POST. KHÔNG phải UI state của /pay vì user có thể tab quay lại sau (web tab/email link).
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Payment Result Screen |
-| **URL Path** | `/payments/result?payment_id=[paymentId]&status=[success\|failed]` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F05-003, FR-F06-001 |
+**SCR-A01 `/admin/login`** — Tách khỏi /login (SCR-W01) vì: (1) post-login redirect khác (/admin vs /workshops), (2) accountType=staff fixed, (3) RBAC route prefix `/admin` enforce ngay từ middleware, (4) admin có thể thêm 2FA sau (Stage 5). Đây là 2 screen khác nhau, không phải 1 screen với conditional render — Principle 3 (URL riêng = screen riêng).
 
-**Mô tả chức năng:** Màn hình landing sau khi cổng thanh toán redirect trình duyệt trở lại hệ thống. Hệ thống gọi GET `/api/v1/students/me/payments/[paymentId]` để lấy trạng thái thực từ DB (không tin vào query param từ gateway để đảm bảo bảo mật). Đây là màn hình độc lập với ranh giới **External Redirect → Confirmation** — người dùng quay về sau khi rời sang trang bên ngoài, cần một điểm tiếp nhận riêng biệt.
+**SCR-A02 `/admin`** — Dashboard boundary (tổng quan); data scope = aggregate stats từ `/admin/stats/overview`; không trùng /admin/workshops (list các workshop) cũng không trùng /admin/stats (drill-down report).
 
-**Dữ liệu hiển thị (trường hợp SUCCESS):**
+**SCR-A03 `/admin/workshops`** — Admin browse boundary; khác SCR-W02 vì data scope mở rộng (status IN draft, open, closed, cancelled — public chỉ thấy 'open'); thao tác bulk khác (publish/cancel buttons).
 
-- Icon thành công, thông báo xác nhận
-- Tóm tắt: tên workshop, số tiền, mã giao dịch (`gateway_txn_id`), thời gian giao dịch
-- `payment_id`, `status = SUCCESS`
-- CTA: "Xem vé của tôi" → `/me/tickets/[ticketId]`
+**SCR-A04 `/admin/workshops/new`** — *List → Create* boundary; form với data scope rỗng (initial state); không trùng /admin/workshops/[id] vì semantic POST khác PATCH (HTTP method hint), không có version để optimistic-lock, không có "cancel/publish" action. Các BA đôi khi gộp với edit (single-form) — ở đây tách vì xét theo interaction purpose: tạo mới và sửa là hai goal khác.
 
-**Dữ liệu hiển thị (trường hợp FAILED / TIMEOUT):**
+**SCR-A05 `/admin/workshops/[id]`** — Edit form với OL (If-Match header). Hub của workshop admin — link đến 3 sub-route. Không trùng SCR-A04 vì có version, có actions (publish, cancel) chỉ áp dụng cho existing workshop.
 
-- Icon thất bại, thông báo lỗi
-- Lý do thất bại (nếu có)
-- CTA: "Thử thanh toán lại" → `/payments/checkout/[registrationId]` (với cùng `idempotency_key`)
-- CTA: "Hủy đăng ký" → DELETE registration
+**SCR-A06 `/admin/workshops/[id]/registrations`** — Sub-screen của workshop, nhưng data scope **hoàn toàn khác** (registrations table, không phải workshops table); có thể export CSV; có thể là entry direct từ email/notification "X người đã đăng ký workshop của bạn"; có deep-link riêng.
 
----
+**SCR-A07 `/admin/workshops/[id]/stats`** — Aggregate metrics (fill rate, check-in rate, revenue); data scope khác /registrations (counts, không phải records); endpoint khác (`/admin/workshops/{id}/stats` vs `/admin/workshops/{id}/registrations`); có thể cache 5 phút (`api-design.md` §10).
 
-#### SCR-W06 — Màn hình Lịch sử Đăng ký
+**SCR-A08 `/admin/workshops/[id]/summary`** — Workflow độc lập: upload PDF → queue → poll status → override. Data scope = `summary_*` fields; có 5 trạng thái (none/queued/processing/done/failed); là async workflow blocking với multi-step nature. Không phải state của /admin/workshops/[id] vì có upload action + retry action + override action — 3 use case riêng.
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Registration History Screen |
-| **URL Path** | `/me/registrations` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F04-006 |
+**SCR-A09–A11 `/admin/speakers/*`** — Master data CRUD. List vs Create vs Edit theo Principle 3 (mỗi URL = mỗi screen). Có thể merge new + [id] thành single form-screen với mode prop, nhưng tách rõ hơn cho SRS traceability.
 
-**Mô tả chức năng:** Danh sách toàn bộ các đơn đăng ký của sinh viên hiện tại. IDOR protection đảm bảo chỉ hiển thị dữ liệu của `jwt.sub`. Hỗ trợ filter theo trạng thái. Là hub trung tâm để sinh viên theo dõi hành trình từ đăng ký đến tham dự.
+**SCR-A12–A13 `/admin/rooms/*`** — Tương tự speakers. Note: list không tách /new vì rooms ít hơn (mỗi room phải có floor_plan upload — UX phức tạp hơn, để ở edit screen). /admin/rooms/[id] hỗ trợ cả create (id='new') và edit. *Đây là exception duy nhất khỏi pattern speakers — flag trong Ambiguity Log.*
 
-**Dữ liệu hiển thị:**
+**SCR-A14 `/admin/imports`** — Cron history list + trigger button. Trigger là action (modal), không phải screen.
 
-- Danh sách `RegistrationWithDetails`: tên workshop, thời gian, địa điểm, `registration_id`, `status` (badge màu: PENDING_PAYMENT=vàng, CONFIRMED=xanh, CANCELLED=đỏ, WAITLISTED=xám)
-- Với PENDING_PAYMENT: countdown timer đến `payment_deadline`
-- Với CONFIRMED: link "Xem vé QR"
-- Filter tab: Tất cả / Đã xác nhận / Chờ thanh toán / Đã hủy
-- Phân trang
+**SCR-A15 `/admin/imports/[id]`** — Chi tiết import run + download error CSV. Data scope khác /admin/imports (1 row vs collection); có action download là response stream — không tạo screen mới.
+
+**SCR-A16 `/admin/notifications`** — Gộp 2 use case của module Notification Channels (`api-design.md` §11): config channels + xem failed logs. Hai phần này có data scope khác nhau nhưng cùng workflow (debug notification system), tab nội bộ là hợp lý — KHÔNG tách thành 2 screen vì over-fragmentation. Tab = component trong screen này.
+
+**SCR-A17 `/admin/system`** — Operations dashboard: gộp Circuit Breaker monitor + Payment Reconciliation trigger. Cả hai cùng "operational concerns" cho BTC trong sự kiện. Tách screen riêng cho mỗi tool sẽ over-fragment vì BTC ít khi vào — gộp thành 1 ops screen với 2 panel.
+
+**SCR-M01 `/login` (mobile)** — Auth screen; entry duy nhất vào app khi chưa có session.
+
+**SCR-M02 `/` (mobile home)** — Workshop selection list; data scope = `JWT.allowedWorkshopIds`; là entry point sau login; mỗi workshop hiển thị cache status (synced / stale / never).
+
+**SCR-M03 `/workshops/[id]` (mobile)** — Workshop "lobby" trước scan. Data scope = cache_metadata + checkin_queue counts; có actions: "Pre-load now", "Open Scanner", "View History". KHÔNG gộp với scan vì scanner cần camera permission + full screen viewfinder — interaction context hoàn toàn khác.
+
+**SCR-M04 `/workshops/[id]/scan` (mobile)** — Camera + QR detection + result overlay. Result feedback (✅/⚠️/❌) là **UI state overlay** trên screen này, không phải screen riêng — user có thể dismiss và scan tiếp ngay. Online/offline switch là banner state, cùng screen.
+
+**SCR-M05 `/workshops/[id]/history` (mobile)** — Local check-in history cho 1 workshop; data từ `checkin_queue` filtered by workshop_id; có thể tap row → re-sync individual.
+
+**SCR-M06 `/sync` (mobile)** — Global sync queue cho mọi workshop; data scope = checkin_queue + sync_log; actions: "Sync now", "Retry failed". Khác SCR-M05 (per-workshop) vì scope toàn cục, có sync_log audit.
+
+**SCR-M07 `/settings` (mobile)** — Logout + app info + device_id display + last sync time global. Profile gọn nhẹ vì single-user app.
 
 ---
 
-#### SCR-W07 — Màn hình Chi tiết Đơn đăng ký
+## Section 3 — Screen Specifications (chi tiết)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Registration Detail Screen |
-| **URL Path** | `/me/registrations/[registrationId]` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F04-005, FR-F04-006 |
+> Mỗi screen liệt kê: read-only data, inputs, primary actions (kèm API endpoint), secondary actions, business rules, validation rules, navigation, UI states, components.
 
-**Mô tả chức năng:** Chi tiết một đơn đăng ký cụ thể. Ranh giới **List → Detail** rõ ràng với data scope mở rộng: bao gồm thông tin workshop đầy đủ, trạng thái vé, lịch sử giao dịch liên quan. Là nơi sinh viên thực hiện hủy đăng ký (nếu cần).
-
-**Dữ liệu hiển thị:**
-
-- `registration_id`, `status`, `registered_at`, `confirmed_at`, `cancelled_at`
-- `WorkshopSummary` đính kèm: tên, thời gian, phòng, diễn giả
-- `cancellation_reason` (nếu đã hủy)
-- **Payment section** (nếu workshop có phí): `payment_id`, `amount`, `gateway`, `status`, `initiated_at`, `completed_at`
-- **Ticket section** (nếu CONFIRMED): `ticket_id`, `status`, link "Xem QR Code"
-- `payment_deadline` countdown (nếu PENDING_PAYMENT)
-
-**Hành động chính:**
-
-- Hủy đăng ký → DELETE `/api/v1/registrations/[registrationId]` → dialog xác nhận → redirect `/me/registrations`
-- Hoàn tất thanh toán (nếu PENDING_PAYMENT) → `/payments/checkout/[registrationId]`
+### A. WEB — SINH VIÊN
 
 ---
 
-#### SCR-W08 — Màn hình Danh sách Vé điện tử
+#### SCR-W01 — `/login` (Sinh viên)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Ticket List Screen |
-| **URL Path** | `/me/tickets` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F06-002 |
+**Purpose:** Sinh viên đăng nhập bằng MSSV + password.
 
-**Mô tả chức năng:** Danh sách tất cả vé điện tử ACTIVE của sinh viên. Đây là màn hình tách biệt khỏi danh sách đăng ký vì có phạm vi dữ liệu khác (tập trung vào `qr_token` và thông tin check-in, không quan tâm đến lịch sử đăng ký). Sinh viên sử dụng màn hình này để chuẩn bị trước ngày sự kiện.
+**Read-only:** Logo trường, link "Quên mật khẩu" (placeholder Stage 5).
 
-**Dữ liệu hiển thị:**
+**Inputs:**
 
-- Danh sách `TicketWithWorkshop`: tên workshop, thời gian, phòng (tên + tòa nhà), `ticket_id`, `status` (ACTIVE/VOID), `issued_at`
-- Preview QR Code nhỏ (thumbnail)
-- Sắp xếp theo ngày sự kiện (gần nhất lên đầu)
-- Badge "Sắp diễn ra" / "Đã qua"
+- `studentId` — text, format MSSV (regex `^\d{8}$`), required
+- `password` — password, min 8 chars, required
 
----
+**Primary actions:**
 
-#### SCR-W09 — Màn hình Vé điện tử & QR Code
+- `[Đăng nhập]` → `POST /api/v1/auth/login` body `{accountType:"student", studentId, password}` → set `accessToken` (memory) + cookie `refresh_token` HttpOnly → navigate `/workshops`
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Ticket QR Screen |
-| **URL Path** | `/me/tickets/[ticketId]` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F06-002 |
+**Secondary actions:**
 
-**Mô tả chức năng:** Màn hình hiển thị vé điện tử đầy đủ với QR Code kích thước lớn để nhân sự quét. Ranh giới **List → Detail** với mục đích tương tác hoàn toàn khác: sinh viên cần giữ màn hình này và đưa ra cho nhân sự tại cổng sự kiện. Giao diện tối giản, QR Code chiếm diện tích lớn, hỗ trợ tăng độ sáng màn hình.
+- `[Đăng nhập với tài khoản BTC]` → navigate `/admin/login`
 
-**Dữ liệu hiển thị:**
+**Business rules:**
 
-- QR Code render từ `qr_token` (kích thước lớn, full-width)
-- Tên workshop, thời gian, địa điểm (tòa nhà + phòng)
-- Tên sinh viên, mã sinh viên (`student_code`)
-- `ticket_id` (dạng rút gọn để đối chiếu thủ công nếu cần)
-- `status` badge: ACTIVE (xanh) / VOID (đỏ — vé đã bị hủy)
-- `issued_at`: ngày cấp vé
-- Cảnh báo nổi bật nếu `status = VOID`: "Vé này đã bị hủy, vui lòng liên hệ ban tổ chức"
+- BR-W01.1 Student không tồn tại trong `students` table → 401 generic message (không leak existence)
+- BR-W01.2 Account disabled → 403 với message thân thiện
 
----
+**Validation rules:**
 
-#### SCR-W10 — Màn hình Lịch sử Giao dịch
+- VR-W01.1 MSSV phải đúng 8 chữ số
+- VR-W01.2 Hiển thị inline error sau blur
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Payment History Screen |
-| **URL Path** | `/me/payments` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F05-001 |
+**Navigation IN:** `/`, `/workshops` (khi yêu cầu auth), `/admin/login` (toggle)
+**Navigation OUT:** Success → `/workshops`. Cancel → `/`
 
-**Mô tả chức năng:** Lịch sử giao dịch thanh toán độc lập với lịch sử đăng ký. Phạm vi dữ liệu khác biệt: tập trung vào các chỉ số tài chính (`amount`, `gateway`, `gateway_txn_id`, `status`). Sinh viên cần màn hình này để kiểm tra biên lai hoặc tra cứu khi có tranh chấp giao dịch.
+**Components:**
 
-**Dữ liệu hiển thị:**
+- `<LoginForm />` (form layout)
+- `<TextField />` (MSSV + password, từ shadcn/ui)
+- `<Button variant="primary" />`
+- `<ErrorBanner />` (inline 4xx error)
 
-- Danh sách `Payment`: tên workshop liên quan, `amount`, `currency`, `gateway` (logo VNPay/MoMo/Stripe), `status` (badge), `initiated_at`, `completed_at`
-- Filter theo `status`: Tất cả / Thành công / Thất bại / Đang xử lý
-- Tổng tiền đã thanh toán thành công (summary)
+**Related UI states:**
+
+- Loading: button spinner; form disabled
+- Error: inline banner cho 401/403/429
+- Rate limit (429): banner với `Retry-After`
+
+**API endpoints:** `POST /api/v1/auth/login`
 
 ---
 
-#### SCR-W11 — Màn hình Chi tiết Giao dịch
+#### SCR-W02 — `/workshops` (Danh sách workshop)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Payment Transaction Detail Screen |
-| **URL Path** | `/me/payments/[paymentId]` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F05-001 |
+**Purpose:** Sinh viên duyệt và lọc danh sách workshop trong tuần lễ.
 
-**Mô tả chức năng:** Chi tiết một giao dịch cụ thể, dùng cho mục đích kiểm tra biên lai và tra cứu khi cần đối chiếu với ngân hàng hoặc ban tổ chức.
+**Read-only:** Mỗi card workshop hiển thị:
 
-**Dữ liệu hiển thị:**
+- `title`, `startsAt`, `endsAt`, `room.name`, `room.building`
+- `speaker.fullName`, `speaker.avatarUrl`
+- `seatsAvailable / seatsTotal`
+- `price` (0 = "Miễn phí")
+- `isRegistered` flag (nếu đã login)
 
-- `payment_id` (đầy đủ)
-- `gateway_txn_id` (mã giao dịch từ cổng thanh toán)
-- `amount`, `currency`
-- `gateway` (tên cổng thanh toán)
-- `status` với mô tả trạng thái bằng tiếng Việt
-- `initiated_at`, `completed_at`, `timeout_at` (nếu có)
-- Thông tin workshop: tên, thời gian
-- Link đến đơn đăng ký liên quan
+**Inputs (filter components):**
 
----
+- `day` — date picker (lọc trong khoảng tuần lễ)
+- `topic` — select multi (Stage 5 nếu có tagging)
+- `hasSeats` — toggle "Chỉ hiển thị còn chỗ"
+- `sort` — select (`startsAt`, `-startsAt`, `seatsAvailable`)
+- `search` — text (debounced 300ms)
 
-#### SCR-W12 — Màn hình Hồ sơ cá nhân
+**Primary actions:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Student Profile Screen |
-| **URL Path** | `/me/profile` |
-| **Người dùng** | STUDENT |
-| **FR liên quan** | FR-F01-004 (GET /auth/me) |
+- Click card → navigate `/workshops/[id]`
+- `[Đăng ký]` button trên card (shortcut, nếu `isRegistered=false && seatsAvailable>0`) → mở `<RegisterConfirmDialog />` (UI state) → POST tới registration
 
-**Mô tả chức năng:** Thông tin tài khoản của sinh viên. Không cho phép chỉnh sửa trực tiếp (thông tin nguồn từ CSV của trường). Cung cấp chức năng đăng xuất.
+**Secondary actions:**
 
-**Dữ liệu hiển thị:**
+- Pagination "Tải thêm" (cursor-based)
 
-- `full_name`, `student_code`, `faculty`, `class_year`
-- `email` (tài khoản UniHub), `email_edu` (email trường)
-- `user_id`, `role = STUDENT`
-- `status` tài khoản (ACTIVE / SUSPENDED)
-- Nút "Đăng xuất" → POST `/api/v1/auth/logout` → về `/login`
+**Business rules:**
 
----
+- BR-W02.1 `seatsAvailable` đến từ Redis cache TTL 10s — chấp nhận trễ tối đa 10s (ADR-13)
+- BR-W02.2 Card workshop hết chỗ vẫn hiển thị nhưng disabled nút đăng ký
+- BR-W02.3 Workshop đã `cancelled` ẩn khỏi list mặc định (status filter mặc định `open`)
 
-### NHÓM 3 — Màn hình Ban tổ chức (ORGANIZER/Admin)
+**Validation rules:**
 
-> Tất cả route `/admin/*` yêu cầu xác thực với `role = ORGANIZER`. Unauthorized → redirect `/login`.
+- VR-W02.1 `day` phải nằm trong tuần lễ sự kiện
+- VR-W02.2 Filter combination không hợp lệ → empty state thay vì error
 
----
+**Navigation IN:** `/login` (post-login), `/`, header logo
+**Navigation OUT:** Card click → `/workshops/[id]`. Header "Của tôi" → `/me/registrations`
 
-#### SCR-W13 — Màn hình Admin Dashboard (Tổng quan)
+**Components:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Admin Dashboard Screen |
-| **URL Path** | `/admin` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-006, FR-F10-001, FR-F10-002, FR-F10-003, FR-F10-005 |
+- `<WorkshopCard />` (re-usable cho list view)
+- `<FilterBar />` (composite: DatePicker + Select + Toggle + SearchInput)
+- `<Pagination cursor />`
+- `<EmptyState />` (component, UI state)
+- `<SkeletonCard />` (loading state)
 
-**Mô tả chức năng:** Trang chủ Admin — tổng quan nhanh toàn hệ thống sau khi đăng nhập với role ORGANIZER. Tập hợp các chỉ số quan trọng nhất từ nhiều module để ban tổ chức nắm bắt tình hình ngay lập tức.
+**Related UI states:**
 
-**Dữ liệu hiển thị:**
+- Initial load skeleton
+- Empty (no match)
+- Network error (retry button)
+- Stale cache banner (nếu detect cache > 10s và Redis down)
 
-- **Workshop Overview:** số workshop đang PUBLISHED, số workshop tự động chuyển COMPLETED trong 24h qua, tổng chỗ còn lại (tổng hợp từ Redis), số đăng ký hôm nay
-- **Quick Stats cards:** tổng đăng ký (CONFIRMED/PENDING), tổng doanh thu (tổng `payments.amount` status=SUCCESS)
-- **Sắp diễn ra:** danh sách 5 workshop gần nhất (tên, thời gian, fill-rate %)
-- **System Health banner:** trạng thái Circuit Breaker của các gateway (CLOSED=xanh, OPEN=đỏ, HALF_OPEN=vàng)
-- **Cảnh báo:** số payment đang PENDING quá hạn, số CSV sync job đang RUNNING
-- Links nhanh đến các phân hệ quản lý
+**API endpoints:**
+
+- `GET /api/v1/workshops?status=open&day=&hasSeats=&cursor=&limit=20&sort=` (T1 RL: 60/60s)
+- (Optional, periodic) `GET /api/v1/workshops/{id}/availability` cho card đang hiển thị (Stage 5 polling)
 
 ---
 
-#### SCR-W14 — Màn hình Quản lý Workshop (Admin List)
+#### SCR-W03 — `/workshops/[id]` (Chi tiết workshop)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Workshop Management List Screen |
-| **URL Path** | `/admin/workshops` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-006 |
+**Purpose:** Sinh viên xem đầy đủ thông tin workshop và quyết định đăng ký.
 
-**Mô tả chức năng:** Danh sách toàn bộ workshop ở **mọi trạng thái** (DRAFT, PUBLISHED, CANCELLED, COMPLETED). Khác biệt hoàn toàn với `/workshops` public: bao gồm DRAFT và CANCELLED, có thêm dữ liệu quản trị (`confirmed_count`, `locked_count`). Đây là điểm xuất phát cho mọi thao tác quản lý workshop.
+**Read-only:**
 
-**Dữ liệu hiển thị:**
+- Title, full description
+- `speaker`: avatar, fullName, title, bio (full)
+- `room`: name, building, floor, `floorPlanUrl` (hiển thị ảnh sơ đồ), facilities
+- `startsAt`, `endsAt`, duration
+- `seatsTotal`, `seatsAvailable` (poll TTL 10s)
+- `price` + `currency`
+- `summary`: `status` + `text` (nếu `status='done'`); placeholder "Đang xử lý" nếu queued/processing; ẩn nếu `none`/`failed`
+- `isRegistered`: nếu true → hiển thị link "Xem QR của tôi" thay vì nút đăng ký
+- `myRegistrationId` (nếu có)
 
-- Danh sách `WorkshopAdminDetail`: tên, speaker, room, `starts_at`, `ends_at`, `status` (badge), `confirmed_count`, `locked_count`, `available_seats` (Redis), `created_by`, `created_at`
-- Filter: theo `status`, theo ngày, theo diễn giả
-- Cột quick-action: nút Publish (nếu DRAFT), nút Hủy (nếu PUBLISHED), nút Xem thống kê
+**Inputs:** Không có form input — chỉ action button.
 
-**Hành động chính:**
+**Primary actions:**
 
-- "Tạo Workshop mới" → `/admin/workshops/new`
-- Click vào workshop → `/admin/workshops/[workshopId]`
+- `[Đăng ký]` (chỉ hiện khi `seatsAvailable > 0 && !isRegistered && status='open'`)
+  - Sinh `Idempotency-Key = crypto.randomUUID()` ở client
+  - `POST /api/v1/registrations` header `Idempotency-Key`, body `{workshopId}`
+  - Nếu `nextStep.action === null` (free workshop) → toast success → redirect `/me/registrations/{id}`
+  - Nếu `nextStep.action === 'create_payment'` (paid) → redirect `/me/registrations/{id}/pay`
+- `[Xem QR]` (nếu đã đăng ký) → navigate `/me/registrations/{myRegistrationId}`
 
----
+**Secondary actions:**
 
-#### SCR-W15 — Màn hình Tạo Workshop
+- `[Quay lại]` → `/workshops`
+- Share link (copy URL, không phải screen)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Workshop Create Form Screen |
-| **URL Path** | `/admin/workshops/new` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-001, FR-F02-002 |
+**Business rules:**
 
-**Mô tả chức năng:** Form tạo workshop mới ở trạng thái DRAFT. Ranh giới **Browse → Data Entry Transaction** rõ ràng. Bao gồm kiểm tra xung đột phòng real-time khi chọn room + time slot. Logic validate: `is_paid = TRUE` bắt buộc `price > 0`; `ends_at > starts_at`. Redis counter **chưa** được khởi tạo ở bước này (chỉ khi Publish — BR-011).
+- BR-W03.1 Pre-check `seatsAvailable` ở client để fail-fast UX, nhưng server vẫn là source of truth (race với cache TTL 10s)
+- BR-W03.2 Idempotency-Key sinh **trước** khi mở dialog confirm — re-click không sinh key mới
+- BR-W03.3 Nếu workshop bị `cancelled` ngay khi đang xem → poll detect → banner "Workshop đã bị hủy"
+- BR-W03.4 Workshop `status='draft'` không truy cập được public → 404
 
-**Dữ liệu hiển thị / Input:**
+**Validation rules:**
 
-- `title` (text, required, max 500 ký tự)
-- `description` (rich text/textarea)
-- `speaker_id` — dropdown tìm kiếm danh sách speakers từ GET `/api/v1/admin/speakers`
-- `room_id` — dropdown tìm kiếm rooms từ GET `/api/v1/admin/rooms`, hiển thị capacity
-- `starts_at`, `ends_at` — datetime picker, validate xung đột phòng real-time (inline warning khi chọn)
-- `capacity` — số nguyên, max = room.capacity
-- `is_paid` — toggle
-- `price` — số thực, chỉ hiển thị khi `is_paid = TRUE`
-- Xem trước thông tin workshop trước khi submit
+- VR-W03.1 Thời gian bắt đầu workshop chưa qua mới cho đăng ký
+- VR-W03.2 Sinh viên không thuộc CSV → 422 `registration.student_not_in_csv` (ADR-12 known 24h gap) → banner thân thiện
 
-**Validation hiển thị:**
+**Navigation IN:** `/workshops` (card click), email/notification link
+**Navigation OUT:**
 
-- Cảnh báo xung đột phòng: "Phòng [tên] đã có workshop [tên] từ [giờ] - [giờ]"
-- Lỗi `is_paid=TRUE` nhưng không có price
+- `[Đăng ký]` free → `/me/registrations/{id}`
+- `[Đăng ký]` paid → `/me/registrations/{id}/pay`
+- `[Xem QR]` → `/me/registrations/{myRegistrationId}`
+- `[Quay lại]` → `/workshops`
 
----
+**Components:**
 
-#### SCR-W16 — Màn hình Chi tiết Workshop (Admin)
+- `<WorkshopHero />` (title, schedule)
+- `<SpeakerCard />` (avatar + bio)
+- `<RoomMap />` (image của floor_plan_url + facilities)
+- `<SeatsBadge />` (real-time, có polling hook)
+- `<AISummaryPanel />` (handle 5 trạng thái summary)
+- `<RegisterConfirmDialog />` (modal — UI state, không screen)
+- `<ErrorBanner />` (cho 422/503/429)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Workshop Detail Admin Screen |
-| **URL Path** | `/admin/workshops/[workshopId]` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-003, FR-F02-004, FR-F02-005, FR-F02-007, FR-F10-005 |
+**Related UI states:**
 
-**Mô tả chức năng:** Hub quản lý trung tâm cho một workshop cụ thể. Đây là màn hình **role-split** so với SCR-W03 (cùng workshop nhưng data scope và actions hoàn toàn khác): bao gồm dữ liệu quản trị (`confirmed_count`, `locked_count`, `created_by`), các action nguy hiểm (Publish, Cancel, Emergency Update). Các action quan trọng dùng dialog xác nhận (UI state, không phải màn hình riêng).
+- CB OPEN (nếu paid) → button disabled + banner "Cổng thanh toán tạm thời gặp sự cố, vui lòng thử lại sau"
+- 429 rate limit → cooldown countdown
+- Empty seats → button "Hết chỗ" disabled
+- Summary processing → skeleton trong AISummaryPanel
+- Workshop cancelled → toàn screen bị mờ + overlay "Workshop đã hủy"
 
-**Dữ liệu hiển thị:**
+**API endpoints:**
 
-- Toàn bộ `WorkshopAdminDetail`: thông tin đầy đủ + `confirmed_count`, `locked_count`, `available_seats`
-- **Status timeline:** DRAFT → PUBLISHED → COMPLETED/CANCELLED (visual stepper)
-- **Action panel** theo trạng thái:
-  - Nếu DRAFT: nút "Publish", nút "Chỉnh sửa" (→ SCR-W17), nút "Xóa"
-  - Nếu PUBLISHED: nút "Đổi phòng/giờ" (mở modal Emergency Update), nút "Hủy Workshop"
-- **Navigation tabs:** Tổng quan | Tài liệu & AI (→ SCR-W19) | Thống kê (→ SCR-W18)
-- AI Summary preview (nếu DONE): `summary_text` rút gọn
-- Danh sách tài liệu đã upload (tên file, `upload_status`)
-- **Realtime seat counter:** đọc từ Redis mỗi 30 giây
-
-**Modal Emergency Update (UI state, không phải màn hình):**
-
-- Form inline: chọn `room_id` mới (dropdown), `starts_at`/`ends_at` mới
-- Kiểm tra xung đột phòng real-time trước khi submit
-- Cảnh báo: "Thông báo sẽ được gửi cho [N] sinh viên đã đăng ký"
+- `GET /api/v1/workshops/{id}` (initial, cache 10s)
+- `GET /api/v1/workshops/{id}/availability` (polling 10s khi user idle ở screen — chỉ trong 5 phút trước `startsAt`)
+- `POST /api/v1/registrations` (header `Idempotency-Key`, body `{workshopId}`)
 
 ---
 
-#### SCR-W17 — Màn hình Chỉnh sửa Workshop
+#### SCR-W04 — `/me/registrations` (Danh sách đăng ký của tôi)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Workshop Edit Form Screen |
-| **URL Path** | `/admin/workshops/[workshopId]/edit` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-001, FR-F02-002 |
+**Purpose:** Sinh viên xem lại các workshop đã đăng ký và truy cập QR.
 
-**Mô tả chức năng:** Form chỉnh sửa workshop đang ở trạng thái **DRAFT**. Ranh giới **View → Edit** rõ ràng với mục đích tương tác khác biệt. Route này không accessible nếu workshop đã PUBLISHED/CANCELLED (redirect về SCR-W16 với thông báo). Đối với workshop PUBLISHED, đổi phòng/giờ được xử lý qua Emergency Update modal trên SCR-W16.
+**Read-only:** Mỗi item:
 
-**Dữ liệu hiển thị / Input:**
+- Workshop title, `startsAt`, `endsAt`, `room.name`
+- `status` (`pending` / `confirmed` / `paid` / `cancelled`) — badge màu
+- Workshop status (active / cancelled)
+- Có QR hay không (true nếu status ∈ {confirmed, paid})
 
-- Tương tự SCR-W15 nhưng form pre-filled với dữ liệu hiện tại
-- Hiển thị `workshop_id` (readonly) để reference
-- Lịch sử thay đổi (nếu có)
+**Inputs (filter):**
 
----
+- `status` filter (chips: All / Sắp tới / Đã hủy / Chờ thanh toán)
+- `upcoming` toggle
 
-#### SCR-W18 — Màn hình Thống kê Workshop
+**Primary actions:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Workshop Statistics Screen |
-| **URL Path** | `/admin/workshops/[workshopId]/stats` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-006, FR-F07-002 |
+- Click item → navigate `/me/registrations/{id}`
+- `[Hủy đăng ký]` (chỉ status=`pending`/`confirmed`/`paid` và workshop chưa diễn ra) → `<CancelConfirmDialog />` → `DELETE /api/v1/registrations/{id}` → refetch list
 
-**Mô tả chức năng:** Phân tích tham dự và đăng ký cho một workshop. Phạm vi dữ liệu hoàn toàn khác SCR-W16 (analytics, không phải management). Query từ PostgreSQL View `v_workshop_checkin_stats`. Đây là màn hình sau sự kiện cho ban tổ chức đánh giá hiệu quả.
+**Secondary actions:**
 
-**Dữ liệu hiển thị:**
+- `[Hoàn tất thanh toán]` (chỉ status=`pending`) → navigate `/me/registrations/{id}/pay`
 
-- `total_registered` (đã CONFIRMED), `total_checkedin`, `offline_checkins`, `checkin_rate_pct`
-- Biểu đồ check-in theo thời gian (timeline check-in trong ngày sự kiện)
-- Breakdown: Online check-in vs Offline sync (`source = ONLINE/OFFLINE_SYNC`)
-- Danh sách sinh viên đã check-in: tên, mã sinh viên, thời điểm check-in, nguồn
-- Danh sách sinh viên đã đăng ký nhưng **chưa check-in** (no-show)
-- Export CSV button (danh sách tham dự)
+**Business rules:**
 
----
+- BR-W04.1 Method-level RBAC: chỉ trả `WHERE student_id = JWT.sub` (server-enforced)
+- BR-W04.2 Cancel paid registration → server enqueue refund job (Redis Streams) — UI hiển thị "Đang xử lý hoàn tiền"
+- BR-W04.3 Status `pending` quá 30 phút → polling detect → server tự cancel (timeout job), UI auto refetch
 
-#### SCR-W19 — Màn hình Quản lý Tài liệu & AI Summary
+**Validation rules:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Document & AI Pipeline Management Screen |
-| **URL Path** | `/admin/workshops/[workshopId]/documents` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F03-001, FR-F03-002 |
+- VR-W04.1 Cancel chỉ khi `now < workshop.startsAt - N hours` (N từ specs/registration-paid.md)
 
-**Mô tả chức năng:** Quản lý tài liệu PDF của workshop và theo dõi trạng thái AI Summary pipeline. Ranh giới tương tác **Workshop Detail → File Management** — người dùng chuyển sang bối cảnh làm việc với file và AI pipeline, không còn quan tâm đến thông tin cơ bản của workshop. Upload file kích hoạt tự động Pipe-and-Filter AI pipeline. Organizer poll trạng thái AI để biết khi nào tóm tắt sẵn sàng.
+**Navigation IN:** Header menu "Của tôi", post-registration redirect, email link
+**Navigation OUT:** Item click → detail; "Hoàn tất thanh toán" → /pay
 
-**Dữ liệu hiển thị:**
+**Components:**
 
-- Danh sách `WorkshopDocument`: `original_name`, `file_size_bytes`, `upload_status`, `uploaded_at`, link download
-- **AI Summary Status panel** cho từng document:
-  - `status`: PENDING (chờ) → PROCESSING (đang xử lý) → DONE (hoàn thành) / FAILED (lỗi)
-  - `summary_text` preview (khi DONE)
-  - `model_used` (vd: "claude-sonnet-4-6"), `generated_at`
-  - `error_message` (khi FAILED)
-- Progress indicator khi PROCESSING (auto-refresh mỗi 5s)
+- `<RegistrationCard />` (status badge + actions)
+- `<StatusFilterChips />`
+- `<CancelConfirmDialog />` (modal, UI state)
+- `<EmptyState />` (chưa đăng ký workshop nào → CTA "Khám phá workshop" → /workshops)
 
-**Hành động chính:**
+**Related UI states:**
 
-- Upload PDF (drag & drop + file picker) → POST `/api/v1/admin/workshops/[id]/documents` (multipart) → kích hoạt AI tự động
-- Retry AI → POST `/api/v1/admin/documents/[id]/ai-retry` (chỉ khi FAILED)
-- Xóa tài liệu → DELETE → cascade xóa AI Summary
+- Loading skeleton
+- Empty (no registrations)
+- Refund pending (sau cancel paid)
+
+**API endpoints:**
+
+- `GET /api/v1/registrations?status=&upcoming=` (T2 RL)
+- `DELETE /api/v1/registrations/{id}` (T2 RL)
 
 ---
 
-#### SCR-W20 — Màn hình Quản lý Phòng
+#### SCR-W05 — `/me/registrations/[id]` (Chi tiết đăng ký + QR)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Room Management Screen |
-| **URL Path** | `/admin/rooms` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-001, FR-F02-002 |
+**Purpose:** Sinh viên hiển thị mã QR cho check-in.
 
-**Mô tả chức năng:** Danh sách và quản lý tất cả phòng. Organizer cần tham chiếu khi tạo/sửa workshop. Bao gồm sức chứa, tiện ích và sơ đồ phòng.
+**Read-only:**
 
-**Dữ liệu hiển thị:**
+- Workshop title, schedule, room, speaker (snapshot tại thời điểm đăng ký, hoặc luôn fresh từ workshop hiện tại — flag trong ambiguity)
+- `status` badge
+- `qrCode` (chỉ khi status ∈ {confirmed, paid}) — render thành QR image SVG
+- `registeredAt`, `payment` info nếu có
+- "Hướng dẫn check-in": "Hiển thị mã QR cho nhân sự tại cửa phòng"
 
-- Danh sách `Room`: `name`, `building`, `floor`, `capacity`, danh sách `facilities` (từ JSONB), `floor_plan_url` (preview thumbnail)
-- Trạng thái "Đang sử dụng" / "Trống" (dựa trên workshop PUBLISHED hiện tại trong phòng)
-- Nút "Thêm phòng mới" → mở form inline/modal hoặc `/admin/rooms/new`
-- Nút "Sửa" cho từng phòng → `/admin/rooms/[roomId]/edit`
+**Inputs:** Không có.
 
----
+**Primary actions:**
 
-#### SCR-W21 — Màn hình Form Phòng (Tạo/Sửa)
+- `[Hủy đăng ký]` (nếu eligible, giống SCR-W04)
+- `[Hoàn tất thanh toán]` (nếu pending) → /pay
+- `[Tải QR về máy]` (download SVG/PNG, không phải API call)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Room Form Screen |
-| **URL Path** | `/admin/rooms/new` &nbsp;/&nbsp; `/admin/rooms/[roomId]/edit` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-001 |
+**Secondary actions:**
 
-**Mô tả chức năng:** Form tạo mới hoặc chỉnh sửa phòng. Hai URL cùng render một component form với trạng thái empty (create) hoặc pre-filled (edit).
+- `[Quay lại]` → `/me/registrations`
+- Share calendar (.ics download)
 
-**Dữ liệu hiển thị / Input:**
+**Business rules:**
 
-- `name` (text, required), `building` (text), `floor` (number), `capacity` (number > 0, required)
-- `floor_plan_url` (URL input + upload sơ đồ phòng lên Object Storage)
-- `facilities` (JSONB builder: checkboxes cho projector, AC, mic count, v.v.)
+- BR-W05.1 Method-level RBAC: 404 nếu không sở hữu (anti-enumeration; **không** 403)
+- BR-W05.2 QR là `qr_code` từ `registrations.qr_code` (UUID v4) — không base64-encoded student_id
+- BR-W05.3 Workshop bị cancel → ẩn QR + banner "Workshop đã bị hủy"
 
----
+**Validation rules:** N/A
 
-#### SCR-W22 — Màn hình Quản lý Diễn giả
+**Navigation IN:** `/me/registrations` item click, post-registration redirect, email link
+**Navigation OUT:** Cancel → confirm dialog; Back → list; Pay → /pay
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Speaker Management Screen |
-| **URL Path** | `/admin/speakers` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-001 |
+**Components:**
 
-**Mô tả chức năng:** Danh sách và quản lý diễn giả. Dữ liệu tham chiếu khi tạo workshop.
+- `<QRCodeDisplay />` (large, high-contrast)
+- `<RegistrationStatusBadge />`
+- `<WorkshopMiniCard />`
+- `<PaymentReceiptCard />` (nếu paid, từ `payment.receiptId`)
+- `<AddToCalendarButton />` (.ics generation)
 
-**Dữ liệu hiển thị:**
+**Related UI states:**
 
-- Danh sách `Speaker`: avatar, `full_name`, `title` (chức danh), `bio` (rút gọn), số workshop đã/đang tham gia
-- Nút "Thêm diễn giả" → `/admin/speakers/new`
-- Nút "Sửa" → `/admin/speakers/[speakerId]/edit`
+- Loading
+- 404 (không sở hữu hoặc không tồn tại)
+- Workshop cancelled overlay
 
----
+**API endpoints:**
 
-#### SCR-W23 — Màn hình Form Diễn giả (Tạo/Sửa)
-
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Speaker Form Screen |
-| **URL Path** | `/admin/speakers/new` &nbsp;/&nbsp; `/admin/speakers/[speakerId]/edit` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F02-001 |
-
-**Mô tả chức năng:** Form tạo mới / chỉnh sửa diễn giả.
-
-**Dữ liệu hiển thị / Input:**
-
-- `full_name` (required), `title` (chức danh), `bio` (textarea), `avatar_url` (upload ảnh lên Object Storage)
+- `GET /api/v1/registrations/{id}` (kèm payment info nếu có)
+- `GET /api/v1/payments/{paymentId}` (nếu paid, để hiển thị receipt) — có thể server lồng vào registration response để giảm round-trip
 
 ---
 
-#### SCR-W24 — Màn hình Quản lý Người dùng
+#### SCR-W06 — `/me/registrations/[id]/pay` (Khởi tạo thanh toán)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer User Management Screen |
-| **URL Path** | `/admin/users` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F01-008 (FR-F10-004 qua liên kết) |
+**Purpose:** Chọn cổng thanh toán và khởi tạo giao dịch cho registration đang `pending`.
 
-**Mô tả chức năng:** Danh sách tất cả tài khoản hệ thống. Organizer dùng để quản lý nhân sự và xử lý sự cố tài khoản.
+**Read-only:**
 
-**Dữ liệu hiển thị:**
+- Workshop title, schedule
+- Amount + currency
+- "Đăng ký sẽ tự hủy sau X phút nếu không thanh toán" (countdown từ `registeredAt + 30 phút`)
+- Trạng thái Circuit Breaker hiện tại (nếu OPEN → cảnh báo, disable button)
 
-- Danh sách `User`: `email`, `role` (badge), `status` (ACTIVE=xanh, SUSPENDED=đỏ, PENDING_VERIFICATION=vàng), `created_at`
-- Filter theo `role`: Tất cả / STUDENT / ORGANIZER / CHECKIN_STAFF
-- Với CHECKIN_STAFF: hiển thị số workshop được phân công
+**Inputs:**
 
-**Hành động chính:**
+- `gateway` — radio group (`VNPAY`, `STRIPE`, `MOMO`, `MOCK`) — `MOCK` chỉ trong dev/seed
 
-- Click → `/admin/users/[userId]`
-- "Thêm tài khoản mới" (tạo Organizer/CheckinStaff account)
+**Primary actions:**
 
----
+- `[Thanh toán]`
+  - Sinh `Idempotency-Key = crypto.randomUUID()` (lưu vào sessionStorage cùng key `registrationId`)
+  - `POST /api/v1/payments` header `Idempotency-Key`, body `{registrationId, gateway, returnUrl: window.location.origin + '/payment-result'}`
+  - Server response:
+    - 200 succeeded (sync MOCK) → redirect `/payment-result?paymentId=...&status=succeeded`
+    - 302/redirect URL từ gateway → external redirect (browser tự follow)
+    - 504 PAYMENT_TIMEOUT → giữ key trong sessionStorage, navigate `/payment-result?paymentId=...&status=unresolved&idempotencyKey=...`
+    - 503 PAYMENT_GATEWAY_OPEN → banner + button disabled
 
-#### SCR-W25 — Màn hình Chi tiết & Quản lý Tài khoản
+**Secondary actions:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer User Detail Management Screen |
-| **URL Path** | `/admin/users/[userId]` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F01-008 |
+- `[Hủy đăng ký]` → DELETE registration
 
-**Mô tả chức năng:** Chi tiết một tài khoản và các hành động quản trị: kích hoạt/đình chỉ tài khoản, thu hồi token khẩn cấp. Ranh giới **List → Detail + Management Actions** — đây không phải chỉ là xem thông tin mà còn thực hiện các hành động có ảnh hưởng bảo mật.
+**Business rules:**
 
-**Dữ liệu hiển thị:**
+- BR-W06.1 **Idempotency-Key sinh ở client trước request đầu tiên** (ADR-08, ADR-15) — KHÔNG sinh lại khi retry
+- BR-W06.2 Nếu sessionStorage đã có key cho registrationId này → reuse nguyên key (browser refresh trong khi đang chờ gateway)
+- BR-W06.3 Idempotency-Key TTL 24h (server-side); client phải clear sau khi `succeeded` confirm
+- BR-W06.4 CB OPEN → page hiển thị, nhưng `[Thanh toán]` disabled + banner — listing workshop khác vẫn hoạt động (graceful degradation, đúng với requirement)
+- BR-W06.5 Registration phải ở status `pending` mới vào được; nếu đã `paid`/`cancelled` → redirect tương ứng
 
-- `user_id`, `email`, `role`, `status`, `created_at`
-- Với STUDENT: `student_code`, `full_name`, `faculty`, `class_year`, `email_edu`
-- Với CHECKIN_STAFF: danh sách workshop được phân công (`allowed_workshop_ids`)
-- Token status: last login time (nếu có)
+**Validation rules:**
 
-**Hành động chính:**
+- VR-W06.1 `gateway` phải được chọn trước khi click "Thanh toán"
+- VR-W06.2 Server check Method-level: registrationId thuộc về JWT.sub
 
-- Toggle ACTIVE/SUSPENDED → PATCH `/api/v1/admin/users/[id]/status`
-- "Thu hồi token khẩn cấp" → POST `/api/v1/admin/users/[id]/revoke-token` (khi nhân sự mất điện thoại)
-- "Phân công Workshop" (với CHECKIN_STAFF) → `/admin/users/[userId]/assign-workshops`
+**Navigation IN:** Post-registration redirect (paid), `/me/registrations/{id}` → "Hoàn tất thanh toán", `/me/registrations` → "Hoàn tất thanh toán"
+**Navigation OUT:**
 
----
+- Success sync → `/payment-result`
+- Gateway redirect → external (gateway page) → quay lại `/payment-result`
+- Cancel → `/me/registrations`
 
-#### SCR-W26 — Màn hình Phân công Workshop cho Nhân sự
+**Components:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Staff Workshop Assignment Screen |
-| **URL Path** | `/admin/users/[userId]/assign-workshops` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F10-004 |
+- `<PaymentSummary />` (workshop + amount + countdown)
+- `<GatewaySelector />` (radio group)
+- `<CircuitBreakerWarning />` (banner conditional)
+- `<PayButton />` (disabled state when CB OPEN hoặc validation fail)
+- `<CountdownTimer />` (auto-cancel countdown)
 
-**Mô tả chức năng:** Màn hình quản lý phân công workshop cho một CHECKIN_STAFF cụ thể. Ranh giới tương tác rõ ràng: đây là một **business transaction** quan trọng (ảnh hưởng đến JWT scope của nhân sự) cần một ngữ cảnh riêng, không thể xử lý inline trong màn hình user detail. Hiển thị cảnh báo **Eventual Consistency**: thay đổi chỉ có hiệu lực sau khi nhân sự đăng xuất và đăng nhập lại (JWT cũ vẫn hợp lệ cho đến khi hết hạn).
+**Related UI states:**
 
-**Dữ liệu hiển thị:**
+- CB OPEN: button disabled + warning
+- Loading: button spinner sau khi POST (chờ redirect / sync response)
+- 504 timeout: redirect tự động đến result với pending state
+- 402 declined: banner inline + cho phép retry
+- Registration đã `paid` (race với refresh) → redirect /me/registrations/{id}
+- Registration đã `cancelled` → redirect với banner
 
-- Thông tin nhân sự: `full_name`, `email`
-- **Current assignments:** danh sách workshop đang được phân công (tên, thời gian, trạng thái)
-- **Available workshops:** danh sách workshop PUBLISHED chưa được phân công (checkbox list)
-- **Cảnh báo Eventual Consistency:** banner vàng — "Nhân sự cần đăng xuất và đăng nhập lại để nhận quyền mới. Thay đổi không áp dụng ngay lập tức cho session hiện tại."
+**API endpoints:**
 
----
-
-#### SCR-W27 — Màn hình Đồng bộ Dữ liệu Sinh viên (Jobs List)
-
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Student Sync Jobs Screen |
-| **URL Path** | `/admin/student-sync` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F09-001 |
-
-**Mô tả chức năng:** Danh sách lịch sử các lần import CSV sinh viên và kích hoạt job mới. Batch-Sequential architecture: job chạy bất đồng bộ, API trả 202 ngay, Organizer poll để theo dõi tiến độ.
-
-**Dữ liệu hiển thị:**
-
-- Danh sách `StudentSyncJob`: `source_file_name`, `triggered_at`, `status` (badge), `total_rows`, `processed_rows`, `error_rows`, `completed_at`
-- Progress bar trực quan cho job đang RUNNING
-- File S3 path selector để kích hoạt job mới
-
-**Hành động chính:**
-
-- "Kích hoạt Import mới" → chọn file CSV trong S3 → POST `/api/v1/admin/student-sync` → nhận `job_id` → auto-redirect `/admin/student-sync/[jobId]`
-- Click vào job → `/admin/student-sync/[jobId]`
+- `GET /api/v1/registrations/{id}` (load summary)
+- `GET /api/v1/admin/system/circuit-breaker` — *KHÔNG, đây là admin-only*. Thay vào đó, server returns 503 PAYMENT_GATEWAY_OPEN khi POST → client biết qua error code, không cần endpoint riêng cho student.
+- `POST /api/v1/payments` (header `Idempotency-Key`)
+- `DELETE /api/v1/registrations/{id}` (cancel option)
 
 ---
 
-#### SCR-W28 — Màn hình Chi tiết Job & Danh sách Lỗi
+#### SCR-W07 — `/payment-result` (Kết quả thanh toán)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Sync Job Detail & Error Log Screen |
-| **URL Path** | `/admin/student-sync/[jobId]` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F09-001, FR-F09-002 |
+**Purpose:** Polling trạng thái payment sau khi user quay từ gateway.
 
-**Mô tả chức năng:** Chi tiết một lần import CSV: tiến độ xử lý và danh sách lỗi từng dòng để debug. Organizer poll màn hình này (hoặc dùng auto-refresh) để theo dõi job đang RUNNING. Data scope hoàn toàn khác danh sách jobs: bao gồm `student_sync_errors` chi tiết từng dòng lỗi.
+**Query params:** `?paymentId=<uuid>` (bắt buộc); optional `?status=` hint từ server.
 
-**Dữ liệu hiển thị:**
+**Read-only:**
 
-- `StudentSyncJob` đầy đủ: tất cả counter + timestamps
-- Progress bar phần trăm (`processed_rows / total_rows`)
-- **Error log table** (`StudentSyncError`): `row_number`, `raw_data` (nội dung dòng lỗi), `error_reason` (DUPLICATE/INVALID_FORMAT/MISSING_FIELD), `error_detail`
-- Link download error log file (`error_log_url` trên S3)
-- Auto-refresh mỗi 3s khi status = RUNNING
+- Spinner + "Đang xác nhận thanh toán..." khi `status=initiated`
+- Workshop summary (title, room, schedule)
+- Final state UI:
+  - **Succeeded**: ✅ + receiptId + nút "Xem QR" → `/me/registrations/{id}`
+  - **Failed**: ❌ + reason + nút "Thử lại" → quay về `/me/registrations/{id}/pay`
+  - **Unresolved (504)**: ⏳ + "Chúng tôi đang kiểm tra với cổng thanh toán. Bạn sẽ nhận thông báo trong vòng 5 phút." + nút "Kiểm tra lại"
 
----
+**Inputs:** Không có.
 
-#### SCR-W29 — Màn hình Lịch sử Thông báo (Audit Log)
+**Primary actions:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Notification Audit Log Screen |
-| **URL Path** | `/admin/notifications/logs` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F08-002 |
+- `[Xem QR]` (nếu succeeded) → `/me/registrations/{registrationId}`
+- `[Thử lại]` (nếu failed) → `/me/registrations/{registrationId}/pay` — **dùng lại idempotency key cũ** từ sessionStorage nếu là cùng registration (server detect `unresolved` → forward gateway, `completed-failed` → trả lại response cũ)
+- `[Kiểm tra lại]` (nếu unresolved) → `GET /api/v1/payments/{id}` polling tay
 
-**Mô tả chức năng:** Audit trail đầy đủ mọi thông báo đã được gửi/cố gắng gửi. Organizer dùng để kiểm tra xem sinh viên có nhận thông báo không, debug khi thông báo thất bại.
+**Secondary actions:**
 
-**Dữ liệu hiển thị:**
+- `[Quay về danh sách]` → `/me/registrations`
 
-- Danh sách `NotificationLog`: `type` (loại sự kiện), `channel` (APP/EMAIL/TELEGRAM), `status` (PENDING/SENT/FAILED), `user_id`, tên workshop liên quan, `sent_at`, `error_message` (khi FAILED)
-- Filter: theo `workshop_id`, `status`, `channel`, khoảng thời gian
-- Chi tiết payload (nội dung email/push đã gửi) khi click vào từng record
+**Business rules:**
 
----
+- BR-W07.1 Polling interval 2s, max 30s. Sau 30s nếu vẫn `initiated` → degrade thành "unresolved" UI + dừng poll
+- BR-W07.2 Nếu sau 5 phút mà vẫn `unresolved` → reconciliation job (background) sẽ resolve; user nhận notification
+- BR-W07.3 Idempotency key trong sessionStorage chỉ clear sau khi `succeeded` confirm
+- BR-W07.4 RBAC: payment thuộc registration thuộc JWT.sub (404 nếu không)
 
-#### SCR-W30 — Màn hình Cấu hình Kênh Thông báo
+**Validation rules:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer Notification Channel Config Screen |
-| **URL Path** | `/admin/notifications/channels` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F08-002 |
+- VR-W07.1 `paymentId` query param bắt buộc; thiếu → redirect `/me/registrations`
 
-**Mô tả chức năng:** Bật/tắt và cấu hình các kênh thông báo (APP, EMAIL, TELEGRAM). Ranh giới tương tác khác SCR-W29: đây là **system configuration** không phải audit. Thiết kế externalized config cho phép thêm kênh mới mà không cần thay đổi code.
+**Navigation IN:** Gateway redirect (returnUrl), POST /payments sync response, manual deep-link
+**Navigation OUT:**
 
-**Dữ liệu hiển thị:**
+- Success → `/me/registrations/{regId}`
+- Retry → `/me/registrations/{regId}/pay`
+- Quit → `/me/registrations`
 
-- Danh sách `NotificationChannelConfig`: `channel_type`, toggle `is_active`, `config_json` viewer (endpoint, API key pattern, template ID)
-- Trạng thái real-time của từng kênh
-- Form cập nhật config inline cho từng kênh
+**Components:**
 
----
+- `<PaymentStatusIcon />` (spinner / check / X / hourglass)
+- `<PaymentSummary />`
+- `<PollingHook />` (logic, không UI)
+- `<ActionFooter />` (CTA buttons theo state)
 
-#### SCR-W31 — Màn hình Giám sát Hệ thống (System Health)
+**Related UI states:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Organizer System Health Monitor Screen |
-| **URL Path** | `/admin/system` |
-| **Người dùng** | ORGANIZER |
-| **FR liên quan** | FR-F10-001, FR-F10-002, FR-F10-003 |
+- Initiated (polling)
+- Succeeded
+- Failed (declined, network error)
+- Unresolved (504 timeout)
+- Timeout polling (>30s) → upgrade thành unresolved UI
 
-**Mô tả chức năng:** Màn hình giám sát sức khỏe hệ thống tập trung. Mặc dù có 3 API endpoint riêng biệt cho Circuit Breaker, Payment Timeout Job, và Reconciliation Job, chúng hợp lý khi được trình bày trong một màn hình duy nhất vì: cùng actor, cùng mục đích (system observability), và thường được kiểm tra cùng nhau. Tách thành 3 màn hình riêng sẽ là over-fragmentation.
+**API endpoints:**
 
-**Dữ liệu hiển thị:**
-
-**Section 1 — Circuit Breaker:**
-
-- Danh sách `CircuitBreakerStatus` cho tất cả gateway: `state` (CLOSED=xanh/OPEN=đỏ/HALF_OPEN=vàng), `failure_count`, `opened_at`, `last_attempt`
-- Nút "Reset thủ công" (force CLOSED) → POST `/api/v1/admin/system/circuit-breaker/[gateway]/reset`
-- Thresholds hiển thị: "CLOSED→OPEN khi ≥5 failures trong 60s; OPEN→HALF_OPEN sau 30s"
-
-**Section 2 — Payment Timeout Job:**
-
-- `pending_overdue_count` (số payment PENDING quá hạn hiện tại)
-- `last_run_at`, `processed_last_24h`
-- Tần suất chạy: "Mỗi 1 phút (Cron)"
-
-**Section 3 — Reconciliation Job:**
-
-- `last_run_at`, `drift_detected` (boolean)
-- Nếu có drift: bảng `drift_details` (workshop_id, redis_available, postgres_available, delta)
-- Tần suất chạy: "Mỗi 10 phút (Cron)"
-
-**Auto-refresh:** mỗi 30 giây cho Circuit Breaker section.
+- `GET /api/v1/payments/{id}` (polling 2s, max 15 lần)
 
 ---
 
-## PHẦN II — MOBILE APP (Offline-First)
-
-**Nền tảng:** React Native | **Actor duy nhất:** CHECKIN_STAFF | **Thiết kế:** Offline-First với SQLite local
-
-> Mobile App được thiết kế **độc quyền cho nhân sự điểm danh**. Sinh viên và Ban tổ chức sử dụng Web Portal. Access Token có hạn 8 giờ (phủ toàn bộ ca làm việc offline). Refresh Token lưu trong Keychain/Secure Storage.
+### B. WEB — BTC ADMIN
 
 ---
 
-#### SCR-M01 — Màn hình Đăng nhập (Mobile)
+#### SCR-A01 — `/admin/login` (BTC Login)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile Login Screen |
-| **Stack Route** | `LoginScreen` (Root navigator) |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F01-001, FR-F01-002 |
+**Purpose:** Đăng nhập BTC bằng email + password.
 
-**Mô tả chức năng:** Điểm vào duy nhất của Mobile App. Bắt buộc phải đăng nhập **khi có mạng** trước ca làm việc. Hệ thống sinh Access Token (8 giờ) + Refresh Token, lưu vào Keychain. JWT payload chứa `allowed_workshop_ids[]` — danh sách workshop được phân công. Sau đăng nhập thành công, chuyển sang `HomeScreen`.
+**Inputs:** `email` (email format), `password`.
 
-**Dữ liệu hiển thị:**
+**Primary actions:**
 
-- Form: email, mật khẩu, nút "Đăng nhập"
-- Logo UniHub + version app
-- Thông báo lỗi: sai credential, tài khoản bị đình chỉ, không có kết nối mạng
-- Thông báo "Cần kết nối mạng để đăng nhập lần đầu"
+- `[Đăng nhập]` → `POST /api/v1/auth/login` body `{accountType:"staff", email, password}` → check `role` trong response:
+  - `role=btc` → `/admin`
+  - `role=checkin_staff` → reject với message "Vui lòng dùng mobile app" (web không phục vụ checkin_staff)
 
----
+**Business rules:**
 
-#### SCR-M02 — Màn hình Danh sách Workshop Được Phân công (Home)
+- BR-A01.1 Web admin **chỉ chấp nhận role=btc** — `checkin_staff` đăng nhập web → 403 với hướng dẫn dùng mobile
+- BR-A01.2 Refresh token transport = HttpOnly cookie (web)
+- BR-A01.3 (Stage 5) MFA enforcement cho btc
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile Assigned Workshop List Screen |
-| **Stack Route** | `HomeScreen` (Tab navigator — Tab "Sự kiện") |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F07-001, FR-F10-004 |
+**Components:** Tương tự SCR-W01 nhưng `email` thay vì `studentId`. Sử dụng cùng `<LoginForm variant="staff" />`.
 
-**Mô tả chức năng:** Màn hình chủ của app sau đăng nhập. Hiển thị **chỉ những workshop nằm trong `jwt.allowed_workshop_ids`**. Nhân sự chọn workshop để vào dashboard check-in. Khi có mạng, hiển thị trạng thái đồng bộ (đã pre-load / chưa pre-load).
-
-**Dữ liệu hiển thị:**
-
-- Danh sách workshop được phân công: tên, địa điểm (phòng + tòa nhà), `starts_at`, `ends_at`
-- Trạng thái đồng bộ của từng workshop: "Đã tải [N] vé" / "Chưa đồng bộ" / "Đồng bộ lần cuối: [thời gian]"
-- Badge "Đang diễn ra" / "Sắp diễn ra" / "Đã kết thúc"
-- Nút "Đồng bộ tất cả" (tải danh sách ticket về SQLite khi có mạng)
-- Chỉ báo kết nối mạng (online/offline status)
-- Tên nhân sự + thời hạn token còn lại
+**API endpoints:** `POST /api/v1/auth/login`
 
 ---
 
-#### SCR-M03 — Màn hình Dashboard Check-in Workshop
+#### SCR-A02 — `/admin` (Dashboard tổng quan)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile Workshop Checkin Dashboard Screen |
-| **Stack Route** | `WorkshopDashboardScreen` |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F07-001, FR-F07-002, FR-F07-003 |
+**Purpose:** BTC vào nhanh thấy tình trạng tổng quan sự kiện.
 
-**Mô tả chức năng:** Dashboard trung tâm cho một workshop cụ thể khi ca làm việc bắt đầu. Hiển thị số liệu check-in real-time và là điểm khởi đầu quét QR. Đây là màn hình nhân sự giữ và nhìn liên tục trong suốt quá trình check-in tại cổng sự kiện.
+**Read-only:**
 
-**Dữ liệu hiển thị:**
+- Tổng số workshops (theo status: draft/open/closed/cancelled)
+- Tổng đăng ký toàn sự kiện
+- Fill rate trung bình
+- Top 5 workshop có fill rate cao nhất + low nhất
+- Check-in rate aggregate
+- Doanh thu paid workshops
+- Quick links: imports gần nhất status, CB state hiện tại
 
-- **Counter real-time:** `total_registered` / `total_checkedin` / `remaining` (đọc từ API nếu online, từ SQLite nếu offline)
-- **Progress ring:** tỉ lệ check-in (%)
-- **Status bar:** Online (xanh) / Offline (cam) — hiển thị số record đang chờ sync trong offline queue
-- **Danh sách check-in gần nhất:** tên sinh viên, mã sinh viên, thời điểm, nguồn (ONLINE/OFFLINE)
-- Thông tin workshop: tên, thời gian, phòng
-- Nút lớn **"Quét QR"** (action chính)
-- Nút **"Đồng bộ"** (khi có mạng và có records trong offline queue)
+**Inputs (filter):**
 
----
+- `from`, `to` date range (default: hôm nay)
 
-#### SCR-M04 — Màn hình Máy quét QR
+**Primary actions:**
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile QR Scanner Screen |
-| **Stack Route** | `QRScannerScreen` |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F07-002, FR-F07-003 |
+- Click workshop card → `/admin/workshops/{id}`
+- Click "Import logs" → `/admin/imports`
+- Click CB indicator (nếu OPEN) → `/admin/system`
 
-**Mô tả chức năng:** Màn hình camera chiếm toàn màn hình để quét QR Code. Đây là màn hình có sự kiện device-level (camera I/O) không thể là component của màn hình khác. Hệ thống tự nhận diện online/offline và xử lý theo luồng phù hợp:
+**Business rules:**
 
-- **Online:** Gọi POST `/api/v1/checkin/scan` → nhận kết quả từ server
-- **Offline:** Tra cứu `qr_token` trong SQLite local → validate offline → ghi vào `offline_checkin_queue`
+- BR-A02.1 Stats heavy-cached 5 phút (`api-design.md` §10) — không real-time, có note "Cập nhật lúc HH:MM"
 
-**Dữ liệu hiển thị:**
+**Components:**
 
-- Viewfinder camera với khung dẫn hướng QR
-- Chỉ báo trạng thái kết nối (góc trên: "Online" / "Offline — Chế độ ngoại tuyến")
-- Thông tin workshop đang check-in (tên, phòng — ở bottom)
-- Đèn flash toggle button
-- Nút "Nhập thủ công" (fallback khi camera lỗi — nhập qr_token bằng bàn phím)
+- `<MetricTile />` (KPI cards)
+- `<TopWorkshopsTable />`
+- `<StatusBreakdownChart />` (pie / bar)
+- `<DateRangePicker />`
+- `<CBStatusIndicator />` (small badge top-right)
 
-Sau khi quét xong → chuyển ngay sang SCR-M05.
+**API endpoints:**
+
+- `GET /api/v1/admin/stats/overview`
+- `GET /api/v1/admin/system/circuit-breaker` (cho indicator)
 
 ---
 
-#### SCR-M05 — Màn hình Kết quả Quét QR
+#### SCR-A03 — `/admin/workshops` (Workshops list)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile Checkin Scan Result Screen |
-| **Stack Route** | `CheckinResultScreen` |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F07-002, FR-F07-003 |
+**Purpose:** BTC duyệt và quản lý toàn bộ workshop.
 
-**Mô tả chức năng:** Màn hình kết quả sau mỗi lần quét QR. Đây là ranh giới **Scan Action → Result Review**: nhân sự cần nhìn thấy rõ kết quả, xác nhận thông tin sinh viên, và chủ động quay lại quét tiếp. Không phải UI state của màn hình scanner vì: có data scope riêng (student info), nhân sự cần review có chủ đích, có thể cần thao tác phụ (báo cáo conflict). Kết quả có 3 loại với visual design khác nhau rõ ràng.
+**Read-only:** Bảng với columns: title, speaker, room, startsAt, status, seats progress (used/total), price, lastUpdatedAt.
 
-**Dữ liệu hiển thị:**
+**Inputs (filter):**
 
-**Trường hợp THÀNH CÔNG (nền xanh lá):**
+- `status` (multi-select: draft, open, closed, cancelled — default: all)
+- `day` (date filter)
+- `search` (title)
+- Sort: startsAt, status, fill rate
 
-- Icon check lớn, "Điểm danh thành công!"
-- Tên sinh viên (lớn, rõ ràng), mã sinh viên
-- Thời điểm check-in, nguồn (Online / Offline)
-- Tên workshop
+**Primary actions:**
 
-**Trường hợp ĐÃ CHECK-IN TRƯỚC ĐÓ (nền vàng):**
+- `[+ Tạo workshop]` → `/admin/workshops/new`
+- Row click → `/admin/workshops/{id}`
+- Bulk action `[Publish selected]` → batch POST publish
 
-- Icon cảnh báo, "Sinh viên này đã điểm danh rồi!"
-- Tên sinh viên, mã sinh viên
-- Thời điểm check-in trước đó
+**Business rules:**
 
-**Trường hợp VÉ KHÔNG HỢP LỆ (nền đỏ):**
+- BR-A03.1 Hiển thị mọi status (khác SCR-W02 chỉ open)
+- BR-A03.2 Action `Publish` chỉ visible cho rows status=draft
+- BR-A03.3 Action `Cancel` chỉ visible cho rows status=open/closed
 
-- Icon lỗi, mô tả lý do: "Vé đã bị hủy" / "Vé không thuộc sự kiện này" / "Mã QR không tồn tại"
-- Tên sinh viên (nếu tìm được), mã QR rút gọn
+**Components:**
 
-**Hành động chính:** Nút lớn "Quét tiếp" → back về SCR-M04 (tự động sau 2-3 giây nếu thành công)
+- `<WorkshopAdminTable />` (sortable columns, row checkbox)
+- `<StatusFilter />` (multi-select chips)
+- `<BulkActionBar />` (xuất hiện khi có row selected)
+- `<CreateWorkshopButton />`
 
----
+**API endpoints:**
 
-#### SCR-M06 — Màn hình Hàng đợi Offline
-
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile Offline Queue Manager Screen |
-| **Stack Route** | `OfflineQueueScreen` (Tab navigator — Tab "Hàng đợi") |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F07-003, FR-F07-004 |
-
-**Mô tả chức năng:** Danh sách các bản ghi điểm danh đã thu thập khi offline, chưa được đồng bộ lên server. Nhân sự cần có khả năng xem và kiểm tra records trước khi sync để phát hiện vấn đề. Đây là màn hình quản lý dữ liệu trung gian (local SQLite `offline_checkin_queue`) — phạm vi dữ liệu và mục đích khác hoàn toàn so với dashboard check-in.
-
-**Dữ liệu hiển thị:**
-
-- Tổng số records đang chờ: `[N] bản ghi chưa đồng bộ`
-- Danh sách records từ `offline_checkin_queue`: `qr_token` (rút gọn), tên sinh viên (từ SQLite cache), `checked_in_at` (thời điểm offline), `device_id`, `sync_status` (PENDING/SYNCED/CONFLICT)
-- Thời điểm offline bắt đầu và kết thúc
-- Kích thước dữ liệu local (SQLite storage usage)
-- Records với `sync_status = CONFLICT` được highlight đỏ kèm `conflict_reason`
-
-**Hành động chính:**
-
-- Nút "Đồng bộ ngay" → trigger sync → chuyển sang SCR-M07
+- `GET /api/v1/admin/workshops?status=&day=&search=&cursor=&limit=`
+- `POST /api/v1/admin/workshops/{id}/publish` (bulk → loop)
+- `POST /api/v1/admin/workshops/{id}/cancel` (bulk → loop)
 
 ---
 
-#### SCR-M07 — Màn hình Tiến độ & Báo cáo Đồng bộ
+#### SCR-A04 — `/admin/workshops/new` (Create Workshop)
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile Sync Progress & Report Screen |
-| **Stack Route** | `SyncProgressScreen` |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F07-004, FR-F07-005 |
+**Purpose:** Tạo workshop mới (mặc định status=`draft`).
 
-**Mô tả chức năng:** Màn hình theo dõi quá trình batch sync dữ liệu offline lên server. Đây là màn hình riêng biệt (không phải UI state) vì: quá trình sync có thể mất thời gian đáng kể (hàng trăm records), có kết quả chi tiết cần review (synced/skipped/conflicts), và nhân sự cần biết chính xác kết quả để đảm bảo không mất dữ liệu. Tự động xử lý Token Refresh (FR-F07-005) trong nền nếu gặp 401 mà không ngắt quá trình.
+**Inputs:**
 
-**Dữ liệu hiển thị:**
+- `title` — text required, max 200
+- `description` — rich text or markdown
+- `speakerId` — autocomplete select từ `/admin/speakers` (optional ở draft)
+- `roomId` — select từ `/admin/rooms` (optional ở draft, required nếu publish luôn)
+- `startsAt`, `endsAt` — datetime picker (ends > starts)
+- `seatsTotal` — number (>0)
+- `price` — number (>=0; 0 = free)
+- `status` — radio: `draft` (default) | `open` (publish luôn)
 
-**Khi đang sync:**
+**Primary actions:**
 
-- Progress bar + phần trăm
-- Số records đã xử lý / tổng
-- Tốc độ sync hiện tại (records/s)
-- Log stream: "Đang gửi batch [N]..."
+- `[Lưu draft]` → `POST /api/v1/admin/workshops` body với `status=draft` → success → redirect `/admin/workshops/{id}`
+- `[Lưu & publish]` → `POST /api/v1/admin/workshops` body với `status=open` → server validate room/speaker non-null + room không xung đột
 
-**Khi hoàn thành:**
+**Business rules:**
 
-- Tóm tắt: `synced` (thành công), `skipped` (đã tồn tại — idempotent), `conflicts` (vé bị void trước khi sync)
-- Danh sách conflicts với `local_id` và `reason` để nhân sự báo cáo ban tổ chức
-- Thời gian hoàn thành
-- Nút "Xong" → back về SCR-M02 hoặc SCR-M03
+- BR-A04.1 Conflict detection cho phòng (custom check server-side, không phải DB CHECK)
+- BR-A04.2 Validation `endsAt > startsAt` (DB CHECK + client)
+- BR-A04.3 `seatsAvailable = seatsTotal` auto khởi tạo
 
----
+**Components:**
 
-#### SCR-M08 — Màn hình Hồ sơ & Cài đặt (Mobile)
+- `<WorkshopForm mode="create" />`
+- `<SpeakerAutocomplete />`
+- `<RoomSelectWithConflictCheck />` (kiểm tra real-time khi user chọn dates)
+- `<PriceInput currency="VND" />`
+- `<DateTimeRangePicker />`
 
-| Thuộc tính | Giá trị |
-|:---|:---|
-| **Tên màn hình** | Mobile Profile & Settings Screen |
-| **Stack Route** | `ProfileScreen` (Tab navigator — Tab "Hồ sơ") |
-| **Người dùng** | CHECKIN_STAFF |
-| **FR liên quan** | FR-F01-003, FR-F01-008 |
+**API endpoints:**
 
-**Mô tả chức năng:** Thông tin tài khoản nhân sự và cài đặt ứng dụng. Cung cấp đăng xuất và thông tin kỹ thuật về token/session cho nhân sự khi cần hỗ trợ.
-
-**Dữ liệu hiển thị:**
-
-- Tên nhân sự, email, role
-- **Token status:** "Token hết hạn lúc [thời gian]" (countdown từ `exp`)
-- **Danh sách workshop được phân công** (từ `jwt.allowed_workshop_ids`): tên + thời gian
-- **Offline storage:** số vé trong SQLite, dung lượng sử dụng, thời điểm pre-load cuối
-- **Cài đặt:** bật/tắt thông báo âm thanh khi quét QR thành công/thất bại, độ sáng màn hình khi hiển thị kết quả
-- App version, server URL (cho troubleshooting)
-
-**Hành động chính:**
-
-- "Đăng xuất" → POST `/api/v1/auth/logout` → xóa Keychain → về SCR-M01
-- "Làm mới quyền hạn" → trigger token refresh (nếu nhân sự vừa được phân công workshop mới và cần cập nhật JWT)
+- `POST /api/v1/admin/workshops`
+- `GET /api/v1/admin/speakers` (cho autocomplete)
+- `GET /api/v1/admin/rooms` (cho select)
 
 ---
 
-## TỔNG HỢP & GHI CHÚ QUAN TRỌNG
+#### SCR-A05 — `/admin/workshops/[id]` (Workshop detail/edit)
 
-### Bảng tổng hợp toàn bộ màn hình
+**Purpose:** Edit workshop info; entry hub đến 3 sub-screen.
 
-| ID | Tên màn hình | URL / Route | Platform | Actor |
-|:---|:---|:---|:---:|:---|
-| W01 | Login | `/login` | Web | ALL |
-| W02 | Workshop Listing (Public) | `/workshops` | Web | PUBLIC, STUDENT, ORG |
-| W03 | Workshop Detail (Public) | `/workshops/[workshopId]` | Web | PUBLIC, STUDENT, ORG |
-| W04 | Payment Checkout | `/payments/checkout/[registrationId]` | Web | STUDENT |
-| W05 | Payment Result | `/payments/result` | Web | STUDENT |
-| W06 | My Registrations | `/me/registrations` | Web | STUDENT |
-| W07 | Registration Detail | `/me/registrations/[registrationId]` | Web | STUDENT |
-| W08 | My Tickets | `/me/tickets` | Web | STUDENT |
-| W09 | Ticket QR Code | `/me/tickets/[ticketId]` | Web | STUDENT |
-| W10 | My Payments | `/me/payments` | Web | STUDENT |
-| W11 | Payment Transaction Detail | `/me/payments/[paymentId]` | Web | STUDENT |
-| W12 | My Profile | `/me/profile` | Web | STUDENT |
-| W13 | Admin Dashboard | `/admin` | Web | ORGANIZER |
-| W14 | Workshop List (Admin) | `/admin/workshops` | Web | ORGANIZER |
-| W15 | Create Workshop | `/admin/workshops/new` | Web | ORGANIZER |
-| W16 | Workshop Detail (Admin) | `/admin/workshops/[workshopId]` | Web | ORGANIZER |
-| W17 | Edit Workshop | `/admin/workshops/[workshopId]/edit` | Web | ORGANIZER |
-| W18 | Workshop Statistics | `/admin/workshops/[workshopId]/stats` | Web | ORGANIZER |
-| W19 | Document & AI Management | `/admin/workshops/[workshopId]/documents` | Web | ORGANIZER |
-| W20 | Room Management | `/admin/rooms` | Web | ORGANIZER |
-| W21 | Room Form (Create/Edit) | `/admin/rooms/new` · `/admin/rooms/[id]/edit` | Web | ORGANIZER |
-| W22 | Speaker Management | `/admin/speakers` | Web | ORGANIZER |
-| W23 | Speaker Form (Create/Edit) | `/admin/speakers/new` · `/admin/speakers/[id]/edit` | Web | ORGANIZER |
-| W24 | User Management | `/admin/users` | Web | ORGANIZER |
-| W25 | User Detail & Management | `/admin/users/[userId]` | Web | ORGANIZER |
-| W26 | Staff Workshop Assignment | `/admin/users/[userId]/assign-workshops` | Web | ORGANIZER |
-| W27 | Student Sync Jobs | `/admin/student-sync` | Web | ORGANIZER |
-| W28 | Sync Job Detail & Errors | `/admin/student-sync/[jobId]` | Web | ORGANIZER |
-| W29 | Notification Audit Log | `/admin/notifications/logs` | Web | ORGANIZER |
-| W30 | Notification Channel Config | `/admin/notifications/channels` | Web | ORGANIZER |
-| W31 | System Health Monitor | `/admin/system` | Web | ORGANIZER |
-| M01 | Login (Mobile) | `LoginScreen` | Mobile | CHECKIN_STAFF |
-| M02 | Assigned Workshops (Home) | `HomeScreen` | Mobile | CHECKIN_STAFF |
-| M03 | Workshop Check-in Dashboard | `WorkshopDashboardScreen` | Mobile | CHECKIN_STAFF |
-| M04 | QR Scanner | `QRScannerScreen` | Mobile | CHECKIN_STAFF |
-| M05 | Check-in Scan Result | `CheckinResultScreen` | Mobile | CHECKIN_STAFF |
-| M06 | Offline Queue Manager | `OfflineQueueScreen` | Mobile | CHECKIN_STAFF |
-| M07 | Sync Progress & Report | `SyncProgressScreen` | Mobile | CHECKIN_STAFF |
-| M08 | Profile & Settings (Mobile) | `ProfileScreen` | Mobile | CHECKIN_STAFF |
+**Read-only:** Header chứa current status badge, version hiện tại, lastUpdatedAt, nút sub-route navigation.
 
-### Các quyết định phân loại quan trọng (Screen vs. Modal vs. State)
+**Inputs:** Tương tự SCR-A04 (form fields editable).
 
-Những yếu tố sau được xử lý là **modal/UI state** (KHÔNG phải màn hình riêng):
+**Primary actions:**
 
-- **Emergency Update** (đổi phòng/giờ) trên SCR-W16: là modal blocking nhưng chỉ có 3 field và single-step → UI state của SCR-W16
-- **Confirm Cancel Workshop / Confirm Publish** trên SCR-W16: dialog Yes/No → UI state
-- **Registration cho workshop miễn phí**: không tạo màn hình riêng — là action button trên SCR-W03, kết quả hiển thị qua toast thành công + redirect
-- **AI Summary detail popup** trên SCR-W19: xem `summary_text` đầy đủ → expandable panel hoặc drawer, không phải màn hình
-- **Scan loading** trên SCR-M04: UI state (spinner trong 200-500ms)
-- **Delete confirmation** trên SCR-W19 (xóa tài liệu): simple Yes/No dialog → UI state
+- `[Lưu thay đổi]` → `PATCH /api/v1/admin/workshops/{id}` header `If-Match: "{version}"`
+- `[Publish]` (nếu draft) → `POST /api/v1/admin/workshops/{id}/publish`
+- `[Hủy workshop]` (nếu open/closed) → `<CancelDialog />` modal với input `reason` + `notifyRegistered=true` → `POST /api/v1/admin/workshops/{id}/cancel`
+
+**Sub-route navigation (visible tabs nhưng là deep-link sub-screens):**
+
+- "Đăng ký" → `/admin/workshops/{id}/registrations` (SCR-A06)
+- "Thống kê" → `/admin/workshops/{id}/stats` (SCR-A07)
+- "AI Summary" → `/admin/workshops/{id}/summary` (SCR-A08)
+
+**Business rules:**
+
+- BR-A05.1 Optimistic Locking: GET trả ETag = version; PATCH gửi If-Match. 412 → reload + show diff dialog
+- BR-A05.2 Đổi `roomId` hoặc `startsAt`/`endsAt` → server enqueue notification "workshop changed" cho mọi active registration
+- BR-A05.3 Đổi `seatsTotal` < (seatsTotal - seatsAvailable) → 422 (không thể giảm dưới số đã đăng ký)
+- BR-A05.4 Cancel → server batch update registrations status=cancelled + enqueue refunds + notify
+
+**Validation rules:**
+
+- VR-A05.1 412 Precondition Failed → "Đã có người sửa workshop này. Reload?" dialog với diff view
+- VR-A05.2 Reason cancel required (min 10 chars)
+
+**Components:**
+
+- `<WorkshopForm mode="edit" version={version} />`
+- `<TabNav />` (links đến sub-routes — KHÔNG client-side state)
+- `<PublishButton />` (conditional)
+- `<CancelDialog />` (modal — UI state)
+- `<ConflictResolutionDialog />` (412 modal)
+- `<VersionBadge />`
+
+**API endpoints:**
+
+- `GET /api/v1/admin/workshops/{id}` (kèm ETag)
+- `PATCH /api/v1/admin/workshops/{id}` (If-Match)
+- `POST /api/v1/admin/workshops/{id}/publish`
+- `POST /api/v1/admin/workshops/{id}/cancel`
+
+---
+
+#### SCR-A06 — `/admin/workshops/[id]/registrations` (Workshop registrations)
+
+**Purpose:** BTC xem ai đã đăng ký workshop, export CSV.
+
+**Read-only:** Bảng: studentCode, fullName, email, status, registeredAt, paymentStatus (nếu paid workshop), checkedInAt (nếu có).
+
+**Inputs (filter):**
+
+- `status` filter (paid, confirmed, pending, cancelled)
+- `checkedIn` toggle
+- `search` (theo MSSV / tên)
+
+**Primary actions:**
+
+- `[Export CSV]` → `GET /api/v1/admin/stats/export?type=registrations&workshop_id={id}` → download
+- Row hover hiển thị quick action: gửi email (Stage 5)
+
+**Business rules:**
+
+- BR-A06.1 Status `pending` quá 30 phút sẽ tự cancel — show indicator
+- BR-A06.2 Hiển thị checkin time nếu sinh viên đã quét QR
+
+**Components:**
+
+- `<RegistrationsTable />` (sortable, paginated)
+- `<ExportCSVButton />`
+- `<StatusBadge />`
+
+**API endpoints:**
+
+- `GET /api/v1/admin/workshops/{id}/registrations?status=&include=student&cursor=&limit=`
+- `GET /api/v1/admin/stats/export?type=registrations&workshop_id={id}`
+
+---
+
+#### SCR-A07 — `/admin/workshops/[id]/stats` (Workshop stats)
+
+**Purpose:** Dashboard metrics cho 1 workshop.
+
+**Read-only:**
+
+- Total registrations + by status
+- Check-in count + rate (%)
+- No-show rate
+- Revenue (nếu paid) + currency
+- Timeline: registration over time chart
+- Time-to-fill metric
+
+**Components:**
+
+- `<KPICard />` × 4
+- `<RegistrationTimelineChart />` (recharts)
+- `<CheckinFunnelChart />`
+
+**API endpoints:**
+
+- `GET /api/v1/admin/workshops/{id}/stats`
+
+---
+
+#### SCR-A08 — `/admin/workshops/[id]/summary` (AI Summary management)
+
+**Purpose:** Upload PDF, theo dõi xử lý, override thủ công.
+
+**Read-only:**
+
+- `summaryStatus`: badge (none / queued / processing / done / failed)
+- `pdfUrl`: link xem PDF gốc nếu có
+- `summaryText`: nội dung AI generated (chỉ khi `done`)
+- `updatedAt`
+- `errorDetail` (nếu failed)
+
+**Inputs:**
+
+- `[Upload PDF]` → file picker (extension .pdf, size ≤ 10MB)
+- `[Edit summary]` → textarea rich text editor
+
+**Primary actions:**
+
+- `[Upload]` → `POST /api/v1/admin/workshops/{id}/summary` (multipart) → status='queued' → polling
+- `[Retry]` (nếu status=failed) → `POST /api/v1/admin/workshops/{id}/summary/retry`
+- `[Lưu override]` (sau khi edit text) → `PUT /api/v1/admin/workshops/{id}/summary` body `{text}` → status='done'
+
+**Business rules:**
+
+- BR-A08.1 Polling status interval 3s khi `queued`/`processing`, dừng khi `done`/`failed`
+- BR-A08.2 Re-upload PDF → reset status về queued, summary text bị xóa (cảnh báo confirm)
+- BR-A08.3 Override thủ công ưu tiên hơn AI — sau khi save, status=done không thay đổi nữa
+
+**Components:**
+
+- `<PDFUploader />` (drag-drop, validation)
+- `<SummaryStatusBadge />`
+- `<RichTextEditor />` (cho override)
+- `<PollingIndicator />`
+
+**API endpoints:**
+
+- `POST /api/v1/admin/workshops/{id}/summary` (multipart)
+- `GET /api/v1/admin/workshops/{id}/summary` (polling)
+- `POST /api/v1/admin/workshops/{id}/summary/retry`
+- `PUT /api/v1/admin/workshops/{id}/summary`
+
+---
+
+#### SCR-A09 — `/admin/speakers` (Speakers list)
+
+**Purpose:** Quản lý master data diễn giả.
+
+**Read-only:** Table: avatar, fullName, title, count of upcoming workshops.
+
+**Primary actions:**
+
+- `[+ Tạo diễn giả]` → `/admin/speakers/new`
+- Row click → `/admin/speakers/{id}`
+- Inline `[Delete]` (soft delete, chặn nếu đang ref bởi workshop chưa kết thúc)
+
+**Components:**
+
+- `<SpeakersTable />`
+- `<DeleteConfirmDialog />` (UI state)
+
+**API endpoints:**
+
+- `GET /api/v1/admin/speakers`
+- `DELETE /api/v1/admin/speakers/{id}`
+
+---
+
+#### SCR-A10 — `/admin/speakers/new` & SCR-A11 `/admin/speakers/[id]` (Speaker form)
+
+**Purpose:** Tạo / edit diễn giả.
+
+**Inputs:** `fullName`, `title`, `bio` (textarea), `avatarUrl` (upload).
+
+**Primary actions:**
+
+- `[Lưu]` → `POST /api/v1/admin/speakers` (new) hoặc `PATCH /api/v1/admin/speakers/{id}` (edit)
+
+**Components:**
+
+- `<SpeakerForm mode="create|edit" />`
+- `<AvatarUploader />` (preview + crop)
+
+**API endpoints:**
+
+- `POST /api/v1/admin/speakers`
+- `PATCH /api/v1/admin/speakers/{id}`
+
+---
+
+#### SCR-A12 — `/admin/rooms` (Rooms list)
+
+**Purpose:** Quản lý phòng tổ chức.
+
+**Read-only:** Table: name, building, floor, capacity, có sơ đồ chưa, count of upcoming workshops.
+
+**Primary actions:**
+
+- `[+ Tạo phòng]` (modal nhỏ → `<CreateRoomDialog />` → `POST /admin/rooms`)
+- Row click → `/admin/rooms/{id}`
+
+**Components:** `<RoomsTable />`, `<CreateRoomDialog />` (modal vì form ngắn, chỉ name/building/floor/capacity).
+
+**API endpoints:** `GET /admin/rooms`, `POST /admin/rooms`.
+
+---
+
+#### SCR-A13 — `/admin/rooms/[id]` (Room detail/edit)
+
+**Purpose:** Edit phòng + xem lịch sử workshop dùng phòng.
+
+**Read-only:** Lịch sử workshop đã/sẽ tổ chức tại phòng (timeline).
+
+**Inputs:** Tương tự create + `floorPlanUrl` (image upload).
+
+**Primary actions:**
+
+- `[Lưu]` → `PATCH /api/v1/admin/rooms/{id}`
+- `[Upload sơ đồ]` → upload endpoint → set `floorPlanUrl`
+
+**Components:**
+
+- `<RoomForm />`
+- `<FloorPlanUploader />` (drag-drop, image preview)
+- `<RoomScheduleCalendar />` (read-only lịch sử)
+
+**API endpoints:**
+
+- `GET /api/v1/admin/rooms/{id}` (kèm workshops đã book)
+- `PATCH /api/v1/admin/rooms/{id}`
+
+---
+
+#### SCR-A14 — `/admin/imports` (Import history)
+
+**Purpose:** Lịch sử CSV import (cron đêm + manual) + manual trigger.
+
+**Read-only:** Table: runAt, triggeredBy (cron/manual), status, totalRows, successCount, failedCount, durationMs.
+
+**Inputs:** N/A.
+
+**Primary actions:**
+
+- `[Trigger import]` (manual) → `<TriggerImportDialog />` (file upload optional) → `POST /api/v1/admin/imports/trigger`
+- Row click → `/admin/imports/{id}`
+
+**Business rules:**
+
+- BR-A14.1 Concurrency guard: nếu có row status=in_progress → button disabled + tooltip
+- BR-A14.2 Mỗi đêm có 1 row tự động (cron)
+
+**Components:**
+
+- `<ImportsTable />`
+- `<StatusBadge />`
+- `<TriggerImportDialog />` (modal, UI state)
+
+**API endpoints:**
+
+- `GET /api/v1/admin/imports?cursor=&limit=`
+- `POST /api/v1/admin/imports/trigger`
+
+---
+
+#### SCR-A15 — `/admin/imports/[id]` (Import detail)
+
+**Purpose:** Chi tiết 1 import run + download error CSV.
+
+**Read-only:** All fields từ `import_logs` + summary breakdown (% success, error categories).
+
+**Primary actions:**
+
+- `[Tải file lỗi]` → `GET /api/v1/admin/imports/{id}/errors` (stream CSV)
+
+**Components:**
+
+- `<ImportSummary />`
+- `<ErrorBreakdownChart />`
+- `<DownloadErrorCSVButton />`
+
+**API endpoints:**
+
+- `GET /api/v1/admin/imports/{id}`
+- `GET /api/v1/admin/imports/{id}/errors`
+
+---
+
+#### SCR-A16 — `/admin/notifications` (Notification channels + logs)
+
+**Purpose:** Cấu hình kênh thông báo (Strategy Pattern, ADR-09) và xem audit log.
+
+**Tabs (cùng screen, chuyển đổi nội bộ — KHÔNG sub-route vì 2 view có cùng business goal: debug & config notification system):**
+
+1. **Channels:** list `notification_channel_configs` (email, in_app, telegram). Toggle is_active, edit configJson.
+2. **Logs:** filter failed/timeout, replay action.
+
+**Read-only:**
+
+- Channels: channelType, isActive, configJson preview, lastUpdatedAt
+- Logs: userId, eventType, channel, status, errorMsg, createdAt
+
+**Inputs:**
+
+- Toggle isActive per channel
+- Edit configJson (modal với JSON editor)
+- Logs filter: status, channel, dateRange
+
+**Primary actions:**
+
+- `[Save channel config]` → `PATCH /api/v1/admin/notification-channels/{id}`
+- `[Replay failed]` (per log row) — Stage 5 if implemented
+
+**Components:**
+
+- `<TabsContainer />` (client-side tabs, không phải sub-route — exception)
+- `<ChannelConfigCard />`
+- `<JSONEditor />` (modal)
+- `<NotificationLogsTable />`
+
+**API endpoints:**
+
+- `GET /api/v1/admin/notification-channels`
+- `PATCH /api/v1/admin/notification-channels/{id}`
+- `GET /api/v1/admin/notifications/logs?status=failed&channel=&from=&to=`
+
+---
+
+#### SCR-A17 — `/admin/system` (Operations: CB + Reconciliation)
+
+**Purpose:** Operational tools cho BTC trong sự kiện — monitor Circuit Breaker và trigger payment reconciliation.
+
+**Tabs:**
+
+1. **Circuit Breaker:** trạng thái CB của mỗi gateway (CLOSED/HALF_OPEN/OPEN), failureCount, autoCloseAt, manual reset button.
+2. **Payment Reconciliation:** số lượng payment status=`unresolved` chờ reconcile, last reconcile run, manual trigger button.
+
+**Read-only:**
+
+- CB: per gateway: state, failureCount, openedAt, autoCloseAt
+- Reconcile: count unresolved, last run timestamp + result
+
+**Inputs:** N/A (chỉ button actions).
+
+**Primary actions:**
+
+- `[Reset CB cho {gateway}]` → confirm dialog → `POST /api/v1/admin/system/circuit-breaker/{gateway}/reset`
+- `[Trigger reconciliation]` → `POST /api/v1/admin/payments/reconcile` (concurrency guard: 409 nếu đang chạy)
+
+**Business rules:**
+
+- BR-A17.1 CB state là in-memory — process restart sẽ reset
+- BR-A17.2 Reconcile dùng PG advisory lock — 1 instance tại 1 thời điểm
+- BR-A17.3 Reset CB là last resort — chỉ dùng sau khi BTC đã verify gateway bình thường
+
+**Components:**
+
+- `<TabsContainer />` (CB | Reconcile)
+- `<CBStateCard />` (per gateway, color-coded)
+- `<ResetCBButton />` + `<ConfirmDialog />`
+- `<UnresolvedPaymentsCount />`
+- `<TriggerReconcileButton />`
+- `<ReconcileHistory />` (last 10 runs)
+
+**API endpoints:**
+
+- `GET /api/v1/admin/system/circuit-breaker`
+- `POST /api/v1/admin/system/circuit-breaker/{gateway}/reset`
+- `POST /api/v1/admin/payments/reconcile`
+- (Optional, Stage 5) `GET /api/v1/admin/payments?status=unresolved&from=&to=` — để show count và list
+
+---
+
+### C. MOBILE — CHECK-IN STAFF
+
+---
+
+#### SCR-M01 — `(auth)/login.tsx` (Mobile login)
+
+**Purpose:** Staff đăng nhập + nhận `allowedWorkshopIds`.
+
+**Inputs:** `email`, `password`.
+
+**Primary actions:**
+
+- `[Login]` → `POST /api/v1/auth/login` body `{accountType:"staff", email, password}` →
+  - Verify `role === 'checkin_staff'` (nếu role=btc → reject với "Vui lòng dùng web admin")
+  - Save `accessToken` to memory + `refreshToken` to Expo SecureStore
+  - INSERT/REPLACE `app_session` row (singleton): user_id, email, role, allowedWorkshopIds, access/refresh exp
+  - Initialize `device_config` if not exists (sinh device_id UUID v4)
+  - Navigate `/` (workshop list)
+
+**Business rules:**
+
+- BR-M01.1 Mobile **chỉ nhận role=checkin_staff** — btc đăng nhập mobile → 403 redirect
+- BR-M01.2 Refresh token transport = JSON body (mobile)
+- BR-M01.3 device_id sinh 1 lần khi install, persist qua mọi login/logout (chỉ mất khi uninstall)
+
+**Validation rules:**
+
+- VR-M01.1 Email format
+- VR-M01.2 Network error → cache last login attempt, hint "Cần mạng để đăng nhập"
+
+**Components:**
+
+- `<LoginScreen />` (Expo)
+- `<TextInput />` (email + password)
+- `<Button variant="primary" />`
+- `<NetworkStatusBanner />` (nếu offline)
+
+**API endpoints:** `POST /api/v1/auth/login`
+
+**Local DB writes:**
+
+- `INSERT OR REPLACE INTO app_session (...)` (singleton row)
+- `INSERT INTO device_config (...) ON CONFLICT DO NOTHING` (lần đầu)
+
+---
+
+#### SCR-M02 — `(app)/index.tsx` (Workshops list)
+
+**Purpose:** Staff thấy các workshop được phân công và chọn để check-in.
+
+**Read-only:**
+
+- Mỗi workshop: title, startsAt, room.name
+- Cache status: cached / partial / not loaded (từ `cache_metadata.is_fully_loaded`)
+- Pending sync count cho workshop đó (từ `checkin_queue WHERE workshop_id=? AND sync_status IN ('PENDING','FAILED')`)
+- Network status banner (online/offline)
+
+**Inputs:** N/A (filter Stage 5 nếu nhiều workshop).
+
+**Primary actions:**
+
+- Tap workshop → navigate `/workshops/[id]`
+
+**Secondary actions:**
+
+- `[Sync all]` (header right) → tab `/sync`
+- `[Settings]` (header right) → `/settings`
+
+**Business rules:**
+
+- BR-M02.1 Chỉ list workshop có `id ∈ JWT.allowedWorkshopIds` (cache trong app_session.allowedWorkshopIds)
+- BR-M02.2 Hiển thị offline indicator nếu `NetInfo.isConnected === false`
+
+**Components:**
+
+- `<WorkshopRowCard />` (mobile-optimized)
+- `<CacheStatusBadge />` (synced / stale / offline)
+- `<PendingSyncBadge />`
+- `<NetworkStatusBanner />`
+- `<HeaderActions />` (sync + settings icons)
+
+**API endpoints:**
+
+- `GET /api/v1/workshops?ids=...` — fetch tên/lịch theo allowedWorkshopIds (chỉ khi online)
+
+**Local DB queries:**
+
+- `SELECT * FROM cache_metadata WHERE workshop_id IN (...)`
+- `SELECT workshop_id, COUNT(*) FROM checkin_queue WHERE sync_status IN ('PENDING','FAILED') GROUP BY workshop_id`
+
+---
+
+#### SCR-M03 — `(app)/workshops/[id]/index.tsx` (Workshop dashboard)
+
+**Purpose:** "Lobby" trước khi vào scanner — staff thấy cache status, scan count, và actions.
+
+**Read-only:**
+
+- Workshop info: title, startsAt, room
+- Cache status: `is_fully_loaded` (1 = ready offline, 0 = chưa đầy đủ)
+- Cache progress: `registration_count / server_total`
+- Scanned count today: từ `checkin_queue WHERE workshop_id=? AND date(checked_in_at) = today`
+- Last sync timestamp (từ `sync_log MAX(completed_at) WHERE workshop_id=?`)
+- Network status
+
+**Inputs:** N/A.
+
+**Primary actions:**
+
+- `[Pre-load registrations]` (visible nếu `is_fully_loaded=0` hoặc cache stale) → fetch all pages từ `/checkin/workshops/{id}/registrations` → INSERT/UPDATE vào `cached_registrations` → SET `cache_metadata.is_fully_loaded=1`
+- `[Mở Scanner]` (chỉ enable nếu `is_fully_loaded=1` HOẶC online) → navigate `/workshops/[id]/scan`
+- `[Lịch sử]` → navigate `/workshops/[id]/history`
+
+**Secondary actions:**
+
+- `[Sync ngay]` (nếu có pending) → trigger sync cho workshop này
+
+**Business rules:**
+
+- BR-M03.1 Scanner chỉ khả dụng offline nếu `is_fully_loaded=1` — nếu chưa load mà offline → button disabled với tooltip "Cần mạng để pre-load trước"
+- BR-M03.2 Pre-load progress: hiển thị "Đang tải 250/500..." trong button khi đang fetch
+- BR-M03.3 Cache stale (>30 phút từ `last_fetched_at`) → banner gợi ý refresh, nhưng vẫn cho dùng
+
+**Validation rules:**
+
+- VR-M03.1 Workshop_id ∈ allowedWorkshopIds (offline check trước, nếu pass thì navigate)
+
+**Components:**
+
+- `<WorkshopHeader />`
+- `<CacheStatusCard />` (with progress bar)
+- `<PreLoadButton />` (shows progress)
+- `<ActionGrid />` (Scanner | History | Sync)
+- `<NetworkStatusBanner />`
+- `<LastSyncTimestamp />`
+
+**API endpoints:**
+
+- `GET /api/v1/checkin/workshops/{id}/registrations?cursor=&limit=200` (pagination, có header X-Total-Count)
+
+**Local DB writes:**
+
+- `INSERT OR REPLACE INTO cached_registrations (...)` per page
+- `INSERT OR REPLACE INTO cache_metadata (workshop_id, last_fetched_at, registration_count, server_total, is_fully_loaded, cache_status)`
+
+---
+
+#### SCR-M04 — `(app)/workshops/[id]/scan.tsx` (QR Scanner)
+
+**Purpose:** Quét QR và check-in (online → POST trực tiếp; offline → enqueue).
+
+**Read-only:**
+
+- Camera viewfinder full screen
+- Top banner: workshop title, network status (online/offline indicator)
+- Scan count counter (today's scans for this workshop)
+- Pending sync count (nếu có)
+
+**Inputs:**
+
+- QR code (camera input — không phải text field)
+
+**Primary actions (state machine):**
+
+```
+State: IDLE
+  → Camera detects QR
+State: VALIDATING
+  → IF online:
+       POST /api/v1/checkins {qrCode, workshopId, checkedInAt, clientLocalId}
+       → 201 → State SUCCESS_NEW
+       → 200 duplicate → State SUCCESS_DUPLICATE
+       → 404 → State ERROR_INVALID
+       → 403 → State ERROR_WRONG_WORKSHOP
+       → network error → fall through to OFFLINE path
+     ELSE (offline):
+       Lookup local: SELECT * FROM cached_registrations WHERE qr_code = :code
+       → IF not found → State ERROR_INVALID
+       → IF found:
+           INSERT INTO checkin_queue (..., sync_status='PENDING')
+           ON CONFLICT (qr_code, workshop_id) DO NOTHING
+           rowsAffected=0 → State SUCCESS_DUPLICATE_LOCAL
+           rowsAffected=1 → State SUCCESS_QUEUED
+State: SUCCESS_*  (overlay hiện 1.5s, hiển thị student name)
+  → Auto return to IDLE
+State: ERROR_*  (overlay hiện cho đến khi tap dismiss)
+  → Tap → return to IDLE
+```
+
+**Secondary actions:**
+
+- `[Tắt scanner]` → back to `/workshops/[id]`
+- `[Sync ngay]` (nếu có pending) → trigger sync without leaving screen
+
+**Business rules:**
+
+- BR-M04.1 `clientLocalId = uuid()` sinh ngay khi detect QR — local idempotency key
+- BR-M04.2 Cùng QR không thể quét 2 lần trên cùng device (UNIQUE INDEX trên `(qr_code, workshop_id)` của `checkin_queue`)
+- BR-M04.3 Khi network resume sau scan offline → auto-trigger sync sau 5s
+- BR-M04.4 Camera permission denied → fallback screen "Cấp quyền camera" với button → app settings
+
+**Validation rules:**
+
+- VR-M04.1 Online: server kiểm tra `workshop_id ∈ JWT.allowedWorkshopIds`
+- VR-M04.2 Offline: app verify `cached_registrations.workshop_id = current_workshop_id` trước khi insert queue
+- VR-M04.3 Registration status NOT IN ('paid','confirmed') → reject với error overlay
+
+**Components:**
+
+- `<CameraView />` (Expo Camera + barcode scanner)
+- `<ScanOverlay />` (viewfinder frame)
+- `<ResultBanner state="success_new|success_duplicate|error_invalid|error_wrong_workshop" />`
+- `<NetworkStatusPill />`
+- `<ScanCounter />`
+- `<PermissionGate />` (component check camera perm)
+
+**Related UI states:**
+
+- IDLE / VALIDATING / SUCCESS_NEW / SUCCESS_DUPLICATE / SUCCESS_QUEUED / SUCCESS_DUPLICATE_LOCAL / ERROR_INVALID / ERROR_WRONG_WORKSHOP / ERROR_NOT_PAID / NO_PERMISSION
+
+**API endpoints:**
+
+- `POST /api/v1/checkins` (online path; tự nhiên idempotent qua DB UNIQUE)
+- `POST /api/v1/checkins/sync` (background sync trigger, không trực tiếp từ screen này)
+
+**Local DB writes:**
+
+- `INSERT INTO checkin_queue (...) ON CONFLICT (qr_code, workshop_id) DO NOTHING`
+
+---
+
+#### SCR-M05 — `(app)/workshops/[id]/history.tsx` (Per-workshop history)
+
+**Purpose:** Xem lịch sử check-in của workshop trên device này.
+
+**Read-only:** List rows: studentCode, studentName, checkedInAt, sync_status (PENDING/SYNCING/SYNCED/CONFLICT/FAILED), error_detail.
+
+**Inputs (filter):**
+
+- `sync_status` chips
+- `dateRange` (default: today)
+
+**Primary actions:**
+
+- Tap row → expand detail (modal): full info + actions
+- `[Re-sync row]` (nếu FAILED) → mark next_retry_at=now → trigger sync
+
+**Business rules:**
+
+- BR-M05.1 Hiển thị server-side first-checkin time nếu CONFLICT (ai check-in trước, từ response duplicate)
+
+**Components:**
+
+- `<HistoryList />`
+- `<SyncStatusChip />`
+- `<RowDetailSheet />` (bottom sheet, không phải screen — UI state)
+- `<RetryButton />`
+
+**API endpoints:**
+
+- `POST /api/v1/checkins/sync` (per individual retry)
+
+**Local DB queries:**
+
+- `SELECT * FROM checkin_queue WHERE workshop_id = ? ORDER BY checked_in_at DESC`
+
+---
+
+#### SCR-M06 — `(app)/sync.tsx` (Global sync queue)
+
+**Purpose:** View global sync state và trigger sync thủ công.
+
+**Read-only:**
+
+- Total pending across all workshops
+- Total failed
+- Last successful sync timestamp (global)
+- Network status
+- List of pending items grouped by workshop
+- Recent sync_log entries (last 10)
+
+**Primary actions:**
+
+- `[Sync all now]` → batch POST `/api/v1/checkins/sync` (50 items per batch, loop until empty)
+- `[Retry all failed]` → reset next_retry_at, trigger sync
+
+**Business rules:**
+
+- BR-M06.1 Sync requires online — disable button + banner if offline
+- BR-M06.2 Mỗi batch tối đa 50 items
+- BR-M06.3 Exponential backoff trên FAILED: 60s, 120s, 240s, ..., max 1h (tự động bởi worker theo `next_retry_at`)
+- BR-M06.4 SYNCING crash recovery: rows có `sync_status='SYNCING' AND syncing_at < now-5min` → reset PENDING (chạy ở app start)
+
+**Validation rules:**
+
+- VR-M06.1 Trước khi POST sync, check JWT exp > now; nếu hết hạn → refresh token trước
+
+**Components:**
+
+- `<SyncSummaryCard />` (counts)
+- `<SyncQueueList />` (per workshop group)
+- `<SyncNowButton />`
+- `<SyncLogTimeline />` (last 10 runs)
+- `<NetworkStatusBanner />`
+
+**API endpoints:**
+
+- `POST /api/v1/checkins/sync` (batch up to 50 items)
+
+**Local DB writes per item:**
+
+- `UPDATE checkin_queue SET sync_status='SYNCING', syncing_at=now()` (claim)
+- After response per item:
+  - `ok` → `sync_status='SYNCED', synced_at=now()`
+  - `duplicate` → `sync_status='CONFLICT', error_detail='...'`
+  - `rejected` → `sync_status='REJECTED' (FAILED in our enum), error_detail=reason`
+- `INSERT INTO sync_log (workshop_id, started_at, completed_at, status, total_records, synced_count, conflict_count, failed_count)`
+
+---
+
+#### SCR-M07 — `(app)/settings.tsx` (Settings)
+
+**Purpose:** Profile info, logout, app info.
+
+**Read-only:**
+
+- User: fullName, email, role
+- App version (from `device_config.app_version`)
+- device_id (debug, ít hiển thị — có thể hide-by-default)
+- Allowed workshops count
+- Last global sync timestamp
+
+**Inputs:** N/A.
+
+**Primary actions:**
+
+- `[Logout]` → `<ConfirmDialog>"Bạn có {pending} check-in chưa sync. Sync trước khi logout?"</ConfirmDialog>` → nếu user confirm:
+  - Trigger final sync
+  - `POST /api/v1/auth/logout` (revoke refresh token)
+  - `DELETE FROM app_session WHERE id=1`
+  - Clear SecureStore tokens
+  - Mark `device_tokens` is_active=false (nếu có push notification, mobile staff hiện tại không có)
+  - Navigate `/login`
+
+**Business rules:**
+
+- BR-M07.1 Cảnh báo logout nếu pending sync > 0 — không block logout, chỉ cảnh báo
+- BR-M07.2 Logout không xóa `device_config` (giữ device_id qua mọi login)
+- BR-M07.3 Logout không xóa `cached_registrations` (giữ cache để login lại nhanh; cleared bởi cache_status='INVALID' check)
+
+**Components:**
+
+- `<UserProfileCard />`
+- `<AppInfoSection />`
+- `<LogoutButton />` + `<LogoutConfirmDialog />`
+
+**API endpoints:**
+
+- `POST /api/v1/auth/logout`
+
+**Local DB writes:**
+
+- `DELETE FROM app_session WHERE id=1`
+
+---
+
+## Section 4 — Mapping Matrix (User Flow Steps → Screens)
+
+> Bảng này verify mỗi bước trong user-flow analysis được phục vụ bởi đúng 1 screen (hoặc UI state của screen tồn tại). Các bước thuộc backend xử lý không có UI mapping.
+
+| Flow | Step | Actor | Boundary? | Classification | Screen / State / Component |
+|---|---|---|---|---|---|
+| 1 | Vào trang danh sách | Sinh viên | Yes | Screen | SCR-W02 `/workshops` |
+| 1 | Hệ thống hiển thị workshop list | System | — | Component | `<WorkshopCard />` |
+| 1 | Filter/search | Sinh viên | No | Component | `<FilterBar />` (state of W02) |
+| 1 | Chọn workshop → xem chi tiết | Sinh viên | Yes | Screen | SCR-W03 `/workshops/[id]` |
+| 2 | Bấm "Đăng ký" | Sinh viên | No | UI State | `<RegisterConfirmDialog />` (state of W03) |
+| 2 | Server xử lý OL + idempotency | System | — | Backend | (no UI) |
+| 2 | Sinh QR + thông báo | System | No | UI State | toast trên W03 → redirect W05 |
+| 2 | Sinh viên nhận QR | Sinh viên | Yes | Screen | SCR-W05 `/me/registrations/[id]` |
+| 3 | Bấm "Đăng ký" (paid) | Sinh viên | No | UI State | dialog state of W03 |
+| 3 | Server CB check, idempotency | System | — | Backend | — |
+| 3 | Redirect đến trang thanh toán | System | Yes | Screen | SCR-W06 `/me/registrations/[id]/pay` |
+| 3 | Chọn gateway, click Pay | Sinh viên | No | Component | `<GatewaySelector />` |
+| 3 | Gateway redirect / sync result | System | Yes | Screen | SCR-W07 `/payment-result` |
+| 3 | Hiển thị kết quả (success/failed/timeout) | System | No | UI State | states of W07 |
+| 4 | Vào "Đăng ký của tôi" | Sinh viên | Yes | Screen | SCR-W04 `/me/registrations` |
+| 4 | Chọn workshop → xem QR | Sinh viên | Yes | Screen | SCR-W05 |
+| 5 | BTC đăng nhập | BTC | Yes | Screen | SCR-A01 `/admin/login` |
+| 5 | Vào dashboard | BTC | Yes | Screen | SCR-A02 `/admin` |
+| 5 | Vào danh sách workshop | BTC | Yes | Screen | SCR-A03 `/admin/workshops` |
+| 5 | Click "Tạo workshop" | BTC | Yes | Screen | SCR-A04 `/admin/workshops/new` |
+| 5 | Form tạo workshop | BTC | No | Component | `<WorkshopForm />` |
+| 5 | Validation server-side | System | — | Backend | — |
+| 5 | INSERT workshop | System | — | Backend | — |
+| 6 | Chọn workshop cần sửa | BTC | Yes | Screen | SCR-A05 `/admin/workshops/[id]` |
+| 6 | Đổi phòng/giờ → save | BTC | No | Component | `<WorkshopForm />` |
+| 6 | Server PATCH với OL | System | — | Backend | — |
+| 6 | Trigger thông báo cho sinh viên | System | — | Backend | — |
+| 6 | Hủy workshop | BTC | No | UI State | `<CancelDialog />` (state of A05) |
+| 7 | Vào tab AI Summary | BTC | Yes | Screen | SCR-A08 `/admin/workshops/[id]/summary` |
+| 7 | Upload file PDF | BTC | No | Component | `<PDFUploader />` |
+| 7 | Server đẩy job vào Streams | System | — | Backend | — |
+| 7 | Worker xử lý + lưu summary | System | — | Backend | — |
+| 7 | Trang chi tiết hiển thị summary | Sinh viên | No | UI State | `<AISummaryPanel />` (state of W03) |
+| 8 | Cron đêm chạy | System | — | Backend | — |
+| 8 | Xem báo cáo import | BTC | Yes | Screen | SCR-A14 `/admin/imports` |
+| 8 | Xem chi tiết một lần import | BTC | Yes | Screen | SCR-A15 `/admin/imports/[id]` |
+| 8 | Tải file lỗi | BTC | No | Action | `[Download]` (no new screen) |
+| 9 | Dashboard tổng quan | BTC | Yes | Screen | SCR-A02 |
+| 9 | Drill-down workshop | BTC | Yes | Screen | SCR-A06 hoặc SCR-A07 |
+| 10 | Mở mobile app, đăng nhập | Staff | Yes | Screen | SCR-M01 `(auth)/login.tsx` |
+| 10 | Chọn workshop | Staff | Yes | Screen | SCR-M02 `(app)/index.tsx` + SCR-M03 |
+| 10 | Quét QR online | Staff | Yes | Screen | SCR-M04 `(app)/workshops/[id]/scan.tsx` |
+| 10 | Server INSERT checkins | System | — | Backend | — |
+| 10 | Hiển thị kết quả | System | No | UI State | `<ResultBanner />` (state of M04) |
+| 11 | App phát hiện mất mạng | System | No | UI State | `<NetworkStatusBanner />` (state of M04) |
+| 11 | Quét QR offline | Staff | No | UI State | offline mode of M04 |
+| 11 | App validate locally + queue | System | — | Local DB | INSERT checkin_queue |
+| 11 | Kết nối phục hồi | System | No | UI State | banner state |
+| 11 | Outbox sync | System | — | Backend | POST /checkins/sync |
+| 11 | Banner "Đã đồng bộ X bản ghi" | Staff | Yes | Screen (visit) | SCR-M06 `(app)/sync.tsx` |
+
+✅ Mọi bước user-flow có UI đều mapped. Không có flow step lạc nào.
+
+---
+
+## Section 5 — Ambiguity Log
+
+```
+[AMB-001] Authentication scope cho student web — SSO trường?
+  → Source: schema.sql students.password_hash NULL nếu auth qua SSO trường (Stage 5).
+            Hiện tại password-based.
+  → Assumption: Stage 1-4 dùng password-based auth (1 login screen).
+  → Impact if wrong: Cần thêm SCR-W01b cho SSO redirect flow + landing page.
+
+[AMB-002] Forgot/reset password flow
+  → Source: requirements.md không đề cập.
+  → Assumption: Không có; hiển thị link "Liên hệ ban tổ chức" trên SCR-W01.
+  → Impact if wrong: Thêm SCR-W08 `/forgot-password`, SCR-W09 `/reset-password/[token]`.
+
+[AMB-003] Self-registration cho sinh viên
+  → Source: ADR-12 nêu rõ CSV import là source of truth.
+  → Assumption: Không có self-signup. Sinh viên không có trong CSV → 422 generic message.
+  → Impact if wrong: Cần SCR-W10 `/signup` với verification flow.
+
+[AMB-004] Profile/account settings cho sinh viên
+  → Source: requirements.md không yêu cầu.
+  → Assumption: Bỏ qua. Email/tên không edit được (đồng bộ từ CSV).
+  → Impact if wrong: Thêm SCR-W11 `/me/profile`.
+
+[AMB-005] Mobile cho student (PWA hay native)?
+  → Source: requirements.md "Sinh viên: web app / mobile". mobile-schema.sql lock CHECKIN_STAFF.
+  → Assumption: Sinh viên dùng responsive web (PWA-compatible). Không có Expo app riêng.
+  → Impact if wrong: Cần parallel screen list cho student mobile (~5 screens).
+
+[AMB-006] Web cho check-in staff
+  → Source: API có endpoint /checkin/* nhưng mobile-schema chỉ CHECKIN_STAFF.
+  → Assumption: Check-in chỉ qua mobile. Web admin không có /admin/checkin.
+  → Impact if wrong: Thêm SCR-A18 `/admin/checkin/[workshopId]` cho fallback web.
+
+[AMB-007] Admin login tách khỏi student login
+  → Source: api-design.md POST /auth/login chung cho cả 2.
+  → Assumption: Tách 2 screen (W01 student, A01 admin) cho RBAC clarity và post-login UX.
+  → Impact if wrong: Gộp thành 1 screen `/login` với role detection auto-redirect post-login.
+
+[AMB-008] Workshop snapshot vs live data trong /me/registrations/[id]
+  → Source: Không clarified — sinh viên xem registration đã đăng ký 3 ngày trước,
+    workshop detail có thay đổi.
+  → Assumption: Hiển thị live (workshop hiện tại) — nếu BTC đổi giờ/phòng,
+    sinh viên thấy thông tin mới (đúng với notification "workshop changed").
+  → Impact if wrong: Cần snapshot tại registeredAt → thêm registration_snapshot table.
+
+[AMB-009] /admin/notifications gộp 2 view (channels + logs) hay tách?
+  → Assumption: Gộp 1 screen với client-side tabs (không sub-route) vì cùng business
+    domain "manage notification system".
+  → Impact if wrong: Tách thành SCR-A16a `/admin/notifications/channels`,
+    SCR-A16b `/admin/notifications/logs`.
+
+[AMB-010] /admin/system gộp CB + Reconciliation hay tách?
+  → Assumption: Gộp 1 screen với client-side tabs vì cùng "operations during incident".
+  → Impact if wrong: Tách thành SCR-A17a `/admin/system/circuit-breaker`,
+    SCR-A17b `/admin/system/payment-reconciliation`.
+
+[AMB-011] /admin/rooms — có /admin/rooms/new tách không?
+  → Assumption: Không tách — `<CreateRoomDialog />` modal vì form ngắn (4 fields).
+    Edit (có floor plan upload phức tạp hơn) → screen riêng /admin/rooms/[id].
+    Đây là exception so với speakers (tách full).
+  → Impact if wrong: Thêm SCR-A12b `/admin/rooms/new` cho consistency.
+
+[AMB-012] Payment redirect-flow vs sync-flow
+  → Source: api-design.md POST /payments có returnUrl nhưng response chỉ document sync.
+  → Assumption: Cả 2 mode đều support — sync (MOCK) + redirect (real gateways).
+    /payment-result handle cả 2 entry: sync redirect và external return.
+  → Impact if wrong: Nếu chỉ redirect → /payment-result luôn chỉ poll, không có sync mode.
+
+[AMB-013] Cancel registration policy — bao nhiêu giờ trước workshop?
+  → Source: registration-paid.md (chưa thấy trong context).
+  → Assumption: Cho phép cancel đến trước startsAt 2 giờ.
+  → Impact if wrong: Cần update validation rule VR-W04.1 và VR-W05.
+
+[AMB-014] Email/calendar invite — UI hay backend only?
+  → Source: requirements.md "thông báo qua app và email".
+  → Assumption: Email được gửi backend (Strategy InAppChannel + EmailChannel).
+    Frontend không có "preview email" hay "manage subscription" screen.
+  → Impact if wrong: Thêm SCR-W12 `/me/notifications` cho subscription preferences.
+
+[AMB-015] 404 / Error pages
+  → Assumption: Next.js `not-found.tsx` và `error.tsx` ở route group level (technical).
+    Không liệt kê thành screen riêng vì không có business goal.
+  → Impact if wrong: Liệt kê trong inventory cho hoàn chỉnh.
+```
+
+---
+
+## Section 6 — Validation Findings
+
+### Possible missing screens (cần xác nhận với stakeholder)
+
+```
+- /forgot-password + /reset-password (AMB-002): Stage 5, hiện chấp nhận thiếu.
+- /me/profile (AMB-004): Hiện không cần — email/tên đồng bộ từ CSV.
+- /me/notifications (AMB-014): Subscription management cho push/email — Stage 5.
+- /admin/checkin/[workshopId] (AMB-006): Web fallback nếu mobile lỗi — không bắt buộc.
+- /admin/payments?status=unresolved (extension của SCR-A17): list view cho unresolved
+  payments — hiện gộp count vào A17 panel; nếu BTC cần drill-down → tách thành sub-screen.
+- /admin/notifications/preview (Stage 5): preview template trước khi gửi — không trong scope.
+```
+
+### Possible redundant screens / merge candidates
+
+```
+- SCR-A09 (speakers list) + SCR-A11 (speaker edit): có thể gộp inline editing trong list,
+  nhưng tách rõ hơn cho audit và URL deep-link. KHÔNG MERGE.
+- SCR-A12 (rooms list) + SCR-A13 (room edit): tương tự, nhưng /new là modal trên list — đã merge.
+- SCR-W01 + SCR-A01: candidate to merge thành 1 `/login` với conditional render.
+  Đã chọn TÁCH (xem AMB-007 rationale). Nếu stakeholder muốn UX đơn giản hơn → merge OK.
+```
+
+### Over-fragmentation risk
+
+```
+- SCR-A06/A07/A08 (workshop sub-routes): 3 sub-route có thể seem over-fragmented nếu
+  BTC chỉ thường vào tab A07 (stats). Mitigation: tab nav rõ ràng + remember last tab.
+  Vẫn KEEP separate vì 3 data scope hoàn toàn khác — đúng theo Principle 3.
+
+- SCR-W04 + SCR-W05: list + detail là pattern chuẩn, KHÔNG over-fragmented.
+
+- SCR-M03 vs SCR-M04: lobby vs scanner. Nguy cơ over-fragment nếu user chỉ vào để scan.
+  Mitigation: M02 → M03 → tap "Scanner" → M04 chỉ 2 taps. Vẫn KEEP separate vì camera
+  permission + full-screen viewfinder thay đổi context hoàn toàn.
+```
+
+### Under-specification risk
+
+```
+- SCR-W07 `/payment-result`: business rule cho "unresolved" sau 5 phút chưa rõ
+  — reconciliation có gọi notification không, hay chỉ silent update? Cần xác nhận với
+  payment-reconciliation.md spec (Stage 5).
+
+- SCR-A08 AI Summary screen: chưa rõ behavior khi BTC re-upload PDF lúc summary đang
+  process — abort job cũ hay queue mới? Cần ADR-10 spec rõ.
+
+- SCR-M04 Scanner: behavior khi camera permission bị revoke giữa session
+  (user vào Settings turn off) — cần fallback graceful, hiện chỉ document
+  "permission denied → fallback screen" mà không spec UI cụ thể.
+
+- SCR-M06 Sync screen: progress bar cho batch lớn (>50 items) — UI chưa cụ thể.
+
+- SCR-A17 Operations: nếu BTC reset CB và gateway vẫn lỗi → CB OPEN lại ngay.
+  UI không có loop detection để cảnh báo BTC. Stage 5.
+```
+
+### Cross-cutting checks (tất cả screen)
+
+```
+✓ Mỗi screen có ít nhất 1 use case mapping (Section 4 verify).
+✓ Không có screen mồ côi không phục vụ flow nào.
+✓ RBAC enforcement điểm 2 và 3 đã spec rõ ở mỗi screen tương ứng (route prefix +
+  method-level WHERE clause + JWT claim check).
+✓ Optimistic Locking visible cho user qua 412 error — UI dialog spec ở SCR-A05.
+✓ Idempotency Key client generation spec rõ ở SCR-W03 và SCR-W06.
+✓ Offline-first invariants (is_fully_loaded check, exponential backoff) spec rõ ở M03/M04/M06.
+✓ Cache TTL 10s ↔ Cache-Control max-age=10s đã consistent (SCR-W02, W03 components dùng
+  poll interval khớp).
+```
+
+---
+
+## Phụ lục — Cấu trúc thư mục đề xuất (cheat sheet)
+
+### Web — `apps/web/` (Next.js)
+
+```
+app/
+├── (public)/
+│   ├── login/page.tsx                       # SCR-W01
+│   ├── workshops/
+│   │   ├── page.tsx                         # SCR-W02
+│   │   └── [id]/page.tsx                    # SCR-W03
+│   └── payment-result/page.tsx              # SCR-W07
+├── (student)/
+│   └── me/
+│       └── registrations/
+│           ├── page.tsx                     # SCR-W04
+│           └── [id]/
+│               ├── page.tsx                 # SCR-W05
+│               └── pay/page.tsx             # SCR-W06
+├── (admin)/
+│   └── admin/
+│       ├── login/page.tsx                   # SCR-A01
+│       ├── page.tsx                         # SCR-A02
+│       ├── workshops/
+│       │   ├── page.tsx                     # SCR-A03
+│       │   ├── new/page.tsx                 # SCR-A04
+│       │   └── [id]/
+│       │       ├── page.tsx                 # SCR-A05
+│       │       ├── registrations/page.tsx   # SCR-A06
+│       │       ├── stats/page.tsx           # SCR-A07
+│       │       └── summary/page.tsx         # SCR-A08
+│       ├── speakers/
+│       │   ├── page.tsx                     # SCR-A09
+│       │   ├── new/page.tsx                 # SCR-A10
+│       │   └── [id]/page.tsx                # SCR-A11
+│       ├── rooms/
+│       │   ├── page.tsx                     # SCR-A12
+│       │   └── [id]/page.tsx                # SCR-A13
+│       ├── imports/
+│       │   ├── page.tsx                     # SCR-A14
+│       │   └── [id]/page.tsx                # SCR-A15
+│       ├── notifications/page.tsx           # SCR-A16
+│       └── system/page.tsx                  # SCR-A17
+├── layout.tsx
+└── not-found.tsx
+```
+
+### Mobile — `apps/mobile/` (Expo Router)
+
+```
+app/
+├── _layout.tsx                              # Root layout (auth gate, NetInfo provider)
+├── (auth)/
+│   ├── _layout.tsx
+│   └── login.tsx                            # SCR-M01
+└── (app)/
+    ├── _layout.tsx                          # Bottom tabs (Home | Sync | Settings)
+    ├── index.tsx                            # SCR-M02 (Workshops list)
+    ├── workshops/
+    │   └── [id]/
+    │       ├── _layout.tsx                  # Stack within workshop
+    │       ├── index.tsx                    # SCR-M03 (Dashboard)
+    │       ├── scan.tsx                     # SCR-M04 (Scanner)
+    │       └── history.tsx                  # SCR-M05 (History)
+    ├── sync.tsx                             # SCR-M06
+    └── settings.tsx                         # SCR-M07
+```
