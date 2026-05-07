@@ -126,7 +126,8 @@ describe("PaymentsService", () => {
           provide: IdempotencyMechanic,
           useValue: {
             check: jest.fn(),
-            setPaymentId: jest.fn(),
+            markCompleted: jest.fn(),
+            markUnresolved: jest.fn(),
           },
         },
         {
@@ -207,7 +208,7 @@ describe("PaymentsService", () => {
         })
       );
       circuitBreaker.recordSuccess.mockResolvedValue();
-      idempotencyMechanic.setPaymentId.mockResolvedValue();
+      idempotencyMechanic.markCompleted.mockResolvedValue(Result.ok());
     }
 
     // FR-F05-001, FR-F05-002, FR-F05-003: full success path
@@ -227,7 +228,10 @@ describe("PaymentsService", () => {
       // Verify pipeline stages
       expect(registrationsRepo.findById).toHaveBeenCalledWith(REGISTRATION_ID);
       expect(seatLock.check).toHaveBeenCalledWith(WORKSHOP_ID, REGISTRATION_ID);
-      expect(idempotencyMechanic.check).toHaveBeenCalledWith(IDEMPOTENCY_KEY);
+      expect(idempotencyMechanic.check).toHaveBeenCalledWith(
+        IDEMPOTENCY_KEY,
+        "PAYMENT"
+      );
       expect(workshopsService.getPublishedById).toHaveBeenCalledWith(
         WORKSHOP_ID
       );
@@ -242,26 +246,33 @@ describe("PaymentsService", () => {
       );
       // Post-gateway
       expect(circuitBreaker.recordSuccess).toHaveBeenCalledWith(GATEWAY);
-      expect(idempotencyMechanic.setPaymentId).toHaveBeenCalledWith(
+      expect(idempotencyMechanic.markCompleted).toHaveBeenCalledWith(
         IDEMPOTENCY_KEY,
-        PAYMENT_ID
+        expect.any(Object),
+        201
       );
     });
 
-    // FR-F05-001: idempotency duplicate
-    it("should return PAYMENT_DUPLICATE on idempotency hit (FR-F05-001)", async () => {
+    // FR-F05-001: idempotency IN_PROGRESS conflict
+    it("should return IDEMPOTENCY_CONFLICT for in-progress key (FR-F05-001)", async () => {
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
       seatLock.check.mockResolvedValue(
         Result.ok({ valid: true, remainingSeconds: 500 })
       );
       idempotencyMechanic.check.mockResolvedValue(
-        Result.ok({ proceed: false, existingPaymentId: "existing-pay" })
+        Result.fail({
+          category: "CONFLICT",
+          code: "IDEMPOTENCY_CONFLICT",
+          message:
+            "Request is already being processed for this idempotency key.",
+          context: { idempotencyKey: IDEMPOTENCY_KEY },
+        })
       );
 
       const result = await service.initiate(STUDENT_ID, dto, IDEMPOTENCY_KEY);
 
       expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("PAYMENT_DUPLICATE");
+      expect(result.error.code).toBe("IDEMPOTENCY_CONFLICT");
       expect(circuitBreaker.checkAndAllow).not.toHaveBeenCalled();
     });
 

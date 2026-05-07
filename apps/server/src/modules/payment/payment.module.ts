@@ -10,6 +10,7 @@ import { PaymentsController } from "./controllers/payments.controller";
 import { HmacSignatureGuard } from "./guards/hmac-signature.guard";
 import { CircuitBreakerMechanic } from "./mechanics/circuit-breaker.mechanic";
 import { IdempotencyMechanic } from "./mechanics/idempotency.mechanic";
+import { IdempotencyKeysRepository } from "./repositories/idempotency-keys.repository";
 import { PaymentsRepository } from "./repositories/payments.repository";
 import { PaymentGatewayService } from "./services/payment-gateway.service";
 import { PaymentsService } from "./services/payments.service";
@@ -29,6 +30,7 @@ import { PaymentsService } from "./services/payments.service";
     PaymentGatewayService,
     // Repositories
     PaymentsRepository,
+    IdempotencyKeysRepository,
     // Mechanics
     CircuitBreakerMechanic,
     IdempotencyMechanic,

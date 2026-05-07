@@ -51,15 +51,18 @@ describe("RegistrationsController", () => {
   });
 
   describe("POST /registrations", () => {
-    it("calls register with user.sub and dto", async () => {
+    const IDEM_KEY = "idem-key-001";
+
+    it("calls register with user.sub, dto, and idempotencyKey", async () => {
       const dto = { workshop_id: "ws-1" };
       registrationsService.register.mockResolvedValue(
         Result.ok(mockRegistrationDto)
       );
-      await controller.createRegistration(dto, mockUser);
+      await controller.createRegistration(dto, IDEM_KEY, mockUser);
       expect(registrationsService.register).toHaveBeenCalledWith(
         "stu-001",
-        dto
+        dto,
+        IDEM_KEY
       );
     });
   });
