@@ -22,6 +22,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
+
 import type { Pipeline } from "ioredis";
 
 /**
@@ -332,7 +333,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    *
    * @returns An ioredis `Pipeline` bound to the **rate-limit (DB2)** connection.
    */
-  multi(): Pipeline {
+  multi(): ReturnType<Redis["multi"]> {
     return this.rateLimitClient.multi();
   }
 

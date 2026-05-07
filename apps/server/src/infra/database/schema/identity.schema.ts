@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, pgTable, unique } from "drizzle-orm/pg-core";
 
 import {
@@ -73,12 +74,20 @@ export const students = pgTable(
     email: t.text("email"),
     fullName: t.text("full_name").notNull(),
     passwordHash: t.text("password_hash"),
+    // userId allows backward-compat auth linkage; will be removed
+    // once STUDENT auth migrates from `users` table to `students` directly.
+    userId: t
+      .uuid("user_id")
+      .references(() => users.userId, { onDelete: "set null" }),
     updatedAt: t
       .timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   }),
-  (table) => [index("idx_students_email").on(table.email)]
+  (table) => [
+    index("idx_students_email").on(table.email),
+    index("idx_students_user_id").on(table.userId),
+  ]
 );
 
 /**
@@ -103,7 +112,9 @@ export const staff = pgTable(
       .defaultNow(),
   }),
   (table) => [
-    index("idx_staff_role").on(table.role).where(table.isActive),
+    index("idx_staff_role")
+      .on(table.role)
+      .where(sql`${table.isActive} = true`),
     index("idx_staff_email").on(table.email),
   ]
 );
@@ -138,7 +149,7 @@ export const deviceTokens = pgTable(
   (table) => [
     index("idx_device_tokens_student")
       .on(table.studentId)
-      .where(table.isActive),
+      .where(sql`${table.isActive} = true`),
     index("idx_device_tokens_token").on(table.token),
   ]
 );

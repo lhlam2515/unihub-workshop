@@ -40,7 +40,11 @@ export const checkinStaffAssignmentsRelations = relations(
   })
 );
 
-export const studentsRelations = relations(students, ({ many }) => ({
+export const studentsRelations = relations(students, ({ one, many }) => ({
+  user: one(users, {
+    fields: [students.userId],
+    references: [users.userId],
+  }),
   registrations: many(registrations),
   payments: many(payments),
   checkinRecords: many(checkinRecords),
