@@ -2,7 +2,7 @@ import { Test, type TestingModule } from "@nestjs/testing";
 
 import { RedisService } from "@/infra/redis/redis.service";
 
-import { RateLimiterMechanic } from "./rate-limiter.mechanic";
+import { RateLimiterMechanic } from "./rate-limiter.service";
 
 describe("RateLimiterMechanic", () => {
   let mechanic: RateLimiterMechanic;

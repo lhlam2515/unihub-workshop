@@ -35,7 +35,7 @@ import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
-import { DocumentsService } from "../services/documents.service";
+import { DocumentsService } from "../services/workshop-documents.service";
 
 import type { Response } from "express";
 

@@ -2,7 +2,7 @@ import { Test, type TestingModule } from "@nestjs/testing";
 
 import { RedisService } from "@/infra/redis/redis.service";
 
-import { GlobalRateLimitMechanic } from "./global-rate-limit.mechanic";
+import { GlobalRateLimitMechanic } from "./global-rate-limit.service";
 
 describe("GlobalRateLimitMechanic", () => {
   let mechanic: GlobalRateLimitMechanic;
