@@ -39,10 +39,7 @@ export const notificationLogs = pgTable(
   "notification_logs",
   (t) => ({
     notificationId: t.uuid("notification_id").primaryKey().defaultRandom(),
-    userId: t
-      .uuid("user_id")
-      .notNull()
-      .references(() => users.userId),
+    userId: t.text("user_id").notNull(),
     workshopId: t.uuid("workshop_id").references(() => workshops.workshopId, {
       onDelete: "set null",
     }),
