@@ -2,7 +2,7 @@
  * Rooms Service
  *
  * Handles CRUD operations for rooms.
- * Rooms are venues for workshops and are managed by ORGANIZER roles.
+ * Rooms are venues for workshops and are managed by BTC roles.
  */
 
 import { Injectable } from "@nestjs/common";

@@ -33,11 +33,11 @@ import { StudentSyncService } from "../services/student-sync.service";
  * - GET    /admin/student-sync/:jobId — Get status of a specific job
  * - GET    /admin/student-sync/:jobId/errors — Get errors for a job (paginated)
  *
- * All endpoints require ORGANIZER role.
+ * All endpoints require BTC role.
  */
 @Controller("/admin/student-sync")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
 export class StudentSyncAdminController {
   constructor(private readonly studentSyncService: StudentSyncService) {}
 

@@ -2,7 +2,7 @@
  * Speakers Service
  *
  * Handles CRUD operations for speaker profiles.
- * Speakers are referenced by workshops and are managed by ORGANIZER roles.
+ * Speakers are referenced by workshops and are managed by BTC roles.
  */
 
 import { Injectable } from "@nestjs/common";
