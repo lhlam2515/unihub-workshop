@@ -17,6 +17,7 @@ function createFsdBoundariesConfig({
             "src/components/**/*",
             ...sharedPatterns,
             "src/context/**/*",
+            "src/providers/**/*",
             "src/database/**/*",
             "src/constants/**/*",
             "src/hooks/**/*",
