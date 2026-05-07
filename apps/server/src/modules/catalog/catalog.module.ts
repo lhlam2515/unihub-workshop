@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
 import { SharedQueueModule } from "@/infra/messaging/queue.module";
@@ -43,7 +43,7 @@ import { WorkshopsService } from "./services/workshops.service";
  * - WorkshopNotificationPublisher — consumed by BackgroundModule (notification worker)
  */
 @Module({
-  imports: [DatabaseModule, RedisModule, SharedQueueModule, AiSummaryModule],
+  imports: [DatabaseModule, RedisModule, SharedQueueModule, forwardRef(() => AiSummaryModule)],
   controllers: [
     WorkshopsPublicController,
     WorkshopsAdminController,
@@ -68,6 +68,7 @@ import { WorkshopsService } from "./services/workshops.service";
     WorkshopsService,
     SeatCounterService,
     WorkshopNotificationPublisher,
+    WorkshopsRepository,
   ],
 })
 export class CatalogModule {}

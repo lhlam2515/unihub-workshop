@@ -8,6 +8,7 @@ import { AiSummaryModule } from "../ai-summary/ai-summary.module";
 import { BookingModule } from "../booking/booking.module";
 import { CatalogModule } from "../catalog/catalog.module";
 import { CsvSyncModule } from "../csv-sync/csv-sync.module";
+import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
 import { SystemAdminController } from "./controllers/system-admin.controller";
 import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
@@ -47,6 +48,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     IamModule,
     AiSummaryModule,
     CsvSyncModule,
+    NotificationModule,
   ],
   controllers: [SystemAdminController],
   providers: [
