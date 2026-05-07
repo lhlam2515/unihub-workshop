@@ -5,7 +5,7 @@
  * to COMPLETED status. Runs every hour.
  *
  * Business rules:
- * - Only targets workshops where status = 'PUBLISHED' AND ends_at < NOW().
+ * - Only targets workshops where status = 'OPEN' AND ends_at < NOW().
  * - Delegates to WorkshopsService.completePastWorkshops() which uses the
  *   WorkshopsRepository to execute the UPDATE.
  * - Idempotent — already COMPLETED, DRAFT, or CANCELLED workshops are excluded

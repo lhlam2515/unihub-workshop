@@ -48,7 +48,7 @@ export const notificationLogs = pgTable(
     }),
     type: notificationTypeEnum("type").notNull(),
     channel: notificationChannelEnum("channel").notNull(),
-    status: notificationStatusEnum("status").notNull().default("PENDING"),
+    status: notificationStatusEnum("status").notNull().default("SENT"),
     payload: t
       .jsonb("payload")
       .notNull()
@@ -65,7 +65,7 @@ export const notificationLogs = pgTable(
     index("idx_notif_workshop_id").on(table.workshopId),
     index("idx_notif_status")
       .on(table.status)
-      .where(sql`${table.status} = 'PENDING'`),
+      .where(sql`${table.status} IN ('FAILED', 'TIMEOUT')`),
   ]
 );
 
@@ -114,7 +114,7 @@ export const aiSummaries = pgTable(
     rawText: t.text("raw_text"),
     summaryText: t.text("summary_text"),
     modelUsed: t.varchar("model_used", { length: 100 }),
-    status: aiSummaryStatusEnum("status").notNull().default("PENDING"),
+    status: aiSummaryStatusEnum("status").notNull().default("NONE"),
     generatedAt: t.timestamp("generated_at", { withTimezone: true }),
     errorMessage: t.text("error_message"),
     createdAt: t
@@ -127,7 +127,7 @@ export const aiSummaries = pgTable(
     index("idx_summary_workshop_id").on(table.workshopId),
     index("idx_summary_status")
       .on(table.status)
-      .where(sql`${table.status} IN ('PENDING', 'PROCESSING')`),
+      .where(sql`${table.status} IN ('QUEUED', 'PROCESSING')`),
   ]
 );
 

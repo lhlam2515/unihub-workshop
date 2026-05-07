@@ -74,7 +74,7 @@ export class AiSummariesRepository {
    * - Enforced by a unique constraint on documentId: if a summary already exists,
    *   its status is reset to PENDING via ON CONFLICT DO UPDATE.
    *
-   * Drizzle operation: INSERT INTO ai_summaries ... ON CONFLICT (documentId) DO UPDATE SET status = 'PENDING'.
+   * Drizzle operation: INSERT INTO ai_summaries ... ON CONFLICT (documentId) DO UPDATE SET status = 'QUEUED'.
    *
    * Side effects:
    * - Inserts a new row or updates the status of an existing row in ai_summaries.
