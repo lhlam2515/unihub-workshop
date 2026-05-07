@@ -3,7 +3,9 @@ import { z } from "zod";
 
 export const CreateDeviceTokenSchema = z.object({
   token: z.string().min(1),
-  platform: z.enum(["WEB", "MOBILE"]),
+  platform: z.enum(["ios", "android"]),
 });
 
-export class CreateDeviceTokenDto extends createZodDto(CreateDeviceTokenSchema) {}
+export class CreateDeviceTokenDto extends createZodDto(
+  CreateDeviceTokenSchema
+) {}
