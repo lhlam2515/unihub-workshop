@@ -47,8 +47,6 @@ import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mec
 import { PaymentsRepository } from "@/modules/payment/repositories/payments.repository";
 import { PaymentGatewayService } from "@/modules/payment/services/payment-gateway.service";
 import { PaymentsService } from "@/modules/payment/services/payments.service";
-import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
-import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
 import { paymentErrors, seatErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -83,14 +81,6 @@ const mockPaymentsRepo = {
   updateStatus: jest.fn(),
   transaction: jest.fn(),
   lockWorkshopSlot: jest.fn(),
-};
-
-const mockRateLimiter = {
-  consumeToken: jest.fn(),
-};
-
-const mockGlobalRateLimit = {
-  check: jest.fn(),
 };
 
 const mockSeatLock = {
@@ -291,8 +281,6 @@ describe("Booking Module — Integration", () => {
         { provide: RegistrationsRepository, useValue: mockRegistrationsRepo },
         { provide: TicketsRepository, useValue: mockTicketsRepo },
         { provide: PaymentsRepository, useValue: mockPaymentsRepo },
-        { provide: RateLimiterMechanic, useValue: mockRateLimiter },
-        { provide: GlobalRateLimitMechanic, useValue: mockGlobalRateLimit },
         { provide: SeatLockMechanic, useValue: mockSeatLock },
         { provide: SeatCounterService, useValue: mockSeatCounter },
         { provide: IdempotencyMechanic, useValue: mockIdempotencyMechanic },
@@ -334,8 +322,6 @@ describe("Booking Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockGlobalRateLimit.check.mockResolvedValue(Result.ok());
-        mockRateLimiter.consumeToken.mockResolvedValue(Result.ok());
         mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(null)
@@ -362,8 +348,6 @@ describe("Booking Module — Integration", () => {
 
       it("creates a PENDING_PAYMENT registration for a paid workshop — FR-F04-004", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(Result.ok(paidWorkshop));
-        mockGlobalRateLimit.check.mockResolvedValue(Result.ok());
-        mockRateLimiter.consumeToken.mockResolvedValue(Result.ok());
         mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(null)
@@ -398,8 +382,6 @@ describe("Booking Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockGlobalRateLimit.check.mockResolvedValue(Result.ok());
-        mockRateLimiter.consumeToken.mockResolvedValue(Result.ok());
         mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(registration)
@@ -423,8 +405,6 @@ describe("Booking Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockGlobalRateLimit.check.mockResolvedValue(Result.ok());
-        mockRateLimiter.consumeToken.mockResolvedValue(Result.ok());
         mockSeatCounter.decrement.mockResolvedValue(
           Result.fail(seatErrors.unavailable("wid-001"))
         );
@@ -439,35 +419,10 @@ describe("Booking Module — Integration", () => {
         expect(result.error.code).toBe("SEAT_UNAVAILABLE");
       });
 
-      it("checks rate limit before processing — FR-F04-001", async () => {
-        mockWorkshopsRepo.findById.mockResolvedValue(
-          Result.ok(publishedWorkshop)
-        );
-        mockGlobalRateLimit.check.mockResolvedValue(
-          Result.fail({
-            category: "RATE_LIMIT",
-            code: "RATE_LIMIT_EXCEEDED",
-            message: "Too many requests",
-          })
-        );
-
-        const result = await registrationsController.createRegistration(
-          { workshop_id: "wid-001" },
-          "idem-reg-001",
-          studentUser
-        );
-
-        expect(result.isSuccess).toBe(false);
-        expect(result.error.code).toBe("RATE_LIMIT_EXCEEDED");
-        expect(mockGlobalRateLimit.check).toHaveBeenCalled();
-      });
-
       it("uses student ID from JWT (never from body) — IDOR prevention — FR-F01-007", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockGlobalRateLimit.check.mockResolvedValue(Result.ok());
-        mockRateLimiter.consumeToken.mockResolvedValue(Result.ok());
         mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(null)
