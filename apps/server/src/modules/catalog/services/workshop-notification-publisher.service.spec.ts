@@ -1,8 +1,7 @@
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { Queue } from "bullmq";
 
-import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
+import { BullMQAdapter } from "@/infra/messaging/bullmq.adapter";
+import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 
 import { WorkshopNotificationPublisher } from "./workshop-notification-publisher.service";
 
@@ -12,17 +11,21 @@ import { WorkshopNotificationPublisher } from "./workshop-notification-publisher
 
 describe("WorkshopNotificationPublisher", () => {
   let service: WorkshopNotificationPublisher;
-  let notificationQueue: jest.Mocked<Queue>;
+  let adapter: BullMQAdapter;
 
   beforeEach(async () => {
+    const mockQueue = {
+      add: jest.fn().mockResolvedValue({ id: "job-1" } as any),
+    };
+    adapter = new BullMQAdapter(mockQueue as any);
+    jest.spyOn(adapter, "enqueue");
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkshopNotificationPublisher,
         {
-          provide: getQueueToken(NOTIFICATION_QUEUE),
-          useValue: {
-            add: jest.fn().mockResolvedValue({ id: "job-1" } as any),
-          },
+          provide: MESSAGING_TOKEN.NOTIFICATION_QUEUE,
+          useValue: adapter,
         },
       ],
     }).compile();
@@ -30,7 +33,6 @@ describe("WorkshopNotificationPublisher", () => {
     service = module.get<WorkshopNotificationPublisher>(
       WorkshopNotificationPublisher
     );
-    notificationQueue = module.get(getQueueToken(NOTIFICATION_QUEUE));
   });
 
   describe("publishCancelled", () => {
@@ -42,7 +44,7 @@ describe("WorkshopNotificationPublisher", () => {
 
       await service.publishCancelled(workshop);
 
-      expect(notificationQueue.add).toHaveBeenCalledWith(
+      expect(adapter.enqueue).toHaveBeenCalledWith(
         "workshop.cancelled",
         expect.objectContaining({
           workshopId: "w-001",
@@ -62,7 +64,7 @@ describe("WorkshopNotificationPublisher", () => {
 
       await service.publishEmergencyUpdate(workshop, changes);
 
-      expect(notificationQueue.add).toHaveBeenCalledWith(
+      expect(adapter.enqueue).toHaveBeenCalledWith(
         "workshop.emergency-update",
         expect.objectContaining({
           workshopId: "w-001",
@@ -79,11 +81,13 @@ describe("WorkshopNotificationPublisher", () => {
 
       await service.publishEmergencyUpdate(workshop, {});
 
-      expect(notificationQueue.add).toHaveBeenCalled();
+      expect(adapter.enqueue).toHaveBeenCalled();
     });
 
     it("falls back to logging when queue is unreachable", async () => {
-      notificationQueue.add.mockRejectedValue(new Error("Queue unreachable"));
+      jest
+        .spyOn(adapter, "enqueue")
+        .mockRejectedValue(new Error("Queue unreachable"));
       const loggerSpy = jest.spyOn(service["logger"], "log");
       const workshop = {
         workshopId: "w-003",

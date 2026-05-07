@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
 import { RateLimitModule } from "@/modules/rate-limit/rate-limit.module";
 
@@ -28,7 +28,7 @@ import { TicketsService } from "./services/tickets.service";
  * - DatabaseModule — PostgreSQL access via Drizzle ORM
  * - RedisModule — distributed locks, rate counters
  * - CatalogModule — SeatCounterService for seat availability checks
- * - SharedQueueModule — BullMQ queue definitions
+ * - MessagingModule — BullMQ queue definitions
  * - PaymentModule — payments, circuit breaker, idempotency
  * - RateLimitModule — rate limiting (global + per-endpoint)
  *
@@ -41,7 +41,7 @@ import { TicketsService } from "./services/tickets.service";
     DatabaseModule,
     RedisModule,
     CatalogModule,
-    SharedQueueModule,
+    MessagingModule,
     IamModule,
     PaymentModule,
     RateLimitModule,
