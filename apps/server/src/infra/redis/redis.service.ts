@@ -403,6 +403,89 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ---------------------------------------------------------------------------
+  // Sorted Set Operations
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Adds a member with a numeric score to a Redis Sorted Set.
+   *
+   * Used by SlidingWindowService for rate-limit sliding window counters.
+   * Each request is added with a timestamp score for pruning.
+   *
+   * @param key - Redis Sorted Set key.
+   * @param score - The numeric score (typically `Date.now()`).
+   * @param member - The member value (typically `"${now}-${uuid}"`).
+   * @returns The number of elements added to the sorted set.
+   */
+  async zadd(key: string, score: number, member: string): Promise<number> {
+    return this.client.zadd(key, score, member);
+  }
+
+  /**
+   * Removes all members in a Sorted Set with scores within the given interval.
+   *
+   * Used by SlidingWindowService to prune expired entries before the window.
+   *
+   * @param key - Redis Sorted Set key.
+   * @param min - Minimum score (inclusive).
+   * @param max - Maximum score (inclusive).
+   * @returns The number of members removed.
+   */
+  async zremrangebyscore(
+    key: string,
+    min: number,
+    max: number
+  ): Promise<number> {
+    return this.client.zremrangebyscore(key, min, max);
+  }
+
+  /**
+   * Returns the cardinality (number of members) of a Sorted Set.
+   *
+   * Used by SlidingWindowService to count requests in the current window.
+   *
+   * @param key - Redis Sorted Set key.
+   * @returns The number of members in the sorted set.
+   */
+  async zcard(key: string): Promise<number> {
+    return this.client.zcard(key);
+  }
+
+  /**
+   * Returns a range of members from a Sorted Set by index.
+   *
+   * Used by SlidingWindowService to retrieve the oldest entry timestamp.
+   *
+   * @param key - Redis Sorted Set key.
+   * @param start - Start index (0-based, inclusive).
+   * @param stop - Stop index (0-based, inclusive).
+   * @returns An array of member strings in the specified range.
+   */
+  async zrange(key: string, start: number, stop: number): Promise<string[]> {
+    return this.client.zrange(key, start, stop);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transaction Pipeline
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns an ioredis Pipeline for atomic MULTI/EXEC transaction batches.
+   *
+   * The caller chains commands on the returned Pipeline, then calls `exec()`
+   * to execute them atomically. The result is an array of `[error, result]`
+   * tuples in command order.
+   *
+   * Used by SlidingWindowService to atomically prune, count, add, and set TTL
+   * on a Sorted Set without race conditions between concurrent requests.
+   *
+   * @returns An ioredis Pipeline instance (chainable, with `.exec()`).
+   */
+  pipeline() {
+    return this.client.pipeline();
+  }
+
+  // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
 
