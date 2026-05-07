@@ -37,7 +37,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    const result = await authService.loginWithCredentials({ email: email.trim(), password });
+    const result = await authService.loginWithCredentials({ email: email.trim(), password, platform: "MOBILE" });
 
     setIsLoading(false);
 
