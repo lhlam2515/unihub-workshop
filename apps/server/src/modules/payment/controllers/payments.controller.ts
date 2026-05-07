@@ -28,8 +28,8 @@ import {
   HttpStatus,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";

@@ -17,7 +17,7 @@
 import { Test } from "@nestjs/testing";
 import bcrypt from "bcrypt";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RedisService } from "@/infra/redis/redis.service";
 import { AuthController } from "@/modules/iam/controllers/auth.controller";
 import { CheckinStaffAdminController } from "@/modules/iam/controllers/checkin-staff-admin.controller";

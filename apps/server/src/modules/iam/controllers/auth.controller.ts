@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Public } from "@/shared/decorators/public.decorator";
 import { Result } from "@/shared/response/result";

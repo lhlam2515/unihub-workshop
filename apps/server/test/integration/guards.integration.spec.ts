@@ -16,9 +16,9 @@ import { Reflector } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import jwt from "jsonwebtoken";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
-import { WorkshopScopeGuard } from "@/core/guards/workshop-scope.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { WorkshopScopeGuard } from "@/modules/iam/guards/workshop-scope.guard";
 import { RedisService } from "@/infra/redis/redis.service";
 import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";

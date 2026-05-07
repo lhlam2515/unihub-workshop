@@ -15,8 +15,8 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import {
   NOTIFICATION_QUEUE,

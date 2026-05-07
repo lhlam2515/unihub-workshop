@@ -18,8 +18,8 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 import { CheckinController } from "@/modules/checkin/controllers/checkin.controller";
 import { TicketsController } from "@/modules/checkin/controllers/tickets.controller";
