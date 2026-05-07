@@ -99,18 +99,16 @@ export class SystemMonitorService {
       const redisValueStr = await this.redisService.get(key);
       const redisValue = redisValueStr
         ? parseInt(redisValueStr, 10)
-        : Number(workshop.capacity);
+        : workshop.seatsTotal;
 
-      const slotResult = await this.workshopsService.getSlotByWorkshopId(
-        workshop.workshopId
-      );
-      if (slotResult.isFailure) continue;
+      // Expected = seatsTotal - (confirmed in DB + locked in Redis)
+      const confirmedResult =
+        await this.workshopsService.getPublishedById(workshop.workshopId);
+      if (confirmedResult.isFailure) continue;
 
-      const slot = slotResult.data;
-      const confirmedCount = slot?.confirmedCount ?? 0;
-      const lockedCount = slot?.lockedCount ?? 0;
-      const expectedValue =
-        Number(workshop.capacity) - confirmedCount - lockedCount;
+      const lockPattern = `seat:lock:${workshop.workshopId}:*`;
+      const lockKeys = await this.redisService.scanKeys(lockPattern);
+      const expectedValue = workshop.seatsTotal - lockKeys.length;
 
       if (Math.abs(redisValue - expectedValue) > DISCREPANCY_THRESHOLD) {
         discrepanciesFound++;

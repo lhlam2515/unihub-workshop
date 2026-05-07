@@ -5,7 +5,7 @@
  * and infrastructure state.
  *
  * Security:
- * - All endpoints require JWT authentication and ORGANIZER role.
+ * - All endpoints require JWT authentication and BTC role.
  * - Base path: /admin/system
  *
  * Endpoints:
@@ -40,7 +40,7 @@ import type {
 
 @Controller("/admin/system")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
 export class SystemAdminController {
   constructor(private readonly systemMonitorService: SystemMonitorService) {}
 

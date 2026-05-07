@@ -808,7 +808,7 @@ export const passthroughOrInternal = (err: unknown): AppError =>
  * Detects PostgreSQL lock conflict errors and maps them to DB_LOCK_TIMEOUT.
  * Any other error is wrapped as INTERNAL_ERROR.
  *
- * @param resource - Resource name for the DB_LOCK_TIMEOUT context (e.g., "workshop_slots").
+ * @param resource - Resource name for the DB_LOCK_TIMEOUT context (e.g., "payments", "registrations").
  * @param timeoutMs - Timeout in milliseconds (default 3000).
  * @returns An error mapper function suitable for tryCatch.
  */

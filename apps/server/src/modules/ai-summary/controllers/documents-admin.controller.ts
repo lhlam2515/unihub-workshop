@@ -1,8 +1,8 @@
 /**
  * Documents Admin Controller
  *
- * Handles ORGANIZER-only document management for workshop materials.
- * All endpoints require JWT authentication and ORGANIZER role.
+ * Handles BTC-only document management for workshop materials.
+ * All endpoints require JWT authentication and BTC role.
  *
  * Endpoints:
  * - POST /admin/workshops/:workshopId/documents — upload a document
@@ -47,7 +47,7 @@ const ALLOWED_MIME_TYPE = "application/pdf";
 
 @Controller("admin/workshops/:workshopId/documents")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
 export class DocumentsAdminController {
   constructor(private readonly documentsService: DocumentsService) {}
 
@@ -55,7 +55,7 @@ export class DocumentsAdminController {
    * Uploads a document for a workshop.
    *
    * Route: POST /admin/workshops/:workshopId/documents
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Expects a multipart/form-data request with a `file` field containing
    * a PDF document. The file is validated (PDF MIME type, max 50 MB) and
    * uploaded to S3-compatible object storage. A metadata record is created
@@ -88,7 +88,7 @@ export class DocumentsAdminController {
    * Lists all documents associated with a workshop.
    *
    * Route: GET /admin/workshops/:workshopId/documents
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    *
    * @param workshopId - The UUID of the parent workshop.
    * @returns Array of document DTOs.
@@ -102,7 +102,7 @@ export class DocumentsAdminController {
    * Deletes a specific document from a workshop.
    *
    * Route: DELETE /admin/workshops/:workshopId/documents/:documentId
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Removes the document record from the database. The associated AI
    * summary is cascaded on delete.
    *
@@ -122,7 +122,7 @@ export class DocumentsAdminController {
    * Downloads a document file from object storage.
    *
    * Route: GET /admin/workshops/:workshopId/documents/:documentId/download
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Streams the document PDF from object storage directly to the HTTP response.
    * Uses @Res({ passthrough: true }) to set Content-Disposition headers
    * while still delegating the response body to NestJS's stream handling.
@@ -159,7 +159,7 @@ export class DocumentsAdminController {
    * Retrieves the AI-generated summary for a workshop's documents.
    *
    * Route: GET /admin/workshops/:workshopId/documents/summary
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Returns the public-safe version (summary_text only included when
    * status is DONE). Admin sees the same shape via this endpoint.
    *
@@ -175,7 +175,7 @@ export class DocumentsAdminController {
    * Retries AI summary generation for a document that previously failed.
    *
    * Route: POST /admin/workshops/:workshopId/documents/:documentId/retry-summary
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Only summaries with FAILED status are reset to PENDING for reprocessing.
    *
    * @param documentId - The UUID of the document to retry.

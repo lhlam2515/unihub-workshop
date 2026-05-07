@@ -4,7 +4,7 @@
  * Manages workshop document uploads and AI-powered summarization.
  *
  * Business rules:
- * - Documents are linked to a workshop and uploaded by ORGANIZER users.
+ * - Documents are linked to a workshop and uploaded by BTC users.
  * - Each uploaded document triggers an AI summary job with PENDING status.
  * - Only FAILED AI summaries can be retried.
  * - Document deletion cascades to remove the associated AI summary.
@@ -189,7 +189,7 @@ export class DocumentsService {
 
     const updateResult = await this.aiSummariesRepo.updateStatus(
       summaryResult.data.summaryId,
-      "PENDING"
+      "QUEUED"
     );
     if (updateResult.isFailure) return Result.fail(updateResult.error);
 
