@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 
+import { StorageService } from "@/infra/storage/storage.service";
 import { aiSummaryErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
-import { StorageService } from "@/shared/storage/storage.service";
 
 import type { PdfPipelineContext } from "./pipeline-context";
 import type { IPipelineFilter } from "./pipeline-filter.interface";

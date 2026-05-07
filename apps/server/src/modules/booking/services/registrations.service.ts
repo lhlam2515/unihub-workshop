@@ -2,11 +2,11 @@ import crypto from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 
-import type { Registration } from "@/database/types/transaction.types";
+import type { Registration } from "@/infra/database/types/transaction.types";
+import type { RegistrationEventData } from "@/infra/messaging/event-contracts";
+import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import type { RegistrationEventData } from "@/shared/queues/event-contracts";
-import { NotificationPublisher } from "@/shared/queues/notification-publisher";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

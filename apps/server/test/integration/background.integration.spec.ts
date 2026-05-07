@@ -17,7 +17,12 @@ import { Test } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
+import {
+  NOTIFICATION_QUEUE,
+  STUDENT_SYNC_QUEUE,
+} from "@/infra/messaging/queue.constants";
+import { RedisService } from "@/infra/redis/redis.service";
 import { NotificationsAdminController } from "@/modules/background/controllers/notifications-admin.controller";
 import { StudentSyncAdminController } from "@/modules/background/controllers/student-sync-admin.controller";
 import { SystemAdminController } from "@/modules/background/controllers/system-admin.controller";
@@ -28,11 +33,6 @@ import { StudentSyncJobsRepository } from "@/modules/background/repositories/stu
 import { NotificationsService } from "@/modules/background/services/notifications.service";
 import { StudentSyncService } from "@/modules/background/services/student-sync.service";
 import { SystemMonitorService } from "@/modules/background/services/system-monitor.service";
-import {
-  NOTIFICATION_QUEUE,
-  STUDENT_SYNC_QUEUE,
-} from "@/shared/queues/queue.constants";
-import { RedisService } from "@/shared/redis/redis.service";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------

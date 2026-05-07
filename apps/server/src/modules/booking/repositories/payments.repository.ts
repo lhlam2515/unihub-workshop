@@ -15,10 +15,13 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { and, desc, eq, sql } from "drizzle-orm";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
-import type { DrizzleTransaction } from "@/database/types/drizzle.types";
-import type { Payment, NewPayment } from "@/database/types/transaction.types";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
+import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
+import type { DrizzleTransaction } from "@/infra/database/types/drizzle.types";
+import type {
+  Payment,
+  NewPayment,
+} from "@/infra/database/types/transaction.types";
 import { lockTimeoutMapper, systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 

@@ -3,12 +3,12 @@ import { Readable } from "node:stream";
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
+import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { StorageService } from "@/infra/storage/storage.service";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
-import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";
 import { storageErrors, systemErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
-import { StorageService } from "@/shared/storage/storage.service";
 
 import { StudentSyncService } from "./student-sync.service";
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";

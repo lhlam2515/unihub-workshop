@@ -22,17 +22,17 @@ import { AppModule } from "../../src/app.module";
 import {
   DATABASE_CONNECTION,
   DATABASE_SCHEMA,
-} from "../../src/database/database.constants";
-import { WorkshopsService } from "../../src/modules/catalog/services/workshops.service";
+} from "../../src/infra/database/database.constants";
 import {
   NOTIFICATION_QUEUE,
   AI_SUMMARY_QUEUE,
   STUDENT_SYNC_QUEUE,
-} from "../../src/shared/queues/queue.constants";
-import { RedisService } from "../../src/shared/redis/redis.service";
+} from "../../src/infra/messaging/queue.constants";
+import { RedisService } from "../../src/infra/redis/redis.service";
+import { StorageService } from "../../src/infra/storage/storage.service";
+import { WorkshopsService } from "../../src/modules/catalog/services/workshops.service";
 import { workshopErrors } from "../../src/shared/response/errors";
 import { Result } from "../../src/shared/response/result";
-import { StorageService } from "../../src/shared/storage/storage.service";
 
 // ---------------------------------------------------------------------------
 // Environment setup

@@ -124,7 +124,7 @@ function serverConfig({ tsconfigRootDir }) {
             rules: [
               {
                 from: { type: "core" },
-                allow: { to: { type: ["core", "shared"] } },
+                allow: { to: { type: ["core", "shared", "infra"] } },
               },
               {
                 from: { type: "database" },

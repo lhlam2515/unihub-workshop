@@ -4,13 +4,13 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { eq, and, desc, lte, gte, ne } from "drizzle-orm";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
+import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
 import type {
   Room,
   NewRoom,
   Workshop,
-} from "@/database/types/event-core.types";
+} from "@/infra/database/types/event-core.types";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 

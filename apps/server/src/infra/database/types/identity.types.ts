@@ -5,7 +5,11 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 
-import { checkinStaffAssignments, students, users } from "@/database/schema";
+import {
+  checkinStaffAssignments,
+  students,
+  users,
+} from "@/infra/database/schema";
 
 export const usersSelectSchema = createSelectSchema(users);
 export const usersInsertSchema = createInsertSchema(users);

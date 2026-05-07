@@ -10,9 +10,9 @@
  */
 import { Injectable } from "@nestjs/common";
 
+import { RedisService } from "@/infra/redis/redis.service";
 import { PaymentsService } from "@/modules/booking/services/payments.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { RedisService } from "@/shared/redis/redis.service";
 import { systemErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

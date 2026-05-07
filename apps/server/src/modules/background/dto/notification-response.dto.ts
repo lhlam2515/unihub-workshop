@@ -1,7 +1,7 @@
 import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
-import type { NotificationLog } from "@/database/types";
+import type { NotificationLog } from "@/infra/database/types";
 
 export const NotificationLogResponseSchema = z.object({
   notification_id: z.string().uuid(),

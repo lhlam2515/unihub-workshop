@@ -6,8 +6,11 @@ import {
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from "@/database";
-import type { NewNotificationLog, NotificationLog } from "@/database/types";
+} from "@/infra/database";
+import type {
+  NewNotificationLog,
+  NotificationLog,
+} from "@/infra/database/types";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 

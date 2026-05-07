@@ -5,7 +5,7 @@
  * { document_id, workshop_id, file_url, original_name, file_size_bytes, upload_status, uploaded_at }
  */
 
-import type { WorkshopDocument } from "@/database/types/async.types";
+import type { WorkshopDocument } from "@/infra/database/types/async.types";
 
 export interface WorkshopDocumentResponseDto {
   document_id: string;

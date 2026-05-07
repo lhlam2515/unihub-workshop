@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import jwt from "jsonwebtoken";
 
-import { RedisService } from "@/shared/redis/redis.service";
+import { RedisService } from "@/infra/redis/redis.service";
 
 import { JwtAuthGuard } from "./jwt-auth.guard";
 

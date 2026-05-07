@@ -11,7 +11,7 @@ import {
   payments,
   registrations,
   tickets,
-} from "@/database/schema";
+} from "@/infra/database/schema";
 
 const offlineCheckinSyncStatusSchema = z.enum([
   "PENDING",

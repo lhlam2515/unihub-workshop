@@ -18,7 +18,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 
-import { RedisService } from "@/shared/redis/redis.service";
+import { RedisService } from "@/infra/redis/redis.service";
 
 /** Known payment gateways managed by the circuit breaker system. */
 const KNOWN_GATEWAYS = ["VNPAY", "MOMO", "STRIPE"] as const;

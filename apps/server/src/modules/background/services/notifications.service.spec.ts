@@ -1,7 +1,7 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 import { Result } from "@/shared/response/result";
 
 import { NotificationsService } from "./notifications.service";

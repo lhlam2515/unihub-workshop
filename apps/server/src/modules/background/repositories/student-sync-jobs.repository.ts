@@ -6,8 +6,8 @@ import {
   DATABASE_SCHEMA,
   type DatabaseClient,
   type DatabaseSchema,
-} from "@/database";
-import type { NewStudentSyncJob, StudentSyncJob } from "@/database/types";
+} from "@/infra/database";
+import type { NewStudentSyncJob, StudentSyncJob } from "@/infra/database/types";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 

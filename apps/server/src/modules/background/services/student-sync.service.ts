@@ -3,18 +3,21 @@ import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
 import { parse, CsvError } from "csv-parse";
 
-import type { NewStudentSyncError, StudentSyncJob } from "@/database/types";
+import type {
+  NewStudentSyncError,
+  StudentSyncJob,
+} from "@/infra/database/types";
+import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
+import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { StorageService } from "@/infra/storage/storage.service";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
-import type { StudentSyncJobData } from "@/shared/queues/event-contracts";
-import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";
 import {
   passthroughOrInternal,
   systemErrors,
   validationError,
 } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
-import { StorageService } from "@/shared/storage/storage.service";
 
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";

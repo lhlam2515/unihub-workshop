@@ -4,7 +4,7 @@
  * Shape: full speaker entity
  */
 
-import type { Speaker } from "@/database/types/event-core.types";
+import type { Speaker } from "@/infra/database/types/event-core.types";
 
 export interface SpeakerResponseDto {
   speaker_id: string;

@@ -6,7 +6,7 @@
  * client-safe DTOs, stripping internal fields like raw_gateway_response.
  */
 
-import type { Payment } from "@/database/types/transaction.types";
+import type { Payment } from "@/infra/database/types/transaction.types";
 
 export interface PaymentResponseDto {
   payment_id: string;

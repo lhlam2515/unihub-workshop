@@ -20,8 +20,8 @@ import { HmacSignatureGuard } from "@/core/guards/hmac-signature.guard";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { WorkshopScopeGuard } from "@/core/guards/workshop-scope.guard";
+import { RedisService } from "@/infra/redis/redis.service";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
-import { RedisService } from "@/shared/redis/redis.service";
 
 // ---------------------------------------------------------------------------
 // Helpers

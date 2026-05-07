@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import { RedisService } from "@/shared/redis/redis.service";
+import { RedisService } from "@/infra/redis/redis.service";
 import { rateLimitError } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

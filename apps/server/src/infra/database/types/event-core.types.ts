@@ -5,7 +5,12 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 
-import { rooms, speakers, workshopSlots, workshops } from "@/database/schema";
+import {
+  rooms,
+  speakers,
+  workshopSlots,
+  workshops,
+} from "@/infra/database/schema";
 
 export const speakersSelectSchema = createSelectSchema(speakers);
 export const speakersInsertSchema = createInsertSchema(speakers);

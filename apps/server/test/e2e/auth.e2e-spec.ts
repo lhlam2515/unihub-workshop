@@ -20,17 +20,17 @@ import { AppModule } from "../../src/app.module";
 import {
   DATABASE_CONNECTION,
   DATABASE_SCHEMA,
-} from "../../src/database/database.constants";
-import { AuthService } from "../../src/modules/iam/services/auth.service";
+} from "../../src/infra/database/database.constants";
 import {
   NOTIFICATION_QUEUE,
   AI_SUMMARY_QUEUE,
   STUDENT_SYNC_QUEUE,
-} from "../../src/shared/queues/queue.constants";
-import { RedisService } from "../../src/shared/redis/redis.service";
+} from "../../src/infra/messaging/queue.constants";
+import { RedisService } from "../../src/infra/redis/redis.service";
+import { StorageService } from "../../src/infra/storage/storage.service";
+import { AuthService } from "../../src/modules/iam/services/auth.service";
 import { authErrors } from "../../src/shared/response/errors";
 import { Result } from "../../src/shared/response/result";
-import { StorageService } from "../../src/shared/storage/storage.service";
 
 // ---------------------------------------------------------------------------
 // Environment setup — must happen before module imports

@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { RedisService } from "@/shared/redis/redis.service";
+import { RedisService } from "@/infra/redis/redis.service";
 
 import { RateLimiterMechanic } from "./rate-limiter.mechanic";
 

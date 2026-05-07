@@ -20,6 +20,7 @@ import { Test } from "@nestjs/testing";
 
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
+import { AI_SUMMARY_QUEUE } from "@/infra/messaging/queue.constants";
 import { DocumentsAdminController } from "@/modules/catalog/controllers/documents-admin.controller";
 import { RoomsAdminController } from "@/modules/catalog/controllers/rooms-admin.controller";
 import { SpeakersAdminController } from "@/modules/catalog/controllers/speakers-admin.controller";
@@ -38,7 +39,6 @@ import { SeatCounterService } from "@/modules/catalog/services/seat-counter.serv
 import { SpeakersService } from "@/modules/catalog/services/speakers.service";
 import { WorkshopNotificationPublisher } from "@/modules/catalog/services/workshop-notification-publisher.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { AI_SUMMARY_QUEUE } from "@/shared/queues/queue.constants";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

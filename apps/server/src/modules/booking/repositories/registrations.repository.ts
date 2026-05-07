@@ -1,13 +1,13 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
-import type { DrizzleTransaction } from "@/database/types/drizzle.types";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
+import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
+import type { DrizzleTransaction } from "@/infra/database/types/drizzle.types";
 import type {
   Registration,
   NewRegistration,
-} from "@/database/types/transaction.types";
+} from "@/infra/database/types/transaction.types";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 

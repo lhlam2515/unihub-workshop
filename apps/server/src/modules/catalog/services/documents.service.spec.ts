@@ -2,9 +2,9 @@ import { Readable } from "node:stream";
 
 import { Test, type TestingModule } from "@nestjs/testing";
 
+import { StorageService } from "@/infra/storage/storage.service";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
-import { StorageService } from "@/shared/storage/storage.service";
 
 import { DocumentsService } from "./documents.service";
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";

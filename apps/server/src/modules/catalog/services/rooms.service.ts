@@ -7,7 +7,7 @@
 
 import { Injectable } from "@nestjs/common";
 
-import type { NewRoom } from "@/database/types/event-core.types";
+import type { NewRoom } from "@/infra/database/types/event-core.types";
 import { roomErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

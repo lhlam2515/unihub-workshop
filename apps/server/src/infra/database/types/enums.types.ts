@@ -16,7 +16,7 @@ import {
   userRoleEnum,
   userStatusEnum,
   workshopStatusEnum,
-} from "@/database/schema";
+} from "@/infra/database/schema";
 
 export const userRoleSchema = z.enum(userRoleEnum.enumValues);
 export const userStatusSchema = z.enum(userStatusEnum.enumValues);

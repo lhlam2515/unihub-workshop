@@ -25,6 +25,7 @@ import { Test } from "@nestjs/testing";
 import { HmacSignatureGuard } from "@/core/guards/hmac-signature.guard";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
+import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 import { PaymentsController } from "@/modules/booking/controllers/payments.controller";
 import { RegistrationsController } from "@/modules/booking/controllers/registrations.controller";
 import { CircuitBreakerMechanic } from "@/modules/booking/mechanics/circuit-breaker.mechanic";
@@ -48,7 +49,6 @@ import { RoomConflictService } from "@/modules/catalog/services/room-conflict.se
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopNotificationPublisher } from "@/modules/catalog/services/workshop-notification-publisher.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
 import { paymentErrors, seatErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

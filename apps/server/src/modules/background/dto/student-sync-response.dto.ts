@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { StudentSyncJob, StudentSyncError } from "@/database/types";
+import type { StudentSyncJob, StudentSyncError } from "@/infra/database/types";
 
 export const StudentSyncJobSchema = z.object({
   job_id: z.string().uuid(),

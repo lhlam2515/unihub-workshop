@@ -17,10 +17,10 @@ import { Readable } from "node:stream";
 
 import { Injectable } from "@nestjs/common";
 
-import type { NewWorkshopDocument } from "@/database/types/async.types";
+import type { NewWorkshopDocument } from "@/infra/database/types/async.types";
+import { StorageService } from "@/infra/storage/storage.service";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
-import { StorageService } from "@/shared/storage/storage.service";
 
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
 import { DocumentResponseBuilder } from "../dto/document-response.dto";

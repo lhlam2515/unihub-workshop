@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
+import { SharedQueueModule } from "@/infra/messaging/queue.module";
 import { IamModule } from "@/modules/iam/iam.module";
-import { SharedQueueModule } from "@/shared/queues/queue.module";
 
 import { BookingModule } from "../booking/booking.module";
 import { CatalogModule } from "../catalog/catalog.module";

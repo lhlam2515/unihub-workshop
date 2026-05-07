@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 
 import { StudentSyncJobsRepository } from "./student-sync-jobs.repository";
 

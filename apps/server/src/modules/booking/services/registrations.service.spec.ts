@@ -1,9 +1,9 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import type { Registration } from "@/database/types/transaction.types";
+import type { Registration } from "@/infra/database/types/transaction.types";
+import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { NotificationPublisher } from "@/shared/queues/notification-publisher";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

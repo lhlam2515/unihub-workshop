@@ -35,8 +35,8 @@ import { Reflector } from "@nestjs/core";
 import { Request } from "express";
 import jwt from "jsonwebtoken";
 
+import { RedisService } from "@/infra/redis/redis.service";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
-import { RedisService } from "@/shared/redis/redis.service";
 import { authErrors } from "@/shared/response/errors";
 import type { JwtPayload } from "@/types/jwt-payload";
 

@@ -1,4 +1,7 @@
-import type { Registration, Ticket } from "@/database/types/transaction.types";
+import type {
+  Registration,
+  Ticket,
+} from "@/infra/database/types/transaction.types";
 import type { WorkshopSummaryDto } from "@/modules/catalog/dto/workshop-response.dto";
 
 export interface PaymentDeadlineInfo {

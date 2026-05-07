@@ -2,9 +2,9 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 
-import type { StudentSyncJobData } from "@/shared/queues/event-contracts";
-import { STUDENT_SYNC_QUEUE } from "@/shared/queues/queue.constants";
-import { RedisService } from "@/shared/redis/redis.service";
+import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
+import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { RedisService } from "@/infra/redis/redis.service";
 
 import { StudentSyncService } from "../services/student-sync.service";
 

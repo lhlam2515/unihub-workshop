@@ -25,7 +25,7 @@ import type {
   Speaker,
   Room,
   WorkshopSlot,
-} from "@/database/types/event-core.types";
+} from "@/infra/database/types/event-core.types";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

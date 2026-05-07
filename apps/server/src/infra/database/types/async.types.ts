@@ -12,7 +12,7 @@ import {
   studentSyncErrors,
   studentSyncJobs,
   workshopDocuments,
-} from "@/database/schema";
+} from "@/infra/database/schema";
 
 export const notificationChannelConfigsSelectSchema = createSelectSchema(
   notificationChannelConfigs

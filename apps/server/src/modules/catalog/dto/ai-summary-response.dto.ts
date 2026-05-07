@@ -6,7 +6,7 @@
  * - AiSummaryAdminDto: extends with summary_id, document_id, error_message
  */
 
-import type { AiSummary } from "@/database/types/async.types";
+import type { AiSummary } from "@/infra/database/types/async.types";
 
 export interface AiSummaryPublicDto {
   status: string;

@@ -10,8 +10,8 @@
 
 import { Module } from "@nestjs/common";
 
-import { DatabaseModule } from "@/database/database.module";
-import { RedisModule } from "@/shared/redis/redis.module";
+import { DatabaseModule } from "@/infra/database/database.module";
+import { RedisModule } from "@/infra/redis/redis.module";
 
 import { AuthController } from "./controllers/auth.controller";
 import { CheckinStaffAdminController } from "./controllers/checkin-staff-admin.controller";

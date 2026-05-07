@@ -19,15 +19,15 @@ import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
-import { DatabaseModule } from "./database/database.module";
+import { DatabaseModule } from "./infra/database/database.module";
+import { SharedQueueModule } from "./infra/messaging/queue.module";
+import { RedisModule } from "./infra/redis/redis.module";
+import { StorageModule } from "./infra/storage/storage.module";
 import { BackgroundModule } from "./modules/background/background.module";
 import { BookingModule } from "./modules/booking/booking.module";
 import { CatalogModule } from "./modules/catalog/catalog.module";
 import { CheckinModule } from "./modules/checkin/checkin.module";
 import { IamModule } from "./modules/iam/iam.module";
-import { SharedQueueModule } from "./shared/queues/queue.module";
-import { RedisModule } from "./shared/redis/redis.module";
-import { StorageModule } from "./shared/storage/storage.module";
 
 /**
  * Root application module for the UniHub Workshop backend.

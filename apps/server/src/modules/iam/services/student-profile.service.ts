@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import type { Student } from "@/database/types/identity.types";
+import type { Student } from "@/infra/database/types/identity.types";
 import { Result } from "@/shared/response/result";
 
 import { StudentsRepository } from "../repositories/students.repository";

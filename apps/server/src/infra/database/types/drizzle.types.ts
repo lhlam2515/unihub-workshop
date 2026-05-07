@@ -7,7 +7,7 @@
  *
  * Resolves to PgTransaction<NeonHttpQueryResultHKT, DatabaseSchema, ExtractTablesWithRelations<DatabaseSchema>>.
  */
-import type { DatabaseClient } from "@/database";
+import type { DatabaseClient } from "@/infra/database";
 
 export type DrizzleTransaction = Parameters<
   DatabaseClient["transaction"]

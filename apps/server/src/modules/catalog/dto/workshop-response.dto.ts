@@ -9,7 +9,10 @@
  * Each class has static from() factory
  */
 
-import type { Workshop, WorkshopSlot } from "@/database/types/event-core.types";
+import type {
+  Workshop,
+  WorkshopSlot,
+} from "@/infra/database/types/event-core.types";
 
 export interface WorkshopSummaryDto {
   workshop_id: string;

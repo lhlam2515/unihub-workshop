@@ -7,7 +7,7 @@
 
 import { Injectable } from "@nestjs/common";
 
-import type { NewSpeaker } from "@/database/types/event-core.types";
+import type { NewSpeaker } from "@/infra/database/types/event-core.types";
 import { speakerErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

@@ -21,19 +21,19 @@ import { AppModule } from "../../src/app.module";
 import {
   DATABASE_CONNECTION,
   DATABASE_SCHEMA,
-} from "../../src/database/database.constants";
-import { CheckinService } from "../../src/modules/checkin/services/checkin.service";
-import { OfflineSyncService } from "../../src/modules/checkin/services/offline-sync.service";
-import { TicketService as CheckinTicketService } from "../../src/modules/checkin/services/ticket.service";
+} from "../../src/infra/database/database.constants";
 import {
   NOTIFICATION_QUEUE,
   AI_SUMMARY_QUEUE,
   STUDENT_SYNC_QUEUE,
-} from "../../src/shared/queues/queue.constants";
-import { RedisService } from "../../src/shared/redis/redis.service";
+} from "../../src/infra/messaging/queue.constants";
+import { RedisService } from "../../src/infra/redis/redis.service";
+import { StorageService } from "../../src/infra/storage/storage.service";
+import { CheckinService } from "../../src/modules/checkin/services/checkin.service";
+import { OfflineSyncService } from "../../src/modules/checkin/services/offline-sync.service";
+import { TicketService as CheckinTicketService } from "../../src/modules/checkin/services/ticket.service";
 import { ticketErrors } from "../../src/shared/response/errors";
 import { Result } from "../../src/shared/response/result";
-import { StorageService } from "../../src/shared/storage/storage.service";
 
 // ---------------------------------------------------------------------------
 // Environment setup

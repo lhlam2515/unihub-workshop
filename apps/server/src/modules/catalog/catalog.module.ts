@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
 
-import { DatabaseModule } from "@/database/database.module";
-import { SharedQueueModule } from "@/shared/queues/queue.module";
-import { RedisModule } from "@/shared/redis/redis.module";
+import { DatabaseModule } from "@/infra/database/database.module";
+import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { RedisModule } from "@/infra/redis/redis.module";
 
 import { DocumentsAdminController } from "./controllers/documents-admin.controller";
 import { RoomsAdminController } from "./controllers/rooms-admin.controller";

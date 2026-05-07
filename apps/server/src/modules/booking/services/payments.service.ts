@@ -33,14 +33,14 @@ import crypto from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 
-import type { Payment } from "@/database/types/transaction.types";
-import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
-import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import type { Payment } from "@/infra/database/types/transaction.types";
 import type {
   PaymentEventData,
   RegistrationEventData,
-} from "@/shared/queues/event-contracts";
-import { NotificationPublisher } from "@/shared/queues/notification-publisher";
+} from "@/infra/messaging/event-contracts";
+import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
+import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
+import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { passthroughOrInternal, paymentErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
