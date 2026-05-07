@@ -27,8 +27,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";

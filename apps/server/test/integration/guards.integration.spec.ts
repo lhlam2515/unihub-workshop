@@ -16,12 +16,12 @@ import { Reflector } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import jwt from "jsonwebtoken";
 
-import { HmacSignatureGuard } from "@/core/guards/hmac-signature.guard";
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
-import { WorkshopScopeGuard } from "@/core/guards/workshop-scope.guard";
+import { RedisService } from "@/infra/redis/redis.service";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { WorkshopScopeGuard } from "@/modules/iam/guards/workshop-scope.guard";
+import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
-import { RedisService } from "@/shared/redis/redis.service";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -10,12 +10,15 @@
 
 import { Module } from "@nestjs/common";
 
-import { DatabaseModule } from "@/database/database.module";
-import { RedisModule } from "@/shared/redis/redis.module";
+import { DatabaseModule } from "@/infra/database/database.module";
+import { RedisModule } from "@/infra/redis/redis.module";
 
 import { AuthController } from "./controllers/auth.controller";
 import { CheckinStaffAdminController } from "./controllers/checkin-staff-admin.controller";
 import { UsersAdminController } from "./controllers/users-admin.controller";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { RolesGuard } from "./guards/roles.guard";
+import { WorkshopScopeGuard } from "./guards/workshop-scope.guard";
 import { CheckinStaffAssignmentsRepository } from "./repositories/checkin-staff-assignments.repository";
 import { StudentsRepository } from "./repositories/students.repository";
 import { UsersRepository } from "./repositories/users.repository";
@@ -24,6 +27,7 @@ import { CheckinStaffAssignmentService } from "./services/checkin-staff-assignme
 import { StudentProfileService } from "./services/student-profile.service";
 import { TokenService } from "./services/token.service";
 import { UsersService } from "./services/users.service";
+
 @Module({
   imports: [DatabaseModule, RedisModule],
   controllers: [
@@ -42,6 +46,10 @@ import { UsersService } from "./services/users.service";
     UsersRepository,
     StudentsRepository,
     CheckinStaffAssignmentsRepository,
+    // Guards
+    JwtAuthGuard,
+    RolesGuard,
+    WorkshopScopeGuard,
   ],
   exports: [
     AuthService,
@@ -49,6 +57,10 @@ import { UsersService } from "./services/users.service";
     UsersService,
     StudentsRepository,
     UsersRepository,
+    // Guards
+    JwtAuthGuard,
+    RolesGuard,
+    WorkshopScopeGuard,
   ],
 })
 export class IamModule {}

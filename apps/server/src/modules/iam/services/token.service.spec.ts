@@ -2,7 +2,7 @@ import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import jwt from "jsonwebtoken";
 
-import { RedisService } from "@/shared/redis/redis.service";
+import { RedisService } from "@/infra/redis/redis.service";
 import { authErrors } from "@/shared/response/errors";
 
 import { TokenService } from "./token.service";

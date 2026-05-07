@@ -1,6 +1,6 @@
 import { Test } from "@nestjs/testing";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import { systemErrors } from "@/shared/response/errors";
 
 import { CheckinStaffAssignmentsRepository } from "./checkin-staff-assignments.repository";

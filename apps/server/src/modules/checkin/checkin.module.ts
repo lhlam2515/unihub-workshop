@@ -11,7 +11,7 @@
 
 import { Module } from "@nestjs/common";
 
-import { DatabaseModule } from "@/database/database.module";
+import { DatabaseModule } from "@/infra/database/database.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
 import { CheckinController } from "./controllers/checkin.controller";

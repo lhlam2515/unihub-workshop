@@ -19,33 +19,39 @@ import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
-import { DatabaseModule } from "./database/database.module";
+import { DatabaseModule } from "./infra/database/database.module";
+import { SharedQueueModule } from "./infra/messaging/queue.module";
+import { RedisModule } from "./infra/redis/redis.module";
+import { StorageModule } from "./infra/storage/storage.module";
+import { AiSummaryModule } from "./modules/ai-summary/ai-summary.module";
 import { BackgroundModule } from "./modules/background/background.module";
 import { BookingModule } from "./modules/booking/booking.module";
 import { CatalogModule } from "./modules/catalog/catalog.module";
 import { CheckinModule } from "./modules/checkin/checkin.module";
+import { CsvSyncModule } from "./modules/csv-sync/csv-sync.module";
 import { IamModule } from "./modules/iam/iam.module";
-import { SharedQueueModule } from "./shared/queues/queue.module";
-import { RedisModule } from "./shared/redis/redis.module";
-import { StorageModule } from "./shared/storage/storage.module";
+import { NotificationModule } from "./modules/notification/notification.module";
+import { PaymentModule } from "./modules/payment/payment.module";
+import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
 
 /**
  * Root application module for the UniHub Workshop backend.
  *
  * Registers all infrastructure modules (Database, Redis, Storage, Queue)
- * before domain modules (IAM, Catalog, Booking, Checkin), with
- * BackgroundModule last because it depends on BookingModule and
- * CatalogModule. This ordering prevents circular dependency resolution
- * errors and ensures all providers are available when BackgroundModule's
- * workers and cron jobs initialize.
+ * before domain modules in dependency order. BackgroundModule remains
+ * last because it depends on BookingModule, CatalogModule, PaymentModule,
+ * and NotificationModule. This ordering prevents circular dependency
+ * resolution errors and ensures all providers are available when
+ * BackgroundModule's workers and cron jobs initialize.
  *
  * Business rules:
  * - BackgroundModule MUST remain the last entry in the imports array.
  * - IamModule and CatalogModule are registered before BookingModule
  *   because BookingModule imports CatalogModule for SeatCounterService.
+ * - PaymentModule follows BookingModule (BookingModule imports PaymentModule).
+ * - NotificationModule is event-driven; placed after domain modules.
  * - SharedQueueModule is a shared BullMQ infrastructure module consumed
- *   by Catalog, Booking, and Background modules — not @Global() so it
- *   must be explicitly imported.
+ *   by Catalog, Booking, Payment, Notification, and Background modules.
  */
 @Module({
   imports: [
@@ -79,10 +85,15 @@ import { StorageModule } from "./shared/storage/storage.module";
       }),
     }),
     SharedQueueModule,
+    RateLimitModule,
     IamModule,
     CatalogModule,
     BookingModule,
+    PaymentModule,
     CheckinModule,
+    AiSummaryModule,
+    CsvSyncModule,
+    NotificationModule,
     BackgroundModule,
   ],
   controllers: [AppController],

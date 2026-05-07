@@ -15,24 +15,24 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import { NotificationsAdminController } from "@/modules/background/controllers/notifications-admin.controller";
-import { StudentSyncAdminController } from "@/modules/background/controllers/student-sync-admin.controller";
-import { SystemAdminController } from "@/modules/background/controllers/system-admin.controller";
-import { NotificationChannelConfigsRepository } from "@/modules/background/repositories/notification-channel-configs.repository";
-import { NotificationLogsRepository } from "@/modules/background/repositories/notification-logs.repository";
-import { StudentSyncErrorsRepository } from "@/modules/background/repositories/student-sync-errors.repository";
-import { StudentSyncJobsRepository } from "@/modules/background/repositories/student-sync-jobs.repository";
-import { NotificationsService } from "@/modules/background/services/notifications.service";
-import { StudentSyncService } from "@/modules/background/services/student-sync.service";
-import { SystemMonitorService } from "@/modules/background/services/system-monitor.service";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import {
   NOTIFICATION_QUEUE,
   STUDENT_SYNC_QUEUE,
-} from "@/shared/queues/queue.constants";
-import { RedisService } from "@/shared/redis/redis.service";
+} from "@/infra/messaging/queue.constants";
+import { RedisService } from "@/infra/redis/redis.service";
+import { SystemAdminController } from "@/modules/background/controllers/system-admin.controller";
+import { SystemMonitorService } from "@/modules/background/services/system-monitor.service";
+import { StudentSyncAdminController } from "@/modules/csv-sync/controllers/student-sync-admin.controller";
+import { StudentSyncErrorsRepository } from "@/modules/csv-sync/repositories/student-sync-errors.repository";
+import { StudentSyncJobsRepository } from "@/modules/csv-sync/repositories/student-sync-jobs.repository";
+import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { NotificationsAdminController } from "@/modules/notification/controllers/notifications-admin.controller";
+import { NotificationChannelConfigsRepository } from "@/modules/notification/repositories/notification-channel-configs.repository";
+import { NotificationLogsRepository } from "@/modules/notification/repositories/notification-logs.repository";
+import { NotificationsService } from "@/modules/notification/services/notifications.service";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------

@@ -17,10 +17,11 @@
 import { Test } from "@nestjs/testing";
 import bcrypt from "bcrypt";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RedisService } from "@/infra/redis/redis.service";
 import { AuthController } from "@/modules/iam/controllers/auth.controller";
 import { CheckinStaffAdminController } from "@/modules/iam/controllers/checkin-staff-admin.controller";
 import { UsersAdminController } from "@/modules/iam/controllers/users-admin.controller";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { CheckinStaffAssignmentsRepository } from "@/modules/iam/repositories/checkin-staff-assignments.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import { AuthService } from "@/modules/iam/services/auth.service";
@@ -28,7 +29,6 @@ import { CheckinStaffAssignmentService } from "@/modules/iam/services/checkin-st
 import { StudentProfileService } from "@/modules/iam/services/student-profile.service";
 import { TokenService } from "@/modules/iam/services/token.service";
 import { UsersService } from "@/modules/iam/services/users.service";
-import { RedisService } from "@/shared/redis/redis.service";
 import { authErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

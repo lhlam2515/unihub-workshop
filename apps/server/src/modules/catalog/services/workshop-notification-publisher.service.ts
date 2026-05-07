@@ -26,12 +26,12 @@ import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
 import { Queue } from "bullmq";
 
-import type { Workshop } from "@/database/types/event-core.types";
+import type { Workshop } from "@/infra/database/types/event-core.types";
 import type {
   WorkshopCancelledEventData,
   WorkshopUpdatedEventData,
-} from "@/shared/queues/event-contracts";
-import { NOTIFICATION_QUEUE } from "@/shared/queues/queue.constants";
+} from "@/infra/messaging/event-contracts";
+import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 
 @Injectable()
 export class WorkshopNotificationPublisher {

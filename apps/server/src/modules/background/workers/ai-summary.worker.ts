@@ -2,10 +2,9 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 
-import type { AiSummaryJobData } from "@/shared/queues/event-contracts";
-import { AI_SUMMARY_QUEUE } from "@/shared/queues/queue.constants";
-
-import { AiSummaryService } from "../services/ai-summary.service";
+import type { AiSummaryJobData } from "@/infra/messaging/event-contracts";
+import { AI_SUMMARY_QUEUE } from "@/infra/messaging/queue.constants";
+import { AiSummaryService } from "@/modules/ai-summary/services/ai-summary.service";
 
 /**
  * AiSummaryWorker

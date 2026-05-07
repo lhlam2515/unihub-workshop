@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { RedisService } from "@/shared/redis/redis.service";
+import { RedisService } from "@/infra/redis/redis.service";
 
 import { SeatLockMechanic } from "./seat-lock.mechanic";
 

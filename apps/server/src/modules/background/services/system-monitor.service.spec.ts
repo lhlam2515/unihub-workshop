@@ -1,8 +1,8 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { PaymentsService } from "@/modules/booking/services/payments.service";
+import { RedisService } from "@/infra/redis/redis.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { RedisService } from "@/shared/redis/redis.service";
+import { PaymentsService } from "@/modules/payment/services/payments.service";
 import { Result } from "@/shared/response/result";
 
 import { SystemMonitorService } from "./system-monitor.service";

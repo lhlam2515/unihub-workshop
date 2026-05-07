@@ -4,7 +4,7 @@
  * Shape: full room entity
  */
 
-import type { Room } from "@/database/types/event-core.types";
+import type { Room } from "@/infra/database/types/event-core.types";
 
 export interface RoomResponseDto {
   room_id: string;

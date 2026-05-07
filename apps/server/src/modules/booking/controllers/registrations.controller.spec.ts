@@ -1,7 +1,7 @@
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
-import { RolesGuard } from "@/core/guards/roles.guard";
+import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
+import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 

@@ -1,9 +1,9 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
-import type { Student } from "@/database/types/identity.types";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
+import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
+import type { Student } from "@/infra/database/types/identity.types";
 import { systemErrors } from "@/shared/response/errors";
 import { tryCatch } from "@/shared/response/result";
 import type { Result } from "@/shared/response/result";

@@ -1,67 +1,41 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
+import { SharedQueueModule } from "@/infra/messaging/queue.module";
 import { IamModule } from "@/modules/iam/iam.module";
-import { SharedQueueModule } from "@/shared/queues/queue.module";
 
+import { AiSummaryModule } from "../ai-summary/ai-summary.module";
 import { BookingModule } from "../booking/booking.module";
 import { CatalogModule } from "../catalog/catalog.module";
-import { AppChannel } from "./channels/app.channel";
-import { EmailChannel } from "./channels/email.channel";
-import { TelegramChannel } from "./channels/telegram.channel";
-import { NotificationsAdminController } from "./controllers/notifications-admin.controller";
-import { StudentSyncAdminController } from "./controllers/student-sync-admin.controller";
+import { CsvSyncModule } from "../csv-sync/csv-sync.module";
+import { PaymentModule } from "../payment/payment.module";
 import { SystemAdminController } from "./controllers/system-admin.controller";
 import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
 import { WorkshopAutoCompleteCron } from "./cron/workshop-auto-complete.cron";
-import { LlmSummaryFilter } from "./pipeline/llm-summary.filter";
-import { PdfExtractionFilter } from "./pipeline/pdf-extraction.filter";
-import { PdfSummaryPipeline } from "./pipeline/pdf-summary.pipeline";
-import { PersistResultFilter } from "./pipeline/persist-result.filter";
-import { TextCleaningFilter } from "./pipeline/text-cleaning.filter";
-import { UpsertRecordFilter } from "./pipeline/upsert-record.filter";
-import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
-import { NotificationLogsRepository } from "./repositories/notification-logs.repository";
-import { StudentSyncErrorsRepository } from "./repositories/student-sync-errors.repository";
-import { StudentSyncJobsRepository } from "./repositories/student-sync-jobs.repository";
-import { AiSummaryService } from "./services/ai-summary.service";
-import { NotificationDispatchService } from "./services/notification-dispatch.service";
-import { NotificationsService } from "./services/notifications.service";
-import { StudentSyncService } from "./services/student-sync.service";
 import { SystemMonitorService } from "./services/system-monitor.service";
 import { AiSummaryWorker } from "./workers/ai-summary.worker";
 import { NotificationWorker } from "./workers/notification.worker";
 import { StudentSyncWorker } from "./workers/student-sync.worker";
 
-// Cron Jobs
-
-// Repositories
-
-// Note: AiSummariesRepository is imported from CatalogModule to avoid duplication
-
 /**
- * Orchestrates all async and scheduled background processing.
+ * Orchestrates all scheduled background processing.
  *
- * Owns the workers, cron jobs, and admin controllers for notification
- * dispatch, AI document summarization, student CSV import, payment
- * timeout expiry, and seat-reconciliation monitoring.
+ * Owns cron jobs for payment timeout, seat reconciliation,
+ * circuit breaker recovery, and workshop auto-completion.
  *
  * Business rules:
- * - Notification delivery uses retry-with-backoff per channel type.
  * - Seat reconciliation runs on a 10-minute cron cycle.
  * - Payment timeouts expire PENDING registrations after 15 minutes.
- * - Each worker consumes from its dedicated BullMQ queue.
  *
  * Side effects:
  * - Registers cron schedules via @nestjs/schedule.
- * - Registers BullMQ workers via SharedQueueModule queues.
  * - Exposes admin HTTP endpoints for manual job management.
  *
  * @requires SharedQueueModule — provides BullMQ queue registrations.
- * @requires BookingModule — provides RegistrationsService and PaymentsService (reconciliation, payment timeout cron).
- * @requires CatalogModule — provides WorkshopNotificationPublisher and WorkshopsService (notification, AI summary workers).
+ * @requires BookingModule — provides RegistrationsService (reconciliation).
+ * @requires CsvSyncModule — provides StudentSyncService (data sync).
  */
 @Module({
   imports: [
@@ -69,48 +43,23 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     SharedQueueModule,
     BookingModule,
     CatalogModule,
+    PaymentModule,
     IamModule,
+    AiSummaryModule,
+    CsvSyncModule,
   ],
-  controllers: [
-    NotificationsAdminController,
-    StudentSyncAdminController,
-    SystemAdminController,
-  ],
+  controllers: [SystemAdminController],
   providers: [
-    // Pipeline filters (Pipe-and-Filter architecture)
-    UpsertRecordFilter,
-    PdfExtractionFilter,
-    TextCleaningFilter,
-    LlmSummaryFilter,
-    PersistResultFilter,
-    PdfSummaryPipeline,
-
-    NotificationsService,
-    NotificationDispatchService,
-    AiSummaryService,
-    StudentSyncService,
     SystemMonitorService,
-    NotificationWorker,
-    AiSummaryWorker,
-    StudentSyncWorker,
     PaymentTimeoutCron,
     ReconciliationCron,
     CircuitBreakerRecoveryCron,
     WorkshopAutoCompleteCron,
-    NotificationLogsRepository,
-    NotificationChannelConfigsRepository,
-    EmailChannel,
-    TelegramChannel,
-    AppChannel,
-    StudentSyncJobsRepository,
-    StudentSyncErrorsRepository,
+    // Workers
+    NotificationWorker,
+    AiSummaryWorker,
+    StudentSyncWorker,
   ],
-  exports: [
-    NotificationsService,
-    NotificationDispatchService,
-    AiSummaryService,
-    StudentSyncService,
-    SystemMonitorService,
-  ],
+  exports: [SystemMonitorService],
 })
 export class BackgroundModule {}

@@ -24,9 +24,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 
+import { RedisService } from "@/infra/redis/redis.service";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { RedisService } from "@/shared/redis/redis.service";
 
 const LAST_RUN_KEY = "cron:last_run:reconciliation";
 

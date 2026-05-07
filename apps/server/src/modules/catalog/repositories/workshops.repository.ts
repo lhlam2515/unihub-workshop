@@ -4,16 +4,16 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { eq, and, desc, count, gte, lte, lt } from "drizzle-orm";
 
-import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/database";
-import type { DatabaseClient, DatabaseSchema } from "@/database";
-import type { WorkshopStatus } from "@/database/types/enums.types";
+import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
+import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
+import type { WorkshopStatus } from "@/infra/database/types/enums.types";
 import type {
   Workshop,
   NewWorkshop,
   WorkshopUpdate,
   Speaker,
   Room,
-} from "@/database/types/event-core.types";
+} from "@/infra/database/types/event-core.types";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 

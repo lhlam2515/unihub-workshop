@@ -4,7 +4,7 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import jwt from "jsonwebtoken";
 
-import { RedisService } from "@/shared/redis/redis.service";
+import { RedisService } from "@/infra/redis/redis.service";
 import { authErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 import type { JwtPayload, UserRole } from "@/types/jwt-payload";
