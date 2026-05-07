@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import bcrypt from "bcrypt";
 
+import type { User } from "@/infra/database/types/identity.types";
 import { authErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -9,6 +10,7 @@ import { TokenService, ACCESS_EXPIRY } from "./token.service";
 import { AuthMeResponseBuilder } from "../dto/auth-me-response.dto";
 import { LoginResponseBuilder } from "../dto/login-response.dto";
 import { CheckinStaffAssignmentsRepository } from "../repositories/checkin-staff-assignments.repository";
+import { StudentsRepository } from "../repositories/students.repository";
 import { UsersRepository } from "../repositories/users.repository";
 
 @Injectable()
@@ -17,37 +19,76 @@ export class AuthService {
     private readonly usersRepo: UsersRepository,
     private readonly tokenService: TokenService,
     private readonly studentProfileService: StudentProfileService,
-    private readonly assignmentsRepo: CheckinStaffAssignmentsRepository
+    private readonly assignmentsRepo: CheckinStaffAssignmentsRepository,
+    private readonly studentsRepo: StudentsRepository
   ) {}
 
   /**
-   * Authenticates a user by email and password.
+   * Authenticates a user by account type and credentials.
    *
    * Business rules:
-   * - All failure modes (wrong email, wrong password, suspended account) return the
-   *   same generic `INVALID_CREDENTIALS` to prevent user enumeration.
+   * - STUDENT: looks up by student_code (MSSV), resolves to linked user account.
+   * - STAFF (BTC/CHECKIN_STAFF): looks up by email.
+   * - All failure modes return the same generic `INVALID_CREDENTIALS` to prevent
+   *   user enumeration.
    * - Successfully authenticated CHECKIN_STAFF users have their workshop assignments
    *   loaded and embedded in the access token payload.
-   * - WEB platform returns refresh token as optional (set via HttpOnly cookie by the controller).
-   * - MOBILE platform includes the refresh token in the response body.
+   * - Access token expiry is 15 minutes (default WEB TTL).
    *
-   * Side effects: Queries the users table, optionally queries the checkin_staff_assignments table.
+   * Side effects: Queries the users and students tables.
    *
-   * @param email - The user's email address.
-   * @param password - The plaintext password to verify against the stored bcrypt hash.
-   * @param platform - Determines access token expiry (WEB: 15min, MOBILE: 8hr).
+   * @param params.accountType - "student" or "staff" — determines lookup strategy.
+   * @param params.password - The plaintext password to verify against bcrypt hash.
+   * @param params.studentId - Required if accountType is "student" (MSSV format).
+   * @param params.email - Required if accountType is "staff".
    * @returns OkResult with LoginResponseDto, or FailResult with INVALID_CREDENTIALS.
    */
-  async login(
-    email: string,
-    password: string,
-    platform: "WEB" | "MOBILE"
-  ): Promise<Result<ReturnType<typeof LoginResponseBuilder.from>>> {
-    const userResult = await this.usersRepo.findByEmail(email);
-    if (userResult.isFailure) return Result.fail(userResult.error);
+  async login(params: {
+    accountType: "student" | "staff";
+    password: string;
+    studentId?: string;
+    email?: string;
+  }): Promise<Result<ReturnType<typeof LoginResponseBuilder.from>>> {
+    const { accountType, password, studentId, email } = params;
 
-    const user = userResult.data;
-    if (!user || user.status !== "ACTIVE") {
+    let user: User;
+    let studentProfile: { studentId: string; fullName: string } | undefined;
+
+    if (accountType === "student") {
+      if (!studentId) return Result.fail(authErrors.invalidCredentials());
+
+      const studentResult = await this.studentsRepo.findById(studentId);
+      if (
+        studentResult.isFailure ||
+        !studentResult.data ||
+        !studentResult.data.userId
+      ) {
+        return Result.fail(authErrors.invalidCredentials());
+      }
+
+      studentProfile = {
+        studentId: studentResult.data.studentId,
+        fullName: studentResult.data.fullName,
+      };
+
+      const userResult = await this.usersRepo.findById(
+        studentResult.data.userId
+      );
+      if (userResult.isFailure || !userResult.data) {
+        return Result.fail(authErrors.invalidCredentials());
+      }
+      user = userResult.data;
+    } else {
+      if (!email) return Result.fail(authErrors.invalidCredentials());
+
+      const userResult = await this.usersRepo.findByEmail(email);
+      if (userResult.isFailure || !userResult.data) {
+        return Result.fail(authErrors.invalidCredentials());
+      }
+      user = userResult.data;
+    }
+
+    if (user.status !== "ACTIVE") {
       return Result.fail(authErrors.invalidCredentials());
     }
 
@@ -67,16 +108,11 @@ export class AuthService {
     }
 
     const accessToken = await this.tokenService.signAccessToken(
-      {
-        userId: user.userId,
-        role: user.role,
-        allowedWorkshopIds,
-      },
-      platform
+      { userId: user.userId, role: user.role, allowedWorkshopIds },
+      "WEB"
     );
 
-    const expiresIn = platform === "WEB" ? 900 : 28800;
-
+    const expiresIn = ACCESS_EXPIRY.WEB;
     const refreshToken = await this.tokenService.signRefreshToken(user.userId);
 
     return Result.ok(
@@ -87,7 +123,8 @@ export class AuthService {
           email: user.email,
           role: user.role,
           allowedWorkshopIds,
-        }
+        },
+        studentProfile
       )
     );
   }
@@ -107,7 +144,7 @@ export class AuthService {
    */
   async refreshToken(
     refreshTokenStr: string,
-    platform: "WEB" | "MOBILE" = "WEB"
+    platform: "WEB" | "MOBILE"
   ): Promise<
     Result<{
       accessToken: string;
@@ -209,9 +246,7 @@ export class AuthService {
     }
 
     const user = userResult.data;
-    let studentProfile:
-      | { studentId: string; fullName: string }
-      | undefined;
+    let studentProfile: { studentId: string; fullName: string } | undefined;
     let allowedWorkshopIds: string[] | undefined;
 
     if (user.role === "STUDENT") {

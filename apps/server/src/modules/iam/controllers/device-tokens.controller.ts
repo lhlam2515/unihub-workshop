@@ -13,7 +13,6 @@ import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
-import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import type { CreateDeviceTokenDto } from "../dto/create-device-token.dto";
@@ -22,9 +21,7 @@ import { DeviceTokensService } from "../services/device-tokens.service";
 @Controller("device-tokens")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DeviceTokensController {
-  constructor(
-    private readonly deviceTokensService: DeviceTokensService
-  ) {}
+  constructor(private readonly deviceTokensService: DeviceTokensService) {}
 
   /**
    * POST /device-tokens
@@ -65,21 +62,18 @@ export class DeviceTokensController {
    *
    * @param token - The device token string to deactivate.
    * @param user - Authenticated user's JWT payload (provides student ID).
-   * @returns 200 with { success: true }.
+   * @returns 204 No Content on success.
    */
   @Delete(":token")
   @Roles("STUDENT")
-  @HttpCode(HttpStatus.OK)
-  async remove(
-    @Param("token") token: string,
-    @CurrentUser() user: JwtPayload
-  ) {
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param("token") token: string, @CurrentUser() user: JwtPayload) {
     const result = await this.deviceTokensService.deactivateToken(
       token,
       user.sub
     );
 
     if (result.isFailure) return result;
-    return Result.ok({ success: true });
+    return;
   }
 }

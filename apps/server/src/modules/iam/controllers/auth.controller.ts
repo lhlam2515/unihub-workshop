@@ -38,19 +38,19 @@ export class AuthController {
   /**
    * POST /auth/login
    *
-   * Authenticates a user by email and password. Returns a dual-token pair
-   * (access + refresh) with platform-specific expiry.
+   * Authenticates a user by account type and credentials. Returns a dual-token pair
+   * (access + refresh) with 15-minute access token expiry.
    *
    * Business rules:
-   * - WEB: refresh token is set as an HttpOnly cookie (not exposed to JS).
-   * - MOBILE: refresh token is returned in the response body.
+   * - Refresh token is set as an HttpOnly cookie (for both WEB and MOBILE).
+   * - MOBILE client reads refreshToken from the response body.
    *
    * @Public — no JWT required.
    *
-   * @param loginDto - Validated LoginDto containing email, password, and platform.
+   * @param loginDto - Validated LoginDto containing accountType, password, and conditional studentId/email.
    * @param response - Express response object for setting the HttpOnly cookie.
    */
-  @RateLimit([{ tier: 'T1', limit: 60, windowMs: 60000 }])
+  @RateLimit([{ tier: "T1", limit: 60, windowMs: 60000 }])
   @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -58,19 +58,19 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: Response
   ) {
-    const result = await this.authService.login(
-      loginDto.email,
-      loginDto.password,
-      loginDto.platform
-    );
+    const result = await this.authService.login({
+      accountType: loginDto.accountType,
+      password: loginDto.password,
+      studentId: loginDto.studentId,
+      email: loginDto.email,
+    });
 
-    if (result.isSuccess && loginDto.platform === "WEB") {
+    if (result.isSuccess) {
       response.cookie(
         "refreshToken",
-        result.data.refresh_token!,
+        result.data.refreshToken!,
         REFRESH_COOKIE_OPTIONS
       );
-      return Result.ok({ ...result.data, refresh_token: undefined });
     }
 
     return result;
@@ -83,15 +83,17 @@ export class AuthController {
    * token rotation: the consumed refresh token is blacklisted.
    *
    * Business rules:
-   * - The new refresh token is set as an HttpOnly cookie (WEB flow).
+   * - The new refresh token is set as an HttpOnly cookie (always).
+   * - Platform is inferred from token source: body → MOBILE (8hr TTL),
+   *   cookie → WEB (15min TTL).
    * - The old refresh token is blacklisted in Redis (rotation).
    *
    * @Public — no JWT required (uses refresh token instead).
    *
-   * @param refreshTokenDto - Contains the refresh_token string (optional for Web cookie flow).
+   * @param refreshTokenDto - Contains the refreshToken string (optional for Web cookie flow).
    * @param response - Express response object for setting the HttpOnly cookie.
    */
-  @RateLimit([{ tier: 'T1', limit: 30, windowMs: 60000 }])
+  @RateLimit([{ tier: "T1", limit: 30, windowMs: 60000 }])
   @Post("refresh")
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -100,13 +102,14 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request
   ) {
-    const bodyToken = refreshTokenDto.refresh_token ?? "";
+    const bodyToken = refreshTokenDto.refreshToken ?? "";
     const cookieToken =
       (request.cookies?.refreshToken as string | undefined) ?? "";
     const refreshTokenStr = bodyToken || cookieToken;
+    const platform: "WEB" | "MOBILE" = bodyToken ? "MOBILE" : "WEB";
     const result = await this.authService.refreshToken(
       refreshTokenStr,
-      refreshTokenDto.platform
+      platform
     );
 
     if (result.isSuccess) {
@@ -126,14 +129,17 @@ export class AuthController {
    *
    * Blacklists the current access token's jti in Redis, terminating the session.
    * Idempotent — calling with an already-blacklisted token succeeds silently.
+   * Returns 204 No Content on success.
    *
    * Requires valid JWT. Any authenticated role can access.
    */
   @Post("logout")
   @UseGuards(JwtAuthGuard)
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@CurrentUser() user: JwtPayload) {
-    return this.authService.logout(user.sub, user.jti);
+    const result = await this.authService.logout(user.sub, user.jti);
+    if (result.isFailure) return result;
+    return;
   }
 
   /**

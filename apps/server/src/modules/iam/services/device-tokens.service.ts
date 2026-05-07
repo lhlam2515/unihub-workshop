@@ -7,9 +7,7 @@ import { DeviceTokensRepository } from "../repositories/device-tokens.repository
 
 @Injectable()
 export class DeviceTokensService {
-  constructor(
-    private readonly deviceTokensRepo: DeviceTokensRepository
-  ) {}
+  constructor(private readonly deviceTokensRepo: DeviceTokensRepository) {}
 
   /**
    * Registers a device token for push notifications.
@@ -17,6 +15,7 @@ export class DeviceTokensService {
    * Business rules:
    * - Deactivates all existing active tokens for the same student+platform before
    *   creating the new one, preventing token accumulation.
+   * - Accepts lowercase platform ("ios" | "android") and uppercases before DB insert.
    * - Returns the newly created device token record.
    *
    * Side effects:
@@ -24,13 +23,13 @@ export class DeviceTokensService {
    *
    * @param studentId - The student's UUID.
    * @param token - The device token string from the push provider.
-   * @param platform - The platform identifier ("WEB" | "MOBILE").
+   * @param platform - The platform identifier ("ios" | "android").
    * @returns OkResult with the created device token, or FailResult.
    */
   async registerToken(
     studentId: string,
     token: string,
-    platform: string
+    platform: "ios" | "android"
   ): Promise<
     Result<{
       deviceTokenId: string;
@@ -38,18 +37,21 @@ export class DeviceTokensService {
       createdAt: Date;
     }>
   > {
+    const dbPlatform = platform.toUpperCase() as "IOS" | "ANDROID";
+
     // Deactivate old tokens for this student+platform
-    const deactivateResult = await this.deviceTokensRepo.deactivateAllForStudent(
-      studentId,
-      platform
-    );
+    const deactivateResult =
+      await this.deviceTokensRepo.deactivateAllForStudent(
+        studentId,
+        dbPlatform
+      );
     if (deactivateResult.isFailure) return Result.fail(deactivateResult.error);
 
     // Create new token
     const createResult = await this.deviceTokensRepo.create({
       studentId,
       token,
-      platform,
+      platform: dbPlatform,
     });
     if (createResult.isFailure) return Result.fail(createResult.error);
 

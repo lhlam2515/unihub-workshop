@@ -67,7 +67,7 @@ export class DeviceTokensRepository {
   async create(data: {
     studentId: string;
     token: string;
-    platform: string;
+    platform: "IOS" | "ANDROID";
   }): Promise<Result<DeviceToken>> {
     return tryCatch(
       async () => {
@@ -103,12 +103,12 @@ export class DeviceTokensRepository {
    * Soft-deletes all active device tokens for a given student on a given platform.
    *
    * @param studentId - The student's UUID.
-   * @param platform - The platform ("WEB" | "MOBILE").
+   * @param platform - The platform ("IOS" | "ANDROID").
    * @returns OkResult<void> on success.
    */
   async deactivateAllForStudent(
     studentId: string,
-    platform: string
+    platform: "IOS" | "ANDROID"
   ): Promise<Result<void>> {
     return tryCatch(
       async () => {
