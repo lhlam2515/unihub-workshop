@@ -31,9 +31,11 @@ Preconditions:
   - Student chưa có registration cho workshop này
 
 Request:
-  POST /workshops/:workshop_id/register
-  Headers: Authorization: Bearer <access_token>
-  Body: { "idempotency_key": "<UUID v4 do client sinh trước>" }
+  POST /registrations
+  Headers:
+    Authorization: Bearer <access_token>
+    Idempotency-Key: <UUID v4 do client sinh trước>
+  Body: {}
 ```
 
 **Bước 0 — Rate Limiting (trước toàn bộ logic nghiệp vụ):**
@@ -199,14 +201,15 @@ Preconditions:
 
 Request:
   POST /payments
-  Headers: Authorization: Bearer <access_token>
+  Headers:
+    Authorization: Bearer <access_token>
+    Idempotency-Key: <UUID v4 do client sinh trước, lưu ở localStorage>
   Body: {
-    "registration_id": "<UUID>",
-    "payment_key":     "<UUID v4 do client sinh trước, lưu ở localStorage>"
+    "registration_id": "<UUID>"
   }
 
-QUAN TRỌNG: payment_key được sinh một lần trước khi gửi request đầu tiên.
-            Client KHÔNG được sinh key mới khi retry — phải dùng lại cùng key.
+QUAN TRỌNG: `Idempotency-Key` được sinh một lần trước khi gửi request đầu tiên.
+            Client KHÔNG được sinh key mới khi retry — phải dùng lại cùng header value.
 ```
 
 **Bước ① — Idempotency Check (PHẢI ĐỨNG TRƯỚC Circuit Breaker):**
@@ -323,7 +326,7 @@ Nếu pmt_status = 'succeeded':
 Nếu pmt_status = 'unresolved':
   → 504 { "error": "payment_timeout",
            "retry_same_key": true,
-           "payment_key": :payment_key,
+           "idempotency_key": :payment_key,
            "retry_after": 30 }
   -- Client PHẢI dùng lại payment_key này, KHÔNG sinh key mới
 
@@ -353,7 +356,7 @@ Nếu pmt_status = 'failed':
 ### Chi tiết E-08 — Gateway Timeout (kịch bản phức tạp nhất)
 
 ```
-T=0s:   Client gửi POST /payments với payment_key K
+T=0s:   Client gửi POST /payments với Idempotency-Key: K
 T=0.1s: Server claim K='in_progress'
 T=0.1s: Server INSERT payments (status='initiated')
 T=0.1s: Server gọi gateway với header Idempotency-Key: K
@@ -416,12 +419,12 @@ Then: 201 + registration_id + qr_code. DB: registrations +1, seats_available -1,
 Given registration status='pending', gateway mock trả 200.
 Then: 200 + receipt_id. DB: payments.status='succeeded', registrations.status='paid'.
 
-**AC-03 — Idempotency registration:**
-Given cùng idempotency_key đã 'completed'.
+**AC-03 — Idempotency registration (header):**
+Given cùng `Idempotency-Key` header (đã 'completed').
 Then: response giống lần 1. DB: KHÔNG có row mới.
 
-**AC-04 — Idempotency payment — retry sau timeout:**
-Lần 1: timeout → 504 + retry_same_key=true. Lần 2: cùng key → gateway confirm → 200.
+**AC-04 — Idempotency payment — retry sau timeout (header):**
+Lần 1: timeout → 504 + retry_same_key=true. Lần 2: cùng `Idempotency-Key` header → gateway confirm → 200.
 DB: chỉ 1 payment record. Gateway: chỉ nhận 1 charge.
 
 **AC-05 — Concurrent requests no oversell:**

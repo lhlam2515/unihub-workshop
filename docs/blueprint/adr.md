@@ -254,7 +254,7 @@ Flow đầy đủ → `design/04_safety-mechanism.md`. Behavioral spec → `spec
 
 ### 1. Quyết định
 
-**JWT access token** TTL 15 phút (RS256), **Refresh Token** TTL 7 ngày trong HttpOnly cookie. Không có server-side session store. Hai endpoint đăng nhập riêng: `POST /auth/login/student` (tra `students`) và `POST /auth/login/staff` (tra `staff`, đọc `staff.role`).
+**JWT access token** TTL 15 phút (RS256), **Refresh Token** TTL 7 ngày trong HttpOnly cookie. Không có server-side session store. Sử dụng endpoint đăng nhập: `POST /auth/login` cho cả student và staff (phân biệt bằng `accountType` trong body).
 
 JWT payload → `access-control.md`. HTTP contract → `specs/authentication.md`.
 
@@ -540,3 +540,46 @@ Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thá
 **Inline trong upload handler:** HTTP timeout sau 30s, AI có thể mất 2 phút.
 
 **Anthropic Claude thay vì OpenAI:** Chất lượng tương đương. OpenAI có SDK ecosystem rộng hơn cho Node.js/Python — nhưng `AIProvider` interface cho phép swap.
+
+---
+
+## ADR-15 — Idempotency Key Transport: HTTP Header
+
+### 1. Quyết định
+
+**Idempotency key được truyền trong HTTP header**, không phải trong request body.
+
+| Endpoint | Header | Ghi chú |
+|---|---|---|
+| `POST /registrations` | `Idempotency-Key: <UUID v4>` | Dedup lần đăng ký |
+| `POST /payments` | `Idempotency-Key: <UUID v4>` | Dedup + server forward đến gateway |
+
+Cả hai endpoint dùng cùng header name `Idempotency-Key` — thống nhất convention, không phân biệt field name theo endpoint. Server forward giá trị này làm `Idempotency-Key` header khi gọi ra payment gateway (ADR-08 INV-04).
+
+Cơ chế xử lý và 3-state lifecycle (`in_progress` / `completed` / `unresolved`) không thay đổi — ADR-15 chỉ quyết định transport location, không quyết định behavior.
+
+> **Lịch sử:** `registration-paid.md` ban đầu đặt key trong body (`idempotency_key`, `payment_key`). ADR-15 chốt dùng header — `registration-paid.md` cần cập nhật AC tương ứng.
+
+### 2. Lý do chọn
+
+**Tách biệt transport concern và business concern.** Idempotency key không phải dữ liệu nghiệp vụ của operation — nó là cơ chế an toàn ở tầng transport. Header là nơi đúng theo HTTP semantics: `Authorization`, `Content-Type`, `Cache-Control` đều là transport metadata. Body chỉ chứa business payload.
+
+**Không bị log cùng request body.** Hầu hết middleware, API Gateway (Nginx, Kong), và log aggregator mặc định capture body khi debug. Header có thể được filter riêng khỏi log (ví dụ: redact `Idempotency-Key` khỏi production log). Key không phải secret nhưng giảm noise trong audit trail.
+
+**Nhất quán với industry standard.** Stripe, Adyen, Square — tất cả đều dùng `Idempotency-Key` header. Developer tích hợp API đã quen với pattern này. Documentation và tooling (Postman, Insomnia) xử lý header idempotency tốt hơn body field.
+
+**Body schema gọn hơn.** `POST /registrations` body chỉ cần `{ "workshop_id": "..." }`. Không trộn lẫn business field với infrastructure field trong cùng object — giảm nhầm lẫn khi client build request.
+
+**Server nhúng key vào 504 response body để hint retry.** Trên timeout, server trả `{ "idempotency_key": "<key>" }` — lấy từ header của request, embed vào body response. Không tạo asymmetry: key đi vào header, hint ra ngoài body là convention hợp lý (giống `Retry-After` header → `retry_after` field trong body).
+
+### 3. Trade-off và rủi ro
+
+**`registration-paid.md` cần cập nhật AC.** Spec gốc viết AC với `body.idempotency_key`. Sau ADR-15, AC-03 và AC-04 phải test qua header. Đây là cost thực của quyết định — không phải zero-cost như nếu giữ body.
+
+**Mobile client cần cấu hình interceptor.** Expo app phải thêm `Idempotency-Key` vào axios/fetch interceptor cho đúng hai endpoint. Không phức tạp nhưng cần explicit — không tự nhiên như điền body field.
+
+### 4. Phương án đã cân nhắc nhưng không chọn
+
+**Body field (`idempotency_key` / `payment_key`) — phương án từ `registration-paid.md` ban đầu:**
+
+Được loại vì trộn transport concern vào business payload và bị log cùng body. Không nhất quán với convention industry.
