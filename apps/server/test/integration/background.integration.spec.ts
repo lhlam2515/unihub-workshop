@@ -23,16 +23,16 @@ import {
   STUDENT_SYNC_QUEUE,
 } from "@/infra/messaging/queue.constants";
 import { RedisService } from "@/infra/redis/redis.service";
-import { NotificationsAdminController } from "@/modules/notification/controllers/notifications-admin.controller";
 import { StudentSyncAdminController } from "@/modules/background/controllers/student-sync-admin.controller";
 import { SystemAdminController } from "@/modules/background/controllers/system-admin.controller";
-import { NotificationChannelConfigsRepository } from "@/modules/notification/repositories/notification-channel-configs.repository";
-import { NotificationLogsRepository } from "@/modules/notification/repositories/notification-logs.repository";
 import { StudentSyncErrorsRepository } from "@/modules/background/repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "@/modules/background/repositories/student-sync-jobs.repository";
-import { NotificationsService } from "@/modules/notification/services/notifications.service";
 import { StudentSyncService } from "@/modules/background/services/student-sync.service";
 import { SystemMonitorService } from "@/modules/background/services/system-monitor.service";
+import { NotificationsAdminController } from "@/modules/notification/controllers/notifications-admin.controller";
+import { NotificationChannelConfigsRepository } from "@/modules/notification/repositories/notification-channel-configs.repository";
+import { NotificationLogsRepository } from "@/modules/notification/repositories/notification-logs.repository";
+import { NotificationsService } from "@/modules/notification/services/notifications.service";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------

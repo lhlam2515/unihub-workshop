@@ -19,6 +19,7 @@ import { Injectable } from "@nestjs/common";
 
 import type { NewWorkshopDocument } from "@/infra/database/types/async.types";
 import { StorageService } from "@/infra/storage/storage.service";
+import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -26,7 +27,6 @@ import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
 import { DocumentResponseBuilder } from "../dto/document-response.dto";
 import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
-import { WorkshopsRepository } from "../repositories/workshops.repository";
 
 import type { AiSummaryPublicDto } from "../dto/ai-summary-response.dto";
 import type { WorkshopDocumentResponseDto } from "../dto/document-response.dto";

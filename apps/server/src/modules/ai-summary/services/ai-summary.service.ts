@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 
-import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { Result } from "@/shared/response/result";
 
 import { PdfSummaryPipeline } from "../pipeline/pdf-summary.pipeline";

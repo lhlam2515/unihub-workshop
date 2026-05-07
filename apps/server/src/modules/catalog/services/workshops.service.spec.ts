@@ -1,5 +1,7 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
+import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -7,10 +9,8 @@ import { RoomConflictService } from "./room-conflict.service";
 import { SeatCounterService } from "./seat-counter.service";
 import { WorkshopNotificationPublisher } from "./workshop-notification-publisher.service";
 import { WorkshopsService } from "./workshops.service";
-import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 import { RoomsRepository } from "../repositories/rooms.repository";
 import { SpeakersRepository } from "../repositories/speakers.repository";
-import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
 import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "../repositories/workshops.repository";
 

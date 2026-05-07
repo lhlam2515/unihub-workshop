@@ -3,15 +3,15 @@ import { Readable } from "node:stream";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { StorageService } from "@/infra/storage/storage.service";
+import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
-import { DocumentsService } from "./documents.service";
+import { DocumentsService } from "./workshop-documents.service";
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
 import { DocumentResponseBuilder } from "../dto/document-response.dto";
 import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
 import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
-import { WorkshopsRepository } from "../repositories/workshops.repository";
 
 // ---------------------------------------------------------------------------
 // Mock data

@@ -23,6 +23,7 @@ import { DatabaseModule } from "./infra/database/database.module";
 import { SharedQueueModule } from "./infra/messaging/queue.module";
 import { RedisModule } from "./infra/redis/redis.module";
 import { StorageModule } from "./infra/storage/storage.module";
+import { AiSummaryModule } from "./modules/ai-summary/ai-summary.module";
 import { BackgroundModule } from "./modules/background/background.module";
 import { BookingModule } from "./modules/booking/booking.module";
 import { CatalogModule } from "./modules/catalog/catalog.module";
@@ -87,6 +88,7 @@ import { PaymentModule } from "./modules/payment/payment.module";
     BookingModule,
     PaymentModule,
     CheckinModule,
+    AiSummaryModule,
     NotificationModule,
     BackgroundModule,
   ],

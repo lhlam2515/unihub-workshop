@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { Result } from "@/shared/response/result";
 
 import { AiSummaryService } from "./ai-summary.service";
