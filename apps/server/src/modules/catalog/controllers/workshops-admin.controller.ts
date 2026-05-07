@@ -24,26 +24,28 @@ import {
   Body,
   Param,
   Query,
-  Headers,
   UseGuards,
+  Headers,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import { parseIfMatch } from "@/shared/utils/etag.utils";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateWorkshopDto } from "../dto/create-workshop.dto";
 import { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
 import { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
 import { UpdateWorkshopDto } from "../dto/update-workshop.dto";
-import { parseIfMatch } from "@/shared/utils/etag.utils";
 import { WorkshopsService } from "../services/workshops.service";
 
 @Controller("admin/workshops")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class WorkshopsAdminController {
   constructor(private readonly workshopsService: WorkshopsService) {}
 
@@ -103,11 +105,9 @@ export class WorkshopsAdminController {
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Only workshops in DRAFT status can be modified. Room time conflicts
    * are re-validated if room or time fields are changed.
-   * Requires If-Match header for optimistic concurrency control.
    *
    * @param id - The UUID of the workshop to update.
    * @param body - Partial workshop update payload.
-   * @param ifMatch - The If-Match header containing the expected version.
    * @returns The updated workshop admin detail DTO.
    */
   @Put(":id")
@@ -143,11 +143,9 @@ export class WorkshopsAdminController {
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Allows modifying room, start time, or end time of an already published
    * workshop. Room time conflicts are re-validated against the new schedule.
-   * Requires If-Match header for optimistic concurrency control.
    *
    * @param id - The UUID of the workshop to update.
    * @param body - Emergency update payload (room_id?, starts_at?, ends_at?).
-   * @param ifMatch - The If-Match header containing the expected version.
    * @returns The updated workshop admin detail DTO.
    */
   @Patch(":id/emergency-update")

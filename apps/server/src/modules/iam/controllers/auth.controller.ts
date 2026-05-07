@@ -21,6 +21,7 @@ import { AuthService } from "../services/auth.service";
 import type { LoginDto } from "../dto/login.dto";
 import type { RefreshTokenDto } from "../dto/refresh-token.dto";
 import type { Request, Response } from "express";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -49,6 +50,7 @@ export class AuthController {
    * @param loginDto - Validated LoginDto containing email, password, and platform.
    * @param response - Express response object for setting the HttpOnly cookie.
    */
+  @RateLimit([{ tier: 'T1', limit: 60, windowMs: 60000 }])
   @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -89,6 +91,7 @@ export class AuthController {
    * @param refreshTokenDto - Contains the refresh_token string (optional for Web cookie flow).
    * @param response - Express response object for setting the HttpOnly cookie.
    */
+  @RateLimit([{ tier: 'T1', limit: 30, windowMs: 60000 }])
   @Post("refresh")
   @Public()
   @HttpCode(HttpStatus.OK)

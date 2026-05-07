@@ -32,6 +32,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
@@ -48,6 +49,7 @@ const ALLOWED_MIME_TYPE = "application/pdf";
 @Controller("admin/workshops/:workshopId/documents")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class DocumentsAdminController {
   constructor(private readonly documentsService: DocumentsService) {}
 

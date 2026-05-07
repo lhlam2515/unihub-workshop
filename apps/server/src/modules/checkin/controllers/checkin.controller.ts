@@ -13,6 +13,7 @@ import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { WorkshopScopeGuard } from "@/modules/iam/guards/workshop-scope.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
@@ -71,6 +72,7 @@ export class CheckinController {
    * @returns SyncResultDto with counts of synced, skipped, and conflicted records.
    */
   @Post("sync")
+  @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
   @UseGuards(WorkshopScopeGuard)
   @HttpCode(HttpStatus.OK)
   async syncOfflineData(

@@ -12,6 +12,7 @@ import {
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import { Result } from "@/shared/response/result";
 
@@ -38,6 +39,7 @@ import { StudentSyncService } from "../services/student-sync.service";
 @Controller("/admin/student-sync")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class StudentSyncAdminController {
   constructor(private readonly studentSyncService: StudentSyncService) {}
 

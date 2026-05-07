@@ -14,11 +14,13 @@ import {
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { RegistrationsService } from "../services/registrations.service";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -40,13 +42,15 @@ export class RegistrationsController {
    *
    * Security: Requires valid JWT with STUDENT role.
    */
+  @RateLimit([{ tier: 'T2', limit: 30, windowMs: 60000 }, { tier: 'T3', limit: 5, windowMs: 60000 }])
   @Post("registrations")
   @HttpCode(HttpStatus.CREATED)
   async createRegistration(
     @Body() dto: CreateRegistrationDto,
+    @IdempotencyKey() idempotencyKey: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.register(user.sub, dto);
+    return this.registrationsService.register(user.sub, dto, idempotencyKey);
   }
 
   /**

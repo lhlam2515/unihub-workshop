@@ -7,8 +7,7 @@ import type { RegistrationEventData } from "@/infra/messaging/event-contracts";
 import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
-import { GlobalRateLimitMechanic } from "@/modules/rate-limit/services/global-rate-limit.service";
-import { RateLimiterMechanic } from "@/modules/rate-limit/services/rate-limiter.service";
+import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mechanic";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -26,8 +25,7 @@ export class RegistrationsService {
   constructor(
     private readonly registrationsRepo: RegistrationsRepository,
     private readonly ticketsRepo: TicketsRepository,
-    private readonly rateLimiter: RateLimiterMechanic,
-    private readonly globalRateLimit: GlobalRateLimitMechanic,
+    private readonly idempotencyMechanic: IdempotencyMechanic,
     private readonly seatLock: SeatLockMechanic,
     private readonly seatCounter: SeatCounterService,
     private readonly workshopsService: WorkshopsService,
@@ -76,17 +74,55 @@ export class RegistrationsService {
    */
   async register(
     studentId: string,
+    dto: CreateRegistrationDto,
+    idempotencyKey?: string
+  ): Promise<Result<RegistrationDto>> {
+    // Stage 0: Idempotency check (if key is provided)
+    if (idempotencyKey) {
+      const idemResult = await this.idempotencyMechanic.check(
+        idempotencyKey,
+        "REGISTRATION"
+      );
+      if (idemResult.isFailure) return Result.fail(idemResult.error);
+      if (!idemResult.data.proceed && idemResult.data.cachedResponse) {
+        return Result.ok(
+          idemResult.data.cachedResponse.body as unknown as RegistrationDto
+        );
+      }
+    }
+
+    // Stages 1-8: Run the registration pipeline
+    const pipeResult = await this.runRegistrationCore(studentId, dto);
+
+    // Resolve idempotency based on pipeline outcome
+    if (idempotencyKey) {
+      if (pipeResult.isSuccess) {
+        await this.idempotencyMechanic.markCompleted(
+          idempotencyKey,
+          pipeResult.data,
+          201
+        );
+      } else {
+        await this.idempotencyMechanic.markUnresolved(idempotencyKey);
+      }
+    }
+
+    return pipeResult;
+  }
+
+  /**
+   * Core registration pipeline (stages 1-8).
+   *
+   * Extracted from register() to allow idempotency wrapping.
+   */
+  private async runRegistrationCore(
+    studentId: string,
     dto: CreateRegistrationDto
   ): Promise<Result<RegistrationDto>> {
-    // Stages 1-3: Run independent checks in parallel
-    const [workshopResult, globalCheck, userCheck] = await Promise.all([
-      this.workshopsService.getPublishedById(dto.workshop_id),
-      this.globalRateLimit.check(),
-      this.rateLimiter.consumeToken(studentId),
-    ]);
+    const workshopResult = await this.workshopsService.getPublishedById(
+      dto.workshop_id
+    );
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
-    if (globalCheck.isFailure) return Result.fail(globalCheck.error);
-    if (userCheck.isFailure) return Result.fail(userCheck.error);
 
     // Stage 4: Atomic seat decrement with rollback
     const seatResult = await this.seatCounter.decrement(dto.workshop_id);
