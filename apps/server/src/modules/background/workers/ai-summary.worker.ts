@@ -5,7 +5,7 @@ import { Job } from "bullmq";
 import type { AiSummaryJobData } from "@/infra/messaging/event-contracts";
 import { AI_SUMMARY_QUEUE } from "@/infra/messaging/queue.constants";
 
-import { AiSummaryService } from "../services/ai-summary.service";
+import { AiSummaryService } from "@/modules/ai-summary/services/ai-summary.service";
 
 /**
  * AiSummaryWorker

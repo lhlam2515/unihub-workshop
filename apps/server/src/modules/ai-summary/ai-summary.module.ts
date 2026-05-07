@@ -16,7 +16,6 @@ import { AiSummariesRepository } from "./repositories/ai-summaries.repository";
 import { WorkshopDocumentsRepository } from "./repositories/workshop-documents.repository";
 import { AiSummaryService } from "./services/ai-summary.service";
 import { DocumentsService } from "./services/workshop-documents.service";
-import { AiSummaryWorker } from "./workers/ai-summary.worker";
 
 @Module({
   imports: [DatabaseModule, RedisModule, StorageModule, SharedQueueModule],
@@ -35,8 +34,6 @@ import { AiSummaryWorker } from "./workers/ai-summary.worker";
     LlmSummaryFilter,
     PersistResultFilter,
     PdfSummaryPipeline,
-    // Workers
-    AiSummaryWorker,
   ],
   exports: [AiSummariesRepository, AiSummaryService, DocumentsService],
 })

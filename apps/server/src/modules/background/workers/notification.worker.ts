@@ -5,7 +5,7 @@ import type { NotificationJobData } from "@/infra/messaging/event-contracts";
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
 import type { ErrorCode } from "@/shared/response/types";
 
-import { NotificationDispatchService } from "../services/notification-dispatch.service";
+import { NotificationDispatchService } from "@/modules/notification/services/notification-dispatch.service";
 
 import type { Job } from "bullmq";
 

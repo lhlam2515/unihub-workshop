@@ -8,7 +8,6 @@ import { StudentSyncAdminController } from "./controllers/student-sync-admin.con
 import { StudentSyncErrorsRepository } from "./repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "./repositories/student-sync-jobs.repository";
 import { StudentSyncService } from "./services/student-sync.service";
-import { StudentSyncWorker } from "./workers/student-sync.worker";
 
 @Module({
   imports: [DatabaseModule, SharedQueueModule, IamModule],
@@ -19,8 +18,6 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     // Repositories
     StudentSyncJobsRepository,
     StudentSyncErrorsRepository,
-    // Workers
-    StudentSyncWorker,
   ],
   exports: [StudentSyncService],
 })

@@ -15,10 +15,9 @@ import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
 import { WorkshopAutoCompleteCron } from "./cron/workshop-auto-complete.cron";
 import { SystemMonitorService } from "./services/system-monitor.service";
-
-// Cron Jobs
-
-// Repositories
+import { AiSummaryWorker } from "./workers/ai-summary.worker";
+import { NotificationWorker } from "./workers/notification.worker";
+import { StudentSyncWorker } from "./workers/student-sync.worker";
 
 /**
  * Orchestrates all scheduled background processing.
@@ -56,6 +55,10 @@ import { SystemMonitorService } from "./services/system-monitor.service";
     ReconciliationCron,
     CircuitBreakerRecoveryCron,
     WorkshopAutoCompleteCron,
+    // Workers
+    NotificationWorker,
+    AiSummaryWorker,
+    StudentSyncWorker,
   ],
   exports: [SystemMonitorService],
 })

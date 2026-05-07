@@ -11,7 +11,6 @@ import { NotificationChannelConfigsRepository } from "./repositories/notificatio
 import { NotificationLogsRepository } from "./repositories/notification-logs.repository";
 import { NotificationDispatchService } from "./services/notification-dispatch.service";
 import { NotificationsService } from "./services/notifications.service";
-import { NotificationWorker } from "./workers/notification.worker";
 
 @Module({
   imports: [DatabaseModule, SharedQueueModule],
@@ -27,8 +26,6 @@ import { NotificationWorker } from "./workers/notification.worker";
     EmailChannel,
     TelegramChannel,
     AppChannel,
-    // Workers
-    NotificationWorker,
   ],
   exports: [NotificationsService, NotificationDispatchService],
 })
