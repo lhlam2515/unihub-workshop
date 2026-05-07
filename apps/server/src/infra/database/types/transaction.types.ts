@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import {
   checkinRecords,
+  idempotencyKeys,
   offlineCheckinQueue,
   payments,
   registrations,
@@ -18,6 +19,14 @@ const offlineCheckinSyncStatusSchema = z.enum([
   "SYNCED",
   "CONFLICT",
 ]);
+
+export const idempotencyKeysSelectSchema = createSelectSchema(idempotencyKeys);
+export const idempotencyKeysInsertSchema = createInsertSchema(idempotencyKeys);
+export const idempotencyKeysUpdateSchema = createUpdateSchema(idempotencyKeys);
+
+export type IdempotencyKey = z.infer<typeof idempotencyKeysSelectSchema>;
+export type NewIdempotencyKey = z.infer<typeof idempotencyKeysInsertSchema>;
+export type IdempotencyKeyUpdate = z.infer<typeof idempotencyKeysUpdateSchema>;
 
 export const registrationsSelectSchema = createSelectSchema(registrations);
 export const registrationsInsertSchema = createInsertSchema(registrations);
