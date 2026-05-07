@@ -1,8 +1,8 @@
 /**
  * Workshops Admin Controller
  *
- * Handles ORGANIZER-only workshop management endpoints.
- * All endpoints require JWT authentication and ORGANIZER role.
+ * Handles BTC-only workshop management endpoints.
+ * All endpoints require JWT authentication and BTC role.
  *
  * Endpoints:
  * - GET /admin/workshops — list all workshops (any status)
@@ -41,7 +41,7 @@ import { WorkshopsService } from "../services/workshops.service";
 
 @Controller("admin/workshops")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
 export class WorkshopsAdminController {
   constructor(private readonly workshopsService: WorkshopsService) {}
 
@@ -49,7 +49,7 @@ export class WorkshopsAdminController {
    * Lists all workshops (any status) for admin management.
    *
    * Route: GET /admin/workshops
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Supports optional filtering by status, with pagination.
    *
    * @param query - Query parameters for filtering (status, page, limit).
@@ -64,7 +64,7 @@ export class WorkshopsAdminController {
    * Creates a new workshop as a DRAFT.
    *
    * Route: POST /admin/workshops
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    *
    * @param body - Workshop creation payload (title, description, speaker_id, room_id, starts_at, ends_at, capacity, is_paid, price?).
    * @param user - Authenticated user JWT payload containing the creator's sub.
@@ -82,7 +82,7 @@ export class WorkshopsAdminController {
    * Retrieves full admin detail for a single workshop by ID.
    *
    * Route: GET /admin/workshops/:id
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Includes slot counters (confirmed_count, locked_count), creator ID,
    * and workflow status.
    *
@@ -98,7 +98,7 @@ export class WorkshopsAdminController {
    * Updates a draft workshop.
    *
    * Route: PUT /admin/workshops/:id
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Only workshops in DRAFT status can be modified. Room time conflicts
    * are re-validated if room or time fields are changed.
    *
@@ -118,7 +118,7 @@ export class WorkshopsAdminController {
    * Publishes a draft workshop, making it visible and bookable by students.
    *
    * Route: POST /admin/workshops/:id/publish
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Transitions status from DRAFT to PUBLISHED and initializes the Redis
    * seat counter with the workshop's capacity.
    *
@@ -134,7 +134,7 @@ export class WorkshopsAdminController {
    * Updates scheduling fields of a published workshop without re-publishing.
    *
    * Route: PATCH /admin/workshops/:id/emergency-update
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Allows modifying room, start time, or end time of an already published
    * workshop. Room time conflicts are re-validated against the new schedule.
    *
@@ -154,7 +154,7 @@ export class WorkshopsAdminController {
    * Cancels a workshop, transitioning it to CANCELLED status.
    *
    * Route: POST /admin/workshops/:id/cancel
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Transitions status to CANCELLED and removes the Redis seat counter
    * if the workshop was previously PUBLISHED.
    *
@@ -170,7 +170,7 @@ export class WorkshopsAdminController {
    * Retrieves real-time statistics for a specific workshop.
    *
    * Route: GET /admin/workshops/:id/stats
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Returns confirmed registration count, locked seat count, and remaining
    * available seats sourced from Redis for real-time accuracy.
    *

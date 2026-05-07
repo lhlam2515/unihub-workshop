@@ -111,7 +111,7 @@ export class RoomsRepository {
       async () => {
         const conditions = [
           eq(this.schema.workshops.roomId, roomId),
-          eq(this.schema.workshops.status, "PUBLISHED"),
+          eq(this.schema.workshops.status, "OPEN"),
           lte(this.schema.workshops.startsAt, endsAt),
           gte(this.schema.workshops.endsAt, startsAt),
         ];
