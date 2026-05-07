@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Enable check-in staff to scan workshop tickets via QR code in real-time and retrieve live check-in statistics during workshop events.
+
+## Requirements
 
 ### Requirement: Validate QR token and record online check-in
 The system SHALL accept a `qr_token` and `workshop_id` from CHECKIN_STAFF, look up the ticket by `qr_token`, verify the ticket is ACTIVE and belongs to the given workshop, then insert a `checkin_records` entry with `source = ONLINE`.
