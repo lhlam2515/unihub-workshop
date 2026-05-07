@@ -53,6 +53,57 @@ function serverConfig({ tsconfigRootDir }) {
             pattern: "src/modules/*([^/]+)/dto/**/*",
             capture: ["module"],
           },
+          // Business-logic helpers
+          {
+            type: "mechanics",
+            pattern: "src/modules/*([^/]+)/mechanics/**/*",
+            capture: ["module"],
+          },
+          {
+            type: "channels",
+            pattern: "src/modules/*([^/]+)/channels/**/*",
+            capture: ["module"],
+          },
+          {
+            type: "pipeline",
+            pattern: "src/modules/*([^/]+)/pipeline/**/*",
+            capture: ["module"],
+          },
+          // Background processing
+          {
+            type: "workers",
+            pattern: "src/modules/*([^/]+)/workers/**/*",
+            capture: ["module"],
+          },
+          {
+            type: "cron",
+            pattern: "src/modules/*([^/]+)/cron/**/*",
+            capture: ["module"],
+          },
+          // External-API adapters
+          {
+            type: "gateways",
+            pattern: "src/modules/*([^/]+)/gateways/**/*",
+            capture: ["module"],
+          },
+          {
+            type: "providers",
+            pattern: "src/modules/*([^/]+)/providers/**/*",
+            capture: ["module"],
+          },
+          // Presentation-layer within modules
+          {
+            type: "guards",
+            pattern: "src/modules/*([^/]+)/guards/**/*",
+            capture: ["module"],
+          },
+          {
+            type: "decorators",
+            pattern: "src/modules/*([^/]+)/decorators/**/*",
+            capture: ["module"],
+          },
+          // Infrastructure adapters
+          { type: "infra", pattern: "src/infra/**/*" },
         ],
       },
       rules: {
@@ -108,6 +159,7 @@ function serverConfig({ tsconfigRootDir }) {
                     { type: "core" },
                     { type: "shared" },
                     { type: "database" },
+                    { type: "infra" },
                     {
                       type: "data-access",
                       captured: {
@@ -131,6 +183,7 @@ function serverConfig({ tsconfigRootDir }) {
                     { type: "core" },
                     { type: "shared" },
                     { type: "database" },
+                    { type: "infra" },
                     {
                       type: "dto",
                       captured: {
@@ -138,6 +191,260 @@ function serverConfig({ tsconfigRootDir }) {
                       },
                     },
                   ],
+                },
+              },
+              // ------------------------------------------------
+              // New element types — business-logic helpers
+              // ------------------------------------------------
+              {
+                from: { type: "mechanics" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "database" },
+                    { type: "infra" },
+                    {
+                      type: "data-access",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "business",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                from: { type: "channels" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "infra" },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "data-access",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                from: { type: "pipeline" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "database" },
+                    { type: "infra" },
+                    {
+                      type: "data-access",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "business",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                  ],
+                },
+              },
+              // ------------------------------------------------
+              // New element types — background processing
+              // ------------------------------------------------
+              {
+                from: { type: "workers" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "database" },
+                    { type: "infra" },
+                    {
+                      type: "business",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "data-access",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                from: { type: "cron" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "database" },
+                    { type: "infra" },
+                    {
+                      type: "business",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "data-access",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    // Cron jobs may trigger cross-module domain services
+                    { type: "business" },
+                  ],
+                },
+              },
+              // ------------------------------------------------
+              // New element types — external-API adapters
+              // ------------------------------------------------
+              {
+                from: { type: "gateways" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "infra" },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                from: { type: "providers" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "infra" },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                  ],
+                },
+              },
+              // ------------------------------------------------
+              // New element types — presentation-layer in modules
+              // ------------------------------------------------
+              {
+                from: { type: "guards" },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "infra" },
+                    {
+                      type: "dto",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                    {
+                      type: "business",
+                      captured: {
+                        module: "{{ from.captured.module }}",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                from: { type: "decorators" },
+                allow: {
+                  to: [{ type: "core" }, { type: "shared" }],
+                },
+              },
+              // ------------------------------------------------
+              // New element types — infrastructure adapters
+              // ------------------------------------------------
+              {
+                from: { type: "infra" },
+                allow: {
+                  to: [{ type: "core" }, { type: "shared" }, { type: "infra" }],
+                },
+              },
+              // ------------------------------------------------
+              // Module-specific restrictions
+              // ------------------------------------------------
+              // notification: only consumes events via Redis Streams — no cross-module imports
+              {
+                from: {
+                  type: "business",
+                  captured: { module: "notification" },
+                },
+                allow: {
+                  to: [
+                    { type: "core" },
+                    { type: "shared" },
+                    { type: "database" },
+                    { type: "infra" },
+                    {
+                      type: "data-access",
+                      captured: { module: "notification" },
+                    },
+                    {
+                      type: "dto",
+                      captured: { module: "notification" },
+                    },
+                  ],
+                },
+              },
+              // rate-limit: cross-cutting guard — only core + shared + infra (Redis)
+              {
+                from: { type: "business", captured: { module: "rate-limit" } },
+                allow: {
+                  to: [{ type: "core" }, { type: "shared" }, { type: "infra" }],
                 },
               },
             ],
