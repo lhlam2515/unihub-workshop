@@ -55,6 +55,14 @@ export const envSchema = z.object({
     .min(1, { message: "DEEPSEEK_API_KEY is required" }),
   AI_SUMMARY_MODEL: z.string().default("deepseek-v4-pro"),
 
+  // Payment Gateway HTTP Client
+  GATEWAY_BASE_URL: z.string().url().optional(),
+  GATEWAY_API_KEY: z.string().optional(),
+
+  // AI Provider HTTP Client
+  AI_PROVIDER_BASE_URL: z.string().url().optional(),
+  AI_PROVIDER_API_KEY: z.string().optional(),
+
   // Logging
   LOG_LEVEL: z.string().default("info"),
 
@@ -140,4 +148,14 @@ export const aiConfig = registerAs("ai", () => ({
   deepseekApiKey: process.env.DEEPSEEK_API_KEY!,
   summaryModel: process.env.AI_SUMMARY_MODEL ?? "deepseek-v4-pro",
   baseUrl: "https://api.deepseek.com/anthropic",
+}));
+
+export const gatewayConfig = registerAs("gateway", () => ({
+  baseUrl: process.env.GATEWAY_BASE_URL,
+  apiKey: process.env.GATEWAY_API_KEY,
+}));
+
+export const aiProviderConfig = registerAs("aiProvider", () => ({
+  baseUrl: process.env.AI_PROVIDER_BASE_URL,
+  apiKey: process.env.AI_PROVIDER_API_KEY,
 }));
