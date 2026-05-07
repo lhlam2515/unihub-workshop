@@ -7,7 +7,7 @@
  * Runs every 1 minute.
  *
  * Business rules:
- * - Only targets payments where status = 'PENDING' AND timeout_at < NOW().
+ * - Only targets payments where status = 'INITIATED' AND timeout_at < NOW().
  * - Delegates each expiry to PaymentsService.expirePayment() which handles
  *   the full ACID transaction (payment → TIMEOUT, registration → CANCELLED,
  *   Redis seat release, and notification dispatch).

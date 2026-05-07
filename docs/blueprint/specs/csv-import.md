@@ -29,7 +29,7 @@ Trigger thủ công: POST /admin/imports/trigger (BTC role) — dùng cho retry 
 
 Trước khi bắt đầu — Concurrent Run Protection:
   SELECT id FROM import_logs
-  WHERE status = 'in_progress'
+  WHERE status = 'IN_PROGRESS'
     AND run_at > now() - interval '2 hours';   -- stale lock guard
 
   Nếu tìm thấy:
@@ -41,7 +41,7 @@ Tìm file CSV mới nhất:
   Ưu tiên: file có ngày gần nhất
 
 Nếu không có file:
-  INSERT INTO import_logs (..., status='failed', triggered_by='cron')
+  INSERT INTO import_logs (..., status='FAILED', triggered_by='CRON')
     với note: "No CSV file found"
   → LOG WARNING, EXIT (hệ thống vẫn chạy với dữ liệu cũ)
 
@@ -49,7 +49,7 @@ Nếu có file:
   INSERT INTO import_logs
     (id, run_at, triggered_by, status)
   VALUES
-    (gen_random_uuid(), now(), 'cron', 'in_progress');
+    (gen_random_uuid(), now(), 'CRON', 'IN_PROGRESS');
   → Tiếp tục Stage 2 với import_log_id
 ```
 
@@ -161,7 +161,7 @@ Ghi file error (nếu có invalid rows):
 
 Ghi import log:
   UPDATE import_logs
-    SET status        = 'success',  -- hoặc 'failed' nếu không có file / crash
+    SET status        = 'SUCCESS',  -- hoặc 'FAILED' nếu không có file / crash
         total_rows    = :total,
         success_count = :success,
         failed_count  = :failed,
@@ -169,7 +169,7 @@ Ghi import log:
   WHERE id = :import_log_id;
 
 Gửi notification cho BTC (nếu failed_count > 0):
-  XADD stream:notifications * {
+  addJob notification * {
     event_type: 'csv_import_completed_with_errors',
     user_id:    <btc_users>,
     payload:    {
@@ -193,7 +193,7 @@ Nếu failed_count = 0:
 
 ```
 Điều kiện: Không có file khớp pattern students_YYYY-MM-DD.csv trong input/
-Hành vi: Log warning vào import_logs với status='failed', note='no_file_found'
+Hành vi: Log warning vào import_logs với status='FAILED', note='no_file_found'
          EXIT — không raise exception, không restart
 Hệ thống: Tiếp tục chạy với dữ liệu sinh viên của lần import gần nhất
 Recovery: BTC đặt file vào đúng thư mục, trigger manual qua admin UI
@@ -214,7 +214,7 @@ Recovery: BTC yêu cầu legacy system re-export với UTF-8, hoặc convert fil
 ```
 Điều kiện: File tồn tại nhưng không có data row
 Hành vi: total_rows = 0, success_count = 0, failed_count = 0
-         Import log status = 'success' (không có gì để fail)
+         Import log status = 'SUCCESS' (không có gì để fail)
          Không gửi notification
 Note: Đây là valid state — legacy system có thể export file rỗng nếu không có sinh viên mới
 ```
@@ -223,7 +223,7 @@ Note: Đây là valid state — legacy system có thể export file rỗng nếu
 
 ```
 Điều kiện: Process crash sau khi upsert batch 1-5/10
-Hành vi: import_logs.status = 'in_progress' (không được update về success/failed)
+Hành vi: import_logs.status = 'IN_PROGRESS' (không được update về success/failed)
          Rows của batch 1-5 đã được upsert (committed to DB)
          Rows của batch 6-10 chưa được upsert
 
@@ -231,7 +231,7 @@ Recovery:
   Concurrent run protection sẽ block run mới trong 2 giờ
   Sau 2 giờ: cron trigger lại với cùng file → upsert idempotent → không tạo duplicate
   Manual recovery: BTC trigger ngay qua admin UI (nếu cần)
-  Stale lock guard: import_logs WHERE status='in_progress' AND run_at > now() - 2h
+  Stale lock guard: import_logs WHERE status='IN_PROGRESS' AND run_at > now() - 2h
 ```
 
 ### E-05: Duplicate student_id trong cùng file
@@ -258,7 +258,7 @@ Hành vi: Upsert chỉ UPDATE email, full_name, updated_at
 
 ```
 Điều kiện: Cron trigger và manual trigger cùng thời điểm
-Hành vi: Trigger thứ 2 check import_logs → tìm thấy status='in_progress'
+Hành vi: Trigger thứ 2 check import_logs → tìm thấy status='IN_PROGRESS'
          → LOG WARNING, EXIT không làm gì
 Chỉ có 1 pipeline chạy tại một thời điểm
 ```
@@ -304,7 +304,7 @@ Pipeline chạy trong `csv-sync` module không block `SELECT` từ modules khác
 `password_hash` (nếu đã có từ lần đăng nhập trước) không bị reset về NULL.
 
 **INV-05 — Chỉ 1 Pipeline Chạy Tại Một Thời Điểm:**
-Nếu `import_logs` có row `status='in_progress'` chưa quá 2 giờ, pipeline mới EXIT.
+Nếu `import_logs` có row `status='IN_PROGRESS'` chưa quá 2 giờ, pipeline mới EXIT.
 Không dùng distributed lock — check DB đủ cho single-process monolith.
 
 **INV-06 — Stage-wise Progress (Không All-or-Nothing):**
@@ -318,7 +318,7 @@ Rows đã upsert (các batch trước khi crash) KHÔNG bị rollback.
 
 **AC-01 — Happy path full pipeline:**
 File students_2025-05-06.csv với 1000 rows hợp lệ.
-Then: 1000 rows upserted. import_logs: status='success', success_count=1000, failed_count=0.
+Then: 1000 rows upserted. import_logs: status='SUCCESS', success_count=1000, failed_count=0.
 Không có notification gửi đi.
 
 **AC-02 — Mixed file (valid + invalid):**
@@ -339,13 +339,13 @@ Then: Chỉ 1 pipeline chạy. Manual trigger log warning và exit.
 
 **AC-05 — Crash recovery:**
 Pipeline crash ở giữa Stage 4 (sau batch 3/10).
-Then: import_logs.status = 'in_progress'.
+Then: import_logs.status = 'IN_PROGRESS'.
 After 2h, cron trigger lại → chạy lại toàn bộ file.
 Then: tất cả rows được upsert đúng. Không có duplicate.
 
 **AC-06 — No file:**
 Không có file trong input/ lúc 02:00.
-Then: import_logs.status = 'failed', note = 'no_file_found'. Hệ thống vẫn chạy bình thường.
+Then: import_logs.status = 'FAILED', note = 'no_file_found'. Hệ thống vẫn chạy bình thường.
 
 **AC-07 — Duplicate in file:**
 File có student SV12345678 xuất hiện 2 lần với email khác nhau.

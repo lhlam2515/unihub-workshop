@@ -22,7 +22,7 @@ type TicketWithRegistration = Ticket & {
       startsAt: Date;
       endsAt: Date;
     };
-    student: { studentId: string; fullName: string; studentCode: string };
+    student: { studentId: string; fullName: string; email?: string | null };
   };
 };
 
@@ -37,7 +37,7 @@ type TicketWithWorkshopAndStudent = Ticket & {
       startsAt: Date;
       endsAt: Date;
     };
-    student: { studentId: string; fullName: string; studentCode: string };
+    student: { studentId: string; fullName: string; email?: string | null };
   };
 };
 
@@ -75,7 +75,7 @@ export class TicketsRepository {
             },
           },
         });
-        return (result as TicketWithRegistration) ?? null;
+        return (result as unknown as TicketWithRegistration) ?? null;
       },
       (err) => systemErrors.internal(err)
     );
@@ -103,7 +103,7 @@ export class TicketsRepository {
             },
           },
         });
-        return (result as TicketWithRegistration) ?? null;
+        return (result as unknown as TicketWithRegistration) ?? null;
       },
       (err) => systemErrors.internal(err)
     );

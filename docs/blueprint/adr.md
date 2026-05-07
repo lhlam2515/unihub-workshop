@@ -17,7 +17,7 @@
 
 ### 1. Quyết định
 
-**PostgreSQL** làm primary database duy nhất — source of truth cho mọi trạng thái nghiệp vụ. **Redis** làm lớp phụ trợ cho ba mục đích cụ thể: cache `seats_available` (TTL ngắn), sliding window counters cho Rate Limiting (volatile), và Redis Streams cho async job queue. Redis không bao giờ là source of truth.
+**PostgreSQL** làm primary database duy nhất — source of truth cho mọi trạng thái nghiệp vụ. **Redis** làm lớp phụ trợ cho ba mục đích cụ thể: cache `seats_available` (TTL ngắn), sliding window counters cho Rate Limiting (volatile), và BullMQ cho async job queue. Redis không bao giờ là source of truth.
 
 Schema đầy đủ → `data/schema.sql`.
 
@@ -38,7 +38,7 @@ Khi đã có PostgreSQL, các bài toán khác được giải miễn phí:
 
 **`qr_code` là UUID v4 riêng biệt, không phải `registrations.id`:** Registration ID có thể predictable (sequential). UUID v4 random 122-bit entropy không brute-force được. Tách cho phép re-issue QR mà không đổi registration ID.
 
-**Redis cho ba việc, không hơn:** Cache (performance hint), Rate Limit counters (volatile — mất là tự reset), job queue (Streams với persistence). Giới hạn rõ vai trò để tránh Redis trở thành implicit source of truth.
+**Redis cho ba việc, không hơn:** Cache (performance hint), Rate Limit counters (volatile — mất là tự reset), job queue (BullMQ với persistence). Giới hạn rõ vai trò để tránh Redis trở thành implicit source of truth.
 
 ### 3. Trade-off và rủi ro
 
@@ -46,7 +46,7 @@ Khi đã có PostgreSQL, các bài toán khác được giải miễn phí:
 
 **Không scale ngang.** Với 12,000 user/10 phút ≈ 20 req/s trung bình, không cần scale ngang. Nếu đồ án sau đòi 10× traffic, PostgreSQL là điểm phải xem lại đầu tiên.
 
-**FK cycle giữa `payments` và `idempotency_keys`.** Job dọn key đêm phải skip key đang được reference bởi `payments.status='unresolved'`. Giải pháp: subquery trong điều kiện DELETE — xem `database-schema.md`.
+**FK cycle giữa `payments` và `idempotency_keys`.** Job dọn key đêm phải skip key đang được reference bởi `payments.status='UNRESOLVED'`. Giải pháp: subquery trong điều kiện DELETE — xem `database-schema.md`.
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
@@ -159,7 +159,7 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 **Điều này KHÔNG có nghĩa là:**
 
-- Mọi request đều đồng bộ (AI summary và batch notification vẫn async qua Redis Streams — ADR-10)
+- Mọi request đều đồng bộ (AI summary và batch notification vẫn async qua BullMQ — ADR-10)
 - Không thể tách thành Microservices sau này (ranh giới module được thiết kế để dễ extract)
 
 ---
@@ -194,7 +194,7 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 ### 3. Trade-off và rủi ro
 
-**Timeout là failure loại đặc biệt.** Gateway timeout → CB ghi failure (đóng góp vào threshold) → idempotency key mark `unresolved` (không phải `completed`). Client retry với cùng key → gateway dedup. Chi tiết → `design/04_safety-mechanism.md` và ADR-08.
+**Timeout là failure loại đặc biệt.** Gateway timeout → CB ghi failure (đóng góp vào threshold) → idempotency key mark `UNRESOLVED` (không phải `COMPLETED`). Client retry với cùng key → gateway dedup. Chi tiết → `design/04_safety-mechanism.md` và ADR-08.
 
 **HALF-OPEN race với concurrent probes.** Hai request đến cùng lúc trong HALF-OPEN đều nghĩ mình là probe. Implementation bắt buộc dùng atomic CAS trên `probe_sent` flag — chỉ request đầu tiên đi qua.
 
@@ -216,9 +216,9 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 **3 trạng thái:**
 
-- `in_progress` — đang xử lý, có `locked_until` (~30s) cho crash recovery
-- `completed` — kết quả xác định (200/4xx), response đã cache, terminal state
-- `unresolved` — đã gọi gateway nhưng timeout/network drop, **không terminal** — retry với cùng key để gateway dedup
+- `IN_PROGRESS` — đang xử lý, có `locked_until` (~30s) cho crash recovery
+- `COMPLETED` — kết quả xác định (200/4xx), response đã cache, terminal state
+- `UNRESOLVED` — đã gọi gateway nhưng timeout/network drop, **không terminal** — retry với cùng key để gateway dedup
 
 Flow đầy đủ → `design/04_safety-mechanism.md`. Behavioral spec → `specs/registration-paid.md`.
 
@@ -236,7 +236,7 @@ Flow đầy đủ → `design/04_safety-mechanism.md`. Behavioral spec → `spec
 
 ### 3. Trade-off và rủi ro
 
-**Worst case — client không retry:** Sau 24h, idempotency key bị xóa (với bảo vệ FK). `payments.status='unresolved'` không bị xóa theo. Reconciliation job chạy mỗi 5 phút query `payments WHERE status='unresolved'` → gọi gateway để biết kết quả thực. Chi tiết → `specs/payment-reconciliation.md`.
+**Worst case — client không retry:** Sau 24h, idempotency key bị xóa (với bảo vệ FK). `payments.status='UNRESOLVED'` không bị xóa theo. Reconciliation job chạy mỗi 5 phút query `payments WHERE status='UNRESOLVED'` → gọi gateway để biết kết quả thực. Chi tiết → `specs/payment-reconciliation.md`.
 
 **Key validation:** Server phải validate format UUID v4 tại middleware. Key giả mạo (`"admin-free-pass"`) không có ý nghĩa về security (key chỉ là dedup token) nhưng validation giữ schema sạch.
 
@@ -290,7 +290,7 @@ JWT payload → `access-control.md`. HTTP contract → `specs/authentication.md`
 
 ### 1. Quyết định
 
-**RBAC** với 3 roles cứng (`student`, `btc`, `checkin_staff`), không có role hierarchy, không có ABAC trong phạm vi đồ án. Permission gắn với role tại deployment time — không lưu trong DB, không thay đổi runtime. Enforcement tại 3 điểm theo thứ tự: JWT middleware (Layer ①) → Route RBAC middleware (Layer ②) → Query-level filter (Layer ③).
+**RBAC** với 3 roles cứng (`STUDENT`, `BTC`, `CHECKIN_STAFF`), không có role hierarchy, không có ABAC trong phạm vi đồ án. Permission gắn với role tại deployment time — không lưu trong DB, không thay đổi runtime. Enforcement tại 3 điểm theo thứ tự: JWT middleware (Layer ①) → Route RBAC middleware (Layer ②) → Query-level filter (Layer ③).
 
 Permission matrix đầy đủ và route mapping → `specs/authorization.md`. Implementation 3 lớp → `access-control.md`.
 
@@ -304,7 +304,7 @@ Permission matrix đầy đủ và route mapping → `specs/authorization.md`. I
 
 **Role cứng không xử lý attribute-level permission.** *"BTC chỉ sửa workshop do mình tạo"* đòi ABAC. Hiện tại mọi BTC được trust như nhau — quyết định có ý thức vì không có multi-BTC competition. Schema có `workshops.created_by` để mở rộng sau chỉ cần thêm WHERE clause tại Layer ③.
 
-**Role trong JWT không revoke real-time.** Downgrade BTC → student: JWT cũ có role `btc` tối đa 15 phút. Nếu cần immediate revoke → `specs/auth-revocation.md`.
+**Role trong JWT không revoke real-time.** Downgrade BTC → student: JWT cũ có role `BTC` tối đa 15 phút. Nếu cần immediate revoke → `specs/auth-revocation.md`.
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
@@ -366,7 +366,7 @@ Implementation detail và TypeScript interface → `access-control.md`. Behavior
 
 ### 2. Lý do chọn
 
-**Throughput thực tế không đòi Pub/Sub.** 12,000 notification/event ≈ vài chục msg/s trong vài phút. Redis Streams (ADR-10) xử lý batch async đủ. Kafka/RabbitMQ = cluster 3 nodes + operational overhead cho bài toán này.
+**Throughput thực tế không đòi Pub/Sub.** 12,000 notification/event ≈ vài chục msg/s trong vài phút. BullMQ (ADR-10) xử lý batch async đủ. Kafka/RabbitMQ = cluster 3 nodes + operational overhead cho bài toán này.
 
 **In-process đủ isolation nhờ `Promise.allSettled`.** `TelegramAdapter.send()` throw → không cancel `EmailAdapter.send()`. Failure của một channel bị log và bị bỏ qua.
 
@@ -394,34 +394,34 @@ Implementation detail và TypeScript interface → `access-control.md`. Behavior
 
 ### 1. Quyết định
 
-**Redis Streams** làm job queue cho async tasks:
+**BullMQ** làm job queue cho async tasks:
 
 | Task | Stream | Retry | DLQ |
 |---|---|---|---|
-| AI PDF summary | `stream:ai-summary` | 3 lần (exponential backoff) | `stream:ai-summary-dlq` |
-| Batch notification | `stream:notifications` | 2 lần | `stream:notifications-dlq` |
+| AI PDF summary | `Queue: ai-summary` | 3 lần (exponential backoff) | `Queue: ai-summary-dlq` |
+| Batch notification | `Queue: notification` | 2 lần | `Queue: notification-dlq` |
 
-Consumer group pattern với `XREADGROUP` + `XACK` sau khi hoàn thành. `XAUTOCLAIM` để reclaim messages từ PEL khi worker crash trước XACK. DLQ chỉ lưu — admin can thiệp thủ công.
+BullMQ xử lý job lifecycle tự động: job được đưa vào queue → worker nhận job qua `@Processor` decorator → auto-ack khi hoàn thành. Stalled job detection reclaim job khi worker crash. Failed job tự động retry với backoff, sau đó chuyển vào DLQ khi exhausted. DLQ chỉ lưu — admin can thiệp thủ công.
 
-Redis commands và retry flow chi tiết → `specs/ai-summary.md` và `specs/notification.md`.
+Job và retry flow chi tiết → `specs/ai-summary.md` và `specs/notification.md`.
 
 ### 2. Lý do chọn
 
-**Redis đã có sẵn** (ADR-13 cache, ADR-06 rate limiting) — không add infrastructure mới. Redis Streams persistent hơn Redis Pub/Sub (Pub/Sub là fire-and-forget, Streams có offset như Kafka mini).
+**Redis đã có sẵn** (ADR-13 cache, ADR-06 rate limiting) — không add infrastructure mới. BullMQ tận dụng Redis persistence cho job durability, built-in retry/backoff, và job lifecycle management.
 
 **Boundary:** Redis crash mà không có AOF → pending jobs bị mất. Acceptable cho đồ án — production cần AOF `appendfsync everysec` hoặc Redis Sentinel.
 
 ### 3. Trade-off và rủi ro
 
-**PEL tích lũy khi worker crash không XACK.** XAUTOCLAIM bắt buộc — implementation detail không phải optional.
+**Stalled job detection** — BullMQ tự động reclaim job khi worker crash không ack. Đây là built-in mechanism, không cần implement thủ công.
 
-**Một Redis instance cho cache + rate limit + streams.** Nếu AI summary tiêu thụ nhiều memory → evict cache entries. Giải pháp: dùng Redis 16 DB slots với `maxmemory-policy` khác nhau (DB 0 cache: `allkeys-lru`, DB 1 streams: `noeviction`, DB 2 rate limit: `volatile-ttl`).
+**Một Redis instance cho cache + rate limit + queue.** Nếu AI summary tiêu thụ nhiều memory → evict cache entries. Giải pháp: dùng Redis 16 DB slots với `maxmemory-policy` khác nhau (DB 0 cache: `allkeys-lru`, DB 1 queue: `noeviction`, DB 2 rate limit: `volatile-ttl`).
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
 **RabbitMQ:** Feature-rich nhưng thêm Docker container mới chỉ cho job queue khi Redis đã có sẵn. YAGNI.
 
-**BullMQ:** Abstraction tốt cho production nhưng hides Redis internals — cho đồ án học, hiểu Streams raw tốt hơn.
+**Redis Streams raw:** Cho phép hiểu sâu Redis internals, nhưng thiếu built-in retry, backoff, job lifecycle management. BullMQ giảm boilerplate code và production bugs.
 
 **In-memory queue (EventEmitter):** Zero persistence — không acceptable cho AI summary có thể mất vài phút xử lý.
 
@@ -501,7 +501,7 @@ SQLite schema và sync flow → `specs/checkin-offline.md`.
 
 ### 1. Quyết định
 
-**Async AI Summary** qua Redis Streams (ADR-10). Provider: OpenAI GPT-4o-mini, abstracted qua interface để dễ swap:
+**Async AI Summary** qua BullMQ (ADR-10). Provider: OpenAI GPT-4o-mini, abstracted qua interface để dễ swap:
 
 ```typescript
 interface AIProvider {
@@ -509,7 +509,7 @@ interface AIProvider {
 }
 ```
 
-Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thái: `none`/`queued`/`processing`/`done`/`failed`) trên bảng `workshops` — không tách bảng riêng (1-1 với workshop).
+Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thái: `NONE`/`QUEUED`/`PROCESSING`/`DONE`/`FAILED`) trên bảng `workshops` — không tách bảng riêng (1-1 với workshop).
 
 3-stage async flow và failure handling → `specs/ai-summary.md`.
 
@@ -531,7 +531,7 @@ Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thá
 
 **Privacy:** Nội dung PDF gửi sang external API. Document trong UI: "Không upload PDF chứa thông tin cá nhân".
 
-**PDF scan (image, không có text layer):** `pdf-parse` trả empty → detect `text.length < 100` → mark `failed` với reason `pdf_no_text`.
+**PDF scan (image, không có text layer):** `pdf-parse` trả empty → detect `text.length < 100` → mark `FAILED` với reason `pdf_no_text`.
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
@@ -556,7 +556,7 @@ Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thá
 
 Cả hai endpoint dùng cùng header name `Idempotency-Key` — thống nhất convention, không phân biệt field name theo endpoint. Server forward giá trị này làm `Idempotency-Key` header khi gọi ra payment gateway (ADR-08 INV-04).
 
-Cơ chế xử lý và 3-state lifecycle (`in_progress` / `completed` / `unresolved`) không thay đổi — ADR-15 chỉ quyết định transport location, không quyết định behavior.
+Cơ chế xử lý và 3-state lifecycle (`IN_PROGRESS` / `COMPLETED` / `UNRESOLVED`) không thay đổi — ADR-15 chỉ quyết định transport location, không quyết định behavior.
 
 > **Lịch sử:** `registration-paid.md` ban đầu đặt key trong body (`idempotency_key`, `payment_key`). ADR-15 chốt dùng header — `registration-paid.md` cần cập nhật AC tương ứng.
 

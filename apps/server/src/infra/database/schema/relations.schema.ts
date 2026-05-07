@@ -7,8 +7,8 @@ import {
   studentSyncJobs,
   workshopDocuments,
 } from "./async.schema";
-import { rooms, speakers, workshops, workshopSlots } from "./event-core.schema";
-import { checkinStaffAssignments, students, users } from "./identity.schema";
+import { rooms, speakers, workshops } from "./event-core.schema";
+import { checkinStaffAssignments, deviceTokens, staff, students, users } from "./identity.schema";
 import {
   checkinRecords,
   payments,
@@ -16,15 +16,18 @@ import {
   tickets,
 } from "./transaction.schema";
 
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
 export const usersRelations = relations(users, ({ one, many }) => ({
-  studentProfile: one(students),
-  createdWorkshops: many(workshops, { relationName: "workshop_creator" }),
   checkinScans: many(checkinRecords, { relationName: "checkin_staff" }),
-  notificationLogs: many(notificationLogs),
-  uploadedDocuments: many(workshopDocuments, {
-    relationName: "document_uploader",
-  }),
+  uploadedDocuments: many(workshopDocuments, { relationName: "document_uploader" }),
   staffAssignments: one(checkinStaffAssignments),
+}));
+
+export const staffRelations = relations(staff, ({ many }) => ({
+  createdWorkshops: many(workshops, { relationName: "workshop_creator" }),
 }));
 
 export const checkinStaffAssignmentsRelations = relations(
@@ -45,7 +48,19 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
   registrations: many(registrations),
   payments: many(payments),
   checkinRecords: many(checkinRecords),
+  deviceTokens: many(deviceTokens),
 }));
+
+export const deviceTokensRelations = relations(deviceTokens, ({ one }) => ({
+  student: one(students, {
+    fields: [deviceTokens.studentId],
+    references: [students.studentId],
+  }),
+}));
+
+// ---------------------------------------------------------------------------
+// Event Core
+// ---------------------------------------------------------------------------
 
 export const speakersRelations = relations(speakers, ({ many }) => ({
   workshops: many(workshops),
@@ -64,12 +79,11 @@ export const workshopsRelations = relations(workshops, ({ one, many }) => ({
     fields: [workshops.roomId],
     references: [rooms.roomId],
   }),
-  creator: one(users, {
+  creator: one(staff, {
     fields: [workshops.createdBy],
-    references: [users.userId],
+    references: [staff.staffId],
     relationName: "workshop_creator",
   }),
-  slot: one(workshopSlots),
   registrations: many(registrations),
   checkinRecords: many(checkinRecords),
   notificationLogs: many(notificationLogs),
@@ -77,12 +91,9 @@ export const workshopsRelations = relations(workshops, ({ one, many }) => ({
   summaries: many(aiSummaries),
 }));
 
-export const workshopSlotsRelations = relations(workshopSlots, ({ one }) => ({
-  workshop: one(workshops, {
-    fields: [workshopSlots.workshopId],
-    references: [workshops.workshopId],
-  }),
-}));
+// ---------------------------------------------------------------------------
+// Transaction
+// ---------------------------------------------------------------------------
 
 export const registrationsRelations = relations(
   registrations,
@@ -144,13 +155,13 @@ export const checkinRecordsRelations = relations(checkinRecords, ({ one }) => ({
   }),
 }));
 
+// ---------------------------------------------------------------------------
+// Async
+// ---------------------------------------------------------------------------
+
 export const notificationLogsRelations = relations(
   notificationLogs,
   ({ one }) => ({
-    user: one(users, {
-      fields: [notificationLogs.userId],
-      references: [users.userId],
-    }),
     workshop: one(workshops, {
       fields: [notificationLogs.workshopId],
       references: [workshops.workshopId],

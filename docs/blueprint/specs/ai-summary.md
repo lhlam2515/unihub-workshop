@@ -2,7 +2,7 @@
 
 > **ASR hiện thực hóa:** ASR-7 (Async Processing — xử lý nặng không chặn UX)
 >
-> **ADR tham chiếu:** ADR-14 (AI Summary Pipeline), ADR-10 (Redis Streams), ADR-02 (Schema — workshops.summary_status)
+> **ADR tham chiếu:** ADR-14 (AI Summary Pipeline), ADR-10 (BullMQ), ADR-02 (Schema — workshops.summary_status)
 >
 > **Trade-off chủ đạo:** Async enrichment over Synchronous guarantee. AI summary là feature tùy chọn — workshop vẫn hoạt động đầy đủ khi không có summary. Provider down chỉ ảnh hưởng feature này, không ảnh hưởng registration hoặc check-in.
 >
@@ -25,14 +25,14 @@ Ba stage: (1) Upload và queue, (2) Worker xử lý async, (3) Frontend polling 
 ```
 Request:
   POST /admin/workshops/:id/summary
-  Auth: Bearer <token> (role = 'btc')
+  Auth: Bearer <token> (role = 'BTC')
   Body: multipart/form-data, file field = 'pdf'
   Max file size: 10MB (configurable)
 
 Validation upload:
   Content-Type phải là application/pdf
   File size ≤ 10MB (nếu > 10MB → 413)
-  Workshop phải tồn tại và status != 'cancelled'
+  Workshop phải tồn tại và status != 'CANCELLED'
 
 Xử lý:
   1. Lưu file: /uploads/workshops/{workshop_id}.pdf
@@ -40,11 +40,11 @@ Xử lý:
 
   2. UPDATE workshops
        SET pdf_url        = '/uploads/workshops/{workshop_id}.pdf',
-           summary_status = 'queued',
+           summary_status = 'QUEUED',
            summary_text   = NULL   -- reset summary cũ nếu có
      WHERE id = :workshop_id;
 
-  3. XADD stream:ai-summary * { workshop_id: :workshop_id }
+  3. addJob Queue: ai-summary * { workshop_id: :workshop_id }
 
   4. Trả ngay:
      202 Accepted {
@@ -60,22 +60,22 @@ Xử lý:
 Consumer group: ai-workers
 Consumer name:  ai-summary-worker-1
 
-XREADGROUP GROUP ai-workers ai-summary-worker-1
+@Processor GROUP ai-workers ai-summary-worker-1
   COUNT 1 BLOCK 5000
-  STREAMS stream:ai-summary >
+  STREAMS Queue: ai-summary >
 
 FOR EACH message { workshop_id }:
 
   -- Fetch workshop info (fresh read)
   SELECT id, pdf_url, summary_status FROM workshops WHERE id = :workshop_id;
 
-  IF summary_status NOT IN ('queued'):
+  IF summary_status NOT IN ('QUEUED'):
     -- Đã được xử lý bởi run trước hoặc bị cancel
-    XACK + CONTINUE
+    auto-ack + CONTINUE
 
   -- Mark processing
   UPDATE workshops
-    SET summary_status = 'processing'
+    SET summary_status = 'PROCESSING'
   WHERE id = :workshop_id;
 
   TRY:
@@ -101,24 +101,24 @@ FOR EACH message { workshop_id }:
     -- Step C: Lưu kết quả
     UPDATE workshops
       SET summary_text   = :summary,
-          summary_status = 'done',
+          summary_status = 'DONE',
           updated_at     = now()
     WHERE id = :workshop_id;
 
-    XACK stream:ai-summary ai-workers {message_id}
+    auto-ack Queue: ai-summary ai-workers {message_id}
 
   CATCH Error('PDF_NO_TEXT'):
     UPDATE workshops
-      SET summary_status = 'failed',
+      SET summary_status = 'FAILED',
           summary_text   = NULL
     WHERE id = :workshop_id;
     -- Lưu failure reason cho frontend display
-    XADD stream:ai-summary-dlq * {
+    addJob Queue: ai-summary-dlq * {
       workshop_id:   :workshop_id,
       failure_reason: 'pdf_no_text',
       timestamp:      now()
     }
-    XACK stream:ai-summary ai-workers {message_id}
+    auto-ack Queue: ai-summary ai-workers {message_id}
 
   CATCH timeout/network/provider_error:
     retry_count = getRetryCount(message) + 1
@@ -126,30 +126,30 @@ FOR EACH message { workshop_id }:
     IF retry_count < 3:
       -- Re-queue với exponential backoff
       backoff = 30 * (2 ^ (retry_count - 1))   -- 30s, 60s, 120s
-      XADD stream:ai-summary * {
+      addJob Queue: ai-summary * {
         workshop_id:  :workshop_id,
         retry_count:  retry_count,
         retry_after:  now() + backoff
       }
-      UPDATE workshops SET summary_status = 'queued' WHERE id = :workshop_id;
+      UPDATE workshops SET summary_status = 'QUEUED' WHERE id = :workshop_id;
     ELSE:
       -- 3 lần đều fail — DLQ
       UPDATE workshops
-        SET summary_status = 'failed'
+        SET summary_status = 'FAILED'
       WHERE id = :workshop_id;
-      XADD stream:ai-summary-dlq * {
+      addJob Queue: ai-summary-dlq * {
         workshop_id:   :workshop_id,
         failure_reason: 'max_retries_exceeded',
         last_error:     err.message,
         timestamp:      now()
       }
-      XADD stream:notifications * {
+      addJob Queue: notification * {
         event_type: 'ai_summary_failed',
         user_id:    <btc_users>,
         payload:    { workshop_id, workshop_title }
       }
 
-    XACK stream:ai-summary ai-workers {message_id}
+    auto-ack Queue: ai-summary ai-workers {message_id}
 ```
 
 ### Stage 3 — Frontend Polling
@@ -166,21 +166,21 @@ Response includes:
   }
 
 Frontend polling logic:
-  IF summary_status IN ('queued', 'processing'):
+  IF summary_status IN ('QUEUED', 'PROCESSING'):
     Poll GET /workshops/:id mỗi 5 giây
     Hiển thị: "⏳ Đang tạo tóm tắt tự động..."
 
-  IF summary_status = 'done':
+  IF summary_status = 'DONE':
     Dừng polling
     Hiển thị: summary_text
 
-  IF summary_status = 'failed':
+  IF summary_status = 'FAILED':
     Dừng polling
     Hiển thị: "⚠️ Không thể tạo tóm tắt tự động"
     Nếu user là BTC: Hiển thị button "Thử lại"
                       POST /admin/workshops/:id/summary/retry → re-queue vào stream
 
-  IF summary_status = 'none':
+  IF summary_status = 'NONE':
     Không hiển thị gì (PDF chưa được upload)
 
 Max polling duration: 10 phút (600s / 5s interval = 120 polls)
@@ -195,8 +195,8 @@ Sau 10 phút polling không có kết quả → hiển thị "Xử lý mất nhi
 
 ```
 Điều kiện: pdf-parse trả text.length < 100
-Hành vi: summary_status = 'failed'. DLQ với reason='pdf_no_text'
-         XACK ngay (không retry — vấn đề là data, không phải transient)
+Hành vi: summary_status = 'FAILED'. DLQ với reason='pdf_no_text'
+         auto-ack ngay (không retry — vấn đề là data, không phải transient)
 UI: "⚠️ PDF không chứa văn bản có thể đọc. Vui lòng upload PDF với text layer."
 ```
 
@@ -205,15 +205,15 @@ UI: "⚠️ PDF không chứa văn bản có thể đọc. Vui lòng upload PDF 
 ```
 Điều kiện: OpenAI API không trả response sau 120 giây
 Hành vi: retry_count += 1
-         Nếu < 3: re-queue với backoff 30s/60s/120s, status = 'queued'
-         Nếu = 3: status = 'failed', DLQ, BTC notification
+         Nếu < 3: re-queue với backoff 30s/60s/120s, status = 'QUEUED'
+         Nếu = 3: status = 'FAILED', DLQ, BTC notification
 ```
 
 ### E-03: AI provider down hoàn toàn (3 retries đều fail)
 
 ```
 Điều kiện: OpenAI outage, 3 lần timeout
-Hành vi: summary_status = 'failed'. BTC nhận notification.
+Hành vi: summary_status = 'FAILED'. BTC nhận notification.
          BTC có thể retry thủ công qua admin button khi provider phục hồi.
          Workshop vẫn hoạt động đầy đủ — chỉ không có AI summary.
 ```
@@ -227,13 +227,13 @@ Hành vi: Truncate input, log warning, tiếp tục gọi AI với 50,000 chars 
          Không phải lỗi — là expected truncation
 ```
 
-### E-05: Worker crash sau XREADGROUP, trước XACK
+### E-05: Worker crash sau @Processor, trước auto-ack
 
 ```
 Điều kiện: Process crash khi đang gọi AI API (Step B)
-Hành vi: Message ở lại PEL
-         XAUTOCLAIM sau 10 phút → worker reclaim message
-         Re-process: UPDATE summary_status = 'processing' lại
+Hành vi: Message ở lại pending jobs
+         stalled job detection sau 10 phút → worker reclaim message
+         Re-process: UPDATE summary_status = 'PROCESSING' lại
          Nếu AI call đã thành công nhưng UPDATE chưa commit → AI gọi lại
          Acceptable: AI summary là idempotent — cùng text → cùng summary
 ```
@@ -242,10 +242,10 @@ Hành vi: Message ở lại PEL
 
 ```
 Điều kiện: Redis crash và restart không có AOF
-Hành vi: stream:ai-summary bị xóa → pending jobs mất
-         Workshops có summary_status = 'queued'/'processing' sẽ kẹt mãi
+Hành vi: Queue: ai-summary bị xóa → pending jobs mất
+         Workshops có summary_status = 'QUEUED'/'PROCESSING' sẽ kẹt mãi
 Recovery: BTC phải trigger lại thủ công qua admin UI cho từng workshop
-          Hoặc: cron job đêm check workshops WHERE summary_status IN ('queued','processing')
+          Hoặc: cron job đêm check workshops WHERE summary_status IN ('QUEUED','PROCESSING')
                 AND updated_at < now() - interval '1 hour' → re-queue
 Note: Production cần Redis AOF appendfsync=everysec để tránh case này
 ```
@@ -253,8 +253,8 @@ Note: Production cần Redis AOF appendfsync=everysec để tránh case này
 ### E-07: Concurrent uploads — BTC upload PDF mới khi đang processing
 
 ```
-Điều kiện: BTC upload PDF mới khi summary_status = 'processing'
-Hành vi: Stage 1 overwrite file, set summary_status = 'queued', XADD mới
+Điều kiện: BTC upload PDF mới khi summary_status = 'PROCESSING'
+Hành vi: Stage 1 overwrite file, set summary_status = 'QUEUED', addJob mới
          Worker đang processing sẽ:
            - Hoàn thành với PDF cũ → UPDATE summary_text với summary cũ
            - Worker mới sẽ process PDF mới → overwrite summary_text với summary mới
@@ -271,7 +271,7 @@ Stage 1 (POST /pdf) LUÔN trả về trong < 1 giây (sau khi save file).
 KHÔNG bao giờ block waiting for AI provider.
 
 **INV-02 — Workshop Functional Without Summary:**
-`summary_text = NULL` và `summary_status = 'none'/'failed'` KHÔNG ảnh hưởng đến registration, check-in, hoặc bất kỳ luồng nghiệp vụ nào.
+`summary_text = NULL` và `summary_status = 'NONE'/'FAILED'` KHÔNG ảnh hưởng đến registration, check-in, hoặc bất kỳ luồng nghiệp vụ nào.
 
 **INV-03 — AIProvider Interface:**
 Code chỉ gọi `aiProvider.summarize(text, maxTokens)`.
@@ -287,7 +287,7 @@ Chỉ 5 giá trị hợp lệ: `none`, `queued`, `processing`, `done`, `failed`.
 Frontend dựa vào enum này để quyết định polling/display — không được thêm giá trị mới mà không update frontend.
 
 **INV-06 — DLQ Chỉ Lưu, Không Tự Xử Lý:**
-Khi job vào `stream:ai-summary-dlq`, worker KHÔNG tự retry thêm.
+Khi job vào `Queue: ai-summary-dlq`, worker KHÔNG tự retry thêm.
 Admin phải can thiệp thủ công.
 
 ---
@@ -296,35 +296,35 @@ Admin phải can thiệp thủ công.
 
 **AC-01 — Upload returns 202 immediately:**
 POST /admin/workshops/:id/summary với file 5MB.
-Then: Response 202 trong < 1 giây. workshops.summary_status = 'queued'.
+Then: Response 202 trong < 1 giây. workshops.summary_status = 'QUEUED'.
 
 **AC-02 — Happy path — summary generated:**
 Worker nhận message, AI provider trả summary.
-Then: workshops.summary_status = 'done', summary_text populated.
+Then: workshops.summary_status = 'DONE', summary_text populated.
 GET /workshops/:id returns summary_text.
 
 **AC-03 — Frontend polling lifecycle:**
-After upload: GET /workshops/:id → summary_status='queued' → poll.
-After worker done: GET /workshops/:id → summary_status='done' → stop poll, show summary.
+After upload: GET /workshops/:id → summary_status='QUEUED' → poll.
+After worker done: GET /workshops/:id → summary_status='DONE' → stop poll, show summary.
 
 **AC-04 — Retry on provider timeout:**
 AI provider timeout 2 lần.
-Then: After attempt 1: status='queued', re-queued with 30s delay.
-After attempt 2: status='queued', re-queued with 60s delay.
-After attempt 3 (success): status='done'.
+Then: After attempt 1: status='QUEUED', re-queued with 30s delay.
+After attempt 2: status='QUEUED', re-queued with 60s delay.
+After attempt 3 (success): status='DONE'.
 
 **AC-05 — Max retries exceeded → DLQ + notification:**
 AI provider timeout 3 lần.
-Then: status='failed'. DLQ có 1 message. BTC nhận notification.
+Then: status='FAILED'. DLQ có 1 message. BTC nhận notification.
 Workshop vẫn accessible, không có summary.
 
 **AC-06 — PDF no text → immediate fail:**
 Upload PDF image scan (no text layer).
-Then: status='failed', reason='pdf_no_text'. Không retry (XACK ngay).
+Then: status='FAILED', reason='pdf_no_text'. Không retry (auto-ack ngay).
 
 **AC-07 — Non-blocking for other features:**
 Khi worker đang gọi AI (mất 2 phút), các request registration và check-in vẫn trả 200.
 
 **AC-08 — BTC manual retry:**
-BTC click "Thử lại" sau khi status='failed'.
-Then: summary_status = 'queued', re-queue vào stream. Worker xử lý lại.
+BTC click "Thử lại" sau khi status='FAILED'.
+Then: summary_status = 'QUEUED', re-queue vào stream. Worker xử lý lại.

@@ -17,12 +17,44 @@ import {
 import { workshops } from "./event-core.schema";
 import { students, users } from "./identity.schema";
 
+// ---------------------------------------------------------------------------
+// Idempotency Keys (ADR-08)
+// ---------------------------------------------------------------------------
+
+export const idempotencyKeys = pgTable(
+  "idempotency_keys",
+  (t) => ({
+    key: t.text("key").primaryKey(),
+    resourceType: t.text("resource_type", { enum: ["REGISTRATION", "PAYMENT"] })
+      .notNull(),
+    status: t
+      .text("status", {
+        enum: ["IN_PROGRESS", "COMPLETED", "UNRESOLVED"],
+      })
+      .notNull()
+      .default("IN_PROGRESS"),
+    responseBody: t.jsonb("response_body"),
+    statusCode: t.integer("status_code"),
+    createdAt: t
+      .timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: t.timestamp("expires_at", { withTimezone: true }).notNull(),
+    lockedUntil: t.timestamp("locked_until", { withTimezone: true }),
+  }),
+  (table) => [index("idx_idempotency_expires").on(table.expiresAt)]
+);
+
+// ---------------------------------------------------------------------------
+// Registrations
+// ---------------------------------------------------------------------------
+
 export const registrations = pgTable(
   "registrations",
   (t) => ({
     registrationId: t.uuid("registration_id").primaryKey().defaultRandom(),
     studentId: t
-      .uuid("student_id")
+      .text("student_id")
       .notNull()
       .references(() => students.studentId),
     workshopId: t
@@ -31,7 +63,8 @@ export const registrations = pgTable(
       .references(() => workshops.workshopId),
     status: registrationStatusEnum("status")
       .notNull()
-      .default("PENDING_PAYMENT"),
+      .default("PENDING"),
+    qrCode: t.text("qr_code").notNull().unique(),
     registeredAt: t
       .timestamp("registered_at", { withTimezone: true })
       .notNull()
@@ -51,8 +84,13 @@ export const registrations = pgTable(
     index("idx_registrations_student_id").on(table.studentId),
     index("idx_registrations_workshop_id").on(table.workshopId),
     index("idx_registrations_status").on(table.status),
+    index("idx_registrations_qr_code").on(table.qrCode),
   ]
 );
+
+// ---------------------------------------------------------------------------
+// Tickets
+// ---------------------------------------------------------------------------
 
 export const tickets = pgTable(
   "tickets",
@@ -82,6 +120,10 @@ export const tickets = pgTable(
   ]
 );
 
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
 export const payments = pgTable(
   "payments",
   (t) => ({
@@ -91,14 +133,17 @@ export const payments = pgTable(
       .notNull()
       .references(() => registrations.registrationId),
     studentId: t
-      .uuid("student_id")
+      .text("student_id")
       .notNull()
       .references(() => students.studentId),
     amount: t.numeric("amount", { precision: 12, scale: 2 }).notNull(),
     currency: t.char("currency", { length: 3 }).notNull().default("VND"),
     gateway: paymentGatewayEnum("gateway").notNull(),
-    status: paymentStatusEnum("status").notNull().default("PENDING"),
-    idempotencyKey: t.varchar("idempotency_key", { length: 255 }).notNull(),
+    status: paymentStatusEnum("status").notNull().default("INITIATED"),
+    idempotencyKey: t
+      .text("idempotency_key")
+      .notNull()
+      .references(() => idempotencyKeys.key),
     gatewayTxnId: t.varchar("gateway_txn_id", { length: 255 }),
     initiatedAt: t
       .timestamp("initiated_at", { withTimezone: true })
@@ -111,7 +156,6 @@ export const payments = pgTable(
       .$type<Record<string, unknown>>(),
   }),
   (table) => [
-    unique("uq_payments_idempotency").on(table.idempotencyKey),
     check("chk_payments_amount", sql`${table.amount} > 0`),
     index("idx_payments_registration_id").on(table.registrationId),
     index("idx_payments_student_id").on(table.studentId),
@@ -119,9 +163,13 @@ export const payments = pgTable(
     index("idx_payments_gateway").on(table.gateway),
     index("idx_payments_pending")
       .on(table.initiatedAt)
-      .where(sql`${table.status} = 'PENDING'`),
+      .where(sql`${table.status} = 'INITIATED'`),
   ]
 );
+
+// ---------------------------------------------------------------------------
+// Check-in Records
+// ---------------------------------------------------------------------------
 
 export const checkinRecords = pgTable(
   "checkin_records",
@@ -136,7 +184,7 @@ export const checkinRecords = pgTable(
       .notNull()
       .references(() => tickets.ticketId),
     studentId: t
-      .uuid("student_id")
+      .text("student_id")
       .notNull()
       .references(() => students.studentId),
     workshopId: t

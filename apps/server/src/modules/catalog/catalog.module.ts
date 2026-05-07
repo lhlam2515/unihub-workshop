@@ -11,7 +11,6 @@ import { WorkshopsAdminController } from "./controllers/workshops-admin.controll
 import { WorkshopsPublicController } from "./controllers/workshops-public.controller";
 import { RoomsRepository } from "./repositories/rooms.repository";
 import { SpeakersRepository } from "./repositories/speakers.repository";
-import { WorkshopSlotsRepository } from "./repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "./repositories/workshops.repository";
 import { RoomConflictService } from "./services/room-conflict.service";
 import { RoomsService } from "./services/rooms.service";
@@ -60,7 +59,6 @@ import { WorkshopsService } from "./services/workshops.service";
     WorkshopNotificationPublisher,
     // Repositories
     WorkshopsRepository,
-    WorkshopSlotsRepository,
     RoomsRepository,
     SpeakersRepository,
   ],

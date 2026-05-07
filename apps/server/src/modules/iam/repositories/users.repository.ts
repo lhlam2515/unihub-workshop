@@ -84,7 +84,7 @@ export class UsersRepository {
    * Executes the data query and count query concurrently via Promise.all.
    * Results are ordered by created_at descending (newest first).
    *
-   * @param role - Optional role filter (STUDENT | ORGANIZER | CHECKIN_STAFF).
+   * @param role - Optional role filter (STUDENT | BTC | CHECKIN_STAFF).
    * @param page - Page index (1-based, default 1).
    * @param limit - Items per page (default 20).
    * @returns Object containing items array and total count.

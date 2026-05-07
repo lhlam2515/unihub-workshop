@@ -5,7 +5,7 @@
  * Defined here (rather than imported from database/) to respect the ESLint boundary
  * rule: `shared` may only import from `shared`.
  */
-export type UserRole = "STUDENT" | "ORGANIZER" | "CHECKIN_STAFF";
+export type UserRole = "STUDENT" | "BTC" | "CHECKIN_STAFF";
 
 /**
  * JWT Payload contract shared across guards, decorators, and TokenService.

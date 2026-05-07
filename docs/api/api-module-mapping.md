@@ -26,7 +26,7 @@ Tóm tắt từ `01_architecture.md` section 1.2:
 
 * **Domain module** (8 module) — sở hữu entity, expose REST endpoint, có Controller class.
 * **Cross-cutting module** (`rate-limit`) — không expose endpoint riêng. Hiện thực qua NestJS Guard/Interceptor được apply lên endpoint của các domain module khác (`@RateLimit({ tier: 'per-user', quota: 10 })`).
-* **Operational module** (`background`) — không expose endpoint riêng. Là tập hợp cron job + worker process tiêu thụ Redis Streams.
+* **Operational module** (`background`) — không expose endpoint riêng. Là tập hợp cron job + worker process tiêu thụ BullMQs.
 
 ---
 
@@ -36,7 +36,7 @@ Với mỗi endpoint:
 
 * **Owner** = module có Controller class.
 * **Calls** = module được gọi đồng bộ trong handler (in-process method call).
-* **Emits** = sự kiện đẩy vào Redis Streams hoặc EventEmitter để module khác tiêu thụ async.
+* **Emits** = sự kiện đẩy vào BullMQs hoặc EventEmitter để module khác tiêu thụ async.
 * **Guards** = module áp dụng dưới dạng NestJS Guard/Middleware (luôn có `iam` cho endpoint authenticated, `rate-limit` cho endpoint giới hạn).
 
 ### 2.1. Module `iam`
@@ -94,7 +94,7 @@ Sở hữu entity: `registrations`, một phần `idempotency_keys` (resource_ty
 
 **Cross-module dependency của `booking`:**
 
-* **Read** từ `catalog`: lấy workshop để verify status='open', đọc price.
+* **Read** từ `catalog`: lấy workshop để verify status='OPEN', đọc price.
 * **Write** vào `workshops`: UPDATE `seats_available` + `version` (OL). Đây là điểm **write boundary giao thoa** — về mặt domain, ai update seat count? Có hai lựa chọn:
   * Option A (chọn): `booking` được phép write `workshops.seats_available` + `version`. `catalog` không expose method `decreaseSeats()` ra ngoài.
   * Option B: `catalog` expose `decreaseSeats(id, expectedVersion)`, `booking` gọi method này.
@@ -108,7 +108,7 @@ Sở hữu: `payments`, một phần `idempotency_keys` (resource_type='payment'
 
 | Endpoint | Owner | Calls | Emits | Guards |
 |---|---|---|---|---|
-| `POST /payments` | `payment` | `booking` (verify registration='pending'), Circuit Breaker check, gateway HTTP | `payment.succeeded` / `payment.failed` / `payment.unresolved` | `iam(role:student)`, `rate-limit(T2-user, T3-user×workshop)` |
+| `POST /payments` | `payment` | `booking` (verify registration='PENDING'), Circuit Breaker check, gateway HTTP | `payment.succeeded` / `payment.failed` / `payment.unresolved` | `iam(role:student)`, `rate-limit(T2-user, T3-user×workshop)` |
 | `GET /payments/{id}` | `payment` | — | — | `iam(role:student)` + ownership |
 | `POST /payments/webhook/{gateway}` | `payment` | `booking` (update registration→paid) | `payment.succeeded` | **HMAC signature** (không JWT) |
 | `GET /admin/system/circuit-breaker` | `payment` | — | — | `iam(role:btc)` |
@@ -119,7 +119,7 @@ Sở hữu: `payments`, một phần `idempotency_keys` (resource_type='payment'
 >
 > **Reconcile endpoint:** Kích hoạt cùng `ReconciliationService` mà cron job dùng (không có code path mới). Concurrency guard bằng PostgreSQL advisory lock — trả 409 nếu cron đang chạy.
 
-**Cross-module write:** Sau payment success, `payment` cần update `registrations.status='paid'`. Tương tự booking↔catalog ở 2.3, đây là điểm cần thỏa thuận:
+**Cross-module write:** Sau payment success, `payment` cần update `registrations.status='PAID'`. Tương tự booking↔catalog ở 2.3, đây là điểm cần thỏa thuận:
 
 * `payment` *được phép* update `registrations.status` trực tiếp trong cùng transaction với INSERT payments? — **Có**, vì payment success là sự kiện đồng bộ với registration update.
 * Hoặc emit event và `booking` consume để update? — **Không cho path đồng bộ** vì client đang đợi response 201 với QR. Event chỉ dùng cho side-effect không-blocking (notification).
@@ -136,13 +136,13 @@ Sở hữu: `checkins`. Đối tác đặc biệt với mobile schema (`checkin_
 | `POST /checkins` | `checkin` | `booking` (resolve registration by qr_code) | `checkin.recorded` | `iam(role:checkin_staff)`, `rate-limit(per-user:60/m)` |
 | `POST /checkins/sync` | `checkin` | `booking` (resolve qr_codes batch) | `checkin.recorded` × N | `iam(role:checkin_staff)`, `rate-limit(per-user:30/m)` |
 
-> **Tại sao không phải `booking` sở hữu pre-load endpoint?** Vì endpoint này có **side concern** đặc biệt: trả `X-Total-Count` cho mobile populate `cache_metadata.server_total`, paginate batch lớn (200 items thay vì 20), filter cố định `status IN ('paid','confirmed')`. Đây là **API phục vụ mobile offline cache** — concern thuộc về `checkin`, không phải truy vấn registration thông thường.
+> **Tại sao không phải `booking` sở hữu pre-load endpoint?** Vì endpoint này có **side concern** đặc biệt: trả `X-Total-Count` cho mobile populate `cache_metadata.server_total`, paginate batch lớn (200 items thay vì 20), filter cố định `status IN ('PAID','CONFIRMED')`. Đây là **API phục vụ mobile offline cache** — concern thuộc về `checkin`, không phải truy vấn registration thông thường.
 
 ---
 
 ### 2.6. Module `ai-summary`
 
-Sở hữu: phần summary trên `workshops` (`pdf_url`, `summary_text`, `summary_status`) + Redis Stream `summary-jobs`.
+Sở hữu: phần summary trên `workshops` (`pdf_url`, `summary_text`, `summary_status`) + BullMQ `summary-jobs`.
 
 | Endpoint | Owner | Calls | Emits | Guards |
 |---|---|---|---|---|
@@ -187,7 +187,7 @@ Sở hữu: `notification_logs`, `notification_channel_configs`. **Không có en
 
 **Internal consumers (không phải HTTP endpoint):**
 
-* Worker tiêu thụ Redis Stream `stream:notifications`.
+* Worker tiêu thụ BullMQ `queue: notification`.
 * Strategy Pattern: `EmailChannel`, `InAppChannel` (FCM/APNs từ `device_tokens`), tương lai `TelegramChannel`.
 * Mỗi channel xử lý isolated — failure ở một channel không ảnh hưởng channel khác (ADR-09).
 
@@ -231,34 +231,34 @@ Internally:
 
 ### 2.10. Module `background` (operational)
 
-**KHÔNG có endpoint.** Tập hợp các **scheduled job** (cron) và **worker process** (Redis Streams consumer).
+**KHÔNG có endpoint.** Tập hợp các **scheduled job** (cron) và **worker process** (BullMQ consumer).
 
 #### 2.10.1. Cron jobs (định kỳ)
 
 | Cron expression | Job | Module nghiệp vụ chính |
 |---|---|---|
 | `0 2 * * *` (2 AM hằng đêm) | CSV import — đọc `/input/students_*.csv`, upsert students | `csv-sync` |
-| `*/5 * * * *` (mỗi 5 phút) | Reconcile unresolved payments — query `payments WHERE status='unresolved'`, gọi gateway query API | `payment` |
-| `*/10 * * * *` | Notification retry — query `notification_logs WHERE status IN ('failed','timeout') AND retry_count < 3` | `notification` |
+| `*/5 * * * *` (mỗi 5 phút) | Reconcile unresolved payments — query `payments WHERE status='UNRESOLVED'`, gọi gateway query API | `payment` |
+| `*/10 * * * *` | Notification retry — query `notification_logs WHERE status IN ('FAILED','TIMEOUT') AND retry_count < 3` | `notification` |
 | `0 3 * * *` (3 AM hằng đêm) | Cleanup expired `idempotency_keys` (`expires_at < now()`) | shared utility, owner: `booking` (nó tạo nhiều keys nhất) |
 | `0 4 * * *` | Cleanup `device_tokens` stale (`last_seen < now - 30d`) | `iam` |
-| `*/1 * * * *` (mỗi phút) | DLQ scan — `XAUTOCLAIM` orphaned messages từ Redis Streams (PEL > 5 phút) | `background` core |
+| `*/1 * * * *` (mỗi phút) | DLQ scan — `stalled job detection (BullMQ built-in)` orphaned messages từ BullMQ (pending jobs > 5 phút) | `background` core |
 
-#### 2.10.2. Workers (Redis Streams consumer)
+#### 2.10.2. Workers (BullMQ consumer)
 
 | Stream | Worker | Module nghiệp vụ chính |
 |---|---|---|
-| `stream:summary-jobs` | AI Summary Worker — pipeline 4 stage: parse PDF → clean → AI call → store | `ai-summary` |
-| `stream:notifications` | Notification Worker — fanout sang Email/InApp channels qua Strategy Pattern | `notification` |
-| `stream:refunds` | Refund Worker — gọi gateway refund API cho registrations.cancelled từ paid | `payment` |
-| `stream:summary-jobs.dlq` | DLQ Inspector — chỉ log + alert, không tự retry | `background` core |
+| `queue: ai-summary` | AI Summary Worker — pipeline 4 stage: parse PDF → clean → AI call → store | `ai-summary` |
+| `queue: notification` | Notification Worker — fanout sang Email/InApp channels qua Strategy Pattern | `notification` |
+| `queue: refund` | Refund Worker — gọi gateway refund API cho registrations.cancelled từ paid | `payment` |
+| `queue: ai-summary.dlq` | DLQ Inspector — chỉ log + alert, không tự retry | `background` core |
 
 #### 2.10.3. Endpoint quản lý jobs (gợi ý — Stage 6)
 
 Nếu cần observability cho ops, có thể thêm:
 
 ```
-GET  /admin/jobs/streams              # Trạng thái streams + PEL size
+GET  /admin/jobs/streams              # Trạng thái queues + PEL size
 GET  /admin/jobs/dlq                  # Danh sách messages trong DLQ
 POST /admin/jobs/dlq/{id}/replay      # Manual replay từ DLQ về main stream
 ```
@@ -303,17 +303,17 @@ Mũi tên = "import / call vào". Vòng cấm trong Modular Monolith — nếu p
        └──────────┘
 
        ┌────────────┐
-       │ background │  (depend mọi module để consume streams + cron)
+       │ background │  (depend mọi module để consume queues + cron)
        └────────────┘
 ```
 
 **Quy tắc đọc:**
 
-* `booking` import `catalog` → vì cần verify workshop status='open' và đọc price.
-* `payment` import `booking` → vì cần verify registration='pending' và update→'paid'.
+* `booking` import `catalog` → vì cần verify workshop status='OPEN' và đọc price.
+* `payment` import `booking` → vì cần verify registration='PENDING' và update→'PAID'.
 * `checkin` import `booking` → vì cần resolve qr_code → registration.
 * `ai-summary` không import module khác, chỉ cập nhật cột summary trên workshops.
-* `notification` không import module khác — nó **chỉ consume event** từ Redis Streams. Domain module emit event (đẩy vào stream) → notification worker tiêu thụ. **Đây là decoupling quan trọng** giúp tránh cycle khi `booking` muốn gửi confirmation và `payment` muốn gửi receipt.
+* `notification` không import module khác — nó **chỉ consume event** từ BullMQs. Domain module emit event (đẩy vào stream) → notification worker tiêu thụ. **Đây là decoupling quan trọng** giúp tránh cycle khi `booking` muốn gửi confirmation và `payment` muốn gửi receipt.
 * `background` import từ tất cả — vì worker chạy logic thuộc về domain module (vd: Reconciliation Worker chạy code của `payment.reconcileService`).
 
 **Không có cycle.**
@@ -336,17 +336,17 @@ POST /registrations
   └─ Return 201 ngay sau OL commit (không đợi notification gửi xong)
 ```
 
-### 4.2. Event emission qua Redis Streams (async)
+### 4.2. Event emission qua BullMQs (async)
 
 Dùng cho side-effect không cần block client.
 
 ```
 booking.create() COMMIT thành công
-  └─ XADD stream:notifications {event: 'registration.confirmed', user_id, workshop_id, ...}
+  └─ addJob: notification {event: 'registration.confirmed', user_id, workshop_id, ...}
 
 (parallel — không block response)
 notification.NotificationsWorker
-  ├─ XREADGROUP từ stream
+  ├─ @Processor từ stream
   ├─ Resolve channels active từ notification_channel_configs
   ├─ FOR EACH channel: dispatch via Strategy
   └─ Log vào notification_logs
@@ -360,7 +360,7 @@ External Gateway → POST /payments/webhook/vnpay
   ├─ payment.WebhooksController.handle()
   ├─ Lookup payment by gateway_charge_id
   ├─ Update payments.status
-  ├─ Update registrations.status = 'paid'        ← cross-module write
+  ├─ Update registrations.status = 'PAID'        ← cross-module write
   └─ Emit event → notification worker
 ```
 
@@ -395,7 +395,7 @@ src/
 │   ├── database/                 # Drizzle ORM, connection pool
 │   ├── redis/                    # ioredis client (3 logical DBs)
 │   ├── http-client/              # Axios cho gateway, AI provider
-│   └── messaging/                # Redis Streams + BullMQ wrapper
+│   └── messaging/                # BullMQs + BullMQ wrapper
 │
 ├── modules/
 │   ├── iam/
@@ -452,7 +452,7 @@ src/
 │   │   ├── controllers/          # NotificationChannelsController, NotificationLogsController
 │   │   ├── services/             # NotificationDispatcher, ChannelRegistry
 │   │   ├── channels/             # EmailChannel, InAppChannel, TelegramChannel (Strategy)
-│   │   ├── workers/              # NotificationWorker (Redis Streams consumer)
+│   │   ├── workers/              # NotificationWorker (BullMQ consumer)
 │   │   ├── repositories/         # NotificationLogsRepo, ChannelConfigsRepo
 │   │   └── notification.module.ts
 │   │
@@ -467,7 +467,7 @@ src/
 * Domain module có thể import nhau theo dependency graph ở section 3 (no cycle).
 * Mọi module import `iam` cho Guard. `iam` không import module nào.
 * Mọi module áp `rate-limit` qua decorator. `rate-limit` không import module nào.
-* `notification` không import domain module nào — chỉ tiêu thụ event qua Redis Streams.
+* `notification` không import domain module nào — chỉ tiêu thụ event qua BullMQs.
 * `background` import mọi module nó cần trigger (vd: import `csv-sync` để gọi pipeline).
 
 ---

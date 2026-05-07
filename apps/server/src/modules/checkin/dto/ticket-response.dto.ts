@@ -12,7 +12,7 @@ interface TicketInput {
       startsAt: Date;
       endsAt: Date;
     };
-    student: { studentId: string; fullName: string; studentCode: string };
+    student: { studentId: string; fullName: string; email?: string | null };
   };
 }
 
@@ -30,7 +30,6 @@ export interface TicketResponseDto {
   student: {
     student_id: string;
     full_name: string;
-    student_code: string;
   };
   issued_at: Date;
 }
@@ -62,7 +61,6 @@ export class TicketResponseBuilder {
       student: {
         student_id: ticket.registration.student.studentId,
         full_name: ticket.registration.student.fullName,
-        student_code: ticket.registration.student.studentCode,
       },
       issued_at: ticket.issuedAt,
     };

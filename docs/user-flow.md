@@ -68,10 +68,10 @@ Hệ thống có **3 actor** với phạm vi truy cập hoàn toàn tách biệt
 [END TRANSACTION]
         │
         ▼
-[Sinh mã QR + cập nhật idempotency_keys → status='completed']
+[Sinh mã QR + cập nhật idempotency_keys → status='COMPLETED']
         │
         ▼
-[Gửi thông báo async qua Redis Streams]  ← ADR-10
+[Gửi thông báo async qua BullMQ]  ← ADR-10
   • Kênh: App notification + Email
   • Strategy Pattern → dễ thêm Telegram sau  ← ADR-09
         │
@@ -94,10 +94,10 @@ Hệ thống có **3 actor** với phạm vi truy cập hoàn toàn tách biệt
         │
         ▼
 [Server: kiểm tra idempotency_keys table]
-  ┌─ status='completed' → trả lại response đã lưu (QR cũ)
-  ├─ status='in_progress' → trả lại 202 "Đang xử lý"
-  ├─ status='unresolved' → gateway forward (xem bên dưới)
-  └─ không có → INSERT với status='in_progress', locked_until=now+30s
+  ┌─ status='COMPLETED' → trả lại response đã lưu (QR cũ)
+  ├─ status='IN_PROGRESS' → trả lại 202 "Đang xử lý"
+  ├─ status='UNRESOLVED' → gateway forward (xem bên dưới)
+  └─ không có → INSERT với status='IN_PROGRESS', locked_until=now+30s
         │
         ▼
 [Kiểm tra Circuit Breaker]  ← ADR-07
@@ -113,17 +113,17 @@ Hệ thống có **3 actor** với phạm vi truy cập hoàn toàn tách biệt
 [Gọi Payment Gateway với timeout 10s]
   ┌─ SUCCESS
   │     → COMMIT registrations
-  │     → UPDATE idempotency_keys SET status='completed'
+  │     → UPDATE idempotency_keys SET status='COMPLETED'
   │     → Sinh QR, gửi thông báo
   │
   ├─ PAYMENT FAILED (declined)
   │     → ROLLBACK registrations (hoàn chỗ)
-  │     → UPDATE idempotency_keys SET status='completed', response=error
+  │     → UPDATE idempotency_keys SET status='COMPLETED', response=error
   │     → Thông báo thất bại cho sinh viên
   │
   └─ TIMEOUT (không biết gateway có nhận chưa)
         → ROLLBACK registrations (hoàn chỗ)
-        → UPDATE idempotency_keys SET status='unresolved'  ← ADR-08
+        → UPDATE idempotency_keys SET status='UNRESOLVED'  ← ADR-08
         → Thông báo: "Thanh toán chưa xác nhận, sẽ kiểm tra lại"
         → Reconciliation job sẽ xử lý sau  ← specs/payment-reconciliation.md
 ```
@@ -193,13 +193,13 @@ Hệ thống có **3 actor** với phạm vi truy cập hoàn toàn tách biệt
 Các thao tác có thể:
   ┌─ Đổi phòng / đổi giờ
   │     → Cập nhật record
-  │     → Trigger thông báo cho sinh viên đã đăng ký (async, Redis Streams)
+  │     → Trigger thông báo cho sinh viên đã đăng ký (async, BullMQ)
   │
   ├─ Cập nhật mô tả / diễn giả
   │     → Cập nhật record (không cần notify)
   │
   └─ Hủy workshop
-        → Cập nhật status='cancelled'
+        → Cập nhật status='CANCELLED'
         → Nếu có phí: trigger hoàn tiền cho tất cả người đã đăng ký
         → Gửi thông báo hủy đến toàn bộ sinh viên đã đăng ký
         → seats_available không còn hiển thị
@@ -216,7 +216,7 @@ Các thao tác có thể:
 [Upload file PDF giới thiệu workshop]
         │
         ▼
-[Server nhận file → đẩy job vào Redis Streams]  ← ADR-10
+[Server nhận file → đẩy job vào BullMQ]  ← ADR-10
         │
         ▼
 [Worker nhận job]
@@ -294,7 +294,7 @@ Các thao tác có thể:
 
 ```
 [Mở mobile app → Đăng nhập]
-[RBAC: role = 'checkin_staff' → chỉ thấy màn hình quét QR]  ← ADR-05
+[RBAC: role = 'CHECKIN_STAFF' → chỉ thấy màn hình quét QR]  ← ADR-05
         │
         ▼
 [Chọn workshop đang diễn ra]

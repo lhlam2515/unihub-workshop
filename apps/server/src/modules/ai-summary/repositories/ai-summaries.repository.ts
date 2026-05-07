@@ -74,7 +74,7 @@ export class AiSummariesRepository {
    * - Enforced by a unique constraint on documentId: if a summary already exists,
    *   its status is reset to PENDING via ON CONFLICT DO UPDATE.
    *
-   * Drizzle operation: INSERT INTO ai_summaries ... ON CONFLICT (documentId) DO UPDATE SET status = 'PENDING'.
+   * Drizzle operation: INSERT INTO ai_summaries ... ON CONFLICT (documentId) DO UPDATE SET status = 'QUEUED'.
    *
    * Side effects:
    * - Inserts a new row or updates the status of an existing row in ai_summaries.
@@ -91,10 +91,10 @@ export class AiSummariesRepository {
       async () => {
         const [result] = await this.db
           .insert(this.schema.aiSummaries)
-          .values({ documentId, workshopId, status: "PENDING" })
+          .values({ documentId, workshopId, status: "QUEUED" })
           .onConflictDoUpdate({
             target: this.schema.aiSummaries.documentId,
-            set: { status: "PENDING" },
+            set: { status: "QUEUED" },
           })
           .returning();
         return result;
@@ -112,7 +112,7 @@ export class AiSummariesRepository {
    * - Updates the status column and optionally the summary_text column on ai_summaries.
    *
    * @param id - The UUID of the summary record.
-   * @param status - The new processing status (e.g. "DONE", "FAILED", "PENDING").
+   * @param status - The new processing status (e.g. "DONE", "FAILED", "QUEUED").
    * @param summaryText - Optional final summary text to store when processing completes.
    * @returns OkResult containing the updated AiSummary record, or FailResult (INTERNAL_ERROR).
    */

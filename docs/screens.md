@@ -111,7 +111,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 
 **SCR-A02 `/admin`** — Dashboard boundary (tổng quan); data scope = aggregate stats từ `/admin/stats/overview`; không trùng /admin/workshops (list các workshop) cũng không trùng /admin/stats (drill-down report).
 
-**SCR-A03 `/admin/workshops`** — Admin browse boundary; khác SCR-W02 vì data scope mở rộng (status IN draft, open, closed, cancelled — public chỉ thấy 'open'); thao tác bulk khác (publish/cancel buttons).
+**SCR-A03 `/admin/workshops`** — Admin browse boundary; khác SCR-W02 vì data scope mở rộng (status IN DRAFT, OPEN, CLOSED, CANCELLED — public chỉ thấy 'OPEN'); thao tác bulk khác (publish/cancel buttons).
 
 **SCR-A04 `/admin/workshops/new`** — *List → Create* boundary; form với data scope rỗng (initial state); không trùng /admin/workshops/[id] vì semantic POST khác PATCH (HTTP method hint), không có version để optimistic-lock, không có "cancel/publish" action. Các BA đôi khi gộp với edit (single-form) — ở đây tách vì xét theo interaction purpose: tạo mới và sửa là hai goal khác.
 
@@ -121,7 +121,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 
 **SCR-A07 `/admin/workshops/[id]/stats`** — Aggregate metrics (fill rate, check-in rate, revenue); data scope khác /registrations (counts, không phải records); endpoint khác (`/admin/workshops/{id}/stats` vs `/admin/workshops/{id}/registrations`); có thể cache 5 phút (`api-design.md` §10).
 
-**SCR-A08 `/admin/workshops/[id]/summary`** — Workflow độc lập: upload PDF → queue → poll status → override. Data scope = `summary_*` fields; có 5 trạng thái (none/queued/processing/done/failed); là async workflow blocking với multi-step nature. Không phải state của /admin/workshops/[id] vì có upload action + retry action + override action — 3 use case riêng.
+**SCR-A08 `/admin/workshops/[id]/summary`** — Workflow độc lập: upload PDF → queue → poll status → override. Data scope = `summary_*` fields; có 5 trạng thái (none/QUEUED/PROCESSING/done/failed); là async workflow blocking với multi-step nature. Không phải state của /admin/workshops/[id] vì có upload action + retry action + override action — 3 use case riêng.
 
 **SCR-A09–A11 `/admin/speakers/*`** — Master data CRUD. List vs Create vs Edit theo Principle 3 (mỗi URL = mỗi screen). Có thể merge new + [id] thành single form-screen với mode prop, nhưng tách rõ hơn cho SRS traceability.
 
@@ -285,7 +285,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 - `startsAt`, `endsAt`, duration
 - `seatsTotal`, `seatsAvailable` (poll TTL 10s)
 - `price` + `currency`
-- `summary`: `status` + `text` (nếu `status='done'`); placeholder "Đang xử lý" nếu queued/processing; ẩn nếu `none`/`failed`
+- `summary`: `status` + `text` (nếu `status='DONE'`); placeholder "Đang xử lý" nếu QUEUED/PROCESSING; ẩn nếu `none`/`failed`
 - `isRegistered`: nếu true → hiển thị link "Xem QR của tôi" thay vì nút đăng ký
 - `myRegistrationId` (nếu có)
 
@@ -293,7 +293,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 
 **Primary actions:**
 
-- `[Đăng ký]` (chỉ hiện khi `seatsAvailable > 0 && !isRegistered && status='open'`)
+- `[Đăng ký]` (chỉ hiện khi `seatsAvailable > 0 && !isRegistered && status='OPEN'`)
   - Sinh `Idempotency-Key = crypto.randomUUID()` ở client
   - `POST /api/v1/registrations` header `Idempotency-Key`, body `{workshopId}`
   - Nếu `nextStep.action === null` (free workshop) → toast success → redirect `/me/registrations/{id}`
@@ -310,7 +310,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 - BR-W03.1 Pre-check `seatsAvailable` ở client để fail-fast UX, nhưng server vẫn là source of truth (race với cache TTL 10s)
 - BR-W03.2 Idempotency-Key sinh **trước** khi mở dialog confirm — re-click không sinh key mới
 - BR-W03.3 Nếu workshop bị `cancelled` ngay khi đang xem → poll detect → banner "Workshop đã bị hủy"
-- BR-W03.4 Workshop `status='draft'` không truy cập được public → 404
+- BR-W03.4 Workshop `status='DRAFT'` không truy cập được public → 404
 
 **Validation rules:**
 
@@ -379,7 +379,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 **Business rules:**
 
 - BR-W04.1 Method-level RBAC: chỉ trả `WHERE student_id = JWT.sub` (server-enforced)
-- BR-W04.2 Cancel paid registration → server enqueue refund job (Redis Streams) — UI hiển thị "Đang xử lý hoàn tiền"
+- BR-W04.2 Cancel paid registration → server enqueue refund job (BullMQ) — UI hiển thị "Đang xử lý hoàn tiền"
 - BR-W04.3 Status `pending` quá 30 phút → polling detect → server tự cancel (timeout job), UI auto refetch
 
 **Validation rules:**
@@ -890,9 +890,9 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 
 **Primary actions:**
 
-- `[Upload]` → `POST /api/v1/admin/workshops/{id}/summary` (multipart) → status='queued' → polling
+- `[Upload]` → `POST /api/v1/admin/workshops/{id}/summary` (multipart) → status='QUEUED' → polling
 - `[Retry]` (nếu status=failed) → `POST /api/v1/admin/workshops/{id}/summary/retry`
-- `[Lưu override]` (sau khi edit text) → `PUT /api/v1/admin/workshops/{id}/summary` body `{text}` → status='done'
+- `[Lưu override]` (sau khi edit text) → `PUT /api/v1/admin/workshops/{id}/summary` body `{text}` → status='DONE'
 
 **Business rules:**
 
@@ -1157,7 +1157,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 **Primary actions:**
 
 - `[Login]` → `POST /api/v1/auth/login` body `{accountType:"staff", email, password}` →
-  - Verify `role === 'checkin_staff'` (nếu role=btc → reject với "Vui lòng dùng web admin")
+  - Verify `role === 'CHECKIN_STAFF'` (nếu role=btc → reject với "Vui lòng dùng web admin")
   - Save `accessToken` to memory + `refreshToken` to Expo SecureStore
   - INSERT/REPLACE `app_session` row (singleton): user_id, email, role, allowedWorkshopIds, access/refresh exp
   - Initialize `device_config` if not exists (sinh device_id UUID v4)
@@ -1349,7 +1349,7 @@ State: ERROR_*  (overlay hiện cho đến khi tap dismiss)
 
 - VR-M04.1 Online: server kiểm tra `workshop_id ∈ JWT.allowedWorkshopIds`
 - VR-M04.2 Offline: app verify `cached_registrations.workshop_id = current_workshop_id` trước khi insert queue
-- VR-M04.3 Registration status NOT IN ('paid','confirmed') → reject với error overlay
+- VR-M04.3 Registration status NOT IN ('PAID','CONFIRMED') → reject với error overlay
 
 **Components:**
 

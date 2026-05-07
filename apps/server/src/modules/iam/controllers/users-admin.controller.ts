@@ -19,7 +19,7 @@ import type { UpdateUserStatusDto } from "../dto/update-user-status.dto";
 
 @Controller("admin/users")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
 export class UsersAdminController {
   constructor(private readonly usersService: UsersService) {}
 

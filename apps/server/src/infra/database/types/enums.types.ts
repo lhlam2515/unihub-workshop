@@ -9,7 +9,9 @@ import {
   notificationTypeEnum,
   paymentGatewayEnum,
   paymentStatusEnum,
+  platformEnum,
   registrationStatusEnum,
+  staffRoleEnum,
   syncErrorReasonEnum,
   syncJobStatusEnum,
   ticketStatusEnum,
@@ -20,6 +22,8 @@ import {
 
 export const userRoleSchema = z.enum(userRoleEnum.enumValues);
 export const userStatusSchema = z.enum(userStatusEnum.enumValues);
+export const staffRoleSchema = z.enum(staffRoleEnum.enumValues);
+export const platformSchema = z.enum(platformEnum.enumValues);
 export const workshopStatusSchema = z.enum(workshopStatusEnum.enumValues);
 export const registrationStatusSchema = z.enum(
   registrationStatusEnum.enumValues
@@ -44,6 +48,8 @@ export const documentUploadStatusSchema = z.enum(
 
 export type UserRole = z.infer<typeof userRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
+export type StaffRole = z.infer<typeof staffRoleSchema>;
+export type Platform = z.infer<typeof platformSchema>;
 export type WorkshopStatus = z.infer<typeof workshopStatusSchema>;
 export type RegistrationStatus = z.infer<typeof registrationStatusSchema>;
 export type TicketStatus = z.infer<typeof ticketStatusSchema>;

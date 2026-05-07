@@ -10,7 +10,7 @@ import type { AssignWorkshopsDto } from "../dto/assign-workshops.dto";
 
 @Controller("admin/checkin-staff")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
 export class CheckinStaffAdminController {
   constructor(
     private readonly checkinStaffAssignmentService: CheckinStaffAssignmentService

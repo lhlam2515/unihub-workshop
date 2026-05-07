@@ -23,9 +23,27 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
+import type { Pipeline } from "ioredis";
+
+/**
+ * Database index for the Redis service.
+ *
+ * REF: `docs/blueprint/design/02_storage-strategy.md` L22-26 — DB0 = cache, DB1 = queue, DB2 = rate limit
+ */
+export enum RedisDb {
+  Cache = 0,
+  Queue = 1,
+  RateLimit = 2,
+}
+
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
+  /** DB0 — cache (allkeys-lru eviction policy) */
   private client!: Redis;
+  /** DB1 — queue (noeviction) */
+  private queueClient!: Redis;
+  /** DB2 — rate limit (volatile-ttl eviction policy) */
+  private rateLimitClient!: Redis;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -37,11 +55,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    * the application fails fast rather than serving traffic with a broken
    * connection.
    *
-   * Side effects: Opens a persistent TCP connection to the Redis server.
+   * Side effects: Opens persistent TCP connections to Redis DB0, DB1, DB2.
    */
-  onModuleInit() {
+  async onModuleInit() {
     const url = this.configService.getOrThrow<string>("redis.url");
     this.client = new Redis(url);
+    this.queueClient = new Redis(url);
+    this.rateLimitClient = new Redis(url);
+    // Select logical databases after connection
+    await this.client.select(RedisDb.Cache);
+    await this.queueClient.select(RedisDb.Queue);
+    await this.rateLimitClient.select(RedisDb.RateLimit);
   }
 
   // ---------------------------------------------------------------------------
@@ -217,6 +241,56 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ---------------------------------------------------------------------------
+  // Sorted Set Primitives (ADR-06 Sliding Window Rate Limiting)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Adds a member with a numeric score to a Sorted Set.
+   *
+   * Used by the Sliding Window Rate Limiter to timestamp each request.
+   *
+   * @param key - Redis Sorted Set key (e.g. `rl:ip:{ip}`).
+   * @param score - The numeric score (typically a Unix millisecond timestamp).
+   * @param member - The member string (typically the request timestamp).
+   * @returns The number of new elements added to the Sorted Set.
+   */
+  async zadd(key: string, score: number, member: string): Promise<number> {
+    return this.rateLimitClient.zadd(key, score, member);
+  }
+
+  /**
+   * Removes all members in a Sorted Set with scores in the given interval.
+   *
+   * Used by the Sliding Window Rate Limiter to prune expired entries before
+   * counting — `ZREMRANGEBYSCORE key -inf <window_start>`.
+   *
+   * @param key - Redis Sorted Set key.
+   * @param min - Minimum score bound (use `"-inf"` for unbounded).
+   * @param max - Maximum score bound (use `"+inf"` for unbounded).
+   * @returns The number of members removed.
+   */
+  async zremrangebyscore(
+    key: string,
+    min: number | string,
+    max: number | string
+  ): Promise<number> {
+    return this.rateLimitClient.zremrangebyscore(key, min, max);
+  }
+
+  /**
+   * Returns the number of elements in a Sorted Set.
+   *
+   * Used by the Sliding Window Rate Limiter to count requests after pruning:
+   * `ZCARD key` gives the current window count.
+   *
+   * @param key - Redis Sorted Set key.
+   * @returns The cardinality (number of members) of the Sorted Set.
+   */
+  async zcard(key: string): Promise<number> {
+    return this.rateLimitClient.zcard(key);
+  }
+
+  // ---------------------------------------------------------------------------
   // Key Scanning
   // ---------------------------------------------------------------------------
 
@@ -242,6 +316,48 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       stream.on("end", () => resolve(keys));
       stream.on("error", (err: Error) => reject(err));
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pipeline / MULTI-EXEC (ADR-06 atomic batch)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns an ioredis `Pipeline` instance for batched / transactional execution.
+   *
+   * Commands queued on the pipeline are sent to Redis in a single round‑trip when
+   * `.exec()` is called. This is the mechanism used by the Sliding Window Rate
+   * Limiter to atomically execute:
+   *
+   * `ZREMRANGEBYSCORE → ZADD → ZCARD → EXPIRE`
+   *
+   * @returns An ioredis `Pipeline` bound to the **rate-limit (DB2)** connection.
+   */
+  multi(): ReturnType<Redis["multi"]> {
+    return this.rateLimitClient.multi();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-Database Selection
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Switches the current (cache DB0) connection to a different logical database.
+   *
+   * Typical use — switching to DB1 for queue operations:
+   * ```ts
+   * const redis = getRedis();
+   * await redis.selectDb(RedisDb.Queue);
+   * ```
+   *
+   * **Prefer using the dedicated clients** (`client`, `queueClient`,
+   * `rateLimitClient`) which are pre‑configured for the correct database.
+   *
+   * @param db - Logical database index (0–15).
+   * @returns `"OK"` on success.
+   */
+  async selectDb(db: RedisDb | number): Promise<"OK"> {
+    return this.client.select(db);
   }
 
   // ---------------------------------------------------------------------------
@@ -300,6 +416,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    * Side effects: Closes the TCP connection to the Redis server.
    */
   async onModuleDestroy() {
-    await this.client.quit();
+    await Promise.all([
+      this.client.quit(),
+      this.queueClient.quit(),
+      this.rateLimitClient.quit(),
+    ]);
   }
 }
