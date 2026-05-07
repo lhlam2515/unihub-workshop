@@ -102,7 +102,7 @@ describe("TokenService", () => {
       const token = await tokenService.signAccessToken(
         {
           userId: "usr-2",
-          role: "ORGANIZER",
+          role: "BTC",
         },
         "MOBILE"
       );
@@ -112,7 +112,7 @@ describe("TokenService", () => {
         unknown
       >;
       expect(decoded.sub).toBe("usr-2");
-      expect(decoded.role).toBe("ORGANIZER");
+      expect(decoded.role).toBe("BTC");
       const expDelta = (decoded.exp as number) - Math.floor(Date.now() / 1000);
       expect(expDelta).toBeGreaterThan(28700);
       expect(expDelta).toBeLessThanOrEqual(28800);

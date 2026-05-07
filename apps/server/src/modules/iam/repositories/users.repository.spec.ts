@@ -124,7 +124,7 @@ describe("UsersRepository", () => {
         userId: "usr-2",
         email: "jane@test.com",
         passwordHash: "hashed-pw",
-        role: "ORGANIZER",
+        role: "BTC",
         status: "ACTIVE",
         createdAt: new Date(),
         updatedAt: new Date(),
