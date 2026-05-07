@@ -7,10 +7,6 @@ import { IamModule } from "@/modules/iam/iam.module";
 import { BookingModule } from "../booking/booking.module";
 import { CatalogModule } from "../catalog/catalog.module";
 import { PaymentModule } from "../payment/payment.module";
-import { AppChannel } from "./channels/app.channel";
-import { EmailChannel } from "./channels/email.channel";
-import { TelegramChannel } from "./channels/telegram.channel";
-import { NotificationsAdminController } from "./controllers/notifications-admin.controller";
 import { StudentSyncAdminController } from "./controllers/student-sync-admin.controller";
 import { SystemAdminController } from "./controllers/system-admin.controller";
 import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
@@ -23,17 +19,12 @@ import { PdfSummaryPipeline } from "./pipeline/pdf-summary.pipeline";
 import { PersistResultFilter } from "./pipeline/persist-result.filter";
 import { TextCleaningFilter } from "./pipeline/text-cleaning.filter";
 import { UpsertRecordFilter } from "./pipeline/upsert-record.filter";
-import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
-import { NotificationLogsRepository } from "./repositories/notification-logs.repository";
 import { StudentSyncErrorsRepository } from "./repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "./repositories/student-sync-jobs.repository";
 import { AiSummaryService } from "./services/ai-summary.service";
-import { NotificationDispatchService } from "./services/notification-dispatch.service";
-import { NotificationsService } from "./services/notifications.service";
 import { StudentSyncService } from "./services/student-sync.service";
 import { SystemMonitorService } from "./services/system-monitor.service";
 import { AiSummaryWorker } from "./workers/ai-summary.worker";
-import { NotificationWorker } from "./workers/notification.worker";
 import { StudentSyncWorker } from "./workers/student-sync.worker";
 
 // Cron Jobs
@@ -45,12 +36,10 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
 /**
  * Orchestrates all async and scheduled background processing.
  *
- * Owns the workers, cron jobs, and admin controllers for notification
- * dispatch, AI document summarization, student CSV import, payment
- * timeout expiry, and seat-reconciliation monitoring.
+ * Owns cron jobs, admin controllers for AI summary, student CSV import,
+ * and system monitoring.
  *
  * Business rules:
- * - Notification delivery uses retry-with-backoff per channel type.
  * - Seat reconciliation runs on a 10-minute cron cycle.
  * - Payment timeouts expire PENDING registrations after 15 minutes.
  * - Each worker consumes from its dedicated BullMQ queue.
@@ -61,8 +50,8 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
  * - Exposes admin HTTP endpoints for manual job management.
  *
  * @requires SharedQueueModule — provides BullMQ queue registrations.
- * @requires BookingModule — provides RegistrationsService and PaymentsService (reconciliation, payment timeout cron).
- * @requires CatalogModule — provides WorkshopNotificationPublisher and WorkshopsService (notification, AI summary workers).
+ * @requires BookingModule — provides RegistrationsService (reconciliation).
+ * @requires CatalogModule — provides WorkshopsService (AI summary workers).
  */
 @Module({
   imports: [
@@ -73,11 +62,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     PaymentModule,
     IamModule,
   ],
-  controllers: [
-    NotificationsAdminController,
-    StudentSyncAdminController,
-    SystemAdminController,
-  ],
+  controllers: [StudentSyncAdminController, SystemAdminController],
   providers: [
     // Pipeline filters (Pipe-and-Filter architecture)
     UpsertRecordFilter,
@@ -87,32 +72,18 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     PersistResultFilter,
     PdfSummaryPipeline,
 
-    NotificationsService,
-    NotificationDispatchService,
     AiSummaryService,
     StudentSyncService,
     SystemMonitorService,
-    NotificationWorker,
     AiSummaryWorker,
     StudentSyncWorker,
     PaymentTimeoutCron,
     ReconciliationCron,
     CircuitBreakerRecoveryCron,
     WorkshopAutoCompleteCron,
-    NotificationLogsRepository,
-    NotificationChannelConfigsRepository,
-    EmailChannel,
-    TelegramChannel,
-    AppChannel,
     StudentSyncJobsRepository,
     StudentSyncErrorsRepository,
   ],
-  exports: [
-    NotificationsService,
-    NotificationDispatchService,
-    AiSummaryService,
-    StudentSyncService,
-    SystemMonitorService,
-  ],
+  exports: [AiSummaryService, StudentSyncService, SystemMonitorService],
 })
 export class BackgroundModule {}

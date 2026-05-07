@@ -28,24 +28,27 @@ import { BookingModule } from "./modules/booking/booking.module";
 import { CatalogModule } from "./modules/catalog/catalog.module";
 import { CheckinModule } from "./modules/checkin/checkin.module";
 import { IamModule } from "./modules/iam/iam.module";
+import { NotificationModule } from "./modules/notification/notification.module";
+import { PaymentModule } from "./modules/payment/payment.module";
 
 /**
  * Root application module for the UniHub Workshop backend.
  *
  * Registers all infrastructure modules (Database, Redis, Storage, Queue)
- * before domain modules (IAM, Catalog, Booking, Checkin), with
- * BackgroundModule last because it depends on BookingModule and
- * CatalogModule. This ordering prevents circular dependency resolution
- * errors and ensures all providers are available when BackgroundModule's
- * workers and cron jobs initialize.
+ * before domain modules in dependency order. BackgroundModule remains
+ * last because it depends on BookingModule, CatalogModule, PaymentModule,
+ * and NotificationModule. This ordering prevents circular dependency
+ * resolution errors and ensures all providers are available when
+ * BackgroundModule's workers and cron jobs initialize.
  *
  * Business rules:
  * - BackgroundModule MUST remain the last entry in the imports array.
  * - IamModule and CatalogModule are registered before BookingModule
  *   because BookingModule imports CatalogModule for SeatCounterService.
+ * - PaymentModule follows BookingModule (BookingModule imports PaymentModule).
+ * - NotificationModule is event-driven; placed after domain modules.
  * - SharedQueueModule is a shared BullMQ infrastructure module consumed
- *   by Catalog, Booking, and Background modules — not @Global() so it
- *   must be explicitly imported.
+ *   by Catalog, Booking, Payment, Notification, and Background modules.
  */
 @Module({
   imports: [
@@ -82,7 +85,9 @@ import { IamModule } from "./modules/iam/iam.module";
     IamModule,
     CatalogModule,
     BookingModule,
+    PaymentModule,
     CheckinModule,
+    NotificationModule,
     BackgroundModule,
   ],
   controllers: [AppController],
