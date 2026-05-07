@@ -21,8 +21,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 
 import { RedisService } from "@/infra/redis/redis.service";
-import { PaymentsRepository } from "@/modules/booking/repositories/payments.repository";
-import { PaymentsService } from "@/modules/booking/services/payments.service";
+import { PaymentsRepository } from "@/modules/payment/repositories/payments.repository";
+import { PaymentsService } from "@/modules/payment/services/payments.service";
 
 @Injectable()
 export class PaymentTimeoutCron {

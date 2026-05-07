@@ -2,6 +2,10 @@ import { Test, type TestingModule } from "@nestjs/testing";
 
 import type { Payment } from "@/infra/database/types/transaction.types";
 import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
+import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
+import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
+import { TicketsRepository } from "@/modules/booking/repositories/tickets.repository";
+import { TicketsService } from "@/modules/booking/services/tickets.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { paymentErrors } from "@/shared/response/errors";
@@ -9,13 +13,9 @@ import { Result } from "@/shared/response/result";
 
 import { PaymentGatewayService } from "./payment-gateway.service";
 import { PaymentsService } from "./payments.service";
-import { TicketsService } from "./tickets.service";
 import { CircuitBreakerMechanic } from "../mechanics/circuit-breaker.mechanic";
 import { IdempotencyMechanic } from "../mechanics/idempotency.mechanic";
-import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import { PaymentsRepository } from "../repositories/payments.repository";
-import { RegistrationsRepository } from "../repositories/registrations.repository";
-import { TicketsRepository } from "../repositories/tickets.repository";
 
 describe("PaymentsService", () => {
   let service: PaymentsService;

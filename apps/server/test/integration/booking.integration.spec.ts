@@ -22,22 +22,15 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
-import { HmacSignatureGuard } from "@/core/guards/hmac-signature.guard";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
-import { PaymentsController } from "@/modules/booking/controllers/payments.controller";
 import { RegistrationsController } from "@/modules/booking/controllers/registrations.controller";
-import { CircuitBreakerMechanic } from "@/modules/booking/mechanics/circuit-breaker.mechanic";
 import { GlobalRateLimitMechanic } from "@/modules/booking/mechanics/global-rate-limit.mechanic";
-import { IdempotencyMechanic } from "@/modules/booking/mechanics/idempotency.mechanic";
 import { RateLimiterMechanic } from "@/modules/booking/mechanics/rate-limiter.mechanic";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
-import { PaymentsRepository } from "@/modules/booking/repositories/payments.repository";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
 import { TicketsRepository } from "@/modules/booking/repositories/tickets.repository";
-import { PaymentGatewayService } from "@/modules/booking/services/payment-gateway.service";
-import { PaymentsService } from "@/modules/booking/services/payments.service";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
 import { AiSummariesRepository } from "@/modules/catalog/repositories/ai-summaries.repository";
 import { RoomsRepository } from "@/modules/catalog/repositories/rooms.repository";
@@ -49,6 +42,13 @@ import { RoomConflictService } from "@/modules/catalog/services/room-conflict.se
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopNotificationPublisher } from "@/modules/catalog/services/workshop-notification-publisher.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { PaymentsController } from "@/modules/payment/controllers/payments.controller";
+import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
+import { CircuitBreakerMechanic } from "@/modules/payment/mechanics/circuit-breaker.mechanic";
+import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mechanic";
+import { PaymentsRepository } from "@/modules/payment/repositories/payments.repository";
+import { PaymentGatewayService } from "@/modules/payment/services/payment-gateway.service";
+import { PaymentsService } from "@/modules/payment/services/payments.service";
 import { paymentErrors, seatErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 

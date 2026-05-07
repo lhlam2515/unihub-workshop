@@ -6,6 +6,7 @@ import { IamModule } from "@/modules/iam/iam.module";
 
 import { BookingModule } from "../booking/booking.module";
 import { CatalogModule } from "../catalog/catalog.module";
+import { PaymentModule } from "../payment/payment.module";
 import { AppChannel } from "./channels/app.channel";
 import { EmailChannel } from "./channels/email.channel";
 import { TelegramChannel } from "./channels/telegram.channel";
@@ -69,6 +70,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     SharedQueueModule,
     BookingModule,
     CatalogModule,
+    PaymentModule,
     IamModule,
   ],
   controllers: [

@@ -26,8 +26,8 @@ import {
 } from "../../src/infra/messaging/queue.constants";
 import { RedisService } from "../../src/infra/redis/redis.service";
 import { StorageService } from "../../src/infra/storage/storage.service";
-import { PaymentsService } from "../../src/modules/booking/services/payments.service";
 import { RegistrationsService } from "../../src/modules/booking/services/registrations.service";
+import { PaymentsService } from "../../src/modules/payment/services/payments.service";
 import {
   paymentErrors,
   registrationErrors,

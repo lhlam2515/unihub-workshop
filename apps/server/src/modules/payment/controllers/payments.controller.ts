@@ -28,9 +28,9 @@ import {
   HttpStatus,
 } from "@nestjs/common";
 
-import { HmacSignatureGuard } from "@/core/guards/hmac-signature.guard";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
+import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
 import { Public } from "@/shared/decorators/public.decorator";
