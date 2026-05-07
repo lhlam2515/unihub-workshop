@@ -130,7 +130,7 @@ export class PaymentsService {
     if (
       !registration ||
       registration.studentId !== studentId ||
-      registration.status !== "PENDING_PAYMENT"
+      registration.status !== "PENDING"
     ) {
       return Result.fail(paymentErrors.notFound(dto.registration_id));
     }
@@ -162,16 +162,9 @@ export class PaymentsService {
     const cbResult = await this.circuitBreaker.checkAndAllow(dto.gateway);
     if (cbResult.isFailure) return Result.fail(cbResult.error);
 
-    // Stage 6: Insert payment record with FOR UPDATE NOWAIT on workshop_slots
+    // Stage 6: Insert payment record with optimistic lock via version
     const payResult = await tryCatch(async () => {
       return this.paymentsRepo.transaction(async (tx) => {
-        // Pessimistic lock on workshop_slots (fails fast if locked)
-        const lockResult = await this.paymentsRepo.lockWorkshopSlot(
-          registration.workshopId,
-          tx
-        );
-        if (lockResult.isFailure) throw lockResult.error;
-
         const createResult = await this.paymentsRepo.create(
           {
             registrationId: registration.registrationId,
@@ -284,7 +277,7 @@ export class PaymentsService {
         const payment = payResult.data;
 
         // Idempotent webhook: already processed (checked after lock)
-        if (payment.status === "SUCCESS") {
+        if (payment.status === "SUCCEEDED") {
           throw paymentErrors.alreadySuccess(payment.paymentId);
         }
 
@@ -296,7 +289,7 @@ export class PaymentsService {
           // Success path: update payment + registration + create ticket
           const payUpdate = await this.paymentsRepo.updateStatus(
             payment.paymentId,
-            "SUCCESS",
+            "SUCCEEDED",
             webhookDto.gateway_txn_id,
             tx
           );
@@ -485,11 +478,11 @@ export class PaymentsService {
       return Result.fail(paymentErrors.notFound(paymentId));
     }
     // SUCCESS must not be expired
-    if (payResult.data.status === "SUCCESS") {
+    if (payResult.data.status === "SUCCEEDED") {
       return Result.fail(paymentErrors.alreadySuccess(paymentId));
     }
-    // Already in a terminal state (FAILED, TIMEOUT, REFUNDED) — no-op
-    if (payResult.data.status !== "PENDING") {
+    // Already in a terminal state (FAILED, UNRESOLVED) — no-op
+    if (payResult.data.status !== "INITIATED") {
       return Result.ok();
     }
 
@@ -501,7 +494,7 @@ export class PaymentsService {
       return this.paymentsRepo.transaction(async (tx) => {
         const payUpdate = await this.paymentsRepo.updateStatus(
           paymentId,
-          "TIMEOUT",
+          "FAILED",
           undefined,
           tx
         );
