@@ -257,7 +257,7 @@ export class RegistrationsRepository {
               eq(this.schema.registrations.workshopId, workshopId),
               inArray(this.schema.registrations.status, [
                 "CONFIRMED",
-                "PENDING_PAYMENT",
+                "PENDING",
               ])
             )
           )

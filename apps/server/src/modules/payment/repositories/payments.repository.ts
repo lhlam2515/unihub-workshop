@@ -210,34 +210,6 @@ export class PaymentsRepository {
   }
 
   /**
-   * Acquires a pessimistic lock (FOR UPDATE NOWAIT) on the workshop_slots row.
-   *
-   * Used during payment initiation to serialize concurrent payment creation
-   * for the same workshop. Fails fast with DB_LOCK_TIMEOUT if the row is
-   * already locked by another transaction.
-   *
-   * Side effects:
-   * - Locks the workshop_slots row within the current transaction.
-   *
-   * @param workshopId - The UUID of the workshop whose slot to lock.
-   * @param tx - Required transaction context.
-   * @returns OkResult(void) when lock acquired, or FailResult with DB_LOCK_TIMEOUT.
-   */
-  async lockWorkshopSlot(
-    workshopId: string,
-    tx: DrizzleTransaction
-  ): Promise<Result<void>> {
-    return tryCatch(async () => {
-      await tx
-        .select({ dummy: sql`1` })
-        .from(this.schema.workshopSlots)
-        .where(eq(this.schema.workshopSlots.workshopId, workshopId))
-        .for("update", { noWait: true })
-        .limit(1);
-    }, lockTimeoutMapper("workshop_slots"));
-  }
-
-  /**
    * Finds a payment by idempotency key with FOR UPDATE NOWAIT lock.
    *
    * Used during webhook processing to serialize concurrent webhook calls
@@ -282,7 +254,7 @@ export class PaymentsRepository {
           .from(this.schema.payments)
           .where(
             and(
-              eq(this.schema.payments.status, "PENDING"),
+              eq(this.schema.payments.status, "INITIATED"),
               sql`${this.schema.payments.timeoutAt} < NOW()`
             )
           );
@@ -303,7 +275,7 @@ export class PaymentsRepository {
         const [{ count }] = await this.db
           .select({ count: sql<number>`count(*)::int` })
           .from(this.schema.payments)
-          .where(eq(this.schema.payments.status, "PENDING"));
+          .where(eq(this.schema.payments.status, "INITIATED"));
         return count;
       },
       (err) => systemErrors.internal(err)

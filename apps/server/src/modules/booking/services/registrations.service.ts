@@ -52,7 +52,7 @@ export class RegistrationsService {
    *
    * Business rules:
    * - Free workshops: status = CONFIRMED, ticket issued immediately.
-   * - Paid workshops: status = PENDING_PAYMENT, seat lock acquired (TTL 900s).
+   * - Paid workshops: status = PENDING, seat lock acquired (TTL 900s).
    * - A student cannot hold multiple active registrations for the same workshop.
    * - Workshop capacity cannot be exceeded (Redis DECR enforces atomicity).
    *
@@ -109,12 +109,13 @@ export class RegistrationsService {
     }
 
     // Stage 6: Determine status and create registration
-    const isPaid = workshopResult.data.isPaid;
-    const status = isPaid ? "PENDING_PAYMENT" : "CONFIRMED";
+    const isPaid = Number(workshopResult.data.price ?? "0") > 0;
+    const status = isPaid ? "PENDING" : "CONFIRMED";
 
     const regResult = await this.registrationsRepo.create({
       studentId,
       workshopId: dto.workshop_id,
+      qrCode: crypto.randomUUID(),
       status,
       confirmedAt: status === "CONFIRMED" ? new Date() : null,
     });
@@ -125,13 +126,13 @@ export class RegistrationsService {
     const registration = regResult.data;
 
     // Stage 7a: If paid — acquire seat lock
-    const workshop = workshopResult.data;
     if (isPaid) {
+      const workshop = workshopResult.data;
       const lockResult = await this.seatLock.acquire(
         dto.workshop_id,
         registration.registrationId,
         studentId,
-        Number(workshop.price)
+        Number(workshop.price ?? "0")
       );
       if (lockResult.isFailure) {
         // Compensation: mark registration as CANCELLED, release seat
@@ -164,7 +165,7 @@ export class RegistrationsService {
     // Stage 8: Build response
     const response = RegistrationResponseBuilder.from(registration, {
       payment_deadline: isPaid ? new Date(Date.now() + 900_000) : undefined,
-      amount: isPaid ? Number(workshop.price) : undefined,
+      amount: isPaid ? Number(workshopResult.data.price ?? "0") : undefined,
     });
 
     // Fire REGISTRATION_CONFIRMED for free workshops (fire-and-forget)
@@ -259,7 +260,7 @@ export class RegistrationsService {
    * 6. Release the seat lock if the workshop was paid (idempotent).
    *
    * Business rules:
-   * - Only CONFIRMED or PENDING_PAYMENT registrations can be cancelled.
+   * - Only CONFIRMED or PENDING registrations can be cancelled.
    * - Already-cancelled registrations return REGISTRATION_CANCELLED.
    * - IDOR: returns REGISTRATION_NOT_FOUND for non-owned registrations.
    *
@@ -305,7 +306,7 @@ export class RegistrationsService {
     await Promise.all([
       this.ticketsRepo.updateStatusByRegistrationId(registrationId, "VOID"),
       this.seatCounter.increment(registration.workshopId),
-      registration.status === "PENDING_PAYMENT"
+      registration.status === "PENDING"
         ? this.seatLock.release(registration.workshopId, registrationId)
         : Promise.resolve(),
     ]);
