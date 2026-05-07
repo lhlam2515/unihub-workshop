@@ -31,9 +31,8 @@ export class LoginResponseBuilder {
       allowedWorkshopIds?: string[];
     },
     studentProfile?: {
-      studentCode: string;
+      studentId: string;
       fullName: string;
-      faculty: string | null;
     }
   ): LoginResponseDto {
     return {
