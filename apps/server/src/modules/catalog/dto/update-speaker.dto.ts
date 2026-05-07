@@ -2,7 +2,7 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 /**
- * Validates partial speaker update payloads from the ORGANIZER.
+ * Validates partial speaker update payloads from the BTC.
  *
  * All fields are optional — only provided fields are applied to the existing
  * speaker profile. If full_name is provided, it must be at least 1 character;

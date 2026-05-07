@@ -2,7 +2,7 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 /**
- * Validates partial room update payloads from the ORGANIZER.
+ * Validates partial room update payloads from the BTC.
  *
  * All fields are optional — only provided fields are applied to the existing
  * room record. Field validation rules mirror the creation schema (e.g.,
