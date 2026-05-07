@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
 
 import { BookingModule } from "../booking/booking.module";
@@ -18,7 +18,7 @@ import { PaymentsService } from "./services/payments.service";
   imports: [
     DatabaseModule,
     RedisModule,
-    SharedQueueModule,
+    MessagingModule,
     BookingModule,
     IamModule,
   ],
