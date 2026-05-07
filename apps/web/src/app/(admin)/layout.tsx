@@ -22,7 +22,7 @@ export default function AdminLayout({
 
   // Admin login page: skip sidebar & role guard
   if (pathname === ROUTES.ADMIN_LOGIN) {
-    if (user?.role === "BTC") {
+    if (user?.role === "btc") {
       router.replace(ROUTES.ADMIN);
       return null;
     }
@@ -30,7 +30,7 @@ export default function AdminLayout({
   }
 
   // Other /admin/* paths: must be BTC
-  if (!user || user.role !== "BTC") {
+  if (!user || user.role !== "btc") {
     router.replace(ROUTES.ADMIN_LOGIN);
     return null;
   }

@@ -19,7 +19,7 @@ export default function StudentLayout({
     return <PageLoader />;
   }
 
-  if (!isAuthenticated || user?.role !== "STUDENT") {
+  if (!isAuthenticated || user?.role !== "student") {
     router.replace(ROUTES.LOGIN);
     return null;
   }

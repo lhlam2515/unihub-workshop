@@ -1,7 +1,12 @@
 /**
  * User roles mirroring the backend RBAC (ADR-05).
+ *
+ * Values follow the OpenAPI spec:
+ * - `student` — regular student browsing & registering
+ * - `btc` — organizer (Ban Tổ Chức)
+ * - `checkin_staff` — QR scanning staff (mobile-only)
  */
-export type Role = "STUDENT" | "BTC" | "CHECKIN_STAFF";
+export type Role = "student" | "btc" | "checkin_staff";
 
 /**
  * Authenticated user profile returned from GET /auth/me and login responses.
@@ -16,19 +21,20 @@ export interface User {
 }
 
 /**
- * Login request body.
+ * Login request body per OpenAPI spec.
  *
- * `STUDENT` requires `studentId`; `STAFF` requires `email`.
+ * - `accountType="student"` requires `studentId` (MSSV, 8 digits).
+ * - `accountType="staff"` requires `email`.
  */
 export interface LoginRequest {
-  accountType: "STUDENT" | "STAFF";
+  accountType: "student" | "staff";
   studentId?: string;
   email?: string;
   password: string;
 }
 
 /**
- * Successful login response envelope.
+ * Successful login response envelope per OpenAPI spec.
  */
 export interface LoginResponse {
   accessToken: string;
