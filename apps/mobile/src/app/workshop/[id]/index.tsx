@@ -1,17 +1,27 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import {
+  checkinStatusService,
+  type CheckinStatus,
+} from "@/features/workshops/api/checkin-status.service";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import handleError from "@/lib/handlers/error";
 
 function getWorkshopId(value: string | string[] | undefined) {
-  if (Array.isArray(value)) {
-    return value[0] ?? "ws-demo";
-  }
-
-  return value ?? "ws-demo";
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
 }
 
 export default function WorkshopDashboardScreen() {
@@ -20,6 +30,31 @@ export default function WorkshopDashboardScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
 
+  const [status, setStatus] = useState<CheckinStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!workshopId) return;
+    void fetchStatus();
+  }, [workshopId]);
+
+  async function fetchStatus() {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const result = await checkinStatusService.getStatus(workshopId);
+    setIsLoading(false);
+
+    if (result.isFailure) {
+      const appError = handleError(result.error);
+      setErrorMessage(appError.message);
+      return;
+    }
+
+    setStatus(result.data);
+  }
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -27,14 +62,10 @@ export default function WorkshopDashboardScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={[styles.eyebrow, { color: colors.tint }]}>
-            M03 · DASHBOARD
+            DASHBOARD
           </Text>
           <Text style={[styles.title, { color: colors.text }]}>
-            Workshop {workshopId}
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>
-            Bảng điều khiển trung tâm cho một ca check-in, từ đây mở camera quét
-            QR, xem kết quả và quay về hàng đợi khi cần.
+            Workshop {workshopId.slice(0, 8)}
           </Text>
         </View>
 
@@ -42,32 +73,51 @@ export default function WorkshopDashboardScreen() {
           <Text style={[styles.cardTitle, { color: colors.text }]}>
             Tổng quan ca trực
           </Text>
-          <View style={styles.metricRow}>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                248
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Expected
-              </Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                193
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Checked in
+
+          {isLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.tint} />
+              <Text style={[styles.hint, { color: colors.icon }]}>
+                Đang tải...
               </Text>
             </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                55
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Pending
-              </Text>
+          ) : errorMessage ? (
+            <View>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+              <Pressable onPress={fetchStatus}>
+                <Text style={[styles.retryText, { color: colors.tint }]}>
+                  Thử lại
+                </Text>
+              </Pressable>
             </View>
-          </View>
+          ) : (
+            <View style={styles.metricRow}>
+              <View style={styles.metric}>
+                <Text style={[styles.metricValue, { color: colors.text }]}>
+                  {status?.confirmed_count ?? "—"}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.icon }]}>
+                  Đã đăng ký
+                </Text>
+              </View>
+              <View style={styles.metric}>
+                <Text style={[styles.metricValue, { color: colors.text }]}>
+                  {status?.checked_in_count ?? "—"}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.icon }]}>
+                  Đã điểm danh
+                </Text>
+              </View>
+              <View style={styles.metric}>
+                <Text style={[styles.metricValue, { color: colors.text }]}>
+                  {status?.pending_count ?? "—"}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.icon }]}>
+                  Chờ điểm danh
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.actions}>
@@ -81,7 +131,9 @@ export default function WorkshopDashboardScreen() {
             <Text style={styles.primaryButtonText}>Mở máy quét QR</Text>
           </Pressable>
           <Pressable
-            onPress={() => router.push(ROUTES.WORKSHOP_RESULT(workshopId))}
+            onPress={() =>
+              router.push(`/workshop/${workshopId}/history` as Parameters<typeof router.push>[0])
+            }
             style={({ pressed }) => [
               styles.secondaryButton,
               {
@@ -91,7 +143,7 @@ export default function WorkshopDashboardScreen() {
             ]}
           >
             <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-              Xem kết quả mẫu
+              Xem lịch sử điểm danh
             </Text>
           </Pressable>
           <Pressable
@@ -115,81 +167,33 @@ export default function WorkshopDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    padding: 20,
-    gap: 14,
-  },
-  header: {
-    gap: 10,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    lineHeight: 34,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  card: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 18,
-    gap: 10,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  metricRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  metric: {
-    flex: 1,
-    gap: 2,
-  },
-  metricValue: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  metricLabel: {
-    fontSize: 12,
-  },
-  actions: {
-    gap: 12,
-    marginTop: 4,
-  },
+  safeArea: { flex: 1 },
+  content: { flexGrow: 1, padding: 20, gap: 14 },
+  header: { gap: 8 },
+  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2 },
+  title: { fontSize: 28, fontWeight: "800", lineHeight: 34 },
+  card: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 12 },
+  cardTitle: { fontSize: 18, fontWeight: "700" },
+  loadingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  hint: { fontSize: 14 },
+  errorText: { color: "#EF4444", fontSize: 14, lineHeight: 20 },
+  retryText: { fontSize: 13, fontWeight: "700", marginTop: 8 },
+  metricRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  metric: { flex: 1, gap: 4 },
+  metricValue: { fontSize: 24, fontWeight: "800" },
+  metricLabel: { fontSize: 12 },
+  actions: { gap: 12, marginTop: 4 },
   primaryButton: {
     alignItems: "center",
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 18,
   },
-  primaryButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
+  primaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
   secondaryButton: {
     alignItems: "center",
     borderWidth: 1,
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 18,
   },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
+  secondaryButtonText: { fontSize: 15, fontWeight: "700" },
 });

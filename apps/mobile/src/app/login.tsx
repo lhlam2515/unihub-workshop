@@ -1,67 +1,163 @@
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { authService } from "@/features/auth/api/auth.service";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import handleError from "@/lib/handlers/error";
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  async function handleLogin() {
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage("Vui lòng nhập email và mật khẩu.");
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const result = await authService.loginWithCredentials({ email: email.trim(), password });
+
+    setIsLoading(false);
+
+    if (result.isFailure) {
+      const appError = handleError(result.error);
+      setErrorMessage(appError.message);
+      return;
+    }
+
+    router.replace(ROUTES.TABS);
+  }
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
     >
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.hero, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.eyebrow, { color: colors.tint }]}>
-            CHECKIN_STAFF
-          </Text>
-          <Text style={[styles.title, { color: colors.text }]}>Đăng nhập</Text>
-          <Text style={[styles.description, { color: colors.icon }]}>
-            Màn hình khởi động cho luồng offline-first của nhân sự điểm danh.
-            Đây là scaffold mặc định để nối sang tab chính sau khi xác thực.
-          </Text>
-        </View>
-
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Điểm neo điều hướng
-          </Text>
-          <Text style={[styles.cardBody, { color: colors.icon }]}>
-            /login là cổng vào, /(tabs) giữ luồng chính, workshop/[id] xử lý
-            check-in sâu, còn sync/progress mở dạng modal.
-          </Text>
-        </View>
-
-        <View style={styles.actions}>
-          <Pressable
-            onPress={() => router.replace(ROUTES.TABS)}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { opacity: pressed ? 0.8 : 1, backgroundColor: colors.tint },
-            ]}
-          >
-            <Text style={styles.primaryButtonText}>Vào tab Sự kiện</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                opacity: pressed ? 0.85 : 1,
-                borderColor: colors.tabIconDefault,
-              },
-            ]}
-          >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-              Xem đồng bộ
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.hero}>
+            <Text style={[styles.eyebrow, { color: colors.tint }]}>
+              CHECKIN_STAFF
             </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Đăng nhập
+            </Text>
+            <Text style={[styles.description, { color: colors.icon }]}>
+              Dành cho nhân sự điểm danh. Đăng nhập để bắt đầu ca trực.
+            </Text>
+          </View>
+
+          <View style={styles.form}>
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    color: colors.text,
+                    borderColor: colors.tabIconDefault,
+                    backgroundColor:
+                      colorScheme === "dark"
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.03)",
+                  },
+                ]}
+                placeholder="staff@unihub.edu.vn"
+                placeholderTextColor={colors.icon}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoCorrect={false}
+                editable={!isLoading}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>
+                Mật khẩu
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    color: colors.text,
+                    borderColor: colors.tabIconDefault,
+                    backgroundColor:
+                      colorScheme === "dark"
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.03)",
+                  },
+                ]}
+                placeholder="••••••••"
+                placeholderTextColor={colors.icon}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!isLoading}
+                onSubmitEditing={handleLogin}
+                returnKeyType="done"
+              />
+            </View>
+
+            {errorMessage ? (
+              <View
+                style={[
+                  styles.errorBox,
+                  { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "#EF4444" },
+                ]}
+              >
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={handleLogin}
+              disabled={isLoading}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                {
+                  backgroundColor: colors.tint,
+                  opacity: pressed || isLoading ? 0.75 : 1,
+                },
+              ]}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="white" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Đăng nhập</Text>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -72,15 +168,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    padding: 20,
-    gap: 16,
+    padding: 24,
+    gap: 24,
     justifyContent: "center",
   },
   hero: {
-    borderWidth: 1,
-    borderRadius: 28,
-    padding: 24,
-    gap: 12,
+    gap: 10,
   },
   eyebrow: {
     fontSize: 12,
@@ -96,42 +189,44 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  card: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 18,
+  form: {
+    gap: 16,
+  },
+  field: {
     gap: 8,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  cardBody: {
+  label: {
     fontSize: 14,
-    lineHeight: 20,
+    fontWeight: "600",
   },
-  actions: {
-    gap: 12,
+  input: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    fontSize: 15,
+  },
+  errorBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 13,
+    lineHeight: 18,
   },
   primaryButton: {
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 18,
     paddingVertical: 15,
     paddingHorizontal: 18,
+    minHeight: 52,
+    marginTop: 4,
   },
   primaryButtonText: {
     color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingVertical: 15,
-    paddingHorizontal: 18,
-  },
-  secondaryButtonText: {
     fontSize: 15,
     fontWeight: "700",
   },

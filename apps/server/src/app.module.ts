@@ -4,6 +4,7 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { ZodValidationPipe } from "nestjs-zod";
 
 import {
+  aiConfig,
   appConfig,
   corsConfig,
   dbConfig,
@@ -67,6 +68,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
         paymentConfig,
         loggingConfig,
         corsConfig,
+        aiConfig,
       ],
     }),
     DatabaseModule,

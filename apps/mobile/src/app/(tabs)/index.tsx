@@ -1,5 +1,7 @@
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,37 +13,67 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
 import { usePreload } from "@/features/checkin/api/use-preload";
+import {
+  workshopsService,
+  type WorkshopSummary,
+} from "@/features/workshops/api/workshops.service";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-
-const workshops = [
-  {
-    id: "ws-101",
-    name: "Workshop Check-in Basics",
-    status: "Sẵn sàng quét",
-    summary: "Đã đồng bộ dữ liệu ca trực gần nhất.",
-  },
-  {
-    id: "ws-202",
-    name: "Offline Queue Drill",
-    status: "Chờ xác nhận",
-    summary: "Có 12 bản ghi local đang đợi đẩy lên server.",
-  },
-  {
-    id: "ws-303",
-    name: "Safety and Evacuation",
-    status: "Đang diễn ra",
-    summary: "Mở dashboard để quét vé ngay tại cửa vào.",
-  },
-];
+import { offlineAuth } from "@/lib/api/client/offline-auth";
+import handleError from "@/lib/handlers/error";
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
   const { preload } = usePreload();
 
+  const [workshops, setWorkshops] = useState<WorkshopSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadWorkshops() {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const workshopIds = offlineAuth.getAllowedWorkshops();
+
+      if (workshopIds.length === 0) {
+        setIsLoading(false);
+        return;
+      }
+
+      const results = await workshopsService.getWorkshopsByIds(workshopIds);
+      const successful = results
+        .filter((r) => r.isSuccess)
+        .map((r) => r.data);
+
+      const failed = results.filter((r) => r.isFailure);
+      if (failed.length > 0 && successful.length === 0) {
+        const appError = handleError(failed[0]!.error);
+        setErrorMessage(appError.message);
+      }
+
+      setWorkshops(successful);
+      setIsLoading(false);
+    }
+
+    void loadWorkshops();
+  }, []);
+
   function handleWorkshopPress(workshopId: string) {
     router.push(ROUTES.WORKSHOP(workshopId));
     void preload(workshopId);
+  }
+
+  function formatDate(dateStr: string) {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("vi-VN", {
+      weekday: "short",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   return (
@@ -54,57 +86,80 @@ export default function HomeScreen() {
             TAB SỰ KIỆN
           </Text>
           <Text style={[styles.title, { color: colors.text }]}>
-            Danh sách workshop được phân công
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>
-            Điểm vào chính của CHECKIN_STAFF, nơi điều phối hành trình từ danh
-            sách sự kiện sang luồng quét QR chi tiết.
+            Workshop được phân công
           </Text>
         </View>
 
-        <View style={styles.section}>
-          {workshops.map((workshop) => (
-            <Pressable
-              key={workshop.id}
-              onPress={() => handleWorkshopPress(workshop.id)}
-              style={({ pressed }) => [
-                styles.card,
-                {
-                  borderColor: colors.tabIconDefault,
-                  opacity: pressed ? 0.88 : 1,
-                },
-              ]}
-            >
-              <Text style={[styles.cardTitle, { color: colors.text }]}>
-                {workshop.name}
-              </Text>
-              <Text style={[styles.cardBody, { color: colors.icon }]}>
-                {workshop.summary}
-              </Text>
-              <View style={styles.cardFooter}>
-                <Text
-                  style={[
-                    styles.badge,
-                    { color: colors.tint, borderColor: colors.tint },
-                  ]}
-                >
-                  {workshop.status}
+        {isLoading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.tint} size="large" />
+            <Text style={[styles.hint, { color: colors.icon }]}>
+              Đang tải danh sách...
+            </Text>
+          </View>
+        ) : errorMessage ? (
+          <View
+            style={[
+              styles.errorBox,
+              {
+                borderColor: "#EF4444",
+                backgroundColor: "rgba(239,68,68,0.08)",
+              },
+            ]}
+          >
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : workshops.length === 0 ? (
+          <View style={[styles.emptyBox, { borderColor: colors.tabIconDefault }]}>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              Chưa có workshop nào
+            </Text>
+            <Text style={[styles.emptyBody, { color: colors.icon }]}>
+              Tài khoản của bạn chưa được phân công workshop nào. Liên hệ quản
+              trị viên để được cấp quyền.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.section}>
+            {workshops.map((workshop) => (
+              <Pressable
+                key={workshop.workshop_id}
+                onPress={() => handleWorkshopPress(workshop.workshop_id)}
+                style={({ pressed }) => [
+                  styles.card,
+                  {
+                    borderColor: colors.tabIconDefault,
+                    opacity: pressed ? 0.88 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  {workshop.title}
                 </Text>
-                <Text style={[styles.link, { color: colors.tint }]}>
-                  Mở dashboard
+                <Text style={[styles.cardSpeaker, { color: colors.icon }]}>
+                  {workshop.speaker_name}
                 </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
+                <View style={styles.cardFooter}>
+                  <Text style={[styles.cardDate, { color: colors.icon }]}>
+                    {formatDate(workshop.starts_at)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.badge,
+                      { color: colors.tint, borderColor: colors.tint },
+                    ]}
+                  >
+                    {workshop.available_seats} chỗ
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
+        <View style={[styles.quickCard, { borderColor: colors.tabIconDefault }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>
             Hành động nhanh
-          </Text>
-          <Text style={[styles.cardBody, { color: colors.icon }]}>
-            Từ đây có thể đi sang dashboard workshop, mở màn hình đồng bộ hoặc
-            kiểm tra lại hàng đợi offline.
           </Text>
           <View style={styles.quickActions}>
             <Pressable
@@ -140,92 +195,61 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
+  safeArea: { flex: 1 },
+  content: { flexGrow: 1, padding: 20, gap: 12 },
+  header: { gap: 8, paddingVertical: 8 },
+  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2 },
+  title: { fontSize: 28, fontWeight: "800", lineHeight: 34 },
+  center: { alignItems: "center", gap: 12, paddingVertical: 40 },
+  hint: { fontSize: 14 },
+  errorBox: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
   },
-  content: {
-    flexGrow: 1,
-    padding: 20,
-    gap: 8,
-  },
-  header: {
-    gap: 10,
-    paddingVertical: 8,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    lineHeight: 34,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  section: {
-    gap: 12,
-    marginTop: 8,
-  },
-  card: {
+  errorText: { color: "#EF4444", fontSize: 14, lineHeight: 20 },
+  emptyBox: {
     borderWidth: 1,
     borderRadius: 24,
-    padding: 18,
+    padding: 24,
     gap: 10,
+    alignItems: "center",
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  cardBody: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
+  emptyTitle: { fontSize: 17, fontWeight: "700" },
+  emptyBody: { fontSize: 14, lineHeight: 20, textAlign: "center" },
+  section: { gap: 12 },
+  card: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 8 },
+  cardTitle: { fontSize: 17, fontWeight: "700" },
+  cardSpeaker: { fontSize: 13 },
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
+    marginTop: 4,
   },
+  cardDate: { fontSize: 12 },
   badge: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     fontSize: 12,
     fontWeight: "700",
   },
-  link: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  quickActions: {
-    gap: 12,
-    marginTop: 4,
-  },
+  quickCard: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 14 },
+  quickActions: { gap: 10 },
   primaryButton: {
     alignItems: "center",
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 18,
   },
-  primaryButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
+  primaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
   secondaryButton: {
     alignItems: "center",
     borderWidth: 1,
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 18,
   },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
+  secondaryButtonText: { fontSize: 15, fontWeight: "700" },
 });
