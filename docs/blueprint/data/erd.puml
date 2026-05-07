@@ -21,59 +21,55 @@ skinparam class {
     BorderColor<<Async>>            #7722AA
     BackgroundColor<<Redis>>        #FFE0E0
     BorderColor<<Redis>>            #CC2222
+    BackgroundColor<<InMemory>>     #E0FFE0
+    BorderColor<<InMemory>>         #22AA22
     HeaderBackgroundColor<<Identity>>     #2255AA
     HeaderBackgroundColor<<EventCore>>    #226622
     HeaderBackgroundColor<<Transaction>>  #AA7700
     HeaderBackgroundColor<<Async>>        #7722AA
     HeaderBackgroundColor<<Redis>>        #CC2222
+    HeaderBackgroundColor<<InMemory>>     #22AA22
     HeaderFontColor white
 }
 
 ' ============================================================
 ' BOUNDED CONTEXT 1 — IDENTITY
+' Design.md ADR-02: students(student_id TEXT PK) + staff(id UUID PK)
 ' ============================================================
 package "Identity" #EEF4FF {
 
-    class users <<Identity>> {
-        + user_id : UUID <<PK>>
+    class students <<Identity>> {
+        + student_id : TEXT <<PK>>
         --
-        email : VARCHAR(255) <<UQ>>
-        password_hash : VARCHAR(255)
-        role : ENUM(STUDENT, ORGANIZER, CHECKIN_STAFF)
-        status : ENUM(ACTIVE, SUSPENDED, PENDING_VERIFICATION)
-        created_at : TIMESTAMPTZ
+        email : TEXT
+        full_name : TEXT
+        ~ password_hash : TEXT <<NULLABLE>>
         updated_at : TIMESTAMPTZ
-        --
-        idx: email
-        idx: role
     }
 
-    class students <<Identity>> {
-        + student_id : UUID <<PK>>
+    class staff <<Identity>> {
+        + id : UUID <<PK>>
         --
-        ~ user_id : UUID <<FK, UQ, NULLABLE>>
-        student_code : VARCHAR(20) <<UQ>>
-        full_name : VARCHAR(255)
-        faculty : VARCHAR(100)
-        class_year : SMALLINT
-        email_edu : VARCHAR(255)
-        last_synced_at : TIMESTAMPTZ
+        email : TEXT <<UQ>>
+        full_name : TEXT
+        password_hash : TEXT
+        role : TEXT CHECK(btc, checkin_staff)
+        is_active : BOOLEAN DEFAULT true
         created_at : TIMESTAMPTZ
-        updated_at : TIMESTAMPTZ
         --
-        idx: user_id
-        idx: student_code
-        idx: email_edu
+        idx: (role) WHERE is_active=true
     }
 }
 
 ' ============================================================
 ' BOUNDED CONTEXT 2 — EVENT CORE
+' Design.md ADR-02: workshops trực tiếp quản lý seats_total + seats_available
+'                   Không tách bảng workshop_slots riêng
 ' ============================================================
 package "Event Core" #EEFFEE {
 
     class speakers <<EventCore>> {
-        + speaker_id : UUID <<PK>>
+        + id : UUID <<PK>>
         --
         full_name : VARCHAR(255)
         title : VARCHAR(255)
@@ -84,7 +80,7 @@ package "Event Core" #EEFFEE {
     }
 
     class rooms <<EventCore>> {
-        + room_id : UUID <<PK>>
+        + id : UUID <<PK>>
         --
         name : VARCHAR(100)
         building : VARCHAR(100)
@@ -100,294 +96,221 @@ package "Event Core" #EEFFEE {
     }
 
     class workshops <<EventCore>> {
-        + workshop_id : UUID <<PK>>
+        + id : UUID <<PK>>
         --
-        ~ speaker_id : UUID <<FK>>
-        ~ room_id : UUID <<FK>>
-        ~ created_by : UUID <<FK>>
-        title : VARCHAR(500)
+        title : TEXT
         description : TEXT
+        location : TEXT
         starts_at : TIMESTAMPTZ
         ends_at : TIMESTAMPTZ
-        capacity : SMALLINT
-        is_paid : BOOLEAN
-        price : NUMERIC(12,2)
-        status : ENUM(DRAFT, PUBLISHED, CANCELLED, COMPLETED)
+        seats_total : INT
+        seats_available : INT
+        price : NUMERIC(10,2) DEFAULT 0
+        status : TEXT CHECK(draft, open, closed, cancelled)
+        ~ created_by : UUID <<FK>>
+        -- ADR-14: summary + PDF gộp trực tiếp
+        pdf_url : TEXT
+        summary_text : TEXT
+        summary_status : TEXT CHECK(none, queued, processing, done, failed)
+        -- ADR-03: Optimistic Lock
+        version : BIGINT DEFAULT 0
         created_at : TIMESTAMPTZ
         updated_at : TIMESTAMPTZ
         --
         chk: ends_at > starts_at
-        chk: capacity > 0
-        chk: (is_paid=F AND price IS NULL) OR (is_paid=T AND price>0)
-        uq_idx: (room_id, starts_at, ends_at) WHERE status='PUBLISHED'
-        idx: status
-        idx: starts_at
-    }
-
-    class workshop_slots <<EventCore>> {
-        + slot_id : UUID <<PK>>
-        --
-        ~ workshop_id : UUID <<FK, UQ>>
-        total_capacity : SMALLINT
-        locked_count : SMALLINT DEFAULT 0
-        confirmed_count : SMALLINT DEFAULT 0
-        updated_at : TIMESTAMPTZ
-        --
-        chk: total_capacity > 0
-        chk: locked+confirmed <= total_capacity
-        ' available = total - locked - confirmed (computed)
+        chk: seats_total > 0
+        chk: seats_available >= 0 AND <= seats_total
+        idx: (status, starts_at) WHERE status='open'
     }
 }
 
 ' ============================================================
 ' BOUNDED CONTEXT 3 — TRANSACTION
+' Design.md ADR-02: registrations có qr_code, checkins UNIQUE(registration_id)
+'                   idempotency_keys dùng chung cho ADR-03 và ADR-08
 ' ============================================================
 package "Transaction" #FFFBEE {
 
     class registrations <<Transaction>> {
-        + registration_id : UUID <<PK>>
+        + id : UUID <<PK>>
         --
-        ~ student_id : UUID <<FK>>
         ~ workshop_id : UUID <<FK>>
-        status : ENUM(PENDING_PAYMENT, CONFIRMED,\nCANCELLED, WAITLISTED)
+        ~ student_id : TEXT <<FK>>
+        status : TEXT CHECK(pending, paid, cancelled)
+        qr_code : TEXT <<UQ>> -- UUID v4 độc lập
         registered_at : TIMESTAMPTZ
-        confirmed_at : TIMESTAMPTZ
-        cancelled_at : TIMESTAMPTZ
-        cancellation_reason : TEXT
-        updated_at : TIMESTAMPTZ
         --
-        uq: (student_id, workshop_id)
-        idx: student_id
+        uq: (workshop_id, student_id)
         idx: workshop_id
-        idx: status
-    }
-
-    class tickets <<Transaction>> {
-        + ticket_id : UUID <<PK>>
-        --
-        ~ registration_id : UUID <<FK, UQ>>
-        qr_token : VARCHAR(255) <<UQ>>
-        status : ENUM(ACTIVE, VOID)
-        issued_at : TIMESTAMPTZ
-        voided_at : TIMESTAMPTZ
-        --
-        chk: ACTIVE→voided_at IS NULL\n     VOID→voided_at IS NOT NULL
-        idx: qr_token
-        idx: status
+        idx: student_id
+        idx: qr_code
     }
 
     class payments <<Transaction>> {
-        + payment_id : UUID <<PK>>
+        + id : UUID <<PK>>
         --
         ~ registration_id : UUID <<FK>>
-        ~ student_id : UUID <<FK>>
-        amount : NUMERIC(12,2)
-        currency : CHAR(3) DEFAULT 'VND'
-        gateway : ENUM(VNPAY, STRIPE, MOMO, MOCK)
-        status : ENUM(PENDING, SUCCESS, FAILED,\nREFUNDED, TIMEOUT)
-        idempotency_key : VARCHAR(255) <<UQ>>
-        gateway_txn_id : VARCHAR(255)
-        initiated_at : TIMESTAMPTZ
-        completed_at : TIMESTAMPTZ
-        timeout_at : TIMESTAMPTZ
-        raw_gateway_response : JSONB
+        amount : NUMERIC(10,2)
+        currency : TEXT DEFAULT 'VND'
+        gateway_charge_id : TEXT
+        status : TEXT CHECK(initiated, succeeded, failed, unresolved)
+        ~ idempotency_key : TEXT <<FK>> -- REFERENCES idempotency_keys(key)
+        created_at : TIMESTAMPTZ
+        resolved_at : TIMESTAMPTZ
         --
         chk: amount > 0
-        idx: registration_id
-        idx: student_id
-        idx: status
-        idx: (initiated_at) WHERE status='PENDING'
+        idx: (status, created_at) WHERE status IN ('initiated','unresolved')
     }
 
-    class checkin_records <<Transaction>> {
-        + checkin_id : UUID <<PK>>
+    class checkins <<Transaction>> {
+        + id : UUID <<PK>>
         --
-        ~ registration_id : UUID <<FK>>
-        ~ ticket_id : UUID <<FK>>
-        ~ student_id : UUID <<FK>>
-        ~ workshop_id : UUID <<FK>>
-        ~ checked_in_by : UUID <<FK>>
+        ~ registration_id : UUID <<FK, UQ>>
         checked_in_at : TIMESTAMPTZ
-        synced_at : TIMESTAMPTZ
-        source : ENUM(ONLINE, OFFLINE_SYNC)
-        device_id : VARCHAR(100)
+        received_at : TIMESTAMPTZ
+        ~ checked_by : UUID <<FK>> -- REFERENCES staff(id)
+        client_local_id : TEXT
         --
-        uq: (ticket_id, workshop_id)
-        idx: workshop_id
-        idx: student_id
-        idx: (source) WHERE source='OFFLINE_SYNC'
+        uq: registration_id -- first check-in wins
+        idx: (checked_by, received_at)
     }
 
-    class offline_checkin_queue <<Transaction>> {
-        + local_id : UUID <<PK, device-generated>>
+    class idempotency_keys <<Transaction>> {
+        + key : TEXT <<PK>>
         --
-        ~ workshop_id : UUID
-        ~ checked_in_by : UUID
-        qr_token : VARCHAR(255)
-        checked_in_at : TIMESTAMPTZ
-        device_id : VARCHAR(100)
-        sync_status : ENUM(PENDING, SYNCED, CONFLICT)
-        synced_at : TIMESTAMPTZ
-        conflict_reason : TEXT
+        resource_type : TEXT CHECK(registration, payment)
+        status : TEXT CHECK(in_progress, completed, unresolved)
+        response_body : JSONB
+        status_code : INT
+        created_at : TIMESTAMPTZ
+        expires_at : TIMESTAMPTZ
+        locked_until : TIMESTAMPTZ
         --
-        ' No FK — local-first table, synced via batch upsert
+        idx: expires_at
     }
 }
 
 ' ============================================================
 ' BOUNDED CONTEXT 4 — ASYNC
+' Design.md ADR-12 (import_logs), ADR-09 (notification_logs), ADR-14 (summary gộp)
 ' ============================================================
 package "Async" #F8EEFF {
 
-    class notification_channel_configs <<Async>> {
-        + channel_config_id : UUID <<PK>>
+    class import_logs <<Async>> {
+        + id : UUID <<PK>>
         --
-        channel_type : ENUM(APP, EMAIL, TELEGRAM) <<UQ>>
+        run_at : TIMESTAMPTZ
+        total_rows : INT
+        success_count : INT
+        failed_count : INT
+        error_file_path : TEXT -- errors/YYYY-MM-DD.csv
+        triggered_by : TEXT CHECK(cron, manual)
+        status : TEXT CHECK(in_progress, success, failed)
+    }
+
+    class notification_logs <<Async>> {
+        + id : UUID <<PK>>
+        --
+        user_id : TEXT -- student_id hoặc staff.id
+        event_type : TEXT
+        channel : TEXT
+        status : TEXT CHECK(sent, failed, timeout)
+        error_msg : TEXT
+        payload : JSONB
+        created_at : TIMESTAMPTZ
+        --
+        idx: (status, created_at) WHERE status IN ('failed','timeout')
+    }
+
+    class notification_channel_configs <<Async>> {
+        + id : UUID <<PK>>
+        --
+        channel_type : TEXT <<UQ>>
         is_active : BOOLEAN DEFAULT TRUE
         config_json : JSONB
         created_at : TIMESTAMPTZ
         updated_at : TIMESTAMPTZ
     }
+}
 
-    class notification_logs <<Async>> {
-        + notification_id : UUID <<PK>>
+' ============================================================
+' REDIS STRUCTURES (Cache + Rate Limiting + Streams)
+' PostgreSQL là sole source of truth — Redis là auxiliary layer
+' ============================================================
+package "Redis (Auxiliary)" #FFF0F0 {
+
+    class "cache:workshop:{id}:seats" <<Redis>> {
+        Key: cache:workshop:{workshop_id}:seats
+        Type: String (integer)
         --
-        ~ user_id : UUID <<FK>>
-        ~ workshop_id : UUID <<FK, NULLABLE>>
-        type : ENUM(REGISTRATION_CONFIRMED,\nREGISTRATION_CANCELLED, WORKSHOP_UPDATED,\nWORKSHOP_CANCELLED, PAYMENT_SUCCESS,\nPAYMENT_FAILED, CHECKIN_REMINDER)
-        channel : ENUM(APP, EMAIL, TELEGRAM)
-        status : ENUM(PENDING, SENT, FAILED)
-        payload : JSONB
-        sent_at : TIMESTAMPTZ
-        error_message : TEXT
-        created_at : TIMESTAMPTZ
+        Pattern: Cache-Aside (GET/SET EX 10/DEL)
+        TTL: 10s
         --
-        idx: user_id
-        idx: workshop_id
-        idx: (status) WHERE status='PENDING'
+        KHÔNG phải source of truth.
+        Cache miss → đọc DB → SET EX 10.
+        Sau OL commit → DEL (Write-Invalidate).
+        KHÔNG dùng DECR.
     }
 
-    class workshop_documents <<Async>> {
-        + document_id : UUID <<PK>>
+    class "cache:workshop:list" <<Redis>> {
+        Key: cache:workshop:list
+        Type: String (JSON array)
         --
-        ~ workshop_id : UUID <<FK>>
-        ~ uploaded_by : UUID <<FK>>
-        file_url : VARCHAR(1000)
-        original_name : VARCHAR(500)
-        file_size_bytes : BIGINT
-        upload_status : ENUM(UPLOADED, PROCESSING,\nPROCESSED, FAILED)
-        uploaded_at : TIMESTAMPTZ
-        updated_at : TIMESTAMPTZ
-        --
-        idx: workshop_id
+        TTL: 60s
     }
 
-    class ai_summaries <<Async>> {
-        + summary_id : UUID <<PK>>
+    class "rl:ip:{ip}" <<Redis>> {
+        Key: rl:ip:{ip}
+        Type: Sorted Set (Sliding Window)
         --
-        ~ document_id : UUID <<FK, UQ>>
-        ~ workshop_id : UUID <<FK>>
-        raw_text : TEXT
-        summary_text : TEXT
-        model_used : VARCHAR(100)
-        status : ENUM(PENDING, PROCESSING, DONE, FAILED)
-        generated_at : TIMESTAMPTZ
-        error_message : TEXT
-        created_at : TIMESTAMPTZ
-        --
-        idx: workshop_id
-        idx: (status) WHERE status IN ('PENDING','PROCESSING')
+        Threshold: 60 req / 60s
+        ZREMRANGEBYSCORE + ZADD + ZCARD + EXPIRE
     }
 
-    class student_sync_jobs <<Async>> {
-        + job_id : UUID <<PK>>
+    class "rl:user:{uid}" <<Redis>> {
+        Key: rl:user:{user_id}
+        Type: Sorted Set (Sliding Window)
         --
-        triggered_at : TIMESTAMPTZ
-        source_file_name : VARCHAR(500)
-        status : ENUM(RUNNING, SUCCESS,\nPARTIAL_FAILURE, FAILED)
-        total_rows : INTEGER
-        processed_rows : INTEGER
-        error_rows : INTEGER
-        completed_at : TIMESTAMPTZ
-        error_log_url : VARCHAR(1000)
-        --
-        idx: status
-        idx: triggered_at DESC
+        Threshold: 30 req / 60s
     }
 
-    class student_sync_errors <<Async>> {
-        + error_id : UUID <<PK>>
+    class "rl:reg:{uid}:{wid}" <<Redis>> {
+        Key: rl:reg:{user_id}:{workshop_id}
+        Type: Sorted Set (Sliding Window)
         --
-        ~ job_id : UUID <<FK>>
-        row_number : INTEGER
-        raw_data : TEXT
-        error_reason : ENUM(DUPLICATE, INVALID_FORMAT,\nMISSING_FIELD, UNKNOWN)
-        error_detail : TEXT
-        created_at : TIMESTAMPTZ
+        Threshold: 5 req / 60s
+    }
+
+    class "stream:ai-summary" <<Redis>> {
+        Key: stream:ai-summary
+        Type: Redis Stream
         --
-        idx: job_id
+        Consumer Group with XREADGROUP + XACK
+        DLQ: stream:ai-summary-dlq
+    }
+
+    class "stream:notifications" <<Redis>> {
+        Key: stream:notifications
+        Type: Redis Stream
+        --
+        DLQ: stream:notifications-dlq
     }
 }
 
 ' ============================================================
-' REDIS STRUCTURES (Ephemeral — documented only)
+' IN-MEMORY STRUCTURES (No Redis — process variables)
 ' ============================================================
-package "Redis (Ephemeral)" #FFF0F0 {
+package "In-Memory (ADR-07)" #EEFFEE {
 
-    class "seat:available:{wid}" <<Redis>> {
-        Key: seat:available:{workshop_id}
-        Type: String (integer counter)
+    class "Circuit Breaker\n(payment gateway)" <<InMemory>> {
+        State: CLOSED | OPEN | HALF_OPEN
         --
-        Cmd: DECR atomic
-        TTL: none (reset on publish/cancel)
+        Threshold: 5 failures / 60s → OPEN
+        Cool-down: 30s → HALF_OPEN
+        Probing: 2 consecutive success → CLOSED
         --
-        Source of truth cho available seats.
-        DECR < 0 → INCR lại → hết chỗ.
-    }
-
-    class "seat:lock:{wid}:{rid}" <<Redis>> {
-        Key: seat:lock:{workshop_id}:{registration_id}
-        Type: String (JSON)
-        --
-        Value: {student_id, locked_at, amount}
-        Cmd: SET NX EX 900
-        TTL: 900s (15 phút — tự expire)
-    }
-
-    class "idempotency:{key}" <<Redis>> {
-        Key: idempotency:{idempotency_key}
-        Type: String
-        --
-        Value: {payment_id}
-        Cmd: SET NX EX 86400
-        TTL: 86400s (24 giờ)
-        --
-        Layer 1 chống double-charge.
-        Layer 2 = UNIQUE constraint trên payments.
-    }
-
-    class "circuit:payment:{gateway}" <<Redis>> {
-        Key: circuit:payment:{gateway}
-        Type: Hash
-        --
-        Fields: state, failure_count,\n        opened_at, last_attempt
-        TTL: none (managed by logic)
-        --
-        CLOSED→OPEN: 5 failures / 60s
-        OPEN→HALF_OPEN: after 30s
-        HALF_OPEN→CLOSED: 1 success
-    }
-
-    class "ratelimit:register:{uid}" <<Redis>> {
-        Key: ratelimit:register:{user_id}
-        Type: Hash (Token Bucket)
-        --
-        Fields: tokens, last_refill_at
-        TTL: 300s
-        --
-        Capacity: 5 req
-        Refill: 1 token / 10s
-        Global: 500 req/s ceiling
+        Restart process = reset về CLOSED
+        (design.md ADR-07 Section 5)
     }
 }
 
@@ -396,38 +319,22 @@ package "Redis (Ephemeral)" #FFF0F0 {
 ' ============================================================
 
 ' Identity
-users           "1" -- "0..1" students             : "maps to >"
+staff           "1" -- "0..*" workshops             : "created_by >"
 
 ' Event Core
-speakers        "1" -- "0..*" workshops             : "presents >"
-rooms           "1" -- "0..*" workshops             : "hosts >"
-users           "1" -- "0..*" workshops             : "created_by >"
-workshops       "1" -- "1"    workshop_slots         : "has slot >"
+' speakers và rooms là reference data (workshops dùng location TEXT, không FK)
 
 ' Transaction
 students        "1" -- "0..*" registrations         : "registers >"
 workshops       "1" -- "0..*" registrations         : "receives >"
-registrations   "1" -- "0..1" tickets               : "issues >"
 registrations   "1" -- "0..1" payments              : "paid via >"
-students        "1" -- "0..*" payments              : "pays >"
-tickets         "1" -- "0..1" checkin_records       : "verified by >"
-registrations   "1" -- "0..1" checkin_records       : "check-in for >"
-students        "1" -- "0..*" checkin_records       : "attends >"
-workshops       "1" -- "0..*" checkin_records       : "attended at >"
-users           "1" -- "0..*" checkin_records       : "scanned by >"
+registrations   "1" -- "0..1" checkins              : "check-in for >"
+staff           "1" -- "0..*" checkins              : "scanned by >"
+idempotency_keys "1" -- "0..1" payments             : "idempotency for >"
 
 ' Async
-users           "1" -- "0..*" notification_logs     : "notified >"
-workshops       "1" -- "0..*" notification_logs     : "triggers >"
-workshops       "1" -- "0..*" workshop_documents    : "has docs >"
-users           "1" -- "0..*" workshop_documents    : "uploaded by >"
-workshop_documents "1" -- "0..1" ai_summaries       : "summarized as >"
-workshops       "1" -- "0..*" ai_summaries          : "summary for >"
-student_sync_jobs "1" -- "0..*" student_sync_errors : "logs >"
 
 ' Redis conceptual links (dashed)
-workshop_slots  . "seat:available:{wid}"            : "reconciles with"
-payments        . "idempotency:{key}"               : "checked via"
-registrations   . "seat:lock:{wid}:{rid}"           : "held by"
+workshops       . "cache:workshop:{id}:seats"        : "cached by"
 
 @enduml
