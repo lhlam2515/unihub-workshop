@@ -6,6 +6,7 @@ import {
   listRooms,
 } from "@/lib/api/services/admin";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
+import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
 interface PageProps {
   params: Promise<{ workshopId: string }>;
@@ -28,10 +29,15 @@ export default async function AdminWorkshopEditPage({ params }: PageProps) {
   const rooms = roomsResult.isSuccess ? roomsResult.data.items : [];
 
   return (
-    <AdminWorkshopEditWidget
-      workshop={workshopResult.data}
-      speakers={speakers}
-      rooms={rooms}
-    />
+    <div className="space-y-6">
+      <AdminWorkshopEditWidget workshop={workshopResult.data} />
+
+      <AdminWorkshopFormWidget
+        mode="edit"
+        initialData={workshopResult.data}
+        speakers={speakers}
+        rooms={rooms}
+      />
+    </div>
   );
 }

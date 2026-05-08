@@ -7,16 +7,10 @@ import { ErrorDisplay } from "@/components/ErrorDisplay";
 import { PageLoader } from "@/components/PageLoader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { AdminWorkshopFormWidget } from "@/features/admin-workshop-management/components/AdminWorkshopFormContainer";
 import { CancelWorkshopDialog } from "@/features/admin-workshop-management/components/CancelWorkshopDialog";
 import { WorkshopEditTabs } from "@/features/admin-workshop-management/components/WorkshopEditTabs";
 import { publishWorkshop, cancelWorkshop } from "@/lib/api/services/admin";
-import type {
-  RoomSummary,
-  SpeakerSummary,
-  WorkshopAdmin,
-} from "@/types/workshop";
-
+import type { WorkshopAdmin } from "@/types/workshop";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,8 +18,6 @@ import type {
 
 export interface AdminWorkshopEditWidgetProps {
   workshop: WorkshopAdmin;
-  speakers: SpeakerSummary[];
-  rooms: RoomSummary[];
 }
 
 // ---------------------------------------------------------------------------
@@ -45,8 +37,6 @@ function formatDateTime(iso: string): string {
 
 export function AdminWorkshopEditWidget({
   workshop,
-  speakers,
-  rooms,
 }: AdminWorkshopEditWidgetProps) {
   const router = useRouter();
   const [actionLoading, setActionLoading] = useState(false);
@@ -154,14 +144,6 @@ export function AdminWorkshopEditWidget({
 
       {/* Sub-route tabs */}
       <WorkshopEditTabs workshopId={workshop.id} activeTab="edit" />
-
-      {/* Edit form */}
-      <AdminWorkshopFormWidget
-        mode="edit"
-        initialData={workshop}
-        speakers={speakers}
-        rooms={rooms}
-      />
 
       {/* Cancel dialog */}
       <CancelWorkshopDialog

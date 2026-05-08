@@ -1,5 +1,5 @@
-import { AdminWorkshopFormWidget } from "@/features/admin-workshop-management/components/AdminWorkshopFormContainer";
 import { listSpeakers, listRooms } from "@/lib/api/services/admin";
+import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
 export default async function AdminCreateWorkshopPage() {
   const [speakersResult, roomsResult] = await Promise.all([
