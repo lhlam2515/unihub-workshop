@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
+import { ScanOverlay } from "@/features/checkin/components/ScanOverlay";
 import { useScan } from "@/features/checkin/hooks/use-scan";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
@@ -135,7 +136,9 @@ export default function ScanScreen() {
                 },
               ]}
             >
-              <Text style={styles.secondaryButtonText}>Quay lại</Text>
+              <Text style={{ color: "white", fontSize: 15, fontWeight: "700" }}>
+                Quay lại
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -152,81 +155,17 @@ export default function ScanScreen() {
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
       />
 
-      {/* Overlay UI */}
-      <View style={styles.overlay}>
-        <View style={styles.topBar}>
-          <Text style={styles.eyebrow}>QR SCANNER</Text>
-          <Text style={styles.title}>Quét vé</Text>
-        </View>
-
-        <View style={styles.frameOuter}>
-          <View
-            style={[
-              styles.corner,
-              styles.cornerTopLeft,
-              { borderColor: colors.tint },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              styles.cornerTopRight,
-              { borderColor: colors.tint },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              styles.cornerBottomLeft,
-              { borderColor: colors.tint },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              styles.cornerBottomRight,
-              { borderColor: colors.tint },
-            ]}
-          />
-          {isProcessing && (
-            <Text style={styles.processingText}>Đang xử lý...</Text>
-          )}
-        </View>
-
-        <View style={styles.bottomBar}>
-          {errorMessage ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errorMessage}</Text>
-              <Pressable
-                onPress={() => {
-                  reset();
-                  setIsProcessing(false);
-                  lastScannedAt.current = 0;
-                }}
-              >
-                <Text style={[styles.retryText, { color: colors.tint }]}>
-                  Thử lại
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Text style={styles.hint}>Đưa mã QR vào khung để điểm danh</Text>
-          )}
-
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [
-              styles.backButton,
-              {
-                borderColor: "rgba(255,255,255,0.3)",
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
-          >
-            <Text style={styles.secondaryButtonText}>Quay lại dashboard</Text>
-          </Pressable>
-        </View>
-      </View>
+      <ScanOverlay
+        isProcessing={isProcessing}
+        errorMessage={errorMessage}
+        tintColor={colors.tint}
+        onRetry={() => {
+          reset();
+          setIsProcessing(false);
+          lastScannedAt.current = 0;
+        }}
+        onBack={() => router.back()}
+      />
     </SafeAreaView>
   );
 }
@@ -239,12 +178,6 @@ const styles = StyleSheet.create({
     gap: 16,
     justifyContent: "center",
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "space-between",
-    padding: 24,
-  },
-  topBar: { gap: 8 },
   eyebrow: {
     color: "#7DD3FC",
     fontSize: 12,
@@ -261,71 +194,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  frameOuter: {
-    alignSelf: "center",
-    width: 260,
-    height: 260,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  corner: {
-    position: "absolute",
-    width: 48,
-    height: 48,
-  },
-  cornerTopLeft: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-    borderTopLeftRadius: 16,
-  },
-  cornerTopRight: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-    borderTopRightRadius: 16,
-  },
-  cornerBottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    borderBottomLeftRadius: 16,
-  },
-  cornerBottomRight: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    borderBottomRightRadius: 16,
-  },
-  processingText: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  bottomBar: { gap: 12 },
-  hint: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 14,
-    textAlign: "center",
-  },
-  errorBox: {
-    backgroundColor: "rgba(239,68,68,0.15)",
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-    alignItems: "center",
-  },
-  errorText: {
-    color: "#FCA5A5",
-    fontSize: 13,
-    textAlign: "center",
-    lineHeight: 18,
-  },
-  retryText: { fontSize: 13, fontWeight: "700" },
   actions: { gap: 12 },
   primaryButton: {
     alignItems: "center",
@@ -333,17 +201,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   primaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
-  backButton: {
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-  },
   secondaryButton: {
     alignItems: "center",
     borderWidth: 1,
     borderRadius: 18,
     paddingVertical: 14,
   },
-  secondaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
 });

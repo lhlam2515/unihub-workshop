@@ -10,11 +10,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SyncProgressSteps } from "@/features/checkin/components/SyncProgressSteps";
+import { useSync } from "@/features/checkin/hooks/use-sync";
+
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
-import { useSync } from "@/features/checkin/hooks/use-sync";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function SyncProgressScreen() {
@@ -23,37 +25,6 @@ export default function SyncProgressScreen() {
   const params = useLocalSearchParams<{ workshopId?: string }>();
   const workshopId = params.workshopId ?? "";
   const { stats, runStatus, errorMessage, sync } = useSync();
-
-  const steps = [
-    {
-      label: "Đọc hàng đợi local",
-      state: runStatus === "idle" ? "Sẵn sàng" : "Hoàn thành",
-    },
-    {
-      label: "Chuẩn bị batch",
-      state:
-        runStatus === "syncing"
-          ? "Đang xử lý"
-          : runStatus === "done"
-            ? "Hoàn thành"
-            : "Chờ",
-    },
-    {
-      label: "Đẩy lên server",
-      state:
-        runStatus === "syncing"
-          ? "Đang xử lý"
-          : runStatus === "done"
-            ? "Hoàn thành"
-            : runStatus === "error"
-              ? "Thất bại"
-              : "Chờ",
-    },
-    {
-      label: "Cập nhật trạng thái local",
-      state: runStatus === "done" ? "Hoàn thành" : "Chờ",
-    },
-  ];
 
   return (
     <SafeAreaView
@@ -73,68 +44,11 @@ export default function SyncProgressScreen() {
           </Text>
         </View>
 
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Thống kê hàng đợi
-          </Text>
-          <View style={styles.metricRow}>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.pending}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Chờ sync
-              </Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.synced}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Đã sync
-              </Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.conflicts}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Xung đột
-              </Text>
-            </View>
-          </View>
-          {errorMessage ? (
-            <Text style={[styles.errorText, { color: "#F87171" }]}>
-              {errorMessage}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Các bước đồng bộ
-          </Text>
-          <View style={styles.stepList}>
-            {steps.map((step, index) => (
-              <View key={step.label} style={styles.stepRow}>
-                <Text style={[styles.stepIndex, { color: colors.tint }]}>
-                  {index + 1}
-                </Text>
-                <View style={styles.stepBody}>
-                  <Text style={[styles.stepLabel, { color: colors.text }]}>
-                    {step.label}
-                  </Text>
-                  <Text style={[styles.stepState, { color: colors.icon }]}>
-                    {step.state}
-                  </Text>
-                </View>
-                {runStatus === "syncing" && index === 2 ? (
-                  <ActivityIndicator size="small" color={colors.tint} />
-                ) : null}
-              </View>
-            ))}
-          </View>
-        </View>
+        <SyncProgressSteps
+          stats={stats}
+          runStatus={runStatus}
+          errorMessage={errorMessage}
+        />
 
         <View style={styles.actions}>
           {runStatus === "done" ? (
@@ -221,64 +135,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
-  },
-  card: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 18,
-    gap: 10,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  metricRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  metric: {
-    flex: 1,
-    gap: 2,
-  },
-  metricValue: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  metricLabel: {
-    fontSize: 12,
-  },
-  errorText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  stepList: {
-    gap: 12,
-  },
-  stepRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-  },
-  stepIndex: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    textAlign: "center",
-    textAlignVertical: "center",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  stepBody: {
-    flex: 1,
-    gap: 2,
-  },
-  stepLabel: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  stepState: {
-    fontSize: 13,
   },
   actions: {
     gap: 12,
