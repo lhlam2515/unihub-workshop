@@ -6,13 +6,13 @@ export interface CheckinStatus {
   confirmedCount: number;
   checkedInCount: number;
   pendingCount: number;
-  recentCheckins: Array<{
+  recentCheckins: {
     checkinId: string;
     studentName: string;
     studentCode: string;
     checkedInAt: string;
     source: string;
-  }>;
+  }[];
 }
 
 class CheckinStatusService {

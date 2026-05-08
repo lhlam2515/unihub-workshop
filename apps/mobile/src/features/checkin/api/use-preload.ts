@@ -2,11 +2,13 @@ import { eq } from "drizzle-orm";
 import { useCallback, useState } from "react";
 
 import { createDatabaseClient } from "@/database/client";
-import { cachedTickets } from "@/database/schema/cached-tickets.schema";
-import type { NewCachedTicket } from "@/database/types";
+import { cacheMetadata } from "@/database/schema/cache-metadata.schema";
+import { cachedRegistrations } from "@/database/schema/cached-registrations.schema";
+import type { NewCachedRegistration } from "@/database/types";
 import handleError from "@/lib/handlers/error";
 
 import { ticketsApi } from "./tickets.service";
+
 import type { CachedRegistrationDto } from "./tickets.service";
 
 export type PreloadStatus = "idle" | "loading" | "done" | "error";
@@ -58,26 +60,54 @@ export function usePreload(): UsePreloadResult {
 
     // Replace the workshop's cached registrations atomically
     await db
-      .delete(cachedTickets)
-      .where(eq(cachedTickets.workshopId, workshopId));
+      .delete(cachedRegistrations)
+      .where(eq(cachedRegistrations.workshopId, workshopId));
 
     if (registrations.length > 0) {
-      const rows: NewCachedTicket[] = registrations.map((r) => ({
-        ticketId: r.registrationId,
-        qrToken: r.qrCode,
+      const rows: NewCachedRegistration[] = registrations.map((r) => ({
         registrationId: r.registrationId,
+        qrCode: r.qrCode,
         workshopId: r.workshopId,
         studentId: r.studentId,
         studentName: r.studentName,
         studentCode: r.studentCode,
-        ticketStatus: "ACTIVE" as const,
+        registrationStatus: "PAID",
         cachedAt: Date.now(),
         workshopStartsAt: new Date(r.workshopStartsAt).getTime(),
         workshopTitle: r.workshopTitle,
       }));
 
-      await db.insert(cachedTickets).values(rows).onConflictDoNothing();
+      await db.insert(cachedRegistrations).values(rows).onConflictDoNothing();
     }
+
+    // Update cache_metadata — track what we just loaded
+    const lastPage =
+      registrations.length > 0
+        ? await ticketsApi.preload(workshopId, undefined, 1)
+        : null;
+    const serverTotal = lastPage?.isSuccess
+      ? lastPage.data.pagination.total
+      : null;
+
+    await db
+      .insert(cacheMetadata)
+      .values({
+        workshopId,
+        registrationCount: registrations.length,
+        serverTotal,
+        isFullyLoaded: registrations.length < 5000, // assume fully loaded unless paginated
+        cacheStatus: "FRESH",
+        lastFetchedAt: Date.now(),
+      })
+      .onConflictDoUpdate({
+        target: cacheMetadata.workshopId,
+        set: {
+          registrationCount: registrations.length,
+          serverTotal,
+          cacheStatus: "FRESH",
+          lastFetchedAt: Date.now(),
+        },
+      });
 
     setStatus("done");
   }, []);

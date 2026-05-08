@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { useCallback, useState } from "react";
 
 import { createDatabaseClient } from "@/database/client";
-import { cachedTickets } from "@/database/schema/cached-tickets.schema";
+import { cachedRegistrations } from "@/database/schema/cached-registrations.schema";
 import { checkinQueue } from "@/database/schema/checkin-queue.schema";
 import type { NewCheckinQueueRecord } from "@/database/types";
 import { isApiError } from "@/lib/api/errors";
@@ -89,13 +89,13 @@ export function useScan(): UseScanResult {
 
       // Offline path: validate against SQLite cache, then queue
       const db = createDatabaseClient();
-      const [ticket] = await db
+      const [registration] = await db
         .select()
-        .from(cachedTickets)
-        .where(eq(cachedTickets.qrToken, qrToken))
+        .from(cachedRegistrations)
+        .where(eq(cachedRegistrations.qrCode, qrToken))
         .limit(1);
 
-      if (!ticket) {
+      if (!registration) {
         setErrorMessage(
           "Không tìm thấy vé trong bộ nhớ cache. Vui lòng tải lại khi có mạng."
         );
@@ -103,7 +103,7 @@ export function useScan(): UseScanResult {
         return;
       }
 
-      if (ticket.ticketStatus === "VOID") {
+      if (registration.registrationStatus === "CANCELLED") {
         setErrorMessage("Vé này đã bị hủy và không hợp lệ.");
         setStatus("error");
         return;
@@ -112,12 +112,12 @@ export function useScan(): UseScanResult {
       const now = Date.now();
       const record: NewCheckinQueueRecord = {
         localId: crypto.randomUUID(),
-        qrToken: ticket.qrToken,
-        ticketId: ticket.ticketId,
-        workshopId: ticket.workshopId,
-        studentId: ticket.studentId,
-        studentName: ticket.studentName,
-        studentCode: ticket.studentCode,
+        qrCode: registration.qrCode,
+        registrationId: registration.registrationId,
+        workshopId: registration.workshopId,
+        studentId: registration.studentId,
+        studentName: registration.studentName,
+        studentCode: registration.studentCode,
         checkedInAt: now,
         deviceId,
         checkedInBy: staffId,
@@ -139,8 +139,8 @@ export function useScan(): UseScanResult {
       }
 
       setResult({
-        studentName: ticket.studentName,
-        studentCode: ticket.studentCode,
+        studentName: registration.studentName,
+        studentCode: registration.studentCode,
         checkedInAt: new Date(now),
         source: "OFFLINE_QUEUED",
       });

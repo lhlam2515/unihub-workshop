@@ -1,7 +1,7 @@
 import { API_ROUTES } from "@/constants/api-routes";
 import { api } from "@/lib/api/client";
-import { Result } from "@/lib/result";
 import type { PaginationMeta } from "@/lib/api/types";
+import { Result } from "@/lib/result";
 
 // ---------------------------------------------------------------------------
 // Response shapes (mirrors server CachedRegistrationDto + paginated response)
