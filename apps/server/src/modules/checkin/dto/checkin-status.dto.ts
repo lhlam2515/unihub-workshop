@@ -2,7 +2,7 @@ interface CheckinRecordInput {
   checkinId: string;
   checkedInAt: Date;
   source: string;
-  student?: { fullName?: string; studentCode?: string } | null;
+  student?: { fullName?: string; studentId?: string } | null;
 }
 
 export interface CheckinStatusDto {
@@ -44,7 +44,7 @@ export class CheckinStatusBuilder {
       recent_checkins: recentCheckins.map((r) => ({
         checkin_id: r.checkinId,
         student_name: r.student?.fullName ?? "",
-        student_code: r.student?.studentCode ?? "",
+        student_code: r.student?.studentId ?? "",
         checked_in_at: r.checkedInAt,
         source: r.source,
       })),

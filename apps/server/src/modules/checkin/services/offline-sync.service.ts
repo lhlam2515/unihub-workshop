@@ -2,80 +2,153 @@ import { Injectable } from "@nestjs/common";
 
 import { Result } from "@/shared/response/result";
 
-import { SyncResultBuilder, type SyncResultDto } from "../dto/sync-result.dto";
+import type {
+  CheckinSyncResponseDto,
+  CheckinSyncResultItem,
+} from "../dto/checkin-sync-response.dto";
 import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
-import { TicketsRepository } from "../repositories/tickets.repository";
+import { RegistrationsRepository } from "../repositories/registrations.repository";
 
 @Injectable()
 export class OfflineSyncService {
   constructor(
     private readonly checkinRecordsRepo: CheckinRecordsRepository,
-    private readonly ticketsRepo: TicketsRepository
+    private readonly registrationsRepo: RegistrationsRepository
   ) {}
 
   /**
    * Idempotently persists a batch of offline check-in records from mobile.
    *
    * Business rules:
-   * - Each item is validated: ticket must exist and be ACTIVE for the given workshop.
-   * - VOID tickets or wrong-workshop tickets are counted as conflicts, not errors.
-   * - Duplicate records (already synced) are silently skipped via ON CONFLICT DO NOTHING.
+   * - Each item is validated: registration must exist, status IN (PAID, CONFIRMED),
+   *   and workshop must not be CANCELLED.
+   * - Invalid items are marked as REJECTED with a specific reason.
+   * - Duplicate records (already synced) are marked as DUPLICATE with original timestamp.
    * - Batch processing continues even if individual items are invalid.
    *
    * Side effects:
    * - Inserts records into `checkin_records` with source=OFFLINE_SYNC for valid items.
    *
-   * @param items - Array of offline scan records with qr_token and timestamp.
-   * @param staffUserId - UUID of the CHECKIN_STAFF who performed the scans (from jwt.sub).
-   * @param workshopId - UUID of the workshop scope for this sync batch.
-   * @returns OkResult with SyncResultDto (synced/skipped/conflicts counts), or FailResult (INTERNAL_ERROR).
+   * @param items - Array of sync items with local_id, qr_code, workshop_id, checked_in_at.
+   * @param staffUserId - UUID of the CHECKIN_STAFF who performed the scans.
+   * @returns OkResult with per-item array of sync results.
    */
   async processSyncBatch(
-    items: Array<{ qr_token: string; checked_in_at: Date; device_id?: string }>,
-    staffUserId: string,
-    workshopId: string
-  ): Promise<Result<SyncResultDto>> {
-    let synced = 0;
-    let skipped = 0;
-    let conflicts = 0;
+    items: Array<{
+      localId: string;
+      qrCode: string;
+      workshopId: string;
+      checkedInAt: Date;
+    }>,
+    staffUserId: string
+  ): Promise<Result<CheckinSyncResponseDto>> {
+    const results: CheckinSyncResultItem[] = [];
 
     for (const item of items) {
-      const ticketResult = await this.ticketsRepo.findByQRToken(item.qr_token);
-
-      if (ticketResult.isFailure) return Result.fail(ticketResult.error);
-
-      const ticket = ticketResult.data;
-
-      if (
-        !ticket ||
-        ticket.status === "VOID" ||
-        ticket.registration.workshopId !== workshopId
-      ) {
-        conflicts++;
-        continue;
-      }
-
-      const createResult = await this.checkinRecordsRepo.create({
-        registrationId: ticket.registrationId,
-        ticketId: ticket.ticketId,
-        studentId: ticket.registration.studentId,
-        workshopId,
-        checkedInAt: item.checked_in_at,
-        checkedInBy: staffUserId,
-        source: "OFFLINE_SYNC",
-        deviceId: item.device_id,
-        syncedAt: new Date(),
-      });
-
-      if (createResult.isFailure) return Result.fail(createResult.error);
-
-      if (createResult.data === null) {
-        skipped++;
-      } else {
-        synced++;
-      }
+      const result = await this.processItem(item, staffUserId);
+      results.push(result);
     }
 
-    return Result.ok(SyncResultBuilder.from(synced, skipped, conflicts));
+    return Result.ok({ results });
+  }
+
+  private async processItem(
+    item: {
+      localId: string;
+      qrCode: string;
+      workshopId: string;
+      checkedInAt: Date;
+    },
+    staffUserId: string
+  ): Promise<CheckinSyncResultItem> {
+    const regResult = await this.registrationsRepo.findByQRCode(item.qrCode);
+    if (regResult.isFailure) {
+      return {
+        localId: item.localId,
+        result: "REJECTED",
+        reason: "QR_INVALID",
+      };
+    }
+
+    const registration = regResult.data;
+    if (!registration) {
+      return {
+        localId: item.localId,
+        result: "REJECTED",
+        reason: "QR_INVALID",
+      };
+    }
+
+    if (registration.workshop.status === "CANCELLED") {
+      return {
+        localId: item.localId,
+        result: "REJECTED",
+        reason: "WORKSHOP_CANCELLED",
+      };
+    }
+
+    if (registration.status !== "PAID" && registration.status !== "CONFIRMED") {
+      return {
+        localId: item.localId,
+        result: "REJECTED",
+        reason: "NOT_PAID",
+      };
+    }
+
+    if (registration.workshopId !== item.workshopId) {
+      return {
+        localId: item.localId,
+        result: "REJECTED",
+        reason: "QR_INVALID",
+      };
+    }
+
+    const createResult = await this.checkinRecordsRepo.create({
+      registrationId: registration.registrationId,
+      studentId: registration.studentId,
+      workshopId: item.workshopId,
+      checkedInAt: item.checkedInAt,
+      checkedInBy: staffUserId,
+      source: "OFFLINE_SYNC",
+      deviceId: undefined,
+      syncedAt: new Date(),
+    });
+
+    if (createResult.isFailure) {
+      return {
+        localId: item.localId,
+        result: "REJECTED",
+        reason: "QR_INVALID",
+      };
+    }
+
+    if (createResult.data === null) {
+      // Duplicate — find the original
+      const existingResult =
+        await this.checkinRecordsRepo.findFirstByRegistrationId(
+          registration.registrationId
+        );
+
+      if (existingResult.isFailure || !existingResult.data) {
+        return {
+          localId: item.localId,
+          result: "DUPLICATE",
+        };
+      }
+
+      return {
+        localId: item.localId,
+        result: "DUPLICATE",
+        serverId: existingResult.data.checkinId,
+        firstCheckinAt: existingResult.data.checkedInAt,
+        firstStaffName: existingResult.data.staffName,
+      };
+    }
+
+    return {
+      localId: item.localId,
+      result: "OK",
+      serverId: createResult.data.checkinId,
+    };
   }
 }

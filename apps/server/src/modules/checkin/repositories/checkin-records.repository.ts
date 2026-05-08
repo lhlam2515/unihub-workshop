@@ -11,7 +11,7 @@ import { tryCatch } from "@/shared/response/result";
 import type { Result } from "@/shared/response/result";
 
 type CheckinRecordWithStudent = CheckinRecord & {
-  student: { studentId: string; fullName: string; studentCode: string };
+  student: { studentId: string; fullName: string };
 };
 
 @Injectable()
@@ -26,18 +26,53 @@ export class CheckinRecordsRepository {
   /**
    * Inserts a check-in record, silently ignoring duplicates via ON CONFLICT DO NOTHING.
    *
-   * Database: INSERT INTO checkin_records ON CONFLICT (ticket_id, workshop_id) DO NOTHING.
-   * Returns null when a duplicate is detected (ticket already checked in for this workshop).
+   * Database: INSERT INTO checkin_records ON CONFLICT (registration_id, workshop_id) DO NOTHING.
+   * Returns null when a duplicate is detected (registration already checked in for this workshop).
    *
    * Side effects:
    * - Writes a new row to `checkin_records` when no duplicate exists.
    *
-   * @param data - Check-in record payload including ticket, student, workshop, source, and timestamps.
+   * @param data - Check-in record payload including registration, student, workshop, source, and timestamps.
    * @returns OkResult with the inserted record, or null on duplicate, or FailResult (INTERNAL_ERROR).
    */
+  /**
+   * Finds the first check-in record for a registration, with staff details.
+   *
+   * @param registrationId - UUID of the registration to look up.
+   * @returns OkResult with the earliest check-in record and staff name, or null, or FailResult.
+   */
+  async findFirstByRegistrationId(registrationId: string): Promise<
+    Result<{
+      checkinId: string;
+      checkedInAt: Date;
+      staffName: string;
+    } | null>
+  > {
+    return tryCatch(
+      async () => {
+        const result = await this.db.query.checkinRecords.findFirst({
+          where: eq(this.schema.checkinRecords.registrationId, registrationId),
+          orderBy: [this.schema.checkinRecords.checkedInAt],
+          with: {
+            checkedInBy: true,
+          },
+        });
+        if (!result) return null;
+
+        return {
+          checkinId: result.checkinId,
+          checkedInAt: result.checkedInAt,
+          staffName:
+            (result.checkedInBy as unknown as { fullName: string })?.fullName ??
+            "",
+        };
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
   async create(data: {
     registrationId: string;
-    ticketId: string;
     studentId: string;
     workshopId: string;
     checkedInAt: Date;
