@@ -1,8 +1,13 @@
 import { API_ROUTES } from "@/constants/api-routes";
 import { api, type PaginatedResult } from "@/lib/api/client";
+import { API_BASE_URL } from "@/lib/api/client/config";
+import { tokenStore } from "@/lib/api/client/token-store";
+import { ApiError } from "@/lib/api/errors";
 import type { RequestOptions } from "@/lib/api/types";
 import { Result } from "@/lib/result";
 import type { DashboardOverview } from "@/types/admin";
+import type { RegistrationAdmin } from "@/types/registration";
+import type { AiSummary } from "@/types/workshop";
 import type {
   AdminWorkshopFilters,
   RoomSummary,
@@ -118,5 +123,131 @@ export async function listRooms(): Promise<
     api.getPaginated<RoomSummary>(API_ROUTES.ADMIN.ROOMS.LIST, {
       params: { limit: 200 },
     })
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: Workshop Sub-screens
+// ---------------------------------------------------------------------------
+
+/** GET /admin/workshops/{id}/registrations — paginated registration list. */
+export async function getWorkshopRegistrations(
+  workshopId: string,
+  params?: {
+    status?: string;
+    checkedIn?: boolean;
+    search?: string;
+    cursor?: string;
+    limit?: number;
+  }
+): Promise<Result<PaginatedResult<RegistrationAdmin>>> {
+  return Result.fromPromise(
+    api.getPaginated<RegistrationAdmin>(
+      API_ROUTES.ADMIN.WORKSHOPS.REGISTRATIONS(workshopId),
+      { params: params as Record<string, string> }
+    )
+  );
+}
+
+/** GET /admin/workshops/{id}/summary — current AI summary state. */
+export async function getAiSummary(
+  workshopId: string
+): Promise<Result<AiSummary>> {
+  return Result.fromPromise(
+    api.get<AiSummary>(API_ROUTES.ADMIN.WORKSHOPS.SUMMARY(workshopId))
+  );
+}
+
+/** PUT /admin/workshops/{id}/summary — override summary text manually. */
+export async function putSummary(
+  workshopId: string,
+  text: string
+): Promise<Result<AiSummary>> {
+  return Result.fromPromise(
+    api.put<AiSummary>(API_ROUTES.ADMIN.WORKSHOPS.SUMMARY(workshopId), { text })
+  );
+}
+
+/** POST /admin/workshops/{id}/summary/retry — retry AI summary generation. */
+export async function retrySummary(
+  workshopId: string
+): Promise<Result<AiSummary>> {
+  return Result.fromPromise(
+    api.post<AiSummary>(API_ROUTES.ADMIN.WORKSHOPS.SUMMARY_RETRY(workshopId))
+  );
+}
+
+/** POST /admin/workshops/{id}/summary (multipart) — upload PDF for AI processing.
+ *  Uses raw fetch for multipart/form-data. */
+export async function uploadSummaryPdf(
+  workshopId: string,
+  file: File
+): Promise<Result<AiSummary>> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return Result.fromPromise(
+    (async () => {
+      const res = await fetch(
+        `${API_BASE_URL}${API_ROUTES.ADMIN.WORKSHOPS.SUMMARY(workshopId)}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { Authorization: `Bearer ${tokenStore.get()}` },
+          body: formData,
+        }
+      );
+      if (!res.ok) {
+        if (res.status === 413) {
+          throw new ApiError(413, {
+            code: "VALIDATION_FAILED",
+            message: "File quá lớn. Kích thước tối đa là 10MB.",
+          });
+        }
+        if (res.status === 415) {
+          throw new ApiError(415, {
+            code: "VALIDATION_FAILED",
+            message: "Định dạng không được hỗ trợ. Chỉ chấp nhận file PDF.",
+          });
+        }
+        const body = await res.json();
+        throw new ApiError(res.status, body.error);
+      }
+      const body = await res.json();
+      return body.data as AiSummary;
+    })()
+  );
+}
+
+/** GET /admin/stats/export?type=registrations — download registrations CSV. */
+export async function downloadRegistrationsCSV(
+  workshopId: string
+): Promise<Result<void>> {
+  return Result.fromPromise(
+    (async () => {
+      const url = `${API_BASE_URL}${API_ROUTES.ADMIN.STATS.EXPORT}?type=registrations&workshop_id=${encodeURIComponent(workshopId)}`;
+      const res = await fetch(url, {
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${tokenStore.get()}`,
+          Accept: "text/csv",
+        },
+      });
+      if (!res.ok) {
+        throw new ApiError(res.status, {
+          code: "INTERNAL_ERROR",
+          message: "Không thể tải xuống file CSV.",
+        });
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `registrations-${workshopId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    })()
   );
 }

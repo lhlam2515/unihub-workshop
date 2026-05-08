@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 
 import { ContentLoader } from "@/components/ContentLoader";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
+import { MetricTile } from "@/components/MetricTile";
 import { PageHeader } from "@/components/PageHeader";
-import { MetricTile } from "@/features/admin-dashboard/components/MetricTile";
 import { StatusBreakdown } from "@/features/admin-dashboard/components/StatusBreakdown";
 import { TopWorkshopsTable } from "@/features/admin-dashboard/components/TopWorkshopsTable";
 import type { DashboardOverview } from "@/types/admin";

@@ -8,7 +8,10 @@ import { PageLoader } from "@/components/PageLoader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { CancelWorkshopDialog } from "@/features/admin-workshop-management/components/CancelWorkshopDialog";
-import { WorkshopEditTabs } from "@/features/admin-workshop-management/components/WorkshopEditTabs";
+import {
+  WorkshopEditTabs,
+  type AdminEditTab,
+} from "@/features/admin-workshop-management/components/WorkshopEditTabs";
 import { publishWorkshop, cancelWorkshop } from "@/lib/api/services/admin";
 import type { WorkshopAdmin } from "@/types/workshop";
 
@@ -18,6 +21,7 @@ import type { WorkshopAdmin } from "@/types/workshop";
 
 export interface AdminWorkshopEditWidgetProps {
   workshop: WorkshopAdmin;
+  activeTab?: AdminEditTab;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +41,7 @@ function formatDateTime(iso: string): string {
 
 export function AdminWorkshopEditWidget({
   workshop,
+  activeTab,
 }: AdminWorkshopEditWidgetProps) {
   const router = useRouter();
   const [actionLoading, setActionLoading] = useState(false);
@@ -143,7 +148,10 @@ export function AdminWorkshopEditWidget({
       {actionError && <ErrorDisplay error={actionError} variant="inline" />}
 
       {/* Sub-route tabs */}
-      <WorkshopEditTabs workshopId={workshop.id} activeTab="edit" />
+      <WorkshopEditTabs
+        workshopId={workshop.id}
+        activeTab={activeTab ?? "edit"}
+      />
 
       {/* Cancel dialog */}
       <CancelWorkshopDialog

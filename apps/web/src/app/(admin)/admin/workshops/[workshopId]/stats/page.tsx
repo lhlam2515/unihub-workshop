@@ -1,14 +1,39 @@
-import React from "react";
+import { notFound } from "next/navigation";
 
-const AdminWorkshopStatsPage = () => {
+import { getAdminWorkshop, getWorkshopStats } from "@/lib/api/services/admin";
+import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
+import { AdminWorkshopStatsWidget } from "@/widgets/AdminWorkshopStatsWidget";
+
+interface PageProps {
+  params: Promise<{ workshopId: string }>;
+}
+
+export default async function AdminWorkshopStatsPage({ params }: PageProps) {
+  const { workshopId } = await params;
+
+  const [workshopResult, statsResult] = await Promise.all([
+    getAdminWorkshop(workshopId),
+    getWorkshopStats(workshopId),
+  ]);
+
+  if (workshopResult.isFailure) {
+    notFound();
+  }
+
+  const workshop = workshopResult.data;
+
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">AdminWorkshopStatsPage</h1>
-      <p className="text-gray-500">
-        Route: /admin/workshops/[workshopId]/stats
-      </p>
+    <div className="space-y-6">
+      <AdminWorkshopEditWidget workshop={workshop} activeTab="stats" />
+      <AdminWorkshopStatsWidget
+        workshop={workshop}
+        initialStats={statsResult.isSuccess ? statsResult.data : null}
+        initialError={
+          statsResult.isFailure
+            ? (statsResult.error as { message?: string })?.message
+            : undefined
+        }
+      />
     </div>
   );
-};
-
-export default AdminWorkshopStatsPage;
+}
