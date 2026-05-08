@@ -1,4 +1,4 @@
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   interpolate,
   useAnimatedRef,
@@ -8,8 +8,6 @@ import Animated, {
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeColor } from "@/hooks/use-theme-color";
-
-import { ThemedView } from "./themed-view";
 
 import type { PropsWithChildren, ReactElement } from "react";
 
@@ -65,7 +63,7 @@ export default function ParallaxScrollView({
       >
         {headerImage}
       </Animated.View>
-      <ThemedView style={styles.content}>{children}</ThemedView>
+      <View style={styles.content}>{children}</View>
     </Animated.ScrollView>
   );
 }
