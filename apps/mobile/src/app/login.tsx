@@ -1,5 +1,3 @@
-import { router } from "expo-router";
-import { jwtDecode } from "jwt-decode";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -7,131 +5,57 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import ROUTES from "@/constants/routes";
-import { Colors } from "@/constants/theme";
-import { createDatabaseClient } from "@/database/client";
-import { appSession } from "@/database/schema/app-session.schema";
-import { authService } from "@/features/auth/api/auth.service";
-import { useColorScheme } from "@/hooks/use-color-scheme";
-import type { UniHubJwtPayload } from "@/lib/api/client/offline-auth";
-import handleError from "@/lib/handlers/error";
+import { useAuth } from "@/features/auth/hooks/use-auth";
 
 export default function LoginScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
+  const { login, loginStatus, errorMessage } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isLoading = loginStatus === "loading";
 
   async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
-      setErrorMessage("Vui lòng nhập email và mật khẩu.");
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    const result = await authService.loginWithCredentials({
-      accountType: "staff",
-      email: email.trim(),
-      password,
-    });
-
-    setIsLoading(false);
-
-    if (result.isFailure) {
-      const appError = handleError(result.error);
-      setErrorMessage(appError.message);
-      return;
-    }
-
-    // Persist session locally for offline access
-    const session = result.data;
-    try {
-      const payload = jwtDecode<UniHubJwtPayload>(session.accessToken);
-      const db = createDatabaseClient();
-      db.insert(appSession)
-        .values({
-          id: 1,
-          userId: payload.sub,
-          email: email.trim(),
-          role: "CHECKIN_STAFF",
-          allowedWorkshopIds: JSON.stringify(payload.allowedWorkshopIds ?? []),
-          accessTokenExp: payload.exp,
-          refreshTokenExp: Math.floor(Date.now() / 1000) + 7 * 86400, // ~7 days
-          loggedInAt: Date.now(),
-          updatedAt: Date.now(),
-        })
-        .onConflictDoUpdate({
-          target: appSession.id,
-          set: {
-            userId: payload.sub,
-            email: email.trim(),
-            allowedWorkshopIds: JSON.stringify(
-              payload.allowedWorkshopIds ?? []
-            ),
-            accessTokenExp: payload.exp,
-            updatedAt: Date.now(),
-          },
-        });
-    } catch {
-      // Non-critical: session still works, just no local persistence
-    }
-
-    router.replace(ROUTES.TABS);
+    await login(email, password);
   }
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-    >
+    <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerClassName="grow justify-center p-6 gap-6"
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.hero}>
-            <Text style={[styles.eyebrow, { color: colors.tint }]}>
+          <View className="gap-2.5">
+            <Text className="text-xs font-bold uppercase tracking-widest text-primary">
               CHECKIN_STAFF
             </Text>
-            <Text style={[styles.title, { color: colors.text }]}>
+            <Text className="text-3xl font-extrabold text-foreground">
               Đăng nhập
             </Text>
-            <Text style={[styles.description, { color: colors.icon }]}>
+            <Text className="text-base leading-6 text-muted-foreground">
               Dành cho nhân sự điểm danh. Đăng nhập để bắt đầu ca trực.
             </Text>
           </View>
 
-          <View style={styles.form}>
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+          <View className="gap-4">
+            <View className="gap-2">
+              <Text className="text-sm font-semibold text-foreground">
+                Email
+              </Text>
               <TextInput
-                style={[
-                  styles.input,
-                  {
-                    color: colors.text,
-                    borderColor: colors.tabIconDefault,
-                    backgroundColor:
-                      colorScheme === "dark"
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.03)",
-                  },
-                ]}
+                className="rounded-xl border border-border bg-black/5 px-4 py-3.5 text-base text-foreground dark:bg-white/5"
                 placeholder="staff@unihub.edu.vn"
-                placeholderTextColor={colors.icon}
+                placeholderTextColor="#9CA3AF"
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -141,24 +65,14 @@ export default function LoginScreen() {
               />
             </View>
 
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>
+            <View className="gap-2">
+              <Text className="text-sm font-semibold text-foreground">
                 Mật khẩu
               </Text>
               <TextInput
-                style={[
-                  styles.input,
-                  {
-                    color: colors.text,
-                    borderColor: colors.tabIconDefault,
-                    backgroundColor:
-                      colorScheme === "dark"
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.03)",
-                  },
-                ]}
+                className="rounded-xl border border-border bg-black/5 px-4 py-3.5 text-base text-foreground dark:bg-white/5"
                 placeholder="••••••••"
-                placeholderTextColor={colors.icon}
+                placeholderTextColor="#9CA3AF"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -169,34 +83,24 @@ export default function LoginScreen() {
             </View>
 
             {errorMessage ? (
-              <View
-                style={[
-                  styles.errorBox,
-                  {
-                    backgroundColor: "rgba(239,68,68,0.08)",
-                    borderColor: "#EF4444",
-                  },
-                ]}
-              >
-                <Text style={styles.errorText}>{errorMessage}</Text>
+              <View className="rounded-xl border border-red-500 bg-red-500/10 p-3">
+                <Text className="text-sm leading-5 text-red-500">
+                  {errorMessage}
+                </Text>
               </View>
             ) : null}
 
             <Pressable
               onPress={handleLogin}
               disabled={isLoading}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                {
-                  backgroundColor: colors.tint,
-                  opacity: pressed || isLoading ? 0.75 : 1,
-                },
-              ]}
+              className="mt-1 min-h-[52px] items-center justify-center rounded-2xl bg-primary py-4 active:opacity-75 disabled:opacity-75"
             >
               {isLoading ? (
                 <ActivityIndicator color="white" size="small" />
               ) : (
-                <Text style={styles.primaryButtonText}>Đăng nhập</Text>
+                <Text className="text-base font-bold text-white">
+                  Đăng nhập
+                </Text>
               )}
             </Pressable>
           </View>
@@ -205,73 +109,3 @@ export default function LoginScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    padding: 24,
-    gap: 24,
-    justifyContent: "center",
-  },
-  hero: {
-    gap: 10,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "800",
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  form: {
-    gap: 16,
-  },
-  field: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    fontSize: 15,
-  },
-  errorBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-  },
-  errorText: {
-    color: "#EF4444",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  primaryButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-    paddingVertical: 15,
-    paddingHorizontal: 18,
-    minHeight: 52,
-    marginTop: 4,
-  },
-  primaryButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-});
