@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { jwtDecode } from "jwt-decode";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -15,8 +16,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { createDatabaseClient } from "@/database/client";
+import { appSession } from "@/database/schema/app-session.schema";
 import { authService } from "@/features/auth/api/auth.service";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import type { UniHubJwtPayload } from "@/lib/api/client/offline-auth";
 import handleError from "@/lib/handlers/error";
 
 export default function LoginScreen() {
@@ -49,6 +53,39 @@ export default function LoginScreen() {
       const appError = handleError(result.error);
       setErrorMessage(appError.message);
       return;
+    }
+
+    // Persist session locally for offline access
+    const session = result.data;
+    try {
+      const payload = jwtDecode<UniHubJwtPayload>(session.accessToken);
+      const db = createDatabaseClient();
+      db.insert(appSession)
+        .values({
+          id: 1,
+          userId: payload.sub,
+          email: email.trim(),
+          role: "CHECKIN_STAFF",
+          allowedWorkshopIds: JSON.stringify(payload.allowedWorkshopIds ?? []),
+          accessTokenExp: payload.exp,
+          refreshTokenExp: Math.floor(Date.now() / 1000) + 7 * 86400, // ~7 days
+          loggedInAt: Date.now(),
+          updatedAt: Date.now(),
+        })
+        .onConflictDoUpdate({
+          target: appSession.id,
+          set: {
+            userId: payload.sub,
+            email: email.trim(),
+            allowedWorkshopIds: JSON.stringify(
+              payload.allowedWorkshopIds ?? []
+            ),
+            accessTokenExp: payload.exp,
+            updatedAt: Date.now(),
+          },
+        });
+    } catch {
+      // Non-critical: session still works, just no local persistence
     }
 
     router.replace(ROUTES.TABS);

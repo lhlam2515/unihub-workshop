@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
@@ -11,16 +12,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { createDatabaseClient } from "@/database/client";
+import { deviceConfig } from "@/database/schema/device-config.schema";
 import { useSync } from "@/features/checkin/api/use-sync";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-
-const DEMO_WORKSHOP_ID = "ws-101";
 
 export default function SyncProgressScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
   const params = useLocalSearchParams<{ workshopId?: string }>();
-  const workshopId = params.workshopId ?? DEMO_WORKSHOP_ID;
+  const workshopId = params.workshopId ?? "";
   const { stats, runStatus, errorMessage, sync } = useSync();
 
   const steps = [
@@ -148,7 +149,15 @@ export default function SyncProgressScreen() {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => void sync(workshopId, "device-demo")}
+              onPress={() => {
+                const db = createDatabaseClient();
+                const device = db
+                  .select()
+                  .from(deviceConfig)
+                  .where(eq(deviceConfig.id, 1))
+                  .get();
+                void sync(workshopId, device?.deviceId ?? "unknown");
+              }}
               disabled={runStatus === "syncing"}
               style={({ pressed }) => [
                 styles.primaryButton,

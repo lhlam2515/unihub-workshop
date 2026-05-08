@@ -10,7 +10,11 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import "react-native-reanimated";
 
+import { eq } from "drizzle-orm";
+
+import { createDatabaseClient } from "@/database/client";
 import { DatabaseProvider } from "@/database/provider";
+import { deviceConfig } from "@/database/schema/device-config.schema";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { tokenStore } from "@/lib/api/client";
 import "./global.css";
@@ -26,6 +30,26 @@ export default function RootLayout() {
     async function bootstrap() {
       // Hydrate memory cache from SecureStore before any API call
       await tokenStore.init();
+
+      // Ensure device_config singleton exists (one-time device ID generation)
+      try {
+        const db = createDatabaseClient();
+        const existing = db
+          .select()
+          .from(deviceConfig)
+          .where(eq(deviceConfig.id, 1))
+          .get();
+        if (!existing) {
+          db.insert(deviceConfig).values({
+            id: 1,
+            deviceId: crypto.randomUUID(),
+            appVersion: "0.0.0",
+            initializedAt: Date.now(),
+          });
+        }
+      } catch {
+        // Non-critical: device_config is a nice-to-have for tracking
+      }
       setIsReady(true);
     }
     bootstrap();

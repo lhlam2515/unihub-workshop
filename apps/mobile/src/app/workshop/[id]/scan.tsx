@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import {
   CameraView,
   useCameraPermissions,
@@ -9,6 +10,8 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/theme";
+import { createDatabaseClient } from "@/database/client";
+import { deviceConfig } from "@/database/schema/device-config.schema";
 import { useScan } from "@/features/checkin/api/use-scan";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
@@ -56,14 +59,21 @@ export default function ScanScreen() {
     ({ data }: BarcodeScanningResult) => {
       const now = Date.now();
       // Debounce: ignore if same scan happened within 2s
-      if (isProcessing || now - lastScannedAt.current < SCAN_DEBOUNCE_MS) return;
+      if (isProcessing || now - lastScannedAt.current < SCAN_DEBOUNCE_MS)
+        return;
 
       lastScannedAt.current = now;
       setIsProcessing(true);
 
       const payload = offlineAuth.getTokenPayload();
       const staffId = payload?.sub ?? "unknown";
-      const deviceId = `device-${staffId.slice(0, 8)}`;
+      const db = createDatabaseClient();
+      const device = db
+        .select()
+        .from(deviceConfig)
+        .where(eq(deviceConfig.id, 1))
+        .get();
+      const deviceId = device?.deviceId ?? "unknown";
 
       void scan(data, workshopId, deviceId, staffId);
     },
@@ -150,10 +160,34 @@ export default function ScanScreen() {
         </View>
 
         <View style={styles.frameOuter}>
-          <View style={[styles.corner, styles.cornerTopLeft, { borderColor: colors.tint }]} />
-          <View style={[styles.corner, styles.cornerTopRight, { borderColor: colors.tint }]} />
-          <View style={[styles.corner, styles.cornerBottomLeft, { borderColor: colors.tint }]} />
-          <View style={[styles.corner, styles.cornerBottomRight, { borderColor: colors.tint }]} />
+          <View
+            style={[
+              styles.corner,
+              styles.cornerTopLeft,
+              { borderColor: colors.tint },
+            ]}
+          />
+          <View
+            style={[
+              styles.corner,
+              styles.cornerTopRight,
+              { borderColor: colors.tint },
+            ]}
+          />
+          <View
+            style={[
+              styles.corner,
+              styles.cornerBottomLeft,
+              { borderColor: colors.tint },
+            ]}
+          />
+          <View
+            style={[
+              styles.corner,
+              styles.cornerBottomRight,
+              { borderColor: colors.tint },
+            ]}
+          />
           {isProcessing && (
             <Text style={styles.processingText}>Đang xử lý...</Text>
           )}
@@ -176,9 +210,7 @@ export default function ScanScreen() {
               </Pressable>
             </View>
           ) : (
-            <Text style={styles.hint}>
-              Đưa mã QR vào khung để điểm danh
-            </Text>
+            <Text style={styles.hint}>Đưa mã QR vào khung để điểm danh</Text>
           )}
 
           <Pressable

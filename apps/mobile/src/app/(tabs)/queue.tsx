@@ -1,13 +1,15 @@
+import { eq } from "drizzle-orm";
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { createDatabaseClient } from "@/database/client";
+import { deviceConfig } from "@/database/schema/device-config.schema";
 import { useSync } from "@/features/checkin/api/use-sync";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-
-const DEMO_WORKSHOP_ID = "ws-101";
+import { offlineAuth } from "@/lib/api/client/offline-auth";
 
 export default function QueueScreen() {
   const colorScheme = useColorScheme();
@@ -78,7 +80,15 @@ export default function QueueScreen() {
 
         <View style={styles.actions}>
           <Pressable
-            onPress={() => void sync(DEMO_WORKSHOP_ID, "device-demo")}
+            onPress={() => {
+              const db = createDatabaseClient();
+              const device = db
+                .select()
+                .from(deviceConfig)
+                .where(eq(deviceConfig.id, 1))
+                .get();
+              void sync("", device?.deviceId ?? "unknown");
+            }}
             disabled={runStatus === "syncing" || stats.pending === 0}
             style={({ pressed }) => [
               styles.primaryButton,
@@ -114,7 +124,11 @@ export default function QueueScreen() {
             </Text>
           </Pressable>
           <Pressable
-            onPress={() => router.push(ROUTES.WORKSHOP(DEMO_WORKSHOP_ID))}
+            onPress={() => {
+              const workshops = offlineAuth.getAllowedWorkshops();
+              const firstId = workshops[0] ?? "";
+              router.push(ROUTES.WORKSHOP(firstId));
+            }}
             style={({ pressed }) => [
               styles.secondaryButton,
               {
