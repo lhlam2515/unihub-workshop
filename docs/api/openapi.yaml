@@ -603,10 +603,10 @@ paths:
         schema:
           type: string
           enum:
-          - draft
-          - open
-          - closed
-          - cancelled
+          - DRAFT
+          - OPEN
+          - COMPLETED
+          - CANCELLED
       - name: q
         in: query
         description: Search by title (ILIKE)
@@ -1146,10 +1146,10 @@ paths:
           items:
             type: string
             enum:
-            - pending
-            - confirmed
-            - paid
-            - cancelled
+            - PENDING
+            - CONFIRMED
+            - PAID
+            - CANCELLED
         style: form
         explode: false
       - name: upcoming
@@ -1252,10 +1252,10 @@ paths:
           items:
             type: string
             enum:
-            - pending
-            - confirmed
-            - paid
-            - cancelled
+            - PENDING
+            - CONFIRMED
+            - PAID
+            - CANCELLED
         style: form
         explode: false
       - $ref: '#/components/parameters/CursorParam'
@@ -1699,7 +1699,7 @@ paths:
                   summary_status:
                     type: string
                     enum:
-                    - queued
+                    - QUEUED
                   poll_url:
                     type: string
         '413':
@@ -1780,7 +1780,7 @@ paths:
                   summary_status:
                     type: string
                     enum:
-                    - queued
+                    - QUEUED
         '409':
           description: '`summary.not_in_failed_state`'
           content:
@@ -1805,9 +1805,9 @@ paths:
         schema:
           type: string
           enum:
-          - in_progress
-          - success
-          - failed
+          - IN_PROGRESS
+          - SUCCESS
+          - FAILED
       - $ref: '#/components/parameters/CursorParam'
       - $ref: '#/components/parameters/LimitParam'
       responses:
@@ -2120,17 +2120,17 @@ paths:
         schema:
           type: string
           enum:
-          - sent
-          - failed
-          - timeout
+          - SENT
+          - FAILED
+          - TIMEOUT
       - name: channel
         in: query
         schema:
           type: string
           enum:
-          - email
-          - in_app
-          - telegram
+          - EMAIL
+          - APP
+          - TELEGRAM
       - name: from
         in: query
         schema:
@@ -2398,8 +2398,8 @@ components:
         accountType:
           type: string
           enum:
-          - student
-          - staff
+          - STUDENT
+          - STAFF
         studentId:
           type: string
           description: 'Required when `account_type=student`. MSSV format (e.g., `21127001`).
@@ -2455,9 +2455,9 @@ components:
         role:
           type: string
           enum:
-          - student
-          - btc
-          - checkin_staff
+          - STUDENT
+          - BTC
+          - CHECKIN_STAFF
         refreshToken:
           type: string
           nullable: true
@@ -2488,9 +2488,9 @@ components:
         role:
           type: string
           enum:
-          - student
-          - btc
-          - checkin_staff
+          - STUDENT
+          - BTC
+          - CHECKIN_STAFF
         fullName:
           type: string
         email:
@@ -2515,8 +2515,8 @@ components:
         platform:
           type: string
           enum:
-          - ios
-          - android
+          - IOS
+          - ANDROID
     DeviceToken:
       type: object
       required:
@@ -2531,8 +2531,8 @@ components:
         platform:
           type: string
           enum:
-          - ios
-          - android
+          - IOS
+          - ANDROID
         isActive:
           type: boolean
         lastSeen:
@@ -2581,10 +2581,10 @@ components:
         status:
           type: string
           enum:
-          - draft
-          - open
-          - closed
-          - cancelled
+          - DRAFT
+          - OPEN
+          - COMPLETED
+          - CANCELLED
         speaker:
           allOf:
           - $ref: '#/components/schemas/SpeakerSummary'
@@ -2699,9 +2699,9 @@ components:
         status:
           type: string
           enum:
-          - draft
-          - open
-          default: draft
+          - DRAFT
+          - OPEN
+          default: DRAFT
     WorkshopPatchRequest:
       type: object
       description: All fields optional (PATCH semantics)
@@ -2894,10 +2894,10 @@ components:
         status:
           type: string
           enum:
-          - pending
-          - confirmed
-          - paid
-          - cancelled
+          - PENDING
+          - CONFIRMED
+          - PAID
+          - CANCELLED
         qrCode:
           type: string
           nullable: true
@@ -2917,7 +2917,7 @@ components:
             action:
               type: string
               enum:
-              - create_payment
+              - CREATE_PAYMENT
             endpoint:
               type: string
               example: /api/v1/payments
@@ -2948,10 +2948,10 @@ components:
         status:
           type: string
           enum:
-          - pending
-          - confirmed
-          - paid
-          - cancelled
+          - PENDING
+          - CONFIRMED
+          - PAID
+          - CANCELLED
         qrCode:
           type: string
           nullable: true
@@ -2986,10 +2986,10 @@ components:
         status:
           type: string
           enum:
-          - pending
-          - confirmed
-          - paid
-          - cancelled
+          - PENDING
+          - CONFIRMED
+          - PAID
+          - CANCELLED
         registeredAt:
           type: string
           format: date-time
@@ -3062,10 +3062,10 @@ components:
         status:
           type: string
           enum:
-          - initiated
-          - succeeded
-          - failed
-          - unresolved
+          - INITIATED
+          - SUCCEEDED
+          - FAILED
+          - UNRESOLVED
           description: '`initiated` — call in flight.
 
             `succeeded` — gateway confirmed.
@@ -3116,8 +3116,8 @@ components:
         registrationStatus:
           type: string
           enum:
-          - paid
-          - confirmed
+          - PAID
+          - CONFIRMED
         workshopStartsAt:
           type: string
           format: date-time
@@ -3242,9 +3242,9 @@ components:
         result:
           type: string
           enum:
-          - ok
-          - duplicate
-          - rejected
+          - OK
+          - DUPLICATE
+          - REJECTED
           description: "- `ok` → inserted on server; mobile sets `local_checkins.status\
             \ = 'synced'`.\n- `duplicate` → registration already checked in (first-check-in-wins);\n\
             \  mobile sets `local_checkins.status = 'duplicate'`.\n- `rejected` →\
@@ -3272,9 +3272,9 @@ components:
         reason:
           type: string
           enum:
-          - qr_invalid
-          - workshop_cancelled
-          - not_paid
+          - QR_INVALID
+          - WORKSHOP_CANCELLED
+          - NOT_PAID
           nullable: true
           description: When `result=rejected` — the specific rejection cause.
     AiSummary:
@@ -3285,11 +3285,11 @@ components:
         status:
           type: string
           enum:
-          - none
-          - queued
-          - processing
-          - done
-          - failed
+          - NONE
+          - QUEUED
+          - PROCESSING
+          - DONE
+          - FAILED
         text:
           type: string
           nullable: true
@@ -3319,14 +3319,14 @@ components:
         triggeredBy:
           type: string
           enum:
-          - cron
-          - manual
+          - CRON
+          - MANUAL
         status:
           type: string
           enum:
-          - in_progress
-          - success
-          - failed
+          - IN_PROGRESS
+          - SUCCESS
+          - FAILED
         totalRows:
           type: integer
           nullable: true
@@ -3353,9 +3353,9 @@ components:
         channelType:
           type: string
           enum:
-          - email
-          - in_app
-          - telegram
+          - EMAIL
+          - APP
+          - TELEGRAM
         isActive:
           type: boolean
         configJson:
@@ -3391,15 +3391,15 @@ components:
         channel:
           type: string
           enum:
-          - email
-          - in_app
-          - telegram
+          - EMAIL
+          - APP
+          - TELEGRAM
         status:
           type: string
           enum:
-          - sent
-          - failed
-          - timeout
+          - SENT
+          - FAILED
+          - TIMEOUT
         errorMsg:
           type: string
           nullable: true
