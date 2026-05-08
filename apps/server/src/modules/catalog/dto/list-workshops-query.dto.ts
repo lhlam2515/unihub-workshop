@@ -2,11 +2,14 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const ListWorkshopsQuerySchema = z.object({
-  date_from: z.date().optional(),
-  date_to: z.date().optional(),
-  page: z.number().int().positive().default(1),
-  limit: z.number().int().positive().default(20),
+  date_from: z.coerce.date().optional(),
+  date_to: z.coerce.date().optional(),
+  status: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).default(20),
 });
+
+export type ListWorkshopsQueryInput = z.infer<typeof ListWorkshopsQuerySchema>;
 
 export class ListWorkshopsQueryDto extends createZodDto(
   ListWorkshopsQuerySchema

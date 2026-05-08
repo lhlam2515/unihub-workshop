@@ -8,6 +8,7 @@ import type {
   Room,
 } from "@/infra/database/types/event-core.types";
 import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
+import type { CursorPaginationResult } from "@/shared/pagination/cursor-pagination.helper";
 import {
   concurrentModification,
   workshopErrors,
@@ -53,29 +54,19 @@ export class WorkshopsService {
   // Public Endpoints
   // ---------------------------------------------------------------------------
 
-  async listPublished(query: ListWorkshopsQueryDto): Promise<
-    Result<{
-      items: WorkshopSummaryDto[];
-      total: number;
-      page: number;
-      limit: number;
-    }>
-  > {
-    const filters = query as unknown as {
-      dateFrom?: Date;
-      dateTo?: Date;
-      page: number;
-      limit: number;
-    };
-    if (!filters.page) filters.page = 1;
-    if (!filters.limit) filters.limit = 20;
-
-    const result = await this.workshopsRepo.findPublished(filters);
+  async listPublished(
+    query: ListWorkshopsQueryDto
+  ): Promise<Result<CursorPaginationResult<WorkshopSummaryDto>>> {
+    const result = await this.workshopsRepo.findPublished({
+      dateFrom: query.date_from,
+      dateTo: query.date_to,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
     if (result.isFailure) return Result.fail(result.error);
 
-    const { items, total } = result.data;
     const mapped = await Promise.all(
-      items.map(async (workshop: WorkshopWithSpeakerRoom) => {
+      result.data.items.map(async (workshop: WorkshopWithSpeakerRoom) => {
         const availableSeats = await this.seatCounterService.getAvailable(
           workshop.workshopId
         );
@@ -89,9 +80,8 @@ export class WorkshopsService {
 
     return Result.ok({
       items: mapped,
-      total,
-      page: filters.page,
-      limit: filters.limit,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
     });
   }
 
@@ -449,27 +439,19 @@ export class WorkshopsService {
     );
   }
 
-  async listAdmin(query: ListWorkshopsQueryDto): Promise<
-    Result<{
-      items: WorkshopAdminDetailDto[];
-      total: number;
-      page: number;
-      limit: number;
-    }>
-  > {
-    const filters = query as unknown as {
-      status?: import("@/infra/database/types/enums.types").WorkshopStatus;
-      page: number;
-      limit: number;
-    };
-    if (!filters.page) filters.page = 1;
-    if (!filters.limit) filters.limit = 20;
-
-    const result = await this.workshopsRepo.listAdmin(filters);
+  async listAdmin(
+    query: ListWorkshopsQueryDto
+  ): Promise<Result<CursorPaginationResult<WorkshopAdminDetailDto>>> {
+    const result = await this.workshopsRepo.listAdmin({
+      status: query.status as
+        | import("@/infra/database/types/enums.types").WorkshopStatus
+        | undefined,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
     if (result.isFailure) return Result.fail(result.error);
 
-    const { items, total } = result.data;
-    const mapped = items.map((workshop: any) =>
+    const mapped = result.data.items.map((workshop: any) =>
       WorkshopResponseBuilder.fromAdminDetail(
         workshop,
         workshop.speakers?.fullName ?? "Unknown",
@@ -480,9 +462,8 @@ export class WorkshopsService {
 
     return Result.ok({
       items: mapped,
-      total,
-      page: filters.page,
-      limit: filters.limit,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
     });
   }
 

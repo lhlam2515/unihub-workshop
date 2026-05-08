@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, count, gte, lte, lt, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lte, lt, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -11,6 +11,12 @@ import type {
   Speaker,
   Room,
 } from "@/infra/database/types/event-core.types";
+import {
+  decodeCursor,
+  encodeCursor,
+  type CursorPaginationInput,
+  type CursorPaginationResult,
+} from "@/shared/pagination/cursor-pagination.helper";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
@@ -88,12 +94,9 @@ export class WorkshopsRepository {
     );
   }
 
-  async findPublished(filters: {
-    dateFrom?: Date;
-    dateTo?: Date;
-    page: number;
-    limit: number;
-  }): Promise<Result<{ items: any[]; total: number }>> {
+  async findPublished(
+    filters: { dateFrom?: Date; dateTo?: Date } & CursorPaginationInput
+  ): Promise<Result<CursorPaginationResult<any>>> {
     return tryCatch(
       async () => {
         const conditions = [eq(this.schema.workshops.status, "OPEN")];
@@ -106,12 +109,13 @@ export class WorkshopsRepository {
           conditions.push(lte(this.schema.workshops.startsAt, filters.dateTo));
         }
 
-        const where = and(...conditions);
-        const [totalResult] = await this.db
-          .select({ count: count() })
-          .from(this.schema.workshops)
-          .where(where);
+        // Cursor-based pagination: decode cursor and filter by startsAt
+        if (filters.cursor) {
+          const cursorDate = new Date(decodeCursor(filters.cursor));
+          conditions.push(lt(this.schema.workshops.startsAt, cursorDate));
+        }
 
+        const where = and(...conditions);
         const items = await this.db
           .select()
           .from(this.schema.workshops)
@@ -125,20 +129,25 @@ export class WorkshopsRepository {
           )
           .where(where)
           .orderBy(desc(this.schema.workshops.startsAt))
-          .limit(filters.limit)
-          .offset((filters.page - 1) * filters.limit);
+          .limit(filters.limit + 1); // fetch one extra to detect hasMore
 
-        return { items, total: Number(totalResult.count) };
+        const hasMore = items.length > filters.limit;
+        if (hasMore) items.pop();
+
+        const nextCursor =
+          items.length > 0
+            ? encodeCursor(items[items.length - 1].workshops.startsAt)
+            : null;
+
+        return { items, nextCursor, hasMore };
       },
       (err) => systemErrors.internal(err)
     );
   }
 
-  async listAdmin(filters: {
-    status?: WorkshopStatus;
-    page: number;
-    limit: number;
-  }): Promise<Result<{ items: any[]; total: number }>> {
+  async listAdmin(
+    filters: { status?: WorkshopStatus } & CursorPaginationInput
+  ): Promise<Result<CursorPaginationResult<any>>> {
     return tryCatch(
       async () => {
         const conditions: ReturnType<typeof eq>[] = [];
@@ -146,12 +155,13 @@ export class WorkshopsRepository {
           conditions.push(eq(this.schema.workshops.status, filters.status));
         }
 
-        const where = conditions.length > 0 ? and(...conditions) : undefined;
+        // Cursor-based pagination: decode cursor and filter by createdAt
+        if (filters.cursor) {
+          const cursorDate = new Date(decodeCursor(filters.cursor));
+          conditions.push(lt(this.schema.workshops.createdAt, cursorDate));
+        }
 
-        const [totalResult] = await this.db
-          .select({ count: count() })
-          .from(this.schema.workshops)
-          .where(where);
+        const where = conditions.length > 0 ? and(...conditions) : undefined;
 
         const items = await this.db
           .select()
@@ -166,10 +176,17 @@ export class WorkshopsRepository {
           )
           .where(where)
           .orderBy(desc(this.schema.workshops.createdAt))
-          .limit(filters.limit)
-          .offset((filters.page - 1) * filters.limit);
+          .limit(filters.limit + 1); // fetch one extra to detect hasMore
 
-        return { items, total: Number(totalResult.count) };
+        const hasMore = items.length > filters.limit;
+        if (hasMore) items.pop();
+
+        const nextCursor =
+          items.length > 0
+            ? encodeCursor(items[items.length - 1].workshops.createdAt)
+            : null;
+
+        return { items, nextCursor, hasMore };
       },
       (err) => systemErrors.internal(err)
     );

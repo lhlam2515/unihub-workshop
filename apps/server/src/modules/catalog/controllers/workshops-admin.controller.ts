@@ -8,7 +8,7 @@
  * - GET /admin/workshops — list all workshops (any status)
  * - POST /admin/workshops — create a new workshop
  * - GET /admin/workshops/:id — get admin detail
- * - PUT /admin/workshops/:id — update a draft workshop
+ * - PATCH /admin/workshops/:id — update a draft workshop
  * - POST /admin/workshops/:id/publish — publish workshop and init Redis counter
  * - PATCH /admin/workshops/:id/emergency-update — emergency update published workshop
  * - POST /admin/workshops/:id/cancel — cancel workshop and cascade void tickets
