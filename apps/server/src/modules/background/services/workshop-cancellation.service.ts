@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 
 import type { WorkshopCancelledEventData } from "@/infra/messaging/event-contracts";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 
 /**
  * Processes workshop cancellation domain events asynchronously.
@@ -20,7 +21,10 @@ import { RegistrationsService } from "@/modules/booking/services/registrations.s
 export class WorkshopCancellationService {
   private readonly logger = new Logger(WorkshopCancellationService.name);
 
-  constructor(private readonly registrationsService: RegistrationsService) {}
+  constructor(
+    private readonly registrationsService: RegistrationsService,
+    private readonly notificationLogProducer: NotificationLogProducer
+  ) {}
 
   /**
    * Execute the full cancellation batch for a workshop.
@@ -45,18 +49,27 @@ export class WorkshopCancellationService {
       `[CANCEL_WORKSHOP] Voided ${cancelledCount} registrations for workshop "${title}" (${workshopId})`
     );
 
-    // Step 2: Create notification logs (best-effort, per ADR-11)
-    // Student notification is handled via the NotificationLogProducer
-    // which creates notification_log rows and enqueues dispatch jobs.
-    // For now, the void operation succeeds independently of notification delivery.
-    if (cancelledCount > 0) {
+    // Step 2: Fan-out notification to all affected students (best-effort, per ADR-11)
+    const { affectedStudentIds } = voidResult.data;
+    if (cancelledCount > 0 && affectedStudentIds.length > 0) {
       this.logger.log(
-        `[CANCEL_WORKSHOP] ${cancelledCount} students affected by cancellation of "${title}"`
+        `[CANCEL_WORKSHOP] Notifying ${cancelledCount} students affected by cancellation of "${title}"`
       );
-      // TODO(2E-4): Lookup student IDs from voided registrations for targeted
-      // notification via NotificationLogProducer.batchCreateAndEnqueue().
-      // Currently, only the workshop creator receives notification (handled
-      // inline in WorkshopsService.cancelWorkshop()).
+      await this.notificationLogProducer
+        .batchCreateAndEnqueue(
+          affectedStudentIds.map((studentId) => ({
+            userId: studentId,
+            workshopId,
+            type: "WORKSHOP_CANCELLED" as const,
+            payload: { workshopTitle: title, workshopId },
+          })),
+          100
+        )
+        .catch((cause: unknown) => {
+          this.logger.warn(
+            `[CANCEL_WORKSHOP] Failed to enqueue batch notifications: ${cause}`
+          );
+        });
     }
   }
 }

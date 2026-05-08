@@ -12,8 +12,11 @@ import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
 import { SystemAdminController } from "./controllers/system-admin.controller";
 import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
+import { IdempotencyCleanupCron } from "./cron/idempotency-cleanup.cron";
+import { PaymentReconciliationCron } from "./cron/payment-reconciliation.cron";
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
+import { StudentSyncSchedulerCron } from "./cron/student-sync-scheduler.cron";
 import { WorkshopAutoCompleteCron } from "./cron/workshop-auto-complete.cron";
 import { SystemMonitorService } from "./services/system-monitor.service";
 import { WorkshopCancellationService } from "./services/workshop-cancellation.service";
@@ -58,6 +61,10 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     ReconciliationCron,
     CircuitBreakerRecoveryCron,
     WorkshopAutoCompleteCron,
+    // New crons
+    IdempotencyCleanupCron,
+    PaymentReconciliationCron,
+    StudentSyncSchedulerCron,
     // Services
     WorkshopCancellationService,
     // Workers
