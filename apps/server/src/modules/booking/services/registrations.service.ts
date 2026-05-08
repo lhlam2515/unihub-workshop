@@ -3,9 +3,9 @@ import crypto from "node:crypto";
 import { Injectable } from "@nestjs/common";
 
 import type { Registration } from "@/infra/database/types/transaction.types";
-import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mechanic";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -306,6 +306,26 @@ export class RegistrationsService {
    * @param workshopId - The UUID of the workshop.
    * @returns OkResult containing the count, or FailResult (INTERNAL_ERROR).
    */
+  /**
+   * Cancels all active (CONFIRMED or PENDING) registrations for a workshop.
+   *
+   * Called asynchronously via BullMQ when a workshop is cancelled.
+   * Returns the count of affected registrations. Idempotent — safe
+   * to call multiple times (already-cancelled registrations are skipped).
+   *
+   * Side effects:
+   * - Bulk-updates multiple rows in the registrations table.
+   * - Sets cancelledAt and updatedAt on each affected row.
+   *
+   * @param workshopId - UUID of the cancelled workshop.
+   * @returns OkResult with { cancelledCount }, or FailResult (INTERNAL_ERROR).
+   */
+  async cancelAllForWorkshop(
+    workshopId: string
+  ): Promise<Result<{ cancelledCount: number }>> {
+    return this.registrationsRepo.cancelAllForWorkshop(workshopId);
+  }
+
   async countConfirmedByWorkshop(workshopId: string): Promise<Result<number>> {
     return this.registrationsRepo.countConfirmedByWorkshop(workshopId);
   }

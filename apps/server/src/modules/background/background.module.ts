@@ -16,6 +16,7 @@ import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
 import { WorkshopAutoCompleteCron } from "./cron/workshop-auto-complete.cron";
 import { SystemMonitorService } from "./services/system-monitor.service";
+import { WorkshopCancellationService } from "./services/workshop-cancellation.service";
 import { AiSummaryWorker } from "./workers/ai-summary.worker";
 import { NotificationWorker } from "./workers/notification.worker";
 import { StudentSyncWorker } from "./workers/student-sync.worker";
@@ -57,6 +58,8 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     ReconciliationCron,
     CircuitBreakerRecoveryCron,
     WorkshopAutoCompleteCron,
+    // Services
+    WorkshopCancellationService,
     // Workers
     NotificationWorker,
     AiSummaryWorker,

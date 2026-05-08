@@ -1,10 +1,14 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable, Logger } from "@nestjs/common";
 
-import type { NotificationJobData } from "@/infra/messaging/event-contracts";
+import type {
+  NotificationJobData,
+  WorkshopCancelledEventData,
+} from "@/infra/messaging/event-contracts";
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/messaging.constants";
 import { FatalJobError } from "@/infra/messaging/messaging.errors";
 import type { IJobHandler } from "@/infra/messaging/messaging.interfaces";
+import { WorkshopCancellationService } from "@/modules/background/services/workshop-cancellation.service";
 import { NotificationDispatchService } from "@/modules/notification/services/notification-dispatch.service";
 import type { ErrorCode } from "@/shared/response/types";
 
@@ -47,19 +51,42 @@ export class NotificationWorker
 {
   private readonly logger = new Logger(NotificationWorker.name);
 
-  constructor(private readonly dispatchService: NotificationDispatchService) {
+  constructor(
+    private readonly dispatchService: NotificationDispatchService,
+    private readonly cancellationService: WorkshopCancellationService
+  ) {
     super();
   }
 
-  /** BullMQ adapter — delegates to the typed handler and maps FatalJobError to silent return. */
-  async process(job: Job<NotificationJobData>): Promise<void> {
+  /** BullMQ adapter — routes jobs by name to the matching handler. */
+  async process(job: Job): Promise<void> {
+    switch (job.name) {
+      case "notification.send":
+        return this.processNotification(job);
+      case "workshop.cancelled":
+        return this.processWorkshopCancellation(job);
+      default:
+        this.logger.warn(`Unhandled job type: ${job.name}`);
+    }
+  }
+
+  /** Route handler: dispatch a notification. */
+  private async processNotification(
+    job: Job<NotificationJobData>
+  ): Promise<void> {
     try {
       await this.handle(job.data);
     } catch (error) {
-      // FatalJobError = terminal, don't retry — return silently
       if (error instanceof FatalJobError) return;
-      throw error; // retryable — let BullMQ handle it
+      throw error;
     }
+  }
+
+  /** Route handler: process a workshop cancellation batch. */
+  private async processWorkshopCancellation(
+    job: Job<WorkshopCancelledEventData>
+  ): Promise<void> {
+    await this.cancellationService.handleCancellation(job.data);
   }
 
   /**
