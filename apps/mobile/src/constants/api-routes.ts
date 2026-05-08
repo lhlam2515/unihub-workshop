@@ -19,10 +19,10 @@ export const API_ROUTES = {
   },
 
   CHECKIN: {
-    PRELOAD_TICKETS: (workshopId: string) =>
-      path(`/checkin/workshops/${workshopId}/tickets`),
-    SCAN: path("/checkin/scan"),
-    SYNC: path("/checkin/sync"),
+    PRELOAD_REGISTRATIONS: (workshopId: string) =>
+      path(`/checkin/workshops/${workshopId}/registrations`),
+    SCAN: path("/checkins"),
+    SYNC: path("/checkins/sync"),
     STATUS: (workshopId: string) =>
       path(`/checkin/workshops/${workshopId}/status`),
   },

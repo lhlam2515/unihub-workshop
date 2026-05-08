@@ -78,7 +78,7 @@ export default function QueueScreen() {
 
         <View style={styles.actions}>
           <Pressable
-            onPress={() => void sync(DEMO_WORKSHOP_ID)}
+            onPress={() => void sync(DEMO_WORKSHOP_ID, "device-demo")}
             disabled={runStatus === "syncing" || stats.pending === 0}
             style={({ pressed }) => [
               styles.primaryButton,

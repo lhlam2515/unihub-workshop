@@ -148,7 +148,7 @@ export default function SyncProgressScreen() {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => void sync(workshopId)}
+              onPress={() => void sync(workshopId, "device-demo")}
               disabled={runStatus === "syncing"}
               style={({ pressed }) => [
                 styles.primaryButton,

@@ -1,9 +1,32 @@
 import { API_ROUTES } from "@/constants/api-routes";
 import { api } from "@/lib/api/client";
 import { Result } from "@/lib/result";
+import type { PaginationMeta } from "@/lib/api/types";
 
 // ---------------------------------------------------------------------------
-// Response shapes (mirrors server TicketResponseDto)
+// Response shapes (mirrors server CachedRegistrationDto + paginated response)
+// ---------------------------------------------------------------------------
+
+export interface CachedRegistrationDto {
+  registrationId: string;
+  qrCode: string;
+  workshopId: string;
+  studentId: string;
+  studentName: string;
+  studentCode: string;
+  registrationStatus: string;
+  workshopStartsAt: string;
+  workshopTitle: string;
+}
+
+// Unwrapped paginated preload response shape
+export interface PreloadResponse {
+  data: CachedRegistrationDto[];
+  pagination: PaginationMeta;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy student ticket types (kept for backward compat — mobile is CHECKIN_STAFF only)
 // ---------------------------------------------------------------------------
 
 export interface TicketDto {
@@ -31,28 +54,32 @@ export interface TicketDto {
 
 export const ticketsApi = {
   /**
-   * Fetch all ACTIVE tickets for a workshop for offline pre-load into SQLite cache.
+   * Fetch all active registrations for a workshop for offline pre-load into SQLite cache.
    *
    * Called by CHECKIN_STAFF before entering a venue with unreliable WiFi.
-   * Response is stored in `cached_tickets` table for offline QR validation.
+   * Response is paginated — caller should follow `pagination.nextCursor`.
    *
    * @param workshopId - UUID of the workshop to preload.
-   * @returns OkResult with ticket list, or FailResult with the thrown error.
+   * @param cursor - Optional cursor for pagination.
+   * @param limit - Page size (default 500, max 500).
+   * @returns OkResult with paginated registration list, or FailResult.
    */
-  async preload(workshopId: string): Promise<Result<TicketDto[]>> {
+  async preload(
+    workshopId: string,
+    cursor?: string,
+    limit: number = 500
+  ): Promise<Result<PreloadResponse>> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+
     return Result.fromPromise(
-      api.get<TicketDto[]>(API_ROUTES.CHECKIN.PRELOAD_TICKETS(workshopId))
+      api.get<PreloadResponse>(
+        `${API_ROUTES.CHECKIN.PRELOAD_REGISTRATIONS(workshopId)}?${params.toString()}`
+      )
     );
   },
 
-  /**
-   * Fetch all ACTIVE tickets belonging to the authenticated student.
-   *
-   * Used in the student ticket list screen to display QR codes.
-   * Scoped by jwt.sub server-side — no student_id param needed.
-   *
-   * @returns OkResult with ticket list, or FailResult with the thrown error.
-   */
+  /** @deprecated Student-only endpoint — mobile is CHECKIN_STAFF only */
   async getMyTickets(): Promise<Result<TicketDto[]>> {
     return Result.fromPromise(api.get<TicketDto[]>("/students/me/tickets"));
   },

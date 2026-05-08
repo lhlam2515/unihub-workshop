@@ -51,18 +51,20 @@ export function useScan(): UseScanResult {
 
       // Optimistic online attempt: try server first. Fall back to SQLite queue
       // if the request fails due to a network error (not a business error).
+      const clientLocalId = crypto.randomUUID();
       const scanResult = await checkinApi.scanOnline(
         qrToken,
         workshopId,
-        deviceId
+        clientLocalId
       );
 
       if (scanResult.isSuccess) {
+        const data = scanResult.data;
         setResult({
-          checkinId: scanResult.data.checkin_id,
-          studentName: scanResult.data.student.full_name,
-          studentCode: scanResult.data.student.student_code,
-          checkedInAt: new Date(scanResult.data.checked_in_at),
+          checkinId: data.id,
+          studentName: data.student?.name ?? "—",
+          studentCode: data.student?.code ?? "—",
+          checkedInAt: new Date(data.checkedInAt),
           source: "ONLINE",
         });
         setStatus("success");

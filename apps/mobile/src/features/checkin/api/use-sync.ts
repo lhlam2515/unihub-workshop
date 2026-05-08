@@ -21,7 +21,7 @@ export interface UseSyncResult {
   stats: SyncStats;
   runStatus: SyncRunStatus;
   errorMessage: string | null;
-  sync: (workshopId: string) => Promise<void>;
+  sync: (workshopId: string, deviceId: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -51,7 +51,7 @@ export function useSync(): UseSyncResult {
   }, [loadStats]);
 
   const sync = useCallback(
-    async (workshopId: string) => {
+    async (workshopId: string, deviceId: string) => {
       setRunStatus("syncing");
       setErrorMessage(null);
 
@@ -80,14 +80,15 @@ export function useSync(): UseSyncResult {
         .set({ syncStatus: "SYNCING" })
         .where(inArray(checkinQueue.localId, pendingIds));
 
+      // Map to server-expected shape
       const items = workshopPending.map((r) => ({
-        qr_token: r.qrToken,
-        workshop_id: r.workshopId,
-        checked_in_at: new Date(r.checkedInAt).toISOString(),
-        device_id: r.deviceId,
+        localId: r.localId,
+        qrCode: r.qrToken,
+        workshopId: r.workshopId,
+        checkedInAt: r.checkedInAt,
       }));
 
-      const syncResult = await checkinApi.syncOffline(workshopId, items);
+      const syncResult = await checkinApi.syncOffline(deviceId, items);
 
       if (syncResult.isFailure) {
         // Revert SYNCING → FAILED for retry on next attempt
@@ -103,14 +104,26 @@ export function useSync(): UseSyncResult {
         return;
       }
 
-      // Server processes idempotently — mark all as SYNCED.
-      // Conflicts are tracked server-side; we don't receive per-item feedback,
-      // so we mark all as SYNCED and let the server's conflict count inform the UI.
+      // Process per-item results from server
       const now = Date.now();
-      await db
-        .update(checkinQueue)
-        .set({ syncStatus: "SYNCED", syncedAt: now })
-        .where(inArray(checkinQueue.localId, pendingIds));
+      for (const item of syncResult.data.results) {
+        if (item.result === "OK" || item.result === "DUPLICATE") {
+          await db
+            .update(checkinQueue)
+            .set({ syncStatus: "SYNCED", syncedAt: now })
+            .where(eq(checkinQueue.localId, item.localId));
+        } else {
+          // REJECTED
+          await db
+            .update(checkinQueue)
+            .set({
+              syncStatus: "CONFLICT",
+              errorDetail: item.reason ?? "REJECTED",
+              syncedAt: now,
+            })
+            .where(eq(checkinQueue.localId, item.localId));
+        }
+      }
 
       setRunStatus("done");
       await loadStats();
