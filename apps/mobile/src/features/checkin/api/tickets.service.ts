@@ -30,22 +30,22 @@ export interface PreloadResponse {
 // ---------------------------------------------------------------------------
 
 export interface TicketDto {
-  ticket_id: string;
-  registration_id: string;
-  qr_token: string;
+  ticketId: string;
+  registrationId: string;
+  qrCode: string;
   status: string;
   workshop: {
-    workshop_id: string;
+    workshopId: string;
     title: string;
-    starts_at: string;
-    ends_at: string;
+    startsAt: string;
+    endsAt: string;
   };
   student: {
-    student_id: string;
-    full_name: string;
-    student_code: string;
+    studentId: string;
+    fullName: string;
+    studentCode: string;
   };
-  issued_at: string;
+  issuedAt: string;
 }
 
 // ---------------------------------------------------------------------------

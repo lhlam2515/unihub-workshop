@@ -71,7 +71,7 @@ export default function MyTicketsScreen() {
           <View style={styles.list}>
             {tickets.map((ticket) => (
               <View
-                key={ticket.ticket_id}
+                key={ticket.ticketId}
                 style={[styles.card, { borderColor: colors.tabIconDefault }]}
               >
                 <View style={styles.ticketHeader}>
@@ -93,7 +93,7 @@ export default function MyTicketsScreen() {
                     Sinh viên
                   </Text>
                   <Text style={[styles.infoValue, { color: colors.text }]}>
-                    {ticket.student.full_name} · {ticket.student.student_code}
+                    {ticket.student.fullName} · {ticket.student.studentCode}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
@@ -101,7 +101,7 @@ export default function MyTicketsScreen() {
                     Bắt đầu
                   </Text>
                   <Text style={[styles.infoValue, { color: colors.text }]}>
-                    {new Date(ticket.workshop.starts_at).toLocaleDateString(
+                    {new Date(ticket.workshop.startsAt).toLocaleDateString(
                       "vi-VN",
                       { day: "2-digit", month: "2-digit", year: "numeric" }
                     )}
@@ -123,7 +123,7 @@ export default function MyTicketsScreen() {
                     numberOfLines={2}
                     selectable
                   >
-                    {ticket.qr_token}
+                    {ticket.qrCode}
                   </Text>
                 </View>
               </View>
