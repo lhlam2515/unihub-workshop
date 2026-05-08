@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, pgTable, unique } from "drizzle-orm/pg-core";
 
 import {
-  aiSummaryStatusEnum,
+  summaryStatusEnum,
   documentUploadStatusEnum,
   notificationChannelEnum,
   notificationStatusEnum,
@@ -111,7 +111,7 @@ export const aiSummaries = pgTable(
     rawText: t.text("raw_text"),
     summaryText: t.text("summary_text"),
     modelUsed: t.varchar("model_used", { length: 100 }),
-    status: aiSummaryStatusEnum("status").notNull().default("NONE"),
+    status: summaryStatusEnum("status").notNull().default("NONE"),
     generatedAt: t.timestamp("generated_at", { withTimezone: true }),
     errorMessage: t.text("error_message"),
     createdAt: t

@@ -1,27 +1,22 @@
+import { randomUUID } from "node:crypto";
+
 import { Injectable, Logger } from "@nestjs/common";
 
-import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
+import { StorageService } from "@/infra/storage/storage.service";
+import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { Result } from "@/shared/response/result";
 
+import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
 import { PdfSummaryPipeline } from "../pipeline/pdf-summary.pipeline";
+import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
+
+import type { AiSummaryAdminDto } from "../dto/ai-summary-response.dto";
 
 /**
  * AiSummaryService
  *
- * Orchestrates the AI-powered document summarization pipeline.
- * Delegates all processing stages to the PdfSummaryPipeline (Pipe-and-Filter),
- * and handles failure-side effects (marking DB records as FAILED).
- *
- * Business rules:
- * - Each documentId maps to exactly one ai_summaries row (enforced by unique constraint).
- * - Pipeline failure marks the summary status as FAILED with the error message.
- *
- * Side effects:
- * - Delegates to PdfSummaryPipeline which upserts, extracts, cleans, summarises,
- *   and persists the result.
- * - On failure or timeout, updates ai_summaries status to FAILED.
- *
- * This service is consumed by AiSummaryWorker for each queued document job.
+ * Orchestrates workshop-level AI summary operations: document upload,
+ * summary generation pipeline, manual override, and retry.
  */
 @Injectable()
 export class AiSummaryService {
@@ -29,25 +24,152 @@ export class AiSummaryService {
 
   constructor(
     private readonly pipeline: PdfSummaryPipeline,
-    private readonly aiSummariesRepo: AiSummariesRepository
+    private readonly aiSummariesRepo: AiSummariesRepository,
+    private readonly storageService: StorageService,
+    private readonly workshopsRepo: WorkshopsRepository
   ) {}
+
+  // ── Document upload ──────────────────────────────────────────────
+
+  /**
+   * Uploads a PDF document for a workshop and queues AI summary generation.
+   *
+   * Business rules:
+   * - The workshop must exist in the database.
+   * - The file is uploaded to S3-compatible object storage.
+   * - An AI summary record is upserted with QUEUED status for background processing.
+   *
+   * Side effects:
+   * - Uploads the file buffer to object storage (S3 PutObject).
+   * - Upserts an ai_summaries record with QUEUED status.
+   *
+   * @param workshopId - The UUID of the target workshop.
+   * @param file - Express Multer file object with buffer and metadata.
+   * @returns OkResult with { workshopId }, or FailResult (WORKSHOP_NOT_FOUND, INTERNAL_ERROR).
+   */
+  async uploadDocument(
+    workshopId: string,
+    file: Express.Multer.File
+  ): Promise<Result<{ workshopId: string }>> {
+    const workshopResult = await this.workshopsRepo.findById(workshopId);
+    if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+
+    const uploadResult = await this.storageService.uploadFile(file, workshopId);
+    if (uploadResult.isFailure) return Result.fail(uploadResult.error);
+
+    await this.aiSummariesRepo.upsert(randomUUID(), workshopId);
+
+    return Result.ok({ workshopId });
+  }
+
+  // ── Get summary ──────────────────────────────────────────────────
+
+  /**
+   * Retrieves the AI-generated summary for a workshop (admin view).
+   *
+   * Returns full field visibility including error_message.
+   * Returns { status: "NONE" } when no summary exists.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult containing AiSummaryAdminDto, or FailResult (INTERNAL_ERROR).
+   */
+  async getAiSummary(workshopId: string): Promise<Result<AiSummaryAdminDto>> {
+    const result = await this.aiSummariesRepo.findByWorkshopId(workshopId);
+    if (result.isFailure) return Result.fail(result.error);
+    const summary = result.data;
+    if (!summary) return Result.ok({ status: "NONE" } as AiSummaryAdminDto);
+    return Result.ok(AiSummaryResponseBuilder.fromAdmin(summary));
+  }
+
+  // ── Manual override ──────────────────────────────────────────────
+
+  /**
+   * Manually overrides the AI-generated summary text for a workshop.
+   *
+   * Business rules:
+   * - Sets status to DONE and generated_at to now.
+   * - Creates a new summary record if none exists for this workshop.
+   *
+   * Side effects:
+   * - Updates or inserts a row in ai_summaries.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param text - The manual summary text.
+   * @returns OkResult containing AiSummaryAdminDto, or FailResult (INTERNAL_ERROR).
+   */
+  async updateSummaryText(
+    workshopId: string,
+    text: string
+  ): Promise<Result<AiSummaryAdminDto>> {
+    // Check for existing summary
+    const existing = await this.aiSummariesRepo.findByWorkshopId(workshopId);
+    if (existing.isFailure) return Result.fail(existing.error);
+
+    if (existing.data) {
+      const updated = await this.aiSummariesRepo.updateStatus(
+        existing.data.summaryId,
+        "DONE",
+        text
+      );
+      if (updated.isFailure) return Result.fail(updated.error);
+      return Result.ok(AiSummaryResponseBuilder.fromAdmin(updated.data));
+    }
+
+    // No existing summary — create one. DocumentId is auto-generated
+    // to satisfy FK constraint until DB migration makes it nullable.
+    const created = await this.aiSummariesRepo.createByWorkshopId(
+      workshopId,
+      text
+    );
+    if (created.isFailure) return Result.fail(created.error);
+    return Result.ok(AiSummaryResponseBuilder.fromAdmin(created.data));
+  }
+
+  // ── Retry after failure ──────────────────────────────────────────
+
+  /**
+   * Retries AI summary generation for a workshop that previously failed.
+   *
+   * Business rules:
+   * - Only summaries with FAILED status are eligible for retry.
+   * - Resets the status to QUEUED to re-trigger the Background module.
+   *
+   * Side effects:
+   * - Updates the ai_summaries record status from FAILED to QUEUED.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with void on success, or FailResult (INTERNAL_ERROR).
+   */
+  async retryAiSummary(workshopId: string): Promise<Result<void>> {
+    const summaryResult =
+      await this.aiSummariesRepo.findByWorkshopId(workshopId);
+    if (summaryResult.isFailure) return Result.fail(summaryResult.error);
+    if (!summaryResult.data) return Result.ok();
+
+    if (summaryResult.data.status !== "FAILED") {
+      return Result.ok();
+    }
+
+    const updateResult = await this.aiSummariesRepo.updateStatus(
+      summaryResult.data.summaryId,
+      "QUEUED"
+    );
+    if (updateResult.isFailure) return Result.fail(updateResult.error);
+
+    return Result.ok();
+  }
+
+  // ── Pipeline (called by AiSummaryWorker) ─────────────────────────
 
   /**
    * Runs the full document summarization pipeline.
    *
-   * Pipeline stages (delegated to PdfSummaryPipeline):
-   * 1. Upsert the ai_summaries record (creates new or resets existing to PENDING).
-   * 2. Extract raw text from the PDF located at the storage URL.
-   * 3. Clean and normalise the extracted text (whitespace, newlines, truncation).
-   * 4. Call the DeepSeek API (via Anthropic SDK) to generate a summary.
-   * 5. Persist the result with status DONE.
-   *
-   * On failure at any stage, marks the DB record as FAILED with the error.
+   * Called by AiSummaryWorker for each queued job.
    *
    * @param documentId - The UUID of the workshop document to summarise.
    * @param fileUrl - The object-storage URL of the PDF file.
    * @param workshopId - The UUID of the associated workshop.
-   * @returns OkResult with the generated summary text, or FailResult (INTERNAL_ERROR).
+   * @returns OkResult with summary text, or FailResult (INTERNAL_ERROR).
    */
   async processDocument(
     documentId: string,
@@ -65,11 +187,7 @@ export class AiSummaryService {
         `Pipeline failed for document ${documentId}: ${result.error.message}`,
         { error: result.error.code }
       );
-
-      // Mark as FAILED in the database — needed when failure happens
-      // before the PersistResultFilter would have been reached.
       await this.markFailed(documentId, result.error.message);
-
       return Result.fail(result.error);
     }
 
@@ -79,14 +197,22 @@ export class AiSummaryService {
   }
 
   /**
-   * Marks a document's summary as FAILED due to any pipeline error.
+   * Marks a document's summary as FAILED due to LLM timeout.
    *
-   * This is called when the pipeline fails before reaching the persist stage,
-   * or when the worker detects an LLM timeout.
+   * Called by AiSummaryWorker when the 40s Promise.race timeout fires.
    *
-   * @param documentId - The UUID of the document whose summary failed.
-   * @param errorMessage - The error message to record.
+   * @param documentId - The UUID of the document whose summary timed out.
    */
+  async handleTimeout(documentId: string): Promise<Result<void>> {
+    this.logger.warn(
+      `LLM timeout for document ${documentId}, marking as FAILED`
+    );
+    await this.markFailed(documentId, "LLM_TIMEOUT");
+    return Result.ok();
+  }
+
+  // ── Internal helpers ─────────────────────────────────────────────
+
   private async markFailed(
     documentId: string,
     errorMessage: string
@@ -112,21 +238,5 @@ export class AiSummaryService {
         `Failed to mark summary FAILED for document ${documentId}: ${updateResult.error.message}`
       );
     }
-  }
-
-  /**
-   * Marks a document's summary as FAILED due to LLM timeout.
-   *
-   * Called by AiSummaryWorker when the 40s Promise.race timeout fires.
-   *
-   * @param documentId - The UUID of the document whose summary timed out.
-   */
-  async handleTimeout(documentId: string): Promise<Result<void>> {
-    this.logger.warn(
-      `LLM timeout for document ${documentId}, marking as FAILED`
-    );
-
-    await this.markFailed(documentId, "LLM_TIMEOUT");
-    return Result.ok();
   }
 }

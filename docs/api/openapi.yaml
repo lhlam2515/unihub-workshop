@@ -192,7 +192,7 @@ paths:
                       fullName: Nguyễn Văn A
                       email: 21127001@uni.edu.vn
                     refreshToken: null
-                checkin_staff_mobile:
+                checkinStaffMobile:
                   summary: Check-in staff login (mobile — refresh_token in body)
                   value:
                     accessToken: eyJhbGc...
@@ -265,7 +265,7 @@ paths:
             schema:
               type: object
               properties:
-                refresh_token:
+                refreshToken:
                   type: string
                   description: Mobile only — the stored refresh token from login response
                     body
@@ -809,7 +809,7 @@ paths:
                   type: string
                   minLength: 5
                   maxLength: 500
-                notify_registered:
+                notifyRegistered:
                   type: boolean
                   default: true
       responses:
@@ -1384,12 +1384,12 @@ paths:
                 - $ref: '#/components/schemas/ErrorEnvelope'
                 - type: object
                   properties:
-                    idempotency_key:
+                    idempotencyKey:
                       type: string
                       format: uuid
                       description: Echo of the request Idempotency-Key header — reuse
                         on retry
-                    retry_after:
+                    retryAfter:
                       type: integer
                       description: Suggested seconds to wait before retry (e.g. 30)
   /payments/{paymentId}:
@@ -1703,14 +1703,14 @@ paths:
               schema:
                 type: object
                 properties:
-                  workshop_id:
+                  workshopId:
                     type: string
                     format: uuid
-                  summary_status:
+                  summaryStatus:
                     type: string
                     enum:
                     - QUEUED
-                  poll_url:
+                  pollUrl:
                     type: string
         '413':
           description: File too large
@@ -1784,10 +1784,10 @@ paths:
               schema:
                 type: object
                 properties:
-                  workshop_id:
+                  workshopId:
                     type: string
                     format: uuid
-                  summary_status:
+                  summaryStatus:
                     type: string
                     enum:
                     - QUEUED
@@ -1904,7 +1904,7 @@ paths:
               required:
               - file_path
               properties:
-                file_path:
+                filePath:
                   type: string
                   description: Absolute path inside the container's `/input` volume
                   example: /input/students_2026-05-12-supplement.csv
@@ -2031,13 +2031,13 @@ paths:
               schema:
                 type: object
                 properties:
-                  job_id:
+                  jobId:
                     type: string
                     format: uuid
-                  started_at:
+                  startedAt:
                     type: string
                     format: date-time
-                  unresolved_count:
+                  unresolvedCount:
                     type: integer
                     description: Number of payments queued for reconciliation
         '409':
@@ -2101,9 +2101,9 @@ paths:
             schema:
               type: object
               properties:
-                is_active:
+                isActive:
                   type: boolean
-                config_json:
+                configJson:
                   type: object
                   additionalProperties: true
       responses:
@@ -2338,7 +2338,7 @@ components:
               detail: Bạn đã gửi quá nhiều lần đăng ký workshop này. Vui lòng thử
                 lại sau 23 giây.
             tier: T3_user_workshop
-            retry_after: 23
+            retryAfter: 23
   schemas:
     ErrorEnvelope:
       type: object
@@ -2428,12 +2428,12 @@ components:
       examples:
         student:
           value:
-            account_type: student
-            student_id: '21127001'
+            accountType: student
+            studentId: '21127001'
             password: '...'
         staff:
           value:
-            account_type: staff
+            accountType: staff
             email: btc01@unihub.edu.vn
             password: '...'
     LoginResponse:

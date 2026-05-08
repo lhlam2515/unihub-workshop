@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  aiSummaryStatusEnum,
+  summaryStatusEnum,
   checkinSourceEnum,
   documentUploadStatusEnum,
   notificationChannelEnum,
@@ -42,7 +42,7 @@ export const notificationStatusSchema = z.enum(
 export const checkinSourceSchema = z.enum(checkinSourceEnum.enumValues);
 export const syncJobStatusSchema = z.enum(syncJobStatusEnum.enumValues);
 export const syncErrorReasonSchema = z.enum(syncErrorReasonEnum.enumValues);
-export const aiSummaryStatusSchema = z.enum(aiSummaryStatusEnum.enumValues);
+export const summaryStatusSchema = z.enum(summaryStatusEnum.enumValues);
 export const documentUploadStatusSchema = z.enum(
   documentUploadStatusEnum.enumValues
 );
@@ -62,7 +62,7 @@ export type NotificationStatus = z.infer<typeof notificationStatusSchema>;
 export type CheckinSource = z.infer<typeof checkinSourceSchema>;
 export type SyncJobStatus = z.infer<typeof syncJobStatusSchema>;
 export type SyncErrorReason = z.infer<typeof syncErrorReasonSchema>;
-export type AiSummaryStatus = z.infer<typeof aiSummaryStatusSchema>;
+export type SummaryStatus = z.infer<typeof summaryStatusSchema>;
 export type DocumentUploadStatus = z.infer<typeof documentUploadStatusSchema>;
 
 export const offlineSyncStatusSchema = z.enum(offlineSyncStatusEnum.enumValues);

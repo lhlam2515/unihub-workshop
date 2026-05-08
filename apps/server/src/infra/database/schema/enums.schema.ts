@@ -96,7 +96,7 @@ export const syncErrorReasonEnum = pgEnum("sync_error_reason", [
   "UNKNOWN",
 ]);
 
-export const aiSummaryStatusEnum = pgEnum("ai_summary_status", [
+export const summaryStatusEnum = pgEnum("summary_status", [
   "NONE",
   "QUEUED",
   "PROCESSING",
