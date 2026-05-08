@@ -54,7 +54,7 @@ export function WorkshopCard({
 }: WorkshopCardProps) {
   const isFull = workshop.seatsAvailable <= 0;
   const isFree = workshop.price === 0;
-  const isCancelled = workshop.status === "cancelled";
+  const isCancelled = workshop.status === "CANCELLED";
 
   return (
     <Card
