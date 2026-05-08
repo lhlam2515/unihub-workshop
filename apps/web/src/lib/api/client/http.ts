@@ -118,13 +118,27 @@ export async function request<T>(
   body?: unknown,
   options: RequestOptions = {}
 ): Promise<ApiResponse<T>> {
-  const { params, ...fetchOptions } = options;
+  const { params, headers: customHeaders, ...restOptions } = options;
   const url = buildUrl(path, params);
 
+  // Merge custom headers (e.g. If-Match) on top of auth headers
+  const authHeaders = buildHeaders(tokenStore.get());
+  if (customHeaders) {
+    const entries =
+      customHeaders instanceof Headers
+        ? [...customHeaders.entries()]
+        : Array.isArray(customHeaders)
+          ? customHeaders
+          : Object.entries(customHeaders);
+    for (const [key, value] of entries) {
+      authHeaders.set(key, String(value));
+    }
+  }
+
   const init: RequestInit = {
-    ...fetchOptions,
+    ...restOptions,
     method,
-    headers: buildHeaders(tokenStore.get()),
+    headers: authHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   };
 
