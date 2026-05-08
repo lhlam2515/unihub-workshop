@@ -7,9 +7,10 @@ import type {
   Speaker,
   Room,
 } from "@/infra/database/types/event-core.types";
-import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
-import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
-import { concurrentModification, workshopErrors } from "@/shared/response/errors";
+import {
+  concurrentModification,
+  workshopErrors,
+} from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { RoomConflictService } from "./room-conflict.service";
@@ -89,6 +90,30 @@ export class WorkshopsService {
       total,
       page: filters.page,
       limit: filters.limit,
+    });
+  }
+
+  /**
+   * Returns real-time seat availability for a workshop.
+   *
+   * @param id - The UUID of the workshop.
+   * @returns OkResult with { workshopId, seatsAvailable, asOf }, or FailResult (WORKSHOP_NOT_FOUND).
+   */
+  async getAvailability(
+    id: string
+  ): Promise<
+    Result<{ workshopId: string; seatsAvailable: number; asOf: string }>
+  > {
+    const workshop = await this.workshopsRepo.findById(id);
+    if (workshop.isFailure) return Result.fail(workshop.error);
+    if (!workshop.data) return Result.fail(workshopErrors.notFound(id));
+
+    const availableSeats = await this.seatCounterService.getAvailable(id);
+
+    return Result.ok({
+      workshopId: id,
+      seatsAvailable: availableSeats,
+      asOf: new Date().toISOString(),
     });
   }
 
@@ -207,10 +232,16 @@ export class WorkshopsService {
       updateData.price = String(dto.price);
     }
 
-    const updateResult = await this.workshopsRepo.update(id, updateData, expectedVersion);
+    const updateResult = await this.workshopsRepo.update(
+      id,
+      updateData,
+      expectedVersion
+    );
     if (updateResult.isFailure) return Result.fail(updateResult.error);
     if (!updateResult.data) {
-      return Result.fail(concurrentModification("Workshop", id, expectedVersion));
+      return Result.fail(
+        concurrentModification("Workshop", id, expectedVersion)
+      );
     }
 
     const [speakerResult, roomResult] = await Promise.all([
@@ -302,10 +333,16 @@ export class WorkshopsService {
     if (dto.starts_at !== undefined) updateData.startsAt = dto.starts_at;
     if (dto.ends_at !== undefined) updateData.endsAt = dto.ends_at;
 
-    const updateResult = await this.workshopsRepo.update(id, updateData, expectedVersion);
+    const updateResult = await this.workshopsRepo.update(
+      id,
+      updateData,
+      expectedVersion
+    );
     if (updateResult.isFailure) return Result.fail(updateResult.error);
     if (!updateResult.data) {
-      return Result.fail(concurrentModification("Workshop", id, expectedVersion));
+      return Result.fail(
+        concurrentModification("Workshop", id, expectedVersion)
+      );
     }
 
     const changes: { roomId?: string; startsAt?: Date; endsAt?: Date } = {};

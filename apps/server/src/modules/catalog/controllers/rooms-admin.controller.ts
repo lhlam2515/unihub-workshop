@@ -13,7 +13,7 @@ import {
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
   Param,
   Body,
   UseGuards,
@@ -76,7 +76,7 @@ export class RoomsAdminController {
    * @param body - Partial room update payload.
    * @returns The updated room DTO.
    */
-  @Put(":id")
+  @Patch(":id")
   async updateRoom(@Param("id") id: string, @Body() dto: UpdateRoomDto) {
     return this.roomsService.updateRoom(id, dto);
   }

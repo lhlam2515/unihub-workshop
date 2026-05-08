@@ -13,10 +13,13 @@ import {
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
@@ -76,8 +79,22 @@ export class SpeakersAdminController {
    * @param body - Partial speaker update payload.
    * @returns The updated speaker DTO.
    */
-  @Put(":id")
+  @Patch(":id")
   async updateSpeaker(@Param("id") id: string, @Body() dto: UpdateSpeakerDto) {
     return this.speakersService.updateSpeaker(id, dto);
+  }
+
+  /**
+   * Deletes a speaker profile.
+   *
+   * DELETE /admin/speakers/{id}
+   *
+   * @param id - The UUID of the speaker to delete.
+   * @returns 204 No Content on success, or 404 if not found.
+   */
+  @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSpeaker(@Param("id") id: string) {
+    return this.speakersService.deleteSpeaker(id);
   }
 }

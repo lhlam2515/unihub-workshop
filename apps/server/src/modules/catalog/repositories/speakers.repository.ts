@@ -94,6 +94,26 @@ export class SpeakersRepository {
    * @param data - The partial speaker attributes to apply.
    * @returns OkResult containing the updated Speaker record, or FailResult (INTERNAL_ERROR).
    */
+  /**
+   * Deletes a speaker record by ID.
+   *
+   * Side effects:
+   * - Executes DELETE on the speakers table for the given ID.
+   *
+   * @param id - The UUID of the speaker to delete.
+   * @returns OkResult<void>, or FailResult (INTERNAL_ERROR).
+   */
+  async delete(id: string): Promise<Result<void>> {
+    return tryCatch(
+      async () => {
+        await this.db
+          .delete(this.schema.speakers)
+          .where(eq(this.schema.speakers.speakerId, id));
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
   async update(
     id: string,
     data: Partial<NewSpeaker>

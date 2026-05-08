@@ -6,7 +6,9 @@ import { RedisModule } from "@/infra/redis/redis.module";
 import { AiSummaryModule } from "@/modules/ai-summary/ai-summary.module";
 
 import { RoomsAdminController } from "./controllers/rooms-admin.controller";
+import { RoomsPublicController } from "./controllers/rooms-public.controller";
 import { SpeakersAdminController } from "./controllers/speakers-admin.controller";
+import { SpeakersPublicController } from "./controllers/speakers-public.controller";
 import { WorkshopsAdminController } from "./controllers/workshops-admin.controller";
 import { WorkshopsPublicController } from "./controllers/workshops-public.controller";
 import { RoomsRepository } from "./repositories/rooms.repository";
@@ -47,7 +49,9 @@ import { WorkshopsService } from "./services/workshops.service";
     WorkshopsPublicController,
     WorkshopsAdminController,
     RoomsAdminController,
+    RoomsPublicController,
     SpeakersAdminController,
+    SpeakersPublicController,
   ],
   providers: [
     // Services

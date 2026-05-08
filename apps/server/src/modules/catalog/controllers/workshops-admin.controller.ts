@@ -19,7 +19,6 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Patch,
   Body,
   Param,
@@ -101,16 +100,18 @@ export class WorkshopsAdminController {
   /**
    * Updates a draft workshop.
    *
-   * Route: PUT /admin/workshops/:id
+   * Route: PATCH /admin/workshops/:id
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Only workshops in DRAFT status can be modified. Room time conflicts
    * are re-validated if room or time fields are changed.
+   * Uses If-Match header for optimistic locking.
    *
    * @param id - The UUID of the workshop to update.
    * @param body - Partial workshop update payload.
+   * @param ifMatch - If-Match header for optimistic locking.
    * @returns The updated workshop admin detail DTO.
    */
-  @Put(":id")
+  @Patch(":id")
   async updateWorkshop(
     @Param("id") id: string,
     @Body() dto: UpdateWorkshopDto,
