@@ -7,7 +7,7 @@ import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
-import { useSync } from "@/features/checkin/api/use-sync";
+import { useSync } from "@/features/checkin/hooks/use-sync";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
 

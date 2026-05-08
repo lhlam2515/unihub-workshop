@@ -8,7 +8,7 @@ import type { NewCheckinQueueRecord } from "@/database/types";
 import { isApiError } from "@/lib/api/errors";
 import handleError from "@/lib/handlers/error";
 
-import { checkinApi } from "./checkin.service";
+import { checkinApi } from "../api/checkin.service";
 
 import type { ScanResult, ScanStatus, UseScanResult } from "../lib/types";
 

@@ -16,7 +16,7 @@ import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
 import { cacheMetadata } from "@/database/schema/cache-metadata.schema";
 import type { CacheMetadata } from "@/database/types";
-import { usePreload } from "@/features/checkin/api/use-preload";
+import { usePreload } from "@/features/checkin/hooks/use-preload";
 import {
   workshopsService,
   type WorkshopDetailDto,

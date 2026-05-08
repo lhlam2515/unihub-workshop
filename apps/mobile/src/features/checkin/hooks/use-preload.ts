@@ -7,9 +7,9 @@ import { cachedRegistrations } from "@/database/schema/cached-registrations.sche
 import type { NewCachedRegistration } from "@/database/types";
 import handleError from "@/lib/handlers/error";
 
-import { ticketsApi } from "./tickets.service";
+import { ticketsApi } from "../api/tickets.service";
 
-import type { CachedRegistrationDto } from "./tickets.service";
+import type { CachedRegistrationDto } from "../api/tickets.service";
 import type { PreloadStatus, UsePreloadResult } from "../lib/types";
 
 /** Fetch all pages of registrations by following cursors. */

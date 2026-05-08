@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import handleError from "@/lib/handlers/error";
 
-import { ticketsApi } from "./tickets.service";
+import { ticketsApi } from "../api/tickets.service";
 
-import type { TicketDto } from "./tickets.service";
+import type { TicketDto } from "../api/tickets.service";
 
 export interface UseMyTicketsResult {
   tickets: TicketDto[];

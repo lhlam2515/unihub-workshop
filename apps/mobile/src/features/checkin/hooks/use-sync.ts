@@ -7,7 +7,7 @@ import { syncLog } from "@/database/schema/sync-log.schema";
 import type { CheckinQueueRecord } from "@/database/types";
 import handleError from "@/lib/handlers/error";
 
-import { checkinApi } from "./checkin.service";
+import { checkinApi } from "../api/checkin.service";
 
 import type { SyncRunStatus, SyncStats, UseSyncResult } from "../lib/types";
 

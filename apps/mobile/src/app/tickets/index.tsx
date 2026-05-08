@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/theme";
-import { useMyTickets } from "@/features/checkin/api/use-my-tickets";
+import { useMyTickets } from "@/features/checkin/hooks/use-my-tickets";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function MyTicketsScreen() {
