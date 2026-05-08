@@ -20,8 +20,8 @@ export const checkinQueue = sqliteTable(
     localId: text("local_id").primaryKey().notNull(),
 
     // Data đủ để server reconstruct checkin_record
-    qrToken: text("qr_token").notNull(),
-    ticketId: text("ticket_id").notNull(),
+    qrCode: text("qr_code").notNull(),
+    registrationId: text("registration_id").notNull(),
     workshopId: text("workshop_id").notNull(),
     studentId: text("student_id").notNull(),
     studentName: text("student_name").notNull(),
@@ -69,9 +69,9 @@ export const checkinQueue = sqliteTable(
     index("idx_checkin_queue_workshop").on(table.workshopId, table.syncStatus),
 
     // Ràng buộc local idempotency: cùng vé không thể quét 2 lần
-    // Mirror UNIQUE(ticket_id, workshop_id) của server
-    uniqueIndex("idx_checkin_queue_ticket_workshop").on(
-      table.ticketId,
+    // Mirror UNIQUE(registration_id, workshop_id) của server
+    uniqueIndex("idx_checkin_queue_qr_workshop").on(
+      table.qrCode,
       table.workshopId
     ),
   ]

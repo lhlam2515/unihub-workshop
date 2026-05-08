@@ -30,4 +30,7 @@ export const syncLog = sqliteTable("sync_log", {
 
   // Lý do nếu FAILED (network error, 401, 5xx...)
   errorDetail: text("error_detail"),
+
+  // Workshop scope — null = global sync (tất cả workshops)
+  workshopId: text("workshop_id"),
 });

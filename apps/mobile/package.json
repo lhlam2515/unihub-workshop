@@ -12,7 +12,8 @@
     "lint": "expo lint",
     "lint:fix": "expo lint --fix",
     "check-types": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "db:migrate": "drizzle-kit generate"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
