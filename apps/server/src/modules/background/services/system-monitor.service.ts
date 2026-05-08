@@ -67,11 +67,11 @@ export class SystemMonitorService {
       : now;
 
     return Result.ok({
-      pending_count: pendingResult.data,
-      timeout_count: overdueResult.data,
-      last_run: paymentLastRun,
-      next_run: nextRun,
-      job_status: "IDLE",
+      pendingCount: pendingResult.data,
+      timeoutCount: overdueResult.data,
+      lastRun: paymentLastRun,
+      nextRun: nextRun,
+      jobStatus: "IDLE",
     });
   }
 
@@ -102,8 +102,9 @@ export class SystemMonitorService {
         : workshop.seatsTotal;
 
       // Expected = seatsTotal - (confirmed in DB + locked in Redis)
-      const confirmedResult =
-        await this.workshopsService.getPublishedById(workshop.workshopId);
+      const confirmedResult = await this.workshopsService.getPublishedById(
+        workshop.workshopId
+      );
       if (confirmedResult.isFailure) continue;
 
       const lockPattern = `seat:lock:${workshop.workshopId}:*`;
@@ -123,10 +124,10 @@ export class SystemMonitorService {
     const reconLastRun = reconLastRunStr ? new Date(reconLastRunStr) : now;
 
     return Result.ok({
-      total_workshops: workshops.length,
-      discrepancies_found: discrepanciesFound,
-      last_run: reconLastRun,
-      next_run: nextRun,
+      totalWorkshops: workshops.length,
+      discrepanciesFound: discrepanciesFound,
+      lastRun: reconLastRun,
+      nextRun: nextRun,
     });
   }
 
@@ -168,10 +169,10 @@ export class SystemMonitorService {
         statuses.push({
           gateway: gateway,
           state: currentState,
-          failure_count: failureCount,
-          opened_at: openedAt,
-          last_attempt: lastAttempt,
-          recovery_deadline: recoveryDeadline,
+          failureCount: failureCount,
+          openedAt: openedAt,
+          lastAttempt: lastAttempt,
+          recoveryDeadline: recoveryDeadline,
         });
       }
 
@@ -224,8 +225,8 @@ export class SystemMonitorService {
       return Result.ok({
         gateway: gateway as CircuitBreakerStatusDto["gateway"],
         state: "CLOSED",
-        failure_count: 0,
-        last_attempt: new Date(),
+        failureCount: 0,
+        lastAttempt: new Date(),
       });
     } catch (error) {
       return Result.fail(systemErrors.internal(error));
