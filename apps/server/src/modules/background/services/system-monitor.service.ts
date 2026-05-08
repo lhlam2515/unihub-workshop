@@ -12,6 +12,7 @@ import { Injectable } from "@nestjs/common";
 
 import { RedisService } from "@/infra/redis/redis.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { CircuitBreakerMechanic } from "@/modules/payment/mechanics/circuit-breaker.mechanic";
 import { PaymentsService } from "@/modules/payment/services/payments.service";
 import { systemErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -26,9 +27,6 @@ import type {
 /** Known payment gateways managed by the circuit breaker system. */
 const KNOWN_GATEWAYS = ["VNPAY", "MOMO", "STRIPE"] as const;
 
-/** Redis key prefix for circuit breaker state hashes. */
-const CIRCUIT_KEY_PREFIX = "circuit:payment";
-
 /** Maximum allowed seat-counter discrepancy before flagging as an issue. */
 const DISCREPANCY_THRESHOLD = 5;
 
@@ -37,7 +35,8 @@ export class SystemMonitorService {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly workshopsService: WorkshopsService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly circuitBreaker: CircuitBreakerMechanic
   ) {}
 
   /**
@@ -95,7 +94,7 @@ export class SystemMonitorService {
     let discrepanciesFound = 0;
 
     for (const workshop of workshops) {
-      const key = `seat:available:${workshop.workshopId}`;
+      const key = `cache:workshop:${workshop.workshopId}:seats`;
       const redisValueStr = await this.redisService.get(key);
       const redisValue = redisValueStr
         ? parseInt(redisValueStr, 10)
@@ -146,33 +145,19 @@ export class SystemMonitorService {
       const statuses: CircuitBreakerStatusDto[] = [];
 
       for (const gateway of KNOWN_GATEWAYS) {
-        const key = `${CIRCUIT_KEY_PREFIX}:${gateway}`;
-        const state = await this.redisService.hGetAll(key);
-
-        const currentState = (state.state ??
-          "CLOSED") as CircuitBreakerStatusDto["state"];
-        const failureCount = state.failure_count
-          ? parseInt(state.failure_count, 10)
-          : 0;
-        const openedAt = state.opened_at
-          ? new Date(state.opened_at)
-          : undefined;
-        const lastAttempt = state.last_attempt
-          ? new Date(state.last_attempt)
-          : undefined;
-
-        let recoveryDeadline: Date | undefined;
-        if (openedAt && currentState === "OPEN") {
-          recoveryDeadline = new Date(openedAt.getTime() + 30_000);
-        }
+        const state = this.circuitBreaker.getGatewayState(gateway);
 
         statuses.push({
           gateway: gateway,
-          state: currentState,
-          failureCount: failureCount,
-          openedAt: openedAt,
-          lastAttempt: lastAttempt,
-          recoveryDeadline: recoveryDeadline,
+          state: state.state,
+          failureCount: state.failureCount,
+          openedAt: state.openedAt > 0 ? new Date(state.openedAt) : undefined,
+          lastAttempt:
+            state.lastAttempt > 0 ? new Date(state.lastAttempt) : undefined,
+          recoveryDeadline:
+            state.state === "OPEN" && state.openedAt > 0
+              ? new Date(state.openedAt + 30_000)
+              : undefined,
         });
       }
 
@@ -211,16 +196,7 @@ export class SystemMonitorService {
     }
 
     try {
-      const key = `${CIRCUIT_KEY_PREFIX}:${gateway}`;
-
-      await this.redisService.hSet(key, "state", "CLOSED");
-      await this.redisService.hSet(key, "failure_count", "0");
-      await this.redisService.hSet(key, "opened_at", "");
-      await this.redisService.hSet(
-        key,
-        "last_attempt",
-        new Date().toISOString()
-      );
+      this.circuitBreaker.reset(gateway);
 
       return Result.ok({
         gateway: gateway as CircuitBreakerStatusDto["gateway"],
