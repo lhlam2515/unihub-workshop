@@ -7,6 +7,7 @@ import { RateLimitModule } from "@/modules/rate-limit/rate-limit.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
 import { IamModule } from "../iam/iam.module";
+import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
 import { RegistrationsController } from "./controllers/registrations.controller";
 import { SeatLockMechanic } from "./mechanics/seat-lock.mechanic";
@@ -29,6 +30,7 @@ import { RegistrationsService } from "./services/registrations.service";
     CatalogModule,
     MessagingModule,
     IamModule,
+    NotificationModule,
     forwardRef(() => PaymentModule),
     RateLimitModule,
   ],

@@ -3,8 +3,7 @@ import crypto from "node:crypto";
 import { Injectable } from "@nestjs/common";
 
 import type { Registration } from "@/infra/database/types/transaction.types";
-import type { RegistrationEventData } from "@/infra/messaging/event-contracts";
-import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mechanic";
@@ -30,7 +29,7 @@ export class RegistrationsService {
     private readonly seatLock: SeatLockMechanic,
     private readonly seatCounter: SeatCounterService,
     private readonly workshopsService: WorkshopsService,
-    private readonly notificationPublisher: NotificationPublisher
+    private readonly notificationLogProducer: NotificationLogProducer
   ) {}
 
   /**
@@ -173,14 +172,14 @@ export class RegistrationsService {
       nextStep: nextStep ?? null,
     });
 
-    // Fire event for free workshops (fire-and-forget)
+    // Create notification log for free workshop registration
     if (!isPaid) {
-      this.fireRegistrationEvent(
-        registration.registrationId,
-        studentId,
-        dto.workshop_id,
-        "registration.confirmed"
-      );
+      void this.notificationLogProducer.createAndEnqueue({
+        userId: studentId,
+        workshopId: dto.workshop_id,
+        type: "REGISTRATION_CONFIRMED",
+        payload: { registrationId: registration.registrationId },
+      });
     }
 
     return Result.ok(response);
@@ -290,12 +289,13 @@ export class RegistrationsService {
 
     const response = RegistrationResponseBuilder.from(updateResult.data);
 
-    this.fireRegistrationEvent(
-      registrationId,
-      studentId,
-      registration.workshopId,
-      "registration.cancelled"
-    );
+    // Create notification log for registration cancellation
+    void this.notificationLogProducer.createAndEnqueue({
+      userId: studentId,
+      workshopId: registration.workshopId,
+      type: "REGISTRATION_CANCELLED",
+      payload: { registrationId },
+    });
 
     return Result.ok(response);
   }
@@ -308,21 +308,6 @@ export class RegistrationsService {
    */
   async countConfirmedByWorkshop(workshopId: string): Promise<Result<number>> {
     return this.registrationsRepo.countConfirmedByWorkshop(workshopId);
-  }
-
-  private fireRegistrationEvent(
-    registrationId: string,
-    studentId: string,
-    workshopId: string,
-    eventType: "registration.confirmed" | "registration.cancelled"
-  ): void {
-    const eventData: RegistrationEventData = {
-      registrationId,
-      studentId,
-      workshopId,
-      eventType,
-    };
-    this.notificationPublisher.fire(eventType, eventData);
   }
 
   private async findByIdWithOwnershipCheck(

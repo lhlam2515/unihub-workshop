@@ -7,6 +7,7 @@ import type {
   Speaker,
   Room,
 } from "@/infra/database/types/event-core.types";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import {
   concurrentModification,
   workshopErrors,
@@ -44,7 +45,8 @@ export class WorkshopsService {
     private readonly seatCounterService: SeatCounterService,
     private readonly speakersRepo: SpeakersRepository,
     private readonly roomsRepo: RoomsRepository,
-    private readonly notificationPublisher: WorkshopNotificationPublisher
+    private readonly notificationPublisher: WorkshopNotificationPublisher,
+    private readonly notificationLogProducer: NotificationLogProducer
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -389,6 +391,14 @@ export class WorkshopsService {
     }
 
     void this.notificationPublisher.publishCancelled(workshop);
+
+    // Create notification log for workshop owner
+    void this.notificationLogProducer.createAndEnqueue({
+      userId: workshop.createdBy,
+      workshopId: id,
+      type: "WORKSHOP_CANCELLED",
+      payload: { title: workshop.title },
+    });
 
     const roomResult = await this.roomsRepo.findById(workshop.roomId ?? "");
 

@@ -32,11 +32,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { Payment } from "@/infra/database/types/transaction.types";
-import type {
-  PaymentEventData,
-  RegistrationEventData,
-} from "@/infra/messaging/event-contracts";
-import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { PAYMENT_WINDOW_SECONDS } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
@@ -69,7 +65,7 @@ export class PaymentsService {
     private readonly paymentGatewayService: PaymentGatewayService,
     private readonly workshopsService: WorkshopsService,
     private readonly seatCounter: SeatCounterService,
-    private readonly notificationPublisher: NotificationPublisher
+    private readonly notificationLogProducer: NotificationLogProducer
   ) {}
 
   /**
@@ -332,15 +328,17 @@ export class PaymentsService {
       !isSuccess
     );
 
-    // Post-transaction: Fire REGISTRATION_CONFIRMED for paid workshop (fire-and-forget)
+    // Post-transaction: Create notification log for completed payment
     if (isSuccess) {
-      const regEventData: RegistrationEventData = {
-        registrationId: payment.registrationId,
-        studentId: payment.studentId,
+      void this.notificationLogProducer.createAndEnqueue({
+        userId: payment.studentId,
         workshopId,
-        eventType: "registration.confirmed",
-      };
-      this.notificationPublisher.fire("registration.confirmed", regEventData);
+        type: "REGISTRATION_CONFIRMED",
+        payload: {
+          registrationId: payment.registrationId,
+          paymentId: payment.paymentId,
+        },
+      });
     }
 
     return Result.ok();
@@ -537,18 +535,19 @@ export class PaymentsService {
       await this.seatCounter.increment(workshopId);
     }
 
-    // Fire-and-forget: notification latency must not block webhook response
-    const eventData: PaymentEventData = {
-      paymentId: payment.paymentId,
-      registrationId,
-      studentId: payment.studentId,
+    // Create notification log for payment outcome (fire-and-forget)
+    void this.notificationLogProducer.createAndEnqueue({
+      userId: payment.studentId,
       workshopId,
-      amount: Number(payment.amount),
-      gateway: payment.gateway,
-      eventType,
-    };
-
-    this.notificationPublisher.fire(eventType, eventData);
+      type:
+        eventType === "payment.success" ? "PAYMENT_SUCCESS" : "PAYMENT_FAILED",
+      payload: {
+        paymentId: payment.paymentId,
+        registrationId,
+        amount: Number(payment.amount),
+        gateway: payment.gateway,
+      },
+    });
   }
 
   /**

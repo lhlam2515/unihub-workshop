@@ -6,6 +6,7 @@ import { RedisModule } from "@/infra/redis/redis.module";
 
 import { BookingModule } from "../booking/booking.module";
 import { IamModule } from "../iam/iam.module";
+import { NotificationModule } from "../notification/notification.module";
 import { PaymentsController } from "./controllers/payments.controller";
 import { HmacSignatureGuard } from "./guards/hmac-signature.guard";
 import { CircuitBreakerMechanic } from "./mechanics/circuit-breaker.mechanic";
@@ -22,6 +23,7 @@ import { PaymentsService } from "./services/payments.service";
     MessagingModule,
     BookingModule,
     IamModule,
+    NotificationModule,
   ],
   controllers: [PaymentsController],
   providers: [
