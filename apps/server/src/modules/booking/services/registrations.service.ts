@@ -7,8 +7,13 @@ import { SeatCounterService } from "@/modules/catalog/services/seat-counter.serv
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mechanic";
-import { registrationErrors } from "@/shared/response/errors";
-import { Result } from "@/shared/response/result";
+import {
+  passthroughOrInternal,
+  registrationErrors,
+  seatErrors,
+  systemErrors,
+} from "@/shared/response/errors";
+import { Result, tryCatch } from "@/shared/response/result";
 
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import {
@@ -102,48 +107,119 @@ export class RegistrationsService {
     studentId: string,
     dto: CreateRegistrationDto
   ): Promise<Result<RegistrationDto>> {
+    // Stage 1: Validate workshop
     const workshopResult = await this.workshopsService.getPublishedById(
       dto.workshop_id
     );
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    const workshop = workshopResult.data;
 
-    const seatResult = await this.seatCounter.decrement(dto.workshop_id);
-    if (seatResult.isFailure) return Result.fail(seatResult.error);
+    // Stage 2: Cache-Aside pre-filter (ADR-13)
+    const cachedSeats = await this.seatCounter.getCachedSeats(dto.workshop_id);
+    if (cachedSeats === 0) {
+      return Result.fail(seatErrors.unavailable(dto.workshop_id));
+    }
 
+    // Stage 3: Duplicate check
     const existing = await this.registrationsRepo.findByStudentAndWorkshop(
       studentId,
       dto.workshop_id
     );
-    if (existing.isFailure) {
-      await this.seatCounter.increment(dto.workshop_id);
-      return Result.fail(existing.error);
-    }
+    if (existing.isFailure) return Result.fail(existing.error);
     if (existing.data) {
-      await this.seatCounter.increment(dto.workshop_id);
       return Result.fail(
         registrationErrors.duplicate(studentId, dto.workshop_id)
       );
     }
 
-    const isPaid = Number(workshopResult.data.price ?? "0") > 0;
+    const isPaid = Number(workshop.price ?? "0") > 0;
     const status = isPaid ? "PENDING" : "CONFIRMED";
+    const MAX_RETRIES = 1; // 2 attempts total per ADR-03
 
-    const regResult = await this.registrationsRepo.create({
-      studentId,
-      workshopId: dto.workshop_id,
-      qrCode: crypto.randomUUID(),
-      status,
-      confirmedAt: status === "CONFIRMED" ? new Date() : null,
-    });
-    if (regResult.isFailure) {
-      await this.seatCounter.increment(dto.workshop_id);
-      return Result.fail(regResult.error);
+    // Stage 4-6: OL seat decrement + INSERT in transaction
+    let registration: Registration;
+    let attempts = 0;
+
+    while (attempts <= MAX_RETRIES) {
+      // Stage 4: Read current version for OL (ADR-03)
+      const versionResult = await this.workshopsService.getSeatVersion(
+        dto.workshop_id
+      );
+      if (versionResult.isFailure) return Result.fail(versionResult.error);
+      if (!versionResult.data) {
+        return Result.fail(seatErrors.unavailable(dto.workshop_id));
+      }
+
+      const { version } = versionResult.data;
+
+      // Stage 5-6: OL UPDATE + INSERT in single transaction
+      const txResult = await tryCatch(async () => {
+        return this.registrationsRepo.transaction(async (tx) => {
+          const decResult = await this.workshopsService.decrementSeat(
+            dto.workshop_id,
+            version,
+            tx
+          );
+          if (decResult.isFailure) throw decResult.error;
+
+          if (decResult.data.rowsAffected === 0) {
+            // Re-read to distinguish version conflict vs sold out
+            const recheck = await this.workshopsService.getSeatVersion(
+              dto.workshop_id
+            );
+            if (recheck.isFailure) throw recheck.error;
+            if (!recheck.data || recheck.data.seatsAvailable === 0) {
+              throw seatErrors.unavailable(dto.workshop_id);
+            }
+            // Version conflict — will retry
+            throw { __versionConflict: true };
+          }
+
+          const regResult = await this.registrationsRepo.create(
+            {
+              studentId,
+              workshopId: dto.workshop_id,
+              qrCode: crypto.randomUUID(),
+              status,
+              confirmedAt: status === "CONFIRMED" ? new Date() : null,
+            },
+            tx
+          );
+          if (regResult.isFailure) throw regResult.error;
+          return regResult.data;
+        });
+      }, passthroughOrInternal);
+
+      if (txResult.isSuccess) {
+        registration = txResult.data;
+        break;
+      }
+
+      // Check if version conflict (retryable) or hard error
+      const error = txResult.error;
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "__versionConflict" in error
+      ) {
+        attempts++;
+        continue;
+      }
+
+      // Hard error — sold out or internal
+      return Result.fail(error);
     }
-    const registration = regResult.data;
 
-    // Paid: acquire seat lock
+    // If we exhausted retries, return high contention
+    if (!registration!) {
+      return Result.fail(systemErrors.dbLockTimeout("registration", 2));
+    }
+
+    // Stage 7: Write-Invalidate cache (ADR-13, fire-and-forget outside tx)
+    await this.seatCounter.invalidateCache(dto.workshop_id);
+
+    // Stage 8: Paid — acquire seat lock
     if (isPaid) {
-      const workshop = workshopResult.data;
       const lockResult = await this.seatLock.acquire(
         dto.workshop_id,
         registration.registrationId,
@@ -151,11 +227,13 @@ export class RegistrationsService {
         Number(workshop.price ?? "0")
       );
       if (lockResult.isFailure) {
+        // Compensate: release seat + invalidate cache
+        await this.workshopsService.incrementSeat(dto.workshop_id);
         await this.registrationsRepo.updateStatus(
           registration.registrationId,
           "CANCELLED"
         );
-        await this.seatCounter.increment(dto.workshop_id);
+        await this.seatCounter.invalidateCache(dto.workshop_id);
         return Result.fail(lockResult.error);
       }
     }
@@ -165,7 +243,7 @@ export class RegistrationsService {
       ? {
           action: "CREATE_PAYMENT",
           endpoint: "/api/v1/payments",
-          amount: Number(workshopResult.data.price ?? "0"),
+          amount: Number(workshop.price ?? "0"),
           currency: "VND",
           expiresAt: new Date(Date.now() + PAYMENT_LOCK_TTL_MS),
         }
@@ -282,13 +360,14 @@ export class RegistrationsService {
     );
     if (updateResult.isFailure) return Result.fail(updateResult.error);
 
-    // Release seat + lock in parallel (both idempotent)
+    // Release seat via PostgreSQL (source of truth) + invalidate cache
     await Promise.all([
-      this.seatCounter.increment(registration.workshopId),
+      this.workshopsService.incrementSeat(registration.workshopId),
       registration.status === "PENDING"
         ? this.seatLock.release(registration.workshopId, registrationId)
         : Promise.resolve(),
     ]);
+    await this.seatCounter.invalidateCache(registration.workshopId);
 
     const response = RegistrationResponseBuilder.from(updateResult.data);
 

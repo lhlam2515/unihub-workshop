@@ -32,12 +32,12 @@
 import { Injectable } from "@nestjs/common";
 
 import type { Payment } from "@/infra/database/types/transaction.types";
-import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { PAYMENT_WINDOW_SECONDS } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { passthroughOrInternal, paymentErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
@@ -532,7 +532,8 @@ export class PaymentsService {
 
     // Only return seat to pool on failure/timeout, not on successful payment
     if (incrementSeatCounter) {
-      await this.seatCounter.increment(workshopId);
+      await this.workshopsService.incrementSeat(workshopId);
+      await this.seatCounter.invalidateCache(workshopId);
     }
 
     // Create notification log for payment outcome (fire-and-forget)

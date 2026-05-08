@@ -3,6 +3,7 @@ import { eq, and, desc, gte, lte, lt, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
+import type { DrizzleTransaction } from "@/infra/database/types/drizzle.types";
 import type { WorkshopStatus } from "@/infra/database/types/enums.types";
 import type {
   Workshop,
@@ -279,6 +280,115 @@ export class WorkshopsRepository {
           })
           .from(this.schema.workshops)
           .where(eq(this.schema.workshops.status, "OPEN"));
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Atomically decrements seats_available with optimistic locking.
+   *
+   * Only applies the update if the current version matches expectedVersion
+   * AND seats_available > 0. Used as the enforcement layer (ADR-03) during
+   * registration — PostgreSQL is the sole source of truth for seat counts.
+   *
+   * Business rules:
+   * - Version must match expectedVersion (optimistic lock).
+   * - seats_available must be > 0 (prevents overselling at DB level).
+   * - Returns rowsAffected: 0 means version conflict OR sold out.
+   *
+   * Side effects:
+   * - UPDATE workshops SET seats_available = seats_available - 1, version = version + 1.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param expectedVersion - The version read before the update attempt.
+   * @param tx - Optional transaction handle for multi-statement atomicity.
+   * @returns OkResult with { rowsAffected, newVersion }, or FailResult (INTERNAL_ERROR).
+   */
+  async decrementSeat(
+    workshopId: string,
+    expectedVersion: number,
+    tx?: DrizzleTransaction
+  ): Promise<Result<{ rowsAffected: number; newVersion: number }>> {
+    const conn = tx ?? this.db;
+    return tryCatch(
+      async () => {
+        const result = await conn
+          .update(this.schema.workshops)
+          .set({
+            seatsAvailable: sql`${this.schema.workshops.seatsAvailable} - 1`,
+            version: sql`${this.schema.workshops.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(this.schema.workshops.workshopId, workshopId),
+              eq(this.schema.workshops.version, expectedVersion),
+              sql`${this.schema.workshops.seatsAvailable} > 0`
+            )
+          );
+        return {
+          rowsAffected: result.rowCount ?? 0,
+          newVersion: expectedVersion + 1,
+        };
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Increments seats_available for seat release (cancel, timeout, payment failure).
+   *
+   * No optimistic locking — seat release has no contention (adding seats back).
+   * Still increments version for audit trail consistency.
+   *
+   * Side effects:
+   * - UPDATE workshops SET seats_available = seats_available + 1, version = version + 1.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param tx - Optional transaction handle.
+   * @returns OkResult(void), or FailResult (INTERNAL_ERROR).
+   */
+  async incrementSeat(
+    workshopId: string,
+    tx?: DrizzleTransaction
+  ): Promise<Result<void>> {
+    const conn = tx ?? this.db;
+    return tryCatch(
+      async () => {
+        await conn
+          .update(this.schema.workshops)
+          .set({
+            seatsAvailable: sql`${this.schema.workshops.seatsAvailable} + 1`,
+            version: sql`${this.schema.workshops.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(this.schema.workshops.workshopId, workshopId));
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Reads the current version and seats_available for optimistic locking pre-read.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with { version, seatsAvailable }, or null if not found.
+   */
+  async getSeatVersion(
+    workshopId: string
+  ): Promise<Result<{ version: number; seatsAvailable: number } | null>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .select({
+            version: this.schema.workshops.version,
+            seatsAvailable: this.schema.workshops.seatsAvailable,
+          })
+          .from(this.schema.workshops)
+          .where(eq(this.schema.workshops.workshopId, workshopId))
+          .limit(1);
+        return result ?? null;
       },
       (err) => systemErrors.internal(err)
     );

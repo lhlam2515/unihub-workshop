@@ -30,6 +30,25 @@ export class RegistrationsRepository {
   ) {}
 
   /**
+   * Executes a callback within a Drizzle database transaction.
+   *
+   * All repository methods accept an optional tx parameter — pass the tx
+   * from this callback to participate in the same ACID transaction.
+   * Used by OL seat decrement + registration INSERT atomicity (ADR-03).
+   *
+   * Side effects:
+   * - Opens a database transaction; commits on success, rolls back on thrown error.
+   *
+   * @param callback - Async function receiving the transaction client.
+   * @returns The value returned by the callback.
+   */
+  async transaction<T>(
+    callback: (tx: DrizzleTransaction) => Promise<T>
+  ): Promise<T> {
+    return this.db.transaction(callback);
+  }
+
+  /**
    * Finds a single registration by its primary key.
    *
    * @param id - The registration UUID.
