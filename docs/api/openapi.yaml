@@ -921,6 +921,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Speaker'
+    delete:
+      tags:
+      - Catalog Admin
+      summary: Delete speaker
+      operationId: adminDeleteSpeaker
+      responses:
+        '204':
+          description: No Content — speaker deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
   /admin/rooms:
     get:
       tags:
