@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import "react-native-reanimated";
 
 import { createDatabaseClient } from "@/database/client";
@@ -82,21 +82,10 @@ export default function RootLayout() {
 
 function BootstrapScreen() {
   return (
-    <View style={styles.bootstrapScreen}>
-      <Text style={styles.bootstrapText}>Đang khởi tạo ứng dụng...</Text>
+    <View className="absolute inset-0 items-center justify-center bg-background">
+      <Text className="text-sm text-muted-foreground">
+        Đang khởi tạo ứng dụng...
+      </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  bootstrapScreen: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-  },
-  bootstrapText: {
-    color: "#888",
-    fontSize: 14,
-  },
-});
