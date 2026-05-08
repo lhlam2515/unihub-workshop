@@ -4,13 +4,12 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { PortalHost } from "@rn-primitives/portal";
+import { eq } from "drizzle-orm";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import "react-native-reanimated";
-
-import { eq } from "drizzle-orm";
 
 import { createDatabaseClient } from "@/database/client";
 import { DatabaseProvider } from "@/database/provider";
