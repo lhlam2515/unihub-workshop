@@ -142,7 +142,7 @@ paths:
         \ (checkin_staff):**\n- Same `access_token` in JSON body.\n- `refresh_token`\
         \ **also** included in the JSON body (mobile has no cookie jar).\n  App stores\
         \ it in Android Keystore / iOS Keychain.\n\nFor role `checkin_staff`, the\
-        \ response `user.allowed_workshop_ids` populates\nthe mobile app's `app_session.allowed_workshop_ids`.\n"
+        \ response `user.allowedWorkshopIds` populates\nthe mobile app's `appSession.allowedWorkshopIds`.\n"
       operationId: login
       security: []
       requestBody:
@@ -234,14 +234,14 @@ paths:
 
         **Web client:** Send with no extra header — the browser automatically
 
-        sends the `refresh_token` HttpOnly cookie (set on `/auth/login`).
+        sends the `refreshToken` HttpOnly cookie (set on `/auth/login`).
 
         The `Path=/auth/refresh` attribute ensures the cookie is only sent
 
         to this endpoint, not leaked to other API calls.
 
 
-        **Mobile client:** Send `refresh_token` in the JSON request body
+        **Mobile client:** Send `refreshToken` in the JSON request body
 
         (mobile has no cookie jar). Server accepts either source.
 
@@ -256,7 +256,7 @@ paths:
       requestBody:
         description: 'Required for **mobile clients only**. Web clients omit the body;
 
-          the server reads the `refresh_token` HttpOnly cookie automatically.
+          the server reads the `refreshToken` HttpOnly cookie automatically.
 
           '
         required: false
@@ -333,7 +333,7 @@ paths:
 
         (e.g., shared device, app reinstall), the binding is moved to the
 
-        current student (`is_active=true`, `last_seen=now()`).
+        current student (`isActive=true`, `lastSeen=now()`).
 
 
         **Role:** `student` only.
@@ -368,7 +368,7 @@ paths:
       tags:
       - Device Tokens
       summary: Deactivate a push token
-      description: 'Sets `is_active=false` (soft delete to keep audit trail). Called
+      description: 'Sets `isActive=false` (soft delete to keep audit trail). Called
         when
 
         the user logs out on a device.
@@ -415,9 +415,9 @@ paths:
         schema:
           type: string
           format: date
-      - name: has_seats
+      - name: hasSeats
         in: query
-        description: Hide workshops with `seats_available = 0`
+        description: Hide workshops with `seatsAvailable = 0`
         schema:
           type: boolean
           default: false
@@ -436,12 +436,12 @@ paths:
         in: query
         description: 'Comma-separated sort fields. Prefix `-` for desc. Allowed:
 
-          `starts_at`, `seats_available`, `price`.
+          `startsAt`, `seatsAvailable`, `price`.
 
           '
         schema:
           type: string
-          default: starts_at
+          default: startsAt
       responses:
         '200':
           description: Workshop list
@@ -509,7 +509,7 @@ paths:
       tags:
       - Catalog
       summary: Get real-time seat availability (cache-only)
-      description: 'Lightweight endpoint that returns just `seats_available`. Frontend
+      description: 'Lightweight endpoint that returns just `seatsAvailable`. Frontend
 
         polls this every 5–10s on the workshop detail page while the student
 
@@ -699,14 +699,14 @@ paths:
         client last read it, returns `412 Precondition Failed`.
 
 
-        **Side effect:** Changing `room_id`, `starts_at`, or `ends_at` on a
+        **Side effect:** Changing `roomId`, `startsAt`, or `endsAt` on a
 
         workshop with active registrations triggers `workshop.changed`
 
         notifications to all registered students.
 
 
-        **Edge case:** Lowering `seats_total` below `(seats_total - seats_available)`
+        **Edge case:** Lowering `seatsTotal` below `(seatsTotal - seatsAvailable)`
 
         (i.e., below the count of confirmed registrations) returns 422.
 
@@ -748,7 +748,7 @@ paths:
       tags:
       - Catalog Admin
       summary: Publish a draft workshop (`draft` → `open`)
-      description: 'Requires `room_id` and `speaker_id` to be set. Validates the room
+      description: 'Requires `roomId` and `speakerId` to be set. Validates the room
         is
 
         not double-booked.
@@ -769,7 +769,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkshopAdmin'
         '409':
-          description: '`workshop.cannot_publish` — already open, or missing `room_id`/`speaker_id`.
+          description: '`workshop.cannot_publish` — already open, or missing `roomId`/`speakerId`.
 
             '
           content:
@@ -1028,12 +1028,12 @@ paths:
         \ **and** T3 (user×workshop: 5/60s).\nT1 (IP) does not apply — authenticated\
         \ users are identified by `user_id`.\nT3 is the critical guard: spam on one\
         \ workshop doesn't penalise registering\nfor a different workshop.\n\n## Free\
-        \ workshop flow\n\n1. Rate limit check (T2, T3).\n2. Pre-check `seats_available`\
+        \ workshop flow\n\n1. Rate limit check (T2, T3).\n2. Pre-check `seatsAvailable`\
         \ via Redis cache (fail-fast, no DB round-trip).\n3. Claim idempotency key\
         \ (`in_progress`).\n4. OL retry loop (≤2 attempts, ADR-03):\n   - `INSERT\
         \ registration ON CONFLICT DO NOTHING`.\n   - If `rowsAffected=0` → student\
-        \ already registered → return existing.\n   - `UPDATE workshops SET seats_available\
-        \ -= 1, version += 1\n      WHERE id=? AND version=? AND seats_available >\
+        \ already registered → return existing.\n   - `UPDATE workshops SET seatsAvailable\
+        \ -= 1, version += 1\n      WHERE id=? AND version=? AND seatsAvailable >\
         \ 0`.\n   - On version mismatch → ROLLBACK and retry.\n5. Mark idempotency\
         \ `completed`.\n6. Invalidate cache key (fire-and-forget).\n7. Enqueue confirmation\
         \ notification via BullMQ (async).\n8. Return `201` with `qr_code`.\n\
@@ -1106,7 +1106,7 @@ paths:
 
             (`status=in_progress`, `locked_until` not yet expired). Back off
 
-            and retry after `retry_after` seconds with the **same** key.
+            and retry after `retryAfter` seconds with the **same** key.
 
             '
           content:
@@ -1116,13 +1116,13 @@ paths:
         '422':
           description: 'Multiple causes — check `error.type`:
 
-            - `registration.workshop_full` — `seats_available = 0` after OL retries
+            - `registration.workshop_full` — `seatsAvailable = 0` after OL retries
             (or cache pre-check).
 
             - `registration.already_registered` — UNIQUE constraint hit (same student,
             same workshop).
 
-            - `registration.student_not_in_csv` — `student_id` not in `students` table
+            - `registration.student_not_in_csv` — `studentId` not in `students` table
             (ADR-12 known 24h gap).
 
             - `registration.conflict_exhausted` — OL retry ceiling (2 attempts) exhausted
@@ -1142,9 +1142,9 @@ paths:
       description: 'Returns the authenticated student''s registrations. **Row-level
         filter:**
 
-        `WHERE student_id = JWT.sub`. The endpoint does not accept a
+        `WHERE studentId = JWT.sub`. The endpoint does not accept a
 
-        `student_id` query parameter — preventing peer data enumeration.
+        `studentId` query parameter — preventing peer data enumeration.
 
         '
       operationId: listMyRegistrations
@@ -1164,7 +1164,7 @@ paths:
         explode: false
       - name: upcoming
         in: query
-        description: Only registrations for workshops with `starts_at >= now()`
+        description: Only registrations for workshops with `startsAt >= now()`
         schema:
           type: boolean
       - $ref: '#/components/parameters/CursorParam'
@@ -1292,17 +1292,17 @@ paths:
       description: "**Critical endpoint** — handles the most complex failure modes.\n\
         \n## Step ordering (invariant, `registration-paid.md` INV-03)\n\n1. Rate limit\
         \ check (T2, T3 — same tiers as `/registrations`).\n2. **Idempotency check\
-        \ FIRST** (before Circuit Breaker) — if `payment_key`\n   has `status=completed`,\
+        \ FIRST** (before Circuit Breaker) — if `paymentKey`\n   has `status=completed`,\
         \ return cached response even when CB is OPEN.\n3. **Circuit Breaker check**\
         \ (per-gateway) — if OPEN, return 503 immediately\n   without claiming a new\
         \ key.\n4. Claim / refresh idempotency key (`in_progress`).\n5. Insert `payments`\
         \ record (`status=initiated`).\n6. Call gateway with timeout 5s, forwarding\
-        \ `payment_key` as the gateway's\n   own `Idempotency-Key` header (prevents\
-        \ double-charge).\n\n## `payment_key` — body field, not a header\n\nThe `payment_key`\
+        \ `paymentKey` as the gateway's\n   own `Idempotency-Key` header (prevents\
+        \ double-charge).\n\n## `paymentKey` — body field, not a header\n\nThe `paymentKey`\
         \ is included **in the request body** (per `registration-paid.md`).\nThe client\
         \ must generate it once and **reuse the same key on every retry**.\nGenerating\
         \ a new key on retry bypasses the idempotency mechanism and risks\ndouble-charging.\
-        \ On `504` the server embeds `payment_key` back in the error\nresponse as\
+        \ On `504` the server embeds `paymentKey` back in the error\nresponse as\
         \ a hint — client must use it verbatim.\n\n## Outcomes\n\n| Gateway result\
         \ | `payments.status` | `idempotency_keys.status` | HTTP |\n|---|---|---|---|\n\
         | 200 OK | `succeeded` | `completed` | `200` |\n| 402/4xx declined | `failed`\
@@ -1342,7 +1342,7 @@ paths:
 
             and `locked_until` has not expired. Back off and retry after
 
-            `retry_after` seconds with the **same** key.
+            `retryAfter` seconds with the **same** key.
 
             '
           content:
@@ -1488,7 +1488,7 @@ paths:
 
         **Authorization:** `workshopId` must be in the staff''s
 
-        `allowed_workshop_ids` (from JWT).
+        `allowedWorkshopIds` (from JWT).
 
 
         Returns `X-Total-Count` header so the mobile app can populate
@@ -1549,7 +1549,7 @@ paths:
 
         the QR token to a registration, validates the workshop assignment,
 
-        and inserts via `ON CONFLICT (registration_id) DO NOTHING`
+        and inserts via `ON CONFLICT (registrationId) DO NOTHING`
 
         (first-check-in-wins). Idempotency is provided by the DB constraint,
 
@@ -1615,14 +1615,14 @@ paths:
       tags:
       - Check-in
       summary: Batch sync offline check-ins ⭐
-      description: 'Mobile flushes its `checkin_queue` SQLite buffer to the server.
+      description: 'Mobile flushes its `checkinQueue` SQLite buffer to the server.
 
-        Each item carries a `local_id` (UUID v4 generated on device) which
+        Each item carries a `localId` (UUID v4 generated on device) which
 
         serves as the per-item idempotency key.
 
 
-        **No `Idempotency-Key` header** — each item has its own `local_id`.
+        **No `Idempotency-Key` header** — each item has its own `localId`.
 
         Same batch sent twice produces the same result via
 
@@ -1640,7 +1640,7 @@ paths:
 
         The mobile app updates each row''s `sync_status` based on the matching
 
-        result by `local_id` (not by index — server may reorder).
+        result by `localId` (not by index — server may reorder).
 
         '
       operationId: syncCheckins
@@ -1936,7 +1936,7 @@ paths:
 
         **Per `circuit-breaker.md` §3.4** — response must include at minimum:
 
-        `gateway`, `state`, `failure_count`, `opened_at`, `last_attempt`.
+        `gateway`, `state`, `failureCount`, `openedAt`, `lastAttempt`.
 
         '
       operationId: getCircuitBreakerState
@@ -1959,7 +1959,7 @@ paths:
       tags:
       - System Admin
       summary: Reset Circuit Breaker to CLOSED
-      description: 'Forces the gateway''s CB back to `CLOSED` and resets `failure_count`
+      description: 'Forces the gateway''s CB back to `CLOSED` and resets `failureCount`
         to 0.
 
         Use after a gateway incident is resolved and normal service is confirmed.
@@ -2017,7 +2017,7 @@ paths:
 
         The job queries the gateway for each `payments WHERE status=''UNRESOLVED''
 
-        AND created_at BETWEEN now()-24h AND now()-5min`. Results update both
+        AND createdAt BETWEEN now()-24h AND now()-5min`. Results update both
 
         `payments.status` and `idempotency_keys.status` atomically.
 
@@ -2076,12 +2076,12 @@ paths:
       tags:
       - Notification Admin
       summary: Update channel config
-      description: 'Used to enable/disable a channel or update its `config_json`.
+      description: 'Used to enable/disable a channel or update its `configJson`.
         Adding a
 
         new channel (e.g., Telegram for the next semester) only requires
 
-        flipping `is_active=true` and providing `config_json` — the backend''s
+        flipping `isActive=true` and providing `configJson` — the backend''s
 
         Strategy Pattern resolver picks it up.
 
@@ -2175,9 +2175,9 @@ components:
       bearerFormat: JWT
       description: 'Short-lived access token (15 min). RS256 signed. Decoded claims:
 
-        `sub` (student_id or staff UUID), `role`, `user_type`,
+        `sub` (studentId or staff UUID), `role`, `user_type`,
 
-        `allowed_workshop_ids` (checkin_staff only), `iat`, `exp`.
+        `allowedWorkshopIds` (checkin_staff only), `iat`, `exp`.
 
         Verified by public key — no DB lookup at Layer ① (authentication.md INV-01).
 
@@ -2395,9 +2395,9 @@ components:
       required:
       - accountType
       - password
-      description: 'Login body. Field `student_id` is required when `account_type=student`;
+      description: 'Login body. Field `studentId` is required when `accountType=student`;
 
-        field `email` is required when `account_type=staff`. This split avoids a
+        field `email` is required when `accountType=staff`. This split avoids a
 
         generic `identifier` field whose format depends on context — MSSV format
 
@@ -2491,7 +2491,7 @@ components:
       properties:
         id:
           type: string
-          description: '`student_id` (TEXT) for students, UUID for staff. Frontend
+          description: '`studentId` (TEXT) for students, UUID for staff. Frontend
             treats as opaque.
 
             '
@@ -3152,7 +3152,7 @@ components:
         clientLocalId:
           type: string
           format: uuid
-          description: Optional — matches the `local_id` from mobile SQLite
+          description: Optional — matches the `localId` from mobile SQLite
     CheckinResult:
       type: object
       required:
@@ -3216,7 +3216,7 @@ components:
         localId:
           type: string
           format: uuid
-          description: Per-item idempotency key (from `checkin_queue.local_id`)
+          description: Per-item idempotency key (from `checkinQueue.localId`)
         qrCode:
           type: string
         workshopId:
@@ -3271,7 +3271,7 @@ components:
           nullable: true
           description: 'When `result=duplicate` — timestamp of the winning check-in.
 
-            Mobile displays: "Đã check-in lúc {first_checkin_at} bởi {first_staff_name}".
+            Mobile displays: "Đã check-in lúc {firstCheckinAt} bởi {firstStaffName}".
 
             '
         firstStaffName:
@@ -3394,7 +3394,7 @@ components:
           format: uuid
         userId:
           type: string
-          description: TEXT — student_id or staff UUID (frontend treats as opaque)
+          description: TEXT — studentId or staff UUID (frontend treats as opaque)
         eventType:
           type: string
           example: registration_confirmed
