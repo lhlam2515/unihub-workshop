@@ -1,14 +1,10 @@
 import { eq } from "drizzle-orm";
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import { SyncProgressSteps } from "@/features/checkin/components/SyncProgressSteps";
 import { useSync } from "@/features/checkin/hooks/use-sync";
 
@@ -45,14 +41,14 @@ export default function SyncProgressScreen() {
 
         <View className="mt-1 gap-3">
           {runStatus === "done" ? (
-            <Pressable
+            <Button
               onPress={() => router.back()}
-              className="min-h-[52px] items-center justify-center rounded-2xl bg-primary px-5 py-3.5 active:opacity-85"
+              className="min-h-[52px] rounded-2xl"
             >
-              <Text className="text-base font-bold text-white">Hoàn thành</Text>
-            </Pressable>
+              <Text>Hoàn thành</Text>
+            </Button>
           ) : (
-            <Pressable
+            <Button
               onPress={() => {
                 const db = createDatabaseClient();
                 const device = db
@@ -63,25 +59,24 @@ export default function SyncProgressScreen() {
                 void sync(workshopId, device?.deviceId ?? "unknown");
               }}
               disabled={runStatus === "syncing"}
-              className="min-h-[52px] items-center justify-center rounded-2xl bg-primary px-5 py-3.5 active:opacity-85 disabled:opacity-85"
+              className="min-h-[52px] rounded-2xl"
             >
               {runStatus === "syncing" ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text className="text-base font-bold text-white">
+                <Text>
                   {runStatus === "error" ? "Thử lại" : "Bắt đầu đồng bộ"}
                 </Text>
               )}
-            </Pressable>
+            </Button>
           )}
-          <Pressable
+          <Button
+            variant="outline"
             onPress={() => router.push(ROUTES.TAB_QUEUE)}
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">
-              Đi tới hàng đợi
-            </Text>
-          </Pressable>
+            <Text>Đi tới hàng đợi</Text>
+          </Button>
         </View>
       </ScrollView>
     </SafeAreaView>

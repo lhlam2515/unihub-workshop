@@ -3,14 +3,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
-  Text,
   TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 
 export default function LoginScreen() {
@@ -90,19 +90,18 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            <Pressable
+            <Button
               onPress={handleLogin}
               disabled={isLoading}
-              className="mt-1 min-h-[52px] items-center justify-center rounded-2xl bg-primary py-4 active:opacity-75 disabled:opacity-75"
+              size="lg"
+              className="mt-1 min-h-[52px] rounded-2xl"
             >
               {isLoading ? (
                 <ActivityIndicator color="white" size="small" />
               ) : (
-                <Text className="text-base font-bold text-white">
-                  Đăng nhập
-                </Text>
+                <Text>Đăng nhập</Text>
               )}
-            </Pressable>
+            </Button>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

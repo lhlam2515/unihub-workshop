@@ -1,7 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import ROUTES from "@/constants/routes";
 
 function getParam(value: string | string[] | undefined, fallback = "") {
@@ -71,20 +73,16 @@ export default function ResultScreen() {
         </View>
 
         <View className="mt-1 gap-3">
-          <Pressable
-            onPress={() => router.back()}
-            className="items-center justify-center rounded-2xl bg-primary px-5 py-3.5 active:opacity-85"
-          >
-            <Text className="text-base font-bold text-white">Quét tiếp</Text>
-          </Pressable>
-          <Pressable
+          <Button onPress={() => router.back()} className="rounded-2xl">
+            <Text>Quét tiếp</Text>
+          </Button>
+          <Button
+            variant="outline"
             onPress={() => router.push(ROUTES.WORKSHOP(workshopId))}
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">
-              Về dashboard
-            </Text>
-          </Pressable>
+            <Text>Về dashboard</Text>
+          </Button>
         </View>
       </ScrollView>
     </SafeAreaView>

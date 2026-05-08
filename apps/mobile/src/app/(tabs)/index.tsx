@@ -1,16 +1,12 @@
 import { inArray } from "drizzle-orm";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import { WorkshopCard } from "@/components/WorkshopCard";
 import ROUTES from "@/constants/routes";
 import { createDatabaseClient } from "@/database/client";
@@ -22,7 +18,7 @@ import {
   type WorkshopDetailDto,
 } from "@/features/workshops/api/workshops.service";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
-import handleError from "@/lib/handlers/error";
+import { handleError } from "@/lib/handlers/error";
 
 export default function HomeScreen() {
   const { preload } = usePreload();
@@ -140,22 +136,19 @@ export default function HomeScreen() {
             Hành động nhanh
           </Text>
           <View className="gap-2.5">
-            <Pressable
+            <Button
               onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
-              className="items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-85"
+              className="rounded-2xl"
             >
-              <Text className="text-base font-bold text-white">
-                Đồng bộ ngay
-              </Text>
-            </Pressable>
-            <Pressable
+              <Text>Đồng bộ ngay</Text>
+            </Button>
+            <Button
+              variant="outline"
               onPress={() => router.push(ROUTES.TAB_QUEUE)}
-              className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+              className="rounded-2xl"
             >
-              <Text className="text-base font-bold text-foreground">
-                Mở hàng đợi
-              </Text>
-            </Pressable>
+              <Text>Mở hàng đợi</Text>
+            </Button>
           </View>
         </View>
       </ScrollView>

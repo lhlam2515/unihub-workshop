@@ -1,8 +1,10 @@
 import { eq } from "drizzle-orm";
 import { router } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import ROUTES from "@/constants/routes";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
@@ -67,7 +69,7 @@ export default function QueueScreen() {
         ) : null}
 
         <View className="mt-1 gap-3">
-          <Pressable
+          <Button
             onPress={() => {
               const db = createDatabaseClient();
               const device = db
@@ -78,36 +80,34 @@ export default function QueueScreen() {
               void sync("", device?.deviceId ?? "unknown");
             }}
             disabled={runStatus === "syncing" || stats.pending === 0}
-            className="items-center justify-center rounded-2xl bg-primary px-5 py-3.5 active:opacity-60 disabled:opacity-60"
+            className="rounded-2xl px-5"
           >
-            <Text className="text-base font-bold text-white">
+            <Text>
               {runStatus === "syncing"
                 ? "Đang đồng bộ..."
                 : stats.pending === 0
                   ? "Không có gì để sync"
                   : `Đồng bộ ${stats.pending} bản ghi`}
             </Text>
-          </Pressable>
-          <Pressable
+          </Button>
+          <Button
+            variant="outline"
             onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">
-              Xem chi tiết tiến độ
-            </Text>
-          </Pressable>
-          <Pressable
+            <Text>Xem chi tiết tiến độ</Text>
+          </Button>
+          <Button
+            variant="outline"
             onPress={() => {
               const workshops = offlineAuth.getAllowedWorkshops();
               const firstId = workshops[0] ?? "";
               router.push(ROUTES.WORKSHOP(firstId));
             }}
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">
-              Quay lại workshop
-            </Text>
-          </Pressable>
+            <Text>Quay lại workshop</Text>
+          </Button>
         </View>
       </ScrollView>
     </SafeAreaView>

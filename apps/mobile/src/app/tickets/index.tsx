@@ -1,13 +1,9 @@
 import { router } from "expo-router";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import { TicketCard } from "@/components/TicketCard";
 import { useMyTickets } from "@/features/checkin/hooks/use-my-tickets";
 
@@ -42,12 +38,9 @@ export default function MyTicketsScreen() {
             <Text className="text-sm leading-5 text-muted-foreground">
               {errorMessage}
             </Text>
-            <Pressable
-              onPress={() => void reload()}
-              className="items-center rounded-2xl bg-primary py-3.5 active:opacity-85"
-            >
-              <Text className="text-base font-bold text-white">Thử lại</Text>
-            </Pressable>
+            <Button onPress={() => void reload()} className="rounded-2xl">
+              <Text>Thử lại</Text>
+            </Button>
           </View>
         ) : tickets.length === 0 ? (
           <View className="gap-2.5 rounded-3xl border border-border p-5">
@@ -67,21 +60,21 @@ export default function MyTicketsScreen() {
         )}
 
         <View className="mt-1 gap-3">
-          <Pressable
+          <Button
+            variant="outline"
             onPress={() => void reload()}
             disabled={isLoading}
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85 disabled:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">Tải lại</Text>
-          </Pressable>
-          <Pressable
+            <Text>Tải lại</Text>
+          </Button>
+          <Button
+            variant="outline"
             onPress={() => router.back()}
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">
-              Quay lại
-            </Text>
-          </Pressable>
+            <Text>Quay lại</Text>
+          </Button>
         </View>
       </ScrollView>
     </SafeAreaView>

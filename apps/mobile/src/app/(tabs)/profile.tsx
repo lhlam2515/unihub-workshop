@@ -1,15 +1,10 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import ROUTES from "@/constants/routes";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 
@@ -117,27 +112,24 @@ export default function ProfileScreen() {
         </View>
 
         <View className="mt-1 gap-3">
-          <Pressable
+          <Button
             onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
-            className="min-h-[50px] items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-85"
+            className="min-h-[50px] rounded-2xl"
           >
-            <Text className="text-base font-bold text-white">
-              Mở tiến trình đồng bộ
-            </Text>
-          </Pressable>
-          <Pressable
+            <Text>Mở tiến trình đồng bộ</Text>
+          </Button>
+          <Button
+            variant="destructive"
             onPress={handleLogout}
             disabled={loggingOut}
-            className="min-h-[50px] items-center justify-center rounded-2xl border border-red-500 py-3.5 active:opacity-70 disabled:opacity-70"
+            className="min-h-[50px] rounded-2xl"
           >
             {loggingOut ? (
-              <ActivityIndicator color="#EF4444" size="small" />
+              <ActivityIndicator color="white" size="small" />
             ) : (
-              <Text className="text-base font-bold text-red-500">
-                Đăng xuất
-              </Text>
+              <Text>Đăng xuất</Text>
             )}
-          </Pressable>
+          </Button>
         </View>
       </ScrollView>
     </SafeAreaView>

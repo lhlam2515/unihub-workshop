@@ -1,15 +1,11 @@
 import { eq } from "drizzle-orm";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import { CacheStatusBadge } from "@/components/CacheStatusBadge";
 import ROUTES from "@/constants/routes";
 import { createDatabaseClient } from "@/database/client";
@@ -116,11 +112,13 @@ export default function WorkshopDashboardScreen() {
               <Text className="text-sm leading-5 text-red-500">
                 {errorMessage}
               </Text>
-              <Pressable onPress={fetchStatus}>
-                <Text className="mt-2 text-sm font-bold text-primary">
-                  Thử lại
-                </Text>
-              </Pressable>
+              <Button
+                variant="link"
+                onPress={fetchStatus}
+                className="mt-2 h-auto p-0"
+              >
+                Thử lại
+              </Button>
             </View>
           ) : (
             <View className="flex-row justify-between gap-3">
@@ -153,15 +151,14 @@ export default function WorkshopDashboardScreen() {
         </View>
 
         <View className="mt-1 gap-3">
-          <Pressable
+          <Button
             onPress={() => router.push(ROUTES.WORKSHOP_SCAN(workshopId))}
-            className="items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-white">
-              Mở máy quét QR
-            </Text>
-          </Pressable>
-          <Pressable
+            <Text>Mở máy quét QR</Text>
+          </Button>
+          <Button
+            variant="outline"
             onPress={() =>
               router.push(
                 `/workshop/${workshopId}/history` as Parameters<
@@ -169,20 +166,17 @@ export default function WorkshopDashboardScreen() {
                 >[0]
               )
             }
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">
-              Xem lịch sử điểm danh
-            </Text>
-          </Pressable>
-          <Pressable
+            <Text>Xem lịch sử điểm danh</Text>
+          </Button>
+          <Button
+            variant="outline"
             onPress={() => router.push(ROUTES.TAB_QUEUE)}
-            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
+            className="rounded-2xl"
           >
-            <Text className="text-base font-bold text-foreground">
-              Quay về hàng đợi
-            </Text>
-          </Pressable>
+            <Text>Quay về hàng đợi</Text>
+          </Button>
         </View>
       </ScrollView>
     </SafeAreaView>
