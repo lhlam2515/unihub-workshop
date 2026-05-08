@@ -3,16 +3,16 @@ import { api } from "@/lib/api/client";
 import { Result } from "@/lib/result";
 
 export interface CheckinStatus {
-  confirmed_count: number;
-  checked_in_count: number;
-  pending_count: number;
-  recent_checkins: Array<{
-    checkin_id: string;
-    student_name: string;
-    student_code: string;
-    checked_in_at: string;
+  confirmedCount: number;
+  checkedInCount: number;
+  pendingCount: number;
+  recentCheckins: {
+    checkinId: string;
+    studentName: string;
+    studentCode: string;
+    checkedInAt: string;
     source: string;
-  }>;
+  }[];
 }
 
 class CheckinStatusService {

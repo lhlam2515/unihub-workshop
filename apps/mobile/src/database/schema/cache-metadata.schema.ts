@@ -13,8 +13,18 @@ export const cacheMetadata = sqliteTable("cache_metadata", {
   // Thời điểm fetch gần nhất từ server
   lastFetchedAt: integer("last_fetched_at", { mode: "number" }).notNull(), // Unix timestamp (ms)
 
-  // Tổng số vé đã cache (để hiển thị progress)
-  ticketCount: integer("ticket_count", { mode: "number" }).notNull().default(0),
+  // Tổng số registration đã cache (để hiển thị progress)
+  registrationCount: integer("registration_count", { mode: "number" })
+    .notNull()
+    .default(0),
+
+  // Tổng số trên server (từ pagination.total — có thể null nếu server không trả)
+  serverTotal: integer("server_total", { mode: "number" }),
+
+  // Đã fetch hết tất cả pages chưa?
+  isFullyLoaded: integer("is_fully_loaded", { mode: "boolean" })
+    .notNull()
+    .default(false),
 
   // Trạng thái cache
   // FRESH      → mới fetch, tin cậy

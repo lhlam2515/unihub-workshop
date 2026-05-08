@@ -62,7 +62,7 @@ const ERROR_TITLE_MAP: Partial<Record<ErrorCode, string>> = {
 
   // Workshop
   WORKSHOP_NOT_FOUND: "Không tìm thấy workshop",
-  WORKSHOP_NOT_PUBLISHED: "Workshop chưa được công bố",
+  WORKSHOP_NOT_OPEN: "Workshop chưa mở đăng ký",
   WORKSHOP_CANCELLED: "Workshop đã bị hủy",
   WORKSHOP_FULL: "Workshop đã hết chỗ",
   WORKSHOP_TIME_CONFLICT: "Trùng lịch workshop",
@@ -90,6 +90,29 @@ const ERROR_TITLE_MAP: Partial<Record<ErrorCode, string>> = {
   VALIDATION_FAILED: "Dữ liệu không hợp lệ",
   RATE_LIMIT_EXCEEDED: "Quá nhiều yêu cầu",
   INTERNAL_ERROR: "Lỗi hệ thống",
+
+  // Workshop (thêm)
+  WORKSHOP_NOT_ASSIGNED: "Không được phân công workshop này",
+  ROOM_CONFLICT: "Phòng đã có workshop khác",
+  SEATS_TOTAL_BELOW_REGISTERED: "Số chỗ không thể giảm dưới số đã đăng ký",
+
+  // Registration (thêm)
+  STUDENT_NOT_IN_CSV: "Sinh viên không trong danh sách",
+  REQUEST_IN_PROGRESS: "Yêu cầu đang được xử lý",
+  CONFLICT_EXHAUSTED: "Xung đột dữ liệu, vui lòng thử lại",
+
+  // Auth (thêm)
+  ACCOUNT_DISABLED: "Tài khoản đã bị vô hiệu hóa",
+
+  // Check-in (thêm — codes mới)
+  QR_INVALID: "Mã QR không hợp lệ",
+  REGISTRATION_NOT_ACTIVE: "Vé chưa được kích hoạt",
+  WRONG_WORKSHOP: "Vé không thuộc workshop này",
+
+  // Reconcile / batch
+  RECONCILIATION_ALREADY_RUNNING: "Đang chạy đối soát",
+  NOT_IN_FAILED_STATE: "Không ở trạng thái lỗi",
+  BATCH_TOO_LARGE: "Batch quá lớn",
 };
 
 // ---------------------------------------------------------------------------

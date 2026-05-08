@@ -12,14 +12,17 @@
     "lint": "expo lint",
     "lint:fix": "expo lint --fix",
     "check-types": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "db:migrate": "drizzle-kit generate"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
     "@react-navigation/bottom-tabs": "^7.15.10",
     "@react-navigation/elements": "^2.9.15",
     "@react-navigation/native": "^7.2.2",
+    "@rn-primitives/alert-dialog": "^1.4.0",
     "@rn-primitives/portal": "^1.4.0",
+    "@rn-primitives/slot": "^1.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",

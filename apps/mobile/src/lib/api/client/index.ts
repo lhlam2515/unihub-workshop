@@ -84,7 +84,7 @@ export const api = {
       });
     }
 
-    return { items: success.data.items, pagination: success.pagination };
+    return { items: success.data.data, pagination: success.pagination };
   },
 
   /** POST with an optional body and return the unwrapped payload. */
@@ -141,7 +141,7 @@ export async function login<TCredentials, TSession>(
   });
 
   const envelope = (await response.json()) as ApiResponse<
-    TSession & { access_token: string; refresh_token: string }
+    TSession & { accessToken: string; refreshToken: string }
   >;
 
   if (!envelope.success) {
@@ -150,8 +150,8 @@ export async function login<TCredentials, TSession>(
 
   // Mobile: lưu CẢ HAI token (AT + RT) vào Hybrid Cache + SecureStore
   await tokenStore.setTokens(
-    envelope.data.access_token,
-    envelope.data.refresh_token
+    envelope.data.accessToken,
+    envelope.data.refreshToken
   );
   return envelope.data;
 }

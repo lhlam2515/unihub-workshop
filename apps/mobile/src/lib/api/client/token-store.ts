@@ -15,7 +15,7 @@
  *
  * Security note:
  * - expo-secure-store has a ~2048 byte limit per value on some Android devices.
- *   For JWT payloads with many `allowed_workshop_ids`, monitor token size.
+ *   For JWT payloads with many `allowedWorkshopIds`, monitor token size.
  *   Fallback: store AT in AsyncStorage, keep RT in SecureStore.
  */
 

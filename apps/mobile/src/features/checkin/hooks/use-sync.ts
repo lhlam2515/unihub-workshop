@@ -3,27 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 
 import { createDatabaseClient } from "@/database/client";
 import { checkinQueue } from "@/database/schema/checkin-queue.schema";
+import { syncLog } from "@/database/schema/sync-log.schema";
 import type { CheckinQueueRecord } from "@/database/types";
 import handleError from "@/lib/handlers/error";
 
-import { checkinApi } from "./checkin.service";
+import { checkinApi } from "../api/checkin.service";
 
-export type SyncRunStatus = "idle" | "syncing" | "done" | "error";
-
-export interface SyncStats {
-  pending: number;
-  synced: number;
-  conflicts: number;
-  failed: number;
-}
-
-export interface UseSyncResult {
-  stats: SyncStats;
-  runStatus: SyncRunStatus;
-  errorMessage: string | null;
-  sync: (workshopId: string) => Promise<void>;
-  refresh: () => Promise<void>;
-}
+import type { SyncRunStatus, SyncStats, UseSyncResult } from "../lib/types";
 
 export function useSync(): UseSyncResult {
   const [stats, setStats] = useState<SyncStats>({
@@ -51,7 +37,7 @@ export function useSync(): UseSyncResult {
   }, [loadStats]);
 
   const sync = useCallback(
-    async (workshopId: string) => {
+    async (workshopId: string, deviceId: string) => {
       setRunStatus("syncing");
       setErrorMessage(null);
 
@@ -73,6 +59,8 @@ export function useSync(): UseSyncResult {
         return;
       }
 
+      const syncStartedAt = Date.now();
+
       // Mark as SYNCING to prevent double-submit
       const pendingIds = workshopPending.map((r) => r.localId);
       await db
@@ -80,14 +68,15 @@ export function useSync(): UseSyncResult {
         .set({ syncStatus: "SYNCING" })
         .where(inArray(checkinQueue.localId, pendingIds));
 
+      // Map to server-expected shape (qrCode is now the column name)
       const items = workshopPending.map((r) => ({
-        qr_token: r.qrToken,
-        workshop_id: r.workshopId,
-        checked_in_at: new Date(r.checkedInAt).toISOString(),
-        device_id: r.deviceId,
+        localId: r.localId,
+        qrCode: r.qrCode,
+        workshopId: r.workshopId,
+        checkedInAt: r.checkedInAt,
       }));
 
-      const syncResult = await checkinApi.syncOffline(workshopId, items);
+      const syncResult = await checkinApi.syncOffline(deviceId, items);
 
       if (syncResult.isFailure) {
         // Revert SYNCING → FAILED for retry on next attempt
@@ -96,21 +85,61 @@ export function useSync(): UseSyncResult {
           .set({ syncStatus: "FAILED", retryCount: 1 })
           .where(inArray(checkinQueue.localId, pendingIds));
 
+        // Record failure in sync_log
         const appError = handleError(syncResult.error);
+        db.insert(syncLog).values({
+          startedAt: syncStartedAt,
+          completedAt: Date.now(),
+          status: "FAILED",
+          totalRecords: workshopPending.length,
+          errorDetail: appError.message,
+          workshopId,
+        });
+
         setErrorMessage(appError.message);
         setRunStatus("error");
         await loadStats();
         return;
       }
 
-      // Server processes idempotently — mark all as SYNCED.
-      // Conflicts are tracked server-side; we don't receive per-item feedback,
-      // so we mark all as SYNCED and let the server's conflict count inform the UI.
+      // Process per-item results from server
+      let syncedCount = 0;
+      let conflictCount = 0;
+      let failedCount = 0;
       const now = Date.now();
-      await db
-        .update(checkinQueue)
-        .set({ syncStatus: "SYNCED", syncedAt: now })
-        .where(inArray(checkinQueue.localId, pendingIds));
+      for (const item of syncResult.data.results) {
+        if (item.result === "OK" || item.result === "DUPLICATE") {
+          syncedCount++;
+          await db
+            .update(checkinQueue)
+            .set({ syncStatus: "SYNCED", syncedAt: now })
+            .where(eq(checkinQueue.localId, item.localId));
+        } else {
+          // REJECTED
+          conflictCount++;
+          await db
+            .update(checkinQueue)
+            .set({
+              syncStatus: "CONFLICT",
+              errorDetail: item.reason ?? "REJECTED",
+              syncedAt: now,
+            })
+            .where(eq(checkinQueue.localId, item.localId));
+        }
+      }
+
+      // Finalize sync_log entry
+      const finalStatus = conflictCount > 0 ? "PARTIAL" : "SUCCESS";
+      db.insert(syncLog).values({
+        startedAt: syncStartedAt,
+        completedAt: now,
+        status: finalStatus,
+        totalRecords: workshopPending.length,
+        syncedCount,
+        conflictCount,
+        failedCount,
+        workshopId,
+      });
 
       setRunStatus("done");
       await loadStats();

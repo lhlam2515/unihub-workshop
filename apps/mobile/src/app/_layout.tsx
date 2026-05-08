@@ -4,13 +4,16 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { PortalHost } from "@rn-primitives/portal";
+import { eq } from "drizzle-orm";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import "react-native-reanimated";
 
+import { createDatabaseClient } from "@/database/client";
 import { DatabaseProvider } from "@/database/provider";
+import { deviceConfig } from "@/database/schema/device-config.schema";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { tokenStore } from "@/lib/api/client";
 import "./global.css";
@@ -26,6 +29,26 @@ export default function RootLayout() {
     async function bootstrap() {
       // Hydrate memory cache from SecureStore before any API call
       await tokenStore.init();
+
+      // Ensure device_config singleton exists (one-time device ID generation)
+      try {
+        const db = createDatabaseClient();
+        const existing = db
+          .select()
+          .from(deviceConfig)
+          .where(eq(deviceConfig.id, 1))
+          .get();
+        if (!existing) {
+          db.insert(deviceConfig).values({
+            id: 1,
+            deviceId: crypto.randomUUID(),
+            appVersion: "0.0.0",
+            initializedAt: Date.now(),
+          });
+        }
+      } catch {
+        // Non-critical: device_config is a nice-to-have for tracking
+      }
       setIsReady(true);
     }
     bootstrap();
@@ -59,21 +82,10 @@ export default function RootLayout() {
 
 function BootstrapScreen() {
   return (
-    <View style={styles.bootstrapScreen}>
-      <Text style={styles.bootstrapText}>Đang khởi tạo ứng dụng...</Text>
+    <View className="absolute inset-0 items-center justify-center bg-background">
+      <Text className="text-sm text-muted-foreground">
+        Đang khởi tạo ứng dụng...
+      </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  bootstrapScreen: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-  },
-  bootstrapText: {
-    color: "#888",
-    fontSize: 14,
-  },
-});

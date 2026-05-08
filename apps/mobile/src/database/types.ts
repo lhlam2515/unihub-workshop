@@ -1,12 +1,13 @@
 import type { appSession } from "./schema/app-session.schema";
 import type { cacheMetadata } from "./schema/cache-metadata.schema";
-import type { cachedTickets } from "./schema/cached-tickets.schema";
+import type { cachedRegistrations } from "./schema/cached-registrations.schema";
 import type { checkinQueue } from "./schema/checkin-queue.schema";
+import type { deviceConfig } from "./schema/device-config.schema";
 import type { syncLog } from "./schema/sync-log.schema";
 
-// ── cached_tickets ──────────────────────────────────────────
-export type CachedTicket = typeof cachedTickets.$inferSelect;
-export type NewCachedTicket = typeof cachedTickets.$inferInsert;
+// ── cached_registrations ────────────────────────────────────
+export type CachedRegistration = typeof cachedRegistrations.$inferSelect;
+export type NewCachedRegistration = typeof cachedRegistrations.$inferInsert;
 
 // ── checkin_queue ───────────────────────────────────────────
 export type CheckinQueueRecord = typeof checkinQueue.$inferSelect;
@@ -24,8 +25,12 @@ export type NewCacheMetadata = typeof cacheMetadata.$inferInsert;
 export type SyncLogEntry = typeof syncLog.$inferSelect;
 export type NewSyncLogEntry = typeof syncLog.$inferInsert;
 
+// ── device_config ───────────────────────────────────────────
+export type DeviceConfig = typeof deviceConfig.$inferSelect;
+export type NewDeviceConfig = typeof deviceConfig.$inferInsert;
+
 // ── Enums (literal unions) ──────────────────────────────────
-export type TicketStatus = CachedTicket["ticketStatus"];
+export type RegistrationStatus = CachedRegistration["registrationStatus"];
 export type SyncStatus = CheckinQueueRecord["syncStatus"];
 export type CacheStatus = CacheMetadata["cacheStatus"];
 export type SyncLogStatus = SyncLogEntry["status"];

@@ -1,302 +1,84 @@
+import { eq } from "drizzle-orm";
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import ROUTES from "@/constants/routes";
-import { Colors } from "@/constants/theme";
-import { useSync } from "@/features/checkin/api/use-sync";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
+import { SyncProgressSteps } from "@/features/checkin/components/SyncProgressSteps";
+import { useSync } from "@/features/checkin/hooks/use-sync";
 
-const DEMO_WORKSHOP_ID = "ws-101";
+import ROUTES from "@/constants/routes";
+import { createDatabaseClient } from "@/database/client";
+import { deviceConfig } from "@/database/schema/device-config.schema";
 
 export default function SyncProgressScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
   const params = useLocalSearchParams<{ workshopId?: string }>();
-  const workshopId = params.workshopId ?? DEMO_WORKSHOP_ID;
+  const workshopId = params.workshopId ?? "";
   const { stats, runStatus, errorMessage, sync } = useSync();
 
-  const steps = [
-    {
-      label: "Đọc hàng đợi local",
-      state: runStatus === "idle" ? "Sẵn sàng" : "Hoàn thành",
-    },
-    {
-      label: "Chuẩn bị batch",
-      state:
-        runStatus === "syncing"
-          ? "Đang xử lý"
-          : runStatus === "done"
-            ? "Hoàn thành"
-            : "Chờ",
-    },
-    {
-      label: "Đẩy lên server",
-      state:
-        runStatus === "syncing"
-          ? "Đang xử lý"
-          : runStatus === "done"
-            ? "Hoàn thành"
-            : runStatus === "error"
-              ? "Thất bại"
-              : "Chờ",
-    },
-    {
-      label: "Cập nhật trạng thái local",
-      state: runStatus === "done" ? "Hoàn thành" : "Chờ",
-    },
-  ];
-
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: colors.tint }]}>
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView contentContainerClassName="grow gap-3.5 p-5">
+        <View className="gap-2.5">
+          <Text className="text-xs font-bold tracking-widest text-primary">
             M07 · ĐỒNG BỘ
           </Text>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Tiến độ đồng bộ
           </Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>
+          <Text className="text-base leading-6 text-muted-foreground">
             Đẩy dữ liệu check-in offline lên server. Mỗi bản ghi được xử lý với
             ON CONFLICT DO NOTHING để đảm bảo idempotency.
           </Text>
         </View>
 
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Thống kê hàng đợi
-          </Text>
-          <View style={styles.metricRow}>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.pending}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Chờ sync
-              </Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.synced}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Đã sync
-              </Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={[styles.metricValue, { color: colors.text }]}>
-                {stats.conflicts}
-              </Text>
-              <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                Xung đột
-              </Text>
-            </View>
-          </View>
-          {errorMessage ? (
-            <Text style={[styles.errorText, { color: "#F87171" }]}>
-              {errorMessage}
-            </Text>
-          ) : null}
-        </View>
+        <SyncProgressSteps
+          stats={stats}
+          runStatus={runStatus}
+          errorMessage={errorMessage}
+        />
 
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Các bước đồng bộ
-          </Text>
-          <View style={styles.stepList}>
-            {steps.map((step, index) => (
-              <View key={step.label} style={styles.stepRow}>
-                <Text style={[styles.stepIndex, { color: colors.tint }]}>
-                  {index + 1}
-                </Text>
-                <View style={styles.stepBody}>
-                  <Text style={[styles.stepLabel, { color: colors.text }]}>
-                    {step.label}
-                  </Text>
-                  <Text style={[styles.stepState, { color: colors.icon }]}>
-                    {step.state}
-                  </Text>
-                </View>
-                {runStatus === "syncing" && index === 2 ? (
-                  <ActivityIndicator size="small" color={colors.tint} />
-                ) : null}
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.actions}>
+        <View className="mt-1 gap-3">
           {runStatus === "done" ? (
-            <Pressable
+            <Button
               onPress={() => router.back()}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-              ]}
+              className="min-h-[52px] rounded-2xl"
             >
-              <Text style={styles.primaryButtonText}>Hoàn thành</Text>
-            </Pressable>
+              <Text>Hoàn thành</Text>
+            </Button>
           ) : (
-            <Pressable
-              onPress={() => void sync(workshopId)}
+            <Button
+              onPress={() => {
+                const db = createDatabaseClient();
+                const device = db
+                  .select()
+                  .from(deviceConfig)
+                  .where(eq(deviceConfig.id, 1))
+                  .get();
+                void sync(workshopId, device?.deviceId ?? "unknown");
+              }}
               disabled={runStatus === "syncing"}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                {
-                  backgroundColor: colors.tint,
-                  opacity: pressed || runStatus === "syncing" ? 0.85 : 1,
-                },
-              ]}
+              className="min-h-[52px] rounded-2xl"
             >
               {runStatus === "syncing" ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text style={styles.primaryButtonText}>
+                <Text>
                   {runStatus === "error" ? "Thử lại" : "Bắt đầu đồng bộ"}
                 </Text>
               )}
-            </Pressable>
+            </Button>
           )}
-          <Pressable
+          <Button
+            variant="outline"
             onPress={() => router.push(ROUTES.TAB_QUEUE)}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                borderColor: colors.tabIconDefault,
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
+            className="rounded-2xl"
           >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-              Đi tới hàng đợi
-            </Text>
-          </Pressable>
+            <Text>Đi tới hàng đợi</Text>
+          </Button>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    padding: 20,
-    gap: 14,
-  },
-  header: {
-    gap: 10,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    lineHeight: 34,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  card: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 18,
-    gap: 10,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  metricRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  metric: {
-    flex: 1,
-    gap: 2,
-  },
-  metricValue: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  metricLabel: {
-    fontSize: 12,
-  },
-  errorText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  stepList: {
-    gap: 12,
-  },
-  stepRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-  },
-  stepIndex: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    textAlign: "center",
-    textAlignVertical: "center",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  stepBody: {
-    flex: 1,
-    gap: 2,
-  },
-  stepLabel: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  stepState: {
-    fontSize: 13,
-  },
-  actions: {
-    gap: 12,
-    marginTop: 4,
-  },
-  primaryButton: {
-    alignItems: "center",
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    minHeight: 52,
-    justifyContent: "center",
-  },
-  primaryButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-});
