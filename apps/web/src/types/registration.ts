@@ -52,3 +52,16 @@ export interface PaymentCreateRequest {
   gateway: PaymentGateway;
   returnUrl: string;
 }
+
+export interface RegistrationAdmin {
+  id: string;
+  workshopId: string;
+  student: {
+    studentId: string;
+    fullName: string;
+    email: string;
+  };
+  status: RegistrationStatus;
+  registeredAt: string;
+  checkedInAt: string | null;
+}
