@@ -1,10 +1,11 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
 import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
-import { NotificationModule } from "@/modules/notification/notification.module";
 import { AiSummaryModule } from "@/modules/ai-summary/ai-summary.module";
+import { IamModule } from "@/modules/iam/iam.module";
+import { NotificationModule } from "@/modules/notification/notification.module";
 
 import { RoomsAdminController } from "./controllers/rooms-admin.controller";
 import { RoomsPublicController } from "./controllers/rooms-public.controller";
@@ -51,7 +52,8 @@ import { WorkshopsService } from "./services/workshops.service";
     RedisModule,
     MessagingModule,
     NotificationModule,
-    AiSummaryModule,
+    IamModule,
+    forwardRef(() => AiSummaryModule),
   ],
   controllers: [
     WorkshopsPublicController,

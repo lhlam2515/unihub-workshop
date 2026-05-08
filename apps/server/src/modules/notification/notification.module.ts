@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
 import { MessagingModule } from "@/infra/messaging/messaging.module";
+import { IamModule } from "@/modules/iam/iam.module";
 
 import { AppChannel } from "./channels/app.channel";
 import { EmailChannel } from "./channels/email.channel";
@@ -14,7 +15,7 @@ import { NotificationLogProducer } from "./services/notification-log-producer.se
 import { NotificationsService } from "./services/notifications.service";
 
 @Module({
-  imports: [DatabaseModule, MessagingModule],
+  imports: [DatabaseModule, MessagingModule, IamModule],
   controllers: [NotificationsAdminController],
   providers: [
     // Services

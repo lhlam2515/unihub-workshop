@@ -1,9 +1,11 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
 import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
 import { StorageModule } from "@/infra/storage/storage.module";
+import { CatalogModule } from "@/modules/catalog/catalog.module";
+import { IamModule } from "@/modules/iam/iam.module";
 
 import { AiSummaryAdminController } from "./controllers/ai-summary-admin.controller";
 import { LlmSummaryFilter } from "./pipeline/llm-summary.filter";
@@ -16,7 +18,14 @@ import { AiSummariesRepository } from "./repositories/ai-summaries.repository";
 import { AiSummaryService } from "./services/ai-summary.service";
 
 @Module({
-  imports: [DatabaseModule, RedisModule, StorageModule, MessagingModule],
+  imports: [
+    DatabaseModule,
+    RedisModule,
+    StorageModule,
+    MessagingModule,
+    IamModule,
+    forwardRef(() => CatalogModule),
+  ],
   controllers: [AiSummaryAdminController],
   providers: [
     // Services

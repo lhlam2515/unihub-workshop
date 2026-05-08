@@ -14,6 +14,7 @@ import { Module } from "@nestjs/common";
 import { DatabaseModule } from "@/infra/database/database.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
+import { IamModule } from "../iam/iam.module";
 import {
   CheckinController,
   CheckinPreloadController,
@@ -24,7 +25,7 @@ import { CheckinService } from "./services/checkin.service";
 import { OfflineSyncService } from "./services/offline-sync.service";
 
 @Module({
-  imports: [DatabaseModule, CatalogModule],
+  imports: [DatabaseModule, CatalogModule, IamModule],
   controllers: [CheckinController, CheckinPreloadController],
   providers: [
     // Services

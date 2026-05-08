@@ -36,7 +36,6 @@ import { Request } from "express";
 import { RedisService } from "@/infra/redis/redis.service";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
 import { authErrors } from "@/shared/response/errors";
-import type { JwtPayload } from "@/types/jwt-payload";
 
 import { TokenService } from "../services/token.service";
 

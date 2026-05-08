@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
 import { HttpClientModule } from "@/infra/http-client/http-client.module";
@@ -6,6 +6,7 @@ import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
 
 import { BookingModule } from "../booking/booking.module";
+import { CatalogModule } from "../catalog/catalog.module";
 import { IamModule } from "../iam/iam.module";
 import { NotificationModule } from "../notification/notification.module";
 import { PaymentsController } from "./controllers/payments.controller";
@@ -29,7 +30,8 @@ import { PaymentsService } from "./services/payments.service";
     HttpClientModule,
     RedisModule,
     MessagingModule,
-    BookingModule,
+    forwardRef(() => BookingModule),
+    CatalogModule,
     IamModule,
     NotificationModule,
   ],
@@ -75,6 +77,7 @@ import { PaymentsService } from "./services/payments.service";
     CircuitBreakerMechanic,
     IdempotencyMechanic,
     PaymentsRepository,
+    IdempotencyKeysRepository,
   ],
 })
 export class PaymentModule {}
