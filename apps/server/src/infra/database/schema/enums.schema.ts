@@ -81,6 +81,12 @@ export const syncJobStatusEnum = pgEnum("sync_job_status", [
   "FAILED",
 ]);
 
+export const offlineSyncStatusEnum = pgEnum("offline_sync_status", [
+  "PENDING",
+  "SYNCED",
+  "CONFLICT",
+]);
+
 export const syncErrorReasonEnum = pgEnum("sync_error_reason", [
   "DUPLICATE",
   "INVALID_FORMAT",

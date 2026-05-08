@@ -3,13 +3,11 @@ import {
   check,
   index,
   pgTable,
+  unique,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-import {
-  aiSummaryStatusEnum,
-  workshopStatusEnum,
-} from "./enums.schema";
+import { workshopStatusEnum } from "./enums.schema";
 import { staff } from "./identity.schema";
 
 export const speakers = pgTable("speakers", (t) => ({
@@ -60,12 +58,8 @@ export const workshops = pgTable(
     title: t.varchar("title", { length: 500 }).notNull(),
     description: t.text("description"),
     // NULLABLE — allowed in DRAFT state before speaker/room assigned
-    speakerId: t
-      .uuid("speaker_id")
-      .references(() => speakers.speakerId),
-    roomId: t
-      .uuid("room_id")
-      .references(() => rooms.roomId),
+    speakerId: t.uuid("speaker_id").references(() => speakers.speakerId),
+    roomId: t.uuid("room_id").references(() => rooms.roomId),
     startsAt: t.timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: t.timestamp("ends_at", { withTimezone: true }).notNull(),
     seatsTotal: t.integer("seats_total").notNull(),
@@ -100,8 +94,12 @@ export const workshops = pgTable(
       .where(sql`${table.status} = 'OPEN'`),
     index("idx_workshops_room").on(table.roomId, table.startsAt),
     index("idx_workshops_speaker_id").on(table.speakerId),
-    uniqueIndex("uq_workshops_room_time_slot")
-      .on(table.roomId, table.startsAt, table.endsAt)
+    uniqueIndex("uq_workshops_room_time_slot").on(
+      table.roomId,
+      table.startsAt,
+      table.endsAt
+    ),
+  ]
 );
 
 export const workshopSlots = pgTable(
@@ -128,6 +126,5 @@ export const workshopSlots = pgTable(
       "chk_slot_counts",
       sql`${table.lockedCount} >= 0 AND ${table.confirmedCount} >= 0 AND (${table.lockedCount} + ${table.confirmedCount}) <= ${table.totalCapacity}`
     ),
->>>>>>> 9d9f772 (feat(server): implement Optimistic Locking for Catalog and Booking (1C))
   ]
 );

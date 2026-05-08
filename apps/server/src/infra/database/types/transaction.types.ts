@@ -14,11 +14,7 @@ import {
   tickets,
 } from "@/infra/database/schema";
 
-const offlineCheckinSyncStatusSchema = z.enum([
-  "PENDING",
-  "SYNCED",
-  "CONFLICT",
-]);
+import { offlineSyncStatusSchema as offlineCheckinSyncStatusSchema } from "./enums.types";
 
 export const idempotencyKeysSelectSchema = createSelectSchema(idempotencyKeys);
 export const idempotencyKeysInsertSchema = createInsertSchema(idempotencyKeys);

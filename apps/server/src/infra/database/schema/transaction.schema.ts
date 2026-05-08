@@ -9,6 +9,7 @@ import {
 
 import {
   checkinSourceEnum,
+  offlineSyncStatusEnum,
   paymentGatewayEnum,
   paymentStatusEnum,
   registrationStatusEnum,
@@ -16,34 +17,6 @@ import {
 } from "./enums.schema";
 import { workshops } from "./event-core.schema";
 import { students, users } from "./identity.schema";
-
-// ---------------------------------------------------------------------------
-// Idempotency Keys (ADR-08)
-// ---------------------------------------------------------------------------
-
-export const idempotencyKeys = pgTable(
-  "idempotency_keys",
-  (t) => ({
-    key: t.text("key").primaryKey(),
-    resourceType: t.text("resource_type", { enum: ["REGISTRATION", "PAYMENT"] })
-      .notNull(),
-    status: t
-      .text("status", {
-        enum: ["IN_PROGRESS", "COMPLETED", "UNRESOLVED"],
-      })
-      .notNull()
-      .default("IN_PROGRESS"),
-    responseBody: t.jsonb("response_body"),
-    statusCode: t.integer("status_code"),
-    createdAt: t
-      .timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    expiresAt: t.timestamp("expires_at", { withTimezone: true }).notNull(),
-    lockedUntil: t.timestamp("locked_until", { withTimezone: true }),
-  }),
-  (table) => [index("idx_idempotency_expires").on(table.expiresAt)]
-);
 
 // ---------------------------------------------------------------------------
 // Registrations
@@ -61,9 +34,7 @@ export const registrations = pgTable(
       .uuid("workshop_id")
       .notNull()
       .references(() => workshops.workshopId),
-    status: registrationStatusEnum("status")
-      .notNull()
-      .default("PENDING"),
+    status: registrationStatusEnum("status").notNull().default("PENDING"),
     qrCode: t.text("qr_code").notNull().unique(),
     registeredAt: t
       .timestamp("registered_at", { withTimezone: true })
@@ -141,10 +112,7 @@ export const payments = pgTable(
     currency: t.char("currency", { length: 3 }).notNull().default("VND"),
     gateway: paymentGatewayEnum("gateway").notNull(),
     status: paymentStatusEnum("status").notNull().default("INITIATED"),
-    idempotencyKey: t
-      .text("idempotency_key")
-      .notNull()
-      .references(() => idempotencyKeys.key),
+    idempotencyKey: t.text("idempotency_key").notNull(),
     gatewayTxnId: t.varchar("gateway_txn_id", { length: 255 }),
     initiatedAt: t
       .timestamp("initiated_at", { withTimezone: true })
@@ -220,17 +188,11 @@ export const offlineCheckinQueue = pgTable(
     checkedInAt: t.timestamp("checked_in_at", { withTimezone: true }).notNull(),
     deviceId: t.varchar("device_id", { length: 100 }).notNull(),
     checkedInBy: t.uuid("checked_in_by").notNull(),
-    syncStatus: t
-      .varchar("sync_status", { length: 20 })
+    syncStatus: offlineSyncStatusEnum("sync_status")
       .notNull()
       .default("PENDING"),
     syncedAt: t.timestamp("synced_at", { withTimezone: true }),
     conflictReason: t.text("conflict_reason"),
   }),
-  (table) => [
-    check(
-      "offline_checkin_queue_sync_status_check",
-      sql`${table.syncStatus} IN ('PENDING', 'SYNCED', 'CONFLICT')`
-    ),
-  ]
+  () => []
 );

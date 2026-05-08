@@ -7,6 +7,7 @@ import {
   notificationChannelEnum,
   notificationStatusEnum,
   notificationTypeEnum,
+  offlineSyncStatusEnum,
   paymentGatewayEnum,
   paymentStatusEnum,
   platformEnum,
@@ -63,3 +64,6 @@ export type SyncJobStatus = z.infer<typeof syncJobStatusSchema>;
 export type SyncErrorReason = z.infer<typeof syncErrorReasonSchema>;
 export type AiSummaryStatus = z.infer<typeof aiSummaryStatusSchema>;
 export type DocumentUploadStatus = z.infer<typeof documentUploadStatusSchema>;
+
+export const offlineSyncStatusSchema = z.enum(offlineSyncStatusEnum.enumValues);
+export type OfflineSyncStatus = z.infer<typeof offlineSyncStatusSchema>;
