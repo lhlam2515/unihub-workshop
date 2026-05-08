@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
+import type { DrizzleTransaction } from "@/infra/database/types/drizzle.types";
 import type {
   NewWorkshop,
   WorkshopUpdate,
@@ -67,7 +68,7 @@ export class WorkshopsService {
 
     const mapped = await Promise.all(
       result.data.items.map(async (workshop: WorkshopWithSpeakerRoom) => {
-        const availableSeats = await this.seatCounterService.getAvailable(
+        const availableSeats = await this.seatCounterService.getCachedSeats(
           workshop.workshopId
         );
         return WorkshopResponseBuilder.fromSummary(
@@ -100,7 +101,7 @@ export class WorkshopsService {
     if (workshop.isFailure) return Result.fail(workshop.error);
     if (!workshop.data) return Result.fail(workshopErrors.notFound(id));
 
-    const availableSeats = await this.seatCounterService.getAvailable(id);
+    const availableSeats = await this.seatCounterService.getCachedSeats(id);
 
     return Result.ok({
       workshopId: id,
@@ -119,7 +120,7 @@ export class WorkshopsService {
       return Result.fail(workshopErrors.notPublished(id, workshop.status));
     }
 
-    const availableSeats = await this.seatCounterService.getAvailable(id);
+    const availableSeats = await this.seatCounterService.getCachedSeats(id);
 
     return Result.ok(
       WorkshopResponseBuilder.fromDetail(
@@ -483,7 +484,7 @@ export class WorkshopsService {
     const workshopRow = workshopResult.data!;
     const workshop = workshopRow.workshops;
 
-    const availableSeats = await this.seatCounterService.getAvailable(id);
+    const availableSeats = await this.seatCounterService.getCachedSeats(id);
 
     return Result.ok({
       confirmed_count: 0,
@@ -504,5 +505,26 @@ export class WorkshopsService {
     Result<{ workshopId: string; seatsTotal: number }[]>
   > {
     return this.workshopsRepo.findOpenBasic();
+  }
+
+  async decrementSeat(
+    workshopId: string,
+    expectedVersion: number,
+    tx?: DrizzleTransaction
+  ): Promise<Result<{ rowsAffected: number; newVersion: number }>> {
+    return this.workshopsRepo.decrementSeat(workshopId, expectedVersion, tx);
+  }
+
+  async incrementSeat(
+    workshopId: string,
+    tx?: DrizzleTransaction
+  ): Promise<Result<void>> {
+    return this.workshopsRepo.incrementSeat(workshopId, tx);
+  }
+
+  async getSeatVersion(
+    workshopId: string
+  ): Promise<Result<{ version: number; seatsAvailable: number } | null>> {
+    return this.workshopsRepo.getSeatVersion(workshopId);
   }
 }
