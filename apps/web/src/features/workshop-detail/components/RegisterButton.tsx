@@ -19,7 +19,7 @@ export function RegisterButton({ workshop }: RegisterButtonProps) {
   const canRegister =
     workshop.seatsAvailable > 0 &&
     !workshop.isRegistered &&
-    workshop.status === "open";
+    workshop.status === "OPEN";
 
   const isFull = workshop.seatsAvailable <= 0 && !workshop.isRegistered;
 
@@ -58,7 +58,7 @@ export function RegisterButton({ workshop }: RegisterButtonProps) {
   }
 
   // Cancelled
-  if (workshop.status === "cancelled") {
+  if (workshop.status === "CANCELLED") {
     return (
       <Button variant="secondary" className="w-full" disabled>
         Workshop đã hủy
@@ -67,12 +67,12 @@ export function RegisterButton({ workshop }: RegisterButtonProps) {
   }
 
   // Not yet open / closed
-  if (workshop.status !== "open") {
+  if (workshop.status !== "OPEN") {
     return (
       <Button variant="secondary" className="w-full" disabled>
-        {workshop.status === "draft"
+        {workshop.status === "DRAFT"
           ? "Chưa mở đăng ký"
-          : workshop.status === "closed"
+          : workshop.status === "COMPLETED"
             ? "Đã đóng đăng ký"
             : "Không khả dụng"}
       </Button>
