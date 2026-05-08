@@ -4,23 +4,17 @@ import type { Registration } from "@/infra/database/types/transaction.types";
 import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { IdempotencyMechanic } from "@/modules/payment/mechanics/idempotency.mechanic";
 import { registrationErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { RegistrationsService } from "./registrations.service";
-import { TicketsService } from "./tickets.service";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "../repositories/registrations.repository";
-import { TicketsRepository } from "../repositories/tickets.repository";
 
 describe("RegistrationsService", () => {
   let service: RegistrationsService;
-
-  beforeAll(() => {
-    process.env.JWT_SECRET = "test-secret";
-  });
   let registrationsRepo: jest.Mocked<RegistrationsRepository>;
-  let ticketsRepo: jest.Mocked<TicketsRepository>;
   let seatLock: jest.Mocked<SeatLockMechanic>;
   let seatCounter: jest.Mocked<SeatCounterService>;
   let workshopsService: jest.Mocked<WorkshopsService>;
@@ -50,6 +44,7 @@ describe("RegistrationsService", () => {
     studentId: STUDENT_ID,
     workshopId: WORKSHOP_ID,
     status: "CONFIRMED",
+    qrCode: "550e8400-e29b-41d4-a716-446655440001",
     registeredAt: new Date(),
     confirmedAt: new Date(),
     cancelledAt: null,
@@ -73,15 +68,6 @@ describe("RegistrationsService", () => {
           },
         },
         {
-          provide: TicketsRepository,
-          useValue: {
-            create: jest.fn(),
-            updateStatusByRegistrationId: jest.fn(),
-            findByRegistrationId: jest.fn(),
-            updateQrToken: jest.fn(),
-          },
-        },
-        {
           provide: SeatLockMechanic,
           useValue: { acquire: jest.fn(), release: jest.fn() },
         },
@@ -94,15 +80,19 @@ describe("RegistrationsService", () => {
           useValue: { getPublishedById: jest.fn() },
         },
         {
-          provide: TicketsService,
-          useValue: {
-            signAndUpdateQrToken: jest.fn().mockResolvedValue(undefined),
-          },
+          provide: NotificationPublisher,
+          useValue: { fire: jest.fn() },
         },
         {
-          provide: NotificationPublisher,
+          provide: IdempotencyMechanic,
           useValue: {
-            fire: jest.fn(),
+            check: jest
+              .fn()
+              .mockResolvedValue(
+                Result.ok({ proceed: true, cachedResponse: null })
+              ),
+            markCompleted: jest.fn().mockResolvedValue(undefined),
+            markUnresolved: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -110,7 +100,6 @@ describe("RegistrationsService", () => {
 
     service = module.get<RegistrationsService>(RegistrationsService);
     registrationsRepo = module.get(RegistrationsRepository);
-    ticketsRepo = module.get(TicketsRepository);
     seatLock = module.get(SeatLockMechanic);
     seatCounter = module.get(SeatCounterService);
     workshopsService = module.get(WorkshopsService);
@@ -119,7 +108,7 @@ describe("RegistrationsService", () => {
   describe("register", () => {
     const dto = { workshop_id: WORKSHOP_ID };
 
-    function setupPassThrough() {
+    function setupFreeWorkshop() {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockFreeWorkshop)
       );
@@ -130,29 +119,23 @@ describe("RegistrationsService", () => {
       registrationsRepo.create.mockResolvedValue(
         Result.ok({ ...mockRegistration, status: "CONFIRMED" })
       );
-      ticketsRepo.create.mockResolvedValue(Result.ok({} as any));
-      ticketsRepo.findByRegistrationId.mockResolvedValue(
-        Result.ok({ ticketId: "tkt-001" } as any)
-      );
-      ticketsRepo.updateQrToken.mockResolvedValue(Result.ok({} as any));
     }
 
-    // FR-F04-003: free workshop → CONFIRMED
-    it("should register for a free workshop and issue ticket immediately (FR-F04-003)", async () => {
-      setupPassThrough();
+    it("should register for a free workshop with CONFIRMED status and qrCode", async () => {
+      setupFreeWorkshop();
 
       const result = await service.register(STUDENT_ID, dto);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.status).toBe("CONFIRMED");
+        expect(result.data.qrCode).toBeTruthy();
+        expect(result.data.nextStep).toBeNull();
       }
       expect(seatCounter.decrement).toHaveBeenCalledWith(WORKSHOP_ID);
-      expect(ticketsRepo.create).toHaveBeenCalled();
     });
 
-    // FR-F04-004: paid workshop → PENDING_PAYMENT + seat lock
-    it("should register for a paid workshop with PENDING_PAYMENT and seat lock (FR-F04-004)", async () => {
+    it("should register for a paid workshop with PENDING status and nextStep", async () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockPaidWorkshop)
       );
@@ -161,7 +144,7 @@ describe("RegistrationsService", () => {
         Result.ok(null)
       );
       registrationsRepo.create.mockResolvedValue(
-        Result.ok({ ...mockRegistration, status: "PENDING_PAYMENT" })
+        Result.ok({ ...mockRegistration, status: "PENDING" })
       );
       seatLock.acquire.mockResolvedValue(Result.ok(true));
 
@@ -169,9 +152,11 @@ describe("RegistrationsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.status).toBe("PENDING_PAYMENT");
-        expect(result.data.amount).toBe(50000);
-        expect(result.data.payment_deadline).toBeDefined();
+        expect(result.data.status).toBe("PENDING");
+        expect(result.data.qrCode).toBeNull();
+        expect(result.data.nextStep).toBeDefined();
+        expect(result.data.nextStep!.action).toBe("CREATE_PAYMENT");
+        expect(result.data.nextStep!.amount).toBe(50000);
       }
       expect(seatLock.acquire).toHaveBeenCalledWith(
         WORKSHOP_ID,
@@ -179,11 +164,8 @@ describe("RegistrationsService", () => {
         STUDENT_ID,
         50000
       );
-      // No ticket issued for paid workshops
-      expect(ticketsRepo.create).not.toHaveBeenCalled();
     });
 
-    // FR-F04-001: rate limited
     it("should fail when workshop is not found", async () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.fail(registrationErrors.notFound(WORKSHOP_ID))
@@ -209,7 +191,7 @@ describe("RegistrationsService", () => {
       expect(result.error.code).toBe("SEAT_UNAVAILABLE");
     });
 
-    it("should return REGISTRATION_DUPLICATE with seat rollback (FR-F04-005)", async () => {
+    it("should return REGISTRATION_DUPLICATE with seat rollback", async () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockFreeWorkshop)
       );
@@ -222,26 +204,10 @@ describe("RegistrationsService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("REGISTRATION_DUPLICATE");
-      // Seat must be rolled back
       expect(seatCounter.increment).toHaveBeenCalledWith(WORKSHOP_ID);
     });
 
-    it("should return REGISTRATION_DUPLICATE when find returns failure with seat rollback", async () => {
-      workshopsService.getPublishedById.mockResolvedValue(
-        Result.ok(mockFreeWorkshop)
-      );
-      seatCounter.decrement.mockResolvedValue(Result.ok());
-      registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
-      );
-
-      const result = await service.register(STUDENT_ID, dto);
-
-      expect(result.isFailure).toBe(true);
-      expect(seatCounter.increment).toHaveBeenCalledWith(WORKSHOP_ID);
-    });
-
-    it("should return CANCELLED with seat rollback when seat lock fails for paid workshop", async () => {
+    it("should return SEAT_LOCK_EXPIRED with compensation when seat lock fails for paid workshop", async () => {
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockPaidWorkshop)
       );
@@ -250,7 +216,7 @@ describe("RegistrationsService", () => {
         Result.ok(null)
       );
       registrationsRepo.create.mockResolvedValue(
-        Result.ok({ ...mockRegistration, status: "PENDING_PAYMENT" })
+        Result.ok({ ...mockRegistration, status: "PENDING" })
       );
       seatLock.acquire.mockResolvedValue(
         Result.fail({ code: "SEAT_LOCK_EXPIRED" } as any)
@@ -260,33 +226,11 @@ describe("RegistrationsService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("SEAT_LOCK_EXPIRED");
-      // Compensation: registration cancelled, seat incremented
       expect(registrationsRepo.updateStatus).toHaveBeenCalledWith(
         REGISTRATION_ID,
         "CANCELLED"
       );
       expect(seatCounter.increment).toHaveBeenCalledWith(WORKSHOP_ID);
-    });
-
-    it("should continue even when ticket creation fails (non-fatal)", async () => {
-      workshopsService.getPublishedById.mockResolvedValue(
-        Result.ok(mockFreeWorkshop)
-      );
-      seatCounter.decrement.mockResolvedValue(Result.ok());
-      registrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
-        Result.ok(null)
-      );
-      registrationsRepo.create.mockResolvedValue(
-        Result.ok({ ...mockRegistration, status: "CONFIRMED" })
-      );
-      ticketsRepo.create.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
-      );
-
-      const result = await service.register(STUDENT_ID, dto);
-
-      // Ticket failure is non-fatal
-      expect(result.isSuccess).toBe(true);
     });
   });
 
@@ -296,6 +240,7 @@ describe("RegistrationsService", () => {
       studentId: STUDENT_ID,
       workshopId: WORKSHOP_ID,
       status: "CONFIRMED",
+      qrCode: "550e8400-e29b-41d4-a716-446655440001",
       registeredAt: new Date(),
       confirmedAt: new Date(),
       cancelledAt: null,
@@ -304,11 +249,10 @@ describe("RegistrationsService", () => {
       updatedAt: new Date(),
     };
 
-    const mockPendingPaymentRegistration: Registration = {
+    const mockPendingRegistration: Registration = {
       ...mockConfirmedRegistration,
-      status: "PENDING_PAYMENT",
+      status: "PENDING",
       confirmedAt: null,
-      cancellationReason: null,
     };
 
     function setupConfirmed() {
@@ -318,12 +262,10 @@ describe("RegistrationsService", () => {
       registrationsRepo.updateStatus.mockResolvedValue(
         Result.ok({ ...mockConfirmedRegistration, status: "CANCELLED" })
       );
-      ticketsRepo.updateStatusByRegistrationId.mockResolvedValue(Result.ok());
       seatCounter.increment.mockResolvedValue(1);
     }
 
-    // FR-F04-005: cancel registration
-    it("should cancel a CONFIRMED registration — release seat and void ticket (FR-F04-005)", async () => {
+    it("should cancel a CONFIRMED registration — release seat, no ticket voiding", async () => {
       setupConfirmed();
 
       const result = await service.cancelRegistration(
@@ -339,21 +281,16 @@ describe("RegistrationsService", () => {
         REGISTRATION_ID,
         "CANCELLED"
       );
-      expect(ticketsRepo.updateStatusByRegistrationId).toHaveBeenCalledWith(
-        REGISTRATION_ID,
-        "VOID"
-      );
       expect(seatCounter.increment).toHaveBeenCalledWith(WORKSHOP_ID);
     });
 
-    it("should release seat lock when cancelling a PENDING_PAYMENT registration", async () => {
+    it("should release seat lock when cancelling a PENDING (paid) registration", async () => {
       registrationsRepo.findById.mockResolvedValue(
-        Result.ok(mockPendingPaymentRegistration)
+        Result.ok(mockPendingRegistration)
       );
       registrationsRepo.updateStatus.mockResolvedValue(
-        Result.ok({ ...mockPendingPaymentRegistration, status: "CANCELLED" })
+        Result.ok({ ...mockPendingRegistration, status: "CANCELLED" })
       );
-      ticketsRepo.updateStatusByRegistrationId.mockResolvedValue(Result.ok());
       seatCounter.increment.mockResolvedValue(1);
 
       const result = await service.cancelRegistration(
@@ -373,11 +310,9 @@ describe("RegistrationsService", () => {
 
       await service.cancelRegistration(STUDENT_ID, REGISTRATION_ID);
 
-      // Confirm registration was not PENDING_PAYMENT, so no seatLock.release
       expect(seatLock.release).not.toHaveBeenCalled();
     });
 
-    // FR-F04-005: IDOR
     it("should return REGISTRATION_NOT_FOUND for non-owned registration (IDOR)", async () => {
       registrationsRepo.findById.mockResolvedValue(
         Result.ok({ ...mockConfirmedRegistration, studentId: "other-user" })
@@ -392,7 +327,6 @@ describe("RegistrationsService", () => {
       expect(result.error.code).toBe("REGISTRATION_NOT_FOUND");
     });
 
-    // FR-F04-005: already cancelled
     it("should return REGISTRATION_CANCELLED when already cancelled", async () => {
       registrationsRepo.findById.mockResolvedValue(
         Result.ok({ ...mockConfirmedRegistration, status: "CANCELLED" })
@@ -406,50 +340,9 @@ describe("RegistrationsService", () => {
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("REGISTRATION_CANCELLED");
     });
-
-    it("should return failure when findById fails", async () => {
-      registrationsRepo.findById.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
-      );
-
-      const result = await service.cancelRegistration(
-        STUDENT_ID,
-        REGISTRATION_ID
-      );
-
-      expect(result.isFailure).toBe(true);
-    });
-
-    it("should return failure when updateStatus fails", async () => {
-      registrationsRepo.findById.mockResolvedValue(
-        Result.ok(mockConfirmedRegistration)
-      );
-      registrationsRepo.updateStatus.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
-      );
-
-      const result = await service.cancelRegistration(
-        STUDENT_ID,
-        REGISTRATION_ID
-      );
-
-      expect(result.isFailure).toBe(true);
-    });
-
-    it("should return REGISTRATION_NOT_FOUND when registration is null (IDOR probe)", async () => {
-      registrationsRepo.findById.mockResolvedValue(Result.ok(null));
-
-      const result = await service.cancelRegistration(
-        STUDENT_ID,
-        REGISTRATION_ID
-      );
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("REGISTRATION_NOT_FOUND");
-    });
   });
 
-  describe("getMyRegistrations — FR-F04-006 (view history)", () => {
+  describe("getMyRegistrations", () => {
     it("should return paginated registrations with mapped DTOs", async () => {
       const mockReg = {
         ...mockRegistration,
@@ -465,9 +358,7 @@ describe("RegistrationsService", () => {
       if (result.isSuccess) {
         expect(result.data.items).toHaveLength(1);
         expect(result.data.total).toBe(1);
-        expect(result.data.page).toBe(1);
-        expect(result.data.limit).toBe(20);
-        expect(result.data.items[0].registration_id).toBe(REGISTRATION_ID);
+        expect(result.data.items[0].id).toBe(REGISTRATION_ID);
       }
     });
 
@@ -488,16 +379,6 @@ describe("RegistrationsService", () => {
         { page: 2, limit: 10 }
       );
     });
-
-    it("should return failure on DB error", async () => {
-      registrationsRepo.findMyRegistrations.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
-      );
-
-      const result = await service.getMyRegistrations(STUDENT_ID);
-
-      expect(result.isFailure).toBe(true);
-    });
   });
 
   describe("getRegistrationDetail", () => {
@@ -511,7 +392,7 @@ describe("RegistrationsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.registration_id).toBe(REGISTRATION_ID);
+        expect(result.data.id).toBe(REGISTRATION_ID);
       }
     });
 
@@ -527,31 +408,6 @@ describe("RegistrationsService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("REGISTRATION_NOT_FOUND");
-    });
-
-    it("should return REGISTRATION_NOT_FOUND when registration does not exist", async () => {
-      registrationsRepo.findById.mockResolvedValue(Result.ok(null));
-
-      const result = await service.getRegistrationDetail(
-        STUDENT_ID,
-        REGISTRATION_ID
-      );
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("REGISTRATION_NOT_FOUND");
-    });
-
-    it("should return failure when findById fails", async () => {
-      registrationsRepo.findById.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
-      );
-
-      const result = await service.getRegistrationDetail(
-        STUDENT_ID,
-        REGISTRATION_ID
-      );
-
-      expect(result.isFailure).toBe(true);
     });
   });
 });

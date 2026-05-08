@@ -29,8 +29,6 @@
  * - Creates/reads/deletes Redis keys (idempotency, circuit breaker, seat lock).
  * - Enqueues BullMQ notification events (fire-and-forget).
  */
-import crypto from "node:crypto";
-
 import { Injectable } from "@nestjs/common";
 
 import type { Payment } from "@/infra/database/types/transaction.types";
@@ -42,8 +40,6 @@ import { NotificationPublisher } from "@/infra/messaging/notification-publisher"
 import { PAYMENT_WINDOW_SECONDS } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
-import { TicketsRepository } from "@/modules/booking/repositories/tickets.repository";
-import { TicketsService } from "@/modules/booking/services/tickets.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { passthroughOrInternal, paymentErrors } from "@/shared/response/errors";
@@ -67,14 +63,12 @@ export class PaymentsService {
   constructor(
     private readonly paymentsRepo: PaymentsRepository,
     private readonly registrationsRepo: RegistrationsRepository,
-    private readonly ticketsRepo: TicketsRepository,
     private readonly seatLock: SeatLockMechanic,
     private readonly idempotencyMechanic: IdempotencyMechanic,
     private readonly circuitBreaker: CircuitBreakerMechanic,
     private readonly paymentGatewayService: PaymentGatewayService,
     private readonly workshopsService: WorkshopsService,
     private readonly seatCounter: SeatCounterService,
-    private readonly ticketsService: TicketsService,
     private readonly notificationPublisher: NotificationPublisher
   ) {}
 
@@ -202,7 +196,11 @@ export class PaymentsService {
       gwResult.data.redirect_url,
       payment.timeoutAt!
     );
-    await this.idempotencyMechanic.markCompleted(idempotencyKey, responseDto, 201);
+    await this.idempotencyMechanic.markCompleted(
+      idempotencyKey,
+      responseDto,
+      201
+    );
     await this.circuitBreaker.recordSuccess(dto.gateway);
 
     return Result.ok(responseDto);
@@ -298,16 +296,6 @@ export class PaymentsService {
           );
           if (regUpdate.isFailure) throw regUpdate.error;
           workshopId = regUpdate.data.workshopId;
-
-          const ticketCreate = await this.ticketsRepo.create(
-            {
-              registrationId,
-              qrToken: crypto.randomUUID(),
-              status: "ACTIVE",
-            },
-            tx
-          );
-          if (ticketCreate.isFailure) throw ticketCreate.error;
         } else {
           // Failure path: update payment to FAILED only
           const payUpdate = await this.paymentsRepo.updateStatus(
@@ -344,20 +332,8 @@ export class PaymentsService {
       !isSuccess
     );
 
-    // Post-transaction: Replace placeholder QR token with signed JWT
+    // Post-transaction: Fire REGISTRATION_CONFIRMED for paid workshop (fire-and-forget)
     if (isSuccess) {
-      const ticketResult = await this.ticketsRepo.findByRegistrationId(
-        payment.registrationId
-      );
-      if (ticketResult.isSuccess && ticketResult.data) {
-        await this.ticketsService.signAndUpdateQrToken(
-          ticketResult.data.ticketId,
-          workshopId,
-          payment.studentId
-        );
-      }
-
-      // Fire REGISTRATION_CONFIRMED for paid workshop (fire-and-forget)
       const regEventData: RegistrationEventData = {
         registrationId: payment.registrationId,
         studentId: payment.studentId,
