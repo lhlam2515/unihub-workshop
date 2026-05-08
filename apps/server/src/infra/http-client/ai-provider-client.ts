@@ -21,20 +21,26 @@ const AI_PROVIDER_TIMEOUT_MS = 120_000;
 @Injectable()
 export class AIProviderHttpClient implements IHttpClient {
   private readonly logger = new Logger(AIProviderHttpClient.name);
-  private readonly axios: AxiosInstance;
+  private readonly axios?: AxiosInstance;
 
   constructor(configService: ConfigService) {
-    const baseURL = configService.getOrThrow<string>("aiProvider.baseUrl");
+    const baseURL = configService.get<string>("aiProvider.baseUrl");
     const apiKey = configService.get<string>("aiProvider.apiKey");
 
-    this.axios = createAxiosInstance({
-      baseURL,
-      timeoutMs: AI_PROVIDER_TIMEOUT_MS,
-      apiKey,
-      authScheme: "Bearer",
-    });
+    if (baseURL) {
+      this.axios = createAxiosInstance({
+        baseURL,
+        timeoutMs: AI_PROVIDER_TIMEOUT_MS,
+        apiKey,
+        authScheme: "Bearer",
+      });
 
-    this.logger.log(`AIProviderHttpClient initialized for ${baseURL}`);
+      this.logger.log(`AIProviderHttpClient initialized for ${baseURL}`);
+    } else {
+      this.logger.warn(
+        "AIProviderHttpClient disabled because aiProvider.baseUrl is not configured"
+      );
+    }
   }
 
   async post<T>(
@@ -42,6 +48,15 @@ export class AIProviderHttpClient implements IHttpClient {
     body: unknown,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "AI provider HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.post<T>(url, body, {
         headers: options?.headers,
@@ -61,6 +76,15 @@ export class AIProviderHttpClient implements IHttpClient {
     url: string,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "AI provider HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.get<T>(url, {
         headers: options?.headers,
@@ -81,6 +105,15 @@ export class AIProviderHttpClient implements IHttpClient {
     body: unknown,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "AI provider HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.put<T>(url, body, {
         headers: options?.headers,
@@ -100,6 +133,15 @@ export class AIProviderHttpClient implements IHttpClient {
     url: string,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "AI provider HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.delete<T>(url, {
         headers: options?.headers,

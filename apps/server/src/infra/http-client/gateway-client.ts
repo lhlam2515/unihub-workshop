@@ -21,20 +21,26 @@ const GATEWAY_TIMEOUT_MS = 5_000;
 @Injectable()
 export class GatewayHttpClient implements IHttpClient {
   private readonly logger = new Logger(GatewayHttpClient.name);
-  private readonly axios: AxiosInstance;
+  private readonly axios?: AxiosInstance;
 
   constructor(configService: ConfigService) {
-    const baseURL = configService.getOrThrow<string>("gateway.baseUrl");
+    const baseURL = configService.get<string>("gateway.baseUrl");
     const apiKey = configService.get<string>("gateway.apiKey");
 
-    this.axios = createAxiosInstance({
-      baseURL,
-      timeoutMs: GATEWAY_TIMEOUT_MS,
-      apiKey,
-      authScheme: "Bearer",
-    });
+    if (baseURL) {
+      this.axios = createAxiosInstance({
+        baseURL,
+        timeoutMs: GATEWAY_TIMEOUT_MS,
+        apiKey,
+        authScheme: "Bearer",
+      });
 
-    this.logger.log(`GatewayHttpClient initialized for ${baseURL}`);
+      this.logger.log(`GatewayHttpClient initialized for ${baseURL}`);
+    } else {
+      this.logger.warn(
+        "GatewayHttpClient disabled because gateway.baseUrl is not configured"
+      );
+    }
   }
 
   async post<T>(
@@ -42,6 +48,15 @@ export class GatewayHttpClient implements IHttpClient {
     body: unknown,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "Gateway HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.post<T>(url, body, {
         headers: options?.headers,
@@ -61,6 +76,15 @@ export class GatewayHttpClient implements IHttpClient {
     url: string,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "Gateway HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.get<T>(url, {
         headers: options?.headers,
@@ -81,6 +105,15 @@ export class GatewayHttpClient implements IHttpClient {
     body: unknown,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "Gateway HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.put<T>(url, body, {
         headers: options?.headers,
@@ -100,6 +133,15 @@ export class GatewayHttpClient implements IHttpClient {
     url: string,
     options?: RequestOptions
   ): Promise<Result<HttpResponse<T>>> {
+    if (!this.axios) {
+      return this.handleError(
+        new HttpClientError(
+          "NETWORK_ERROR",
+          "Gateway HTTP client is not configured"
+        )
+      );
+    }
+
     try {
       const response = await this.axios.delete<T>(url, {
         headers: options?.headers,

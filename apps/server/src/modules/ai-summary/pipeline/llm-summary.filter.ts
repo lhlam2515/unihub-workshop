@@ -38,13 +38,13 @@ export class LlmSummaryFilter implements IPipelineFilter<
   PdfPipelineContext
 > {
   private readonly logger = new Logger(LlmSummaryFilter.name);
-  private readonly anthropic: Anthropic;
+  private readonly anthropic?: Anthropic;
   private readonly model: string;
 
   readonly name = "LlmSummary";
 
   constructor(configService: ConfigService) {
-    const apiKey = configService.getOrThrow<string>("ai.deepseekApiKey");
+    const apiKey = configService.get<string>("ai.deepseekApiKey");
     this.model = configService.get<string>(
       "ai.summaryModel",
       "deepseek-v4-pro"
@@ -54,8 +54,16 @@ export class LlmSummaryFilter implements IPipelineFilter<
       "https://api.deepseek.com/anthropic"
     );
 
-    this.anthropic = new Anthropic({ apiKey, baseURL });
-    this.logger.log(`LLM summary filter initialised with model: ${this.model}`);
+    if (apiKey) {
+      this.anthropic = new Anthropic({ apiKey, baseURL });
+      this.logger.log(
+        `LLM summary filter initialised with model: ${this.model}`
+      );
+    } else {
+      this.logger.warn(
+        "LLM summary filter disabled because ai.deepseekApiKey is not configured"
+      );
+    }
   }
 
   async process(
@@ -75,6 +83,15 @@ export class LlmSummaryFilter implements IPipelineFilter<
     this.logger.log(
       `Generating summary via ${this.model} (${context.cleanedText.length} chars)`
     );
+
+    if (!this.anthropic) {
+      return Result.fail(
+        aiSummaryErrors.llmApiError(
+          this.model,
+          "DeepSeek API key is not configured"
+        )
+      );
+    }
 
     try {
       const message = await this.anthropic.messages.create({
