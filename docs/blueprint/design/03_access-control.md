@@ -182,10 +182,10 @@ function requireRole(...allowedRoles: Role[]): Middleware {
 }
 
 // Áp dụng tại route definition:
-router.post('/admin/workshops',           requireRole('btc'),           createWorkshop);
-router.patch('/admin/workshops/:id',      requireRole('btc'),           updateWorkshop);
-router.post('/checkins',                  requireRole('checkin_staff'), scanQR);
-router.post('/registrations',             requireRole('student'),     registerWorkshop);
+router.post('/admin/workshops',           requireRole('BTC'),           createWorkshop);
+router.patch('/admin/workshops/:id',      requireRole('BTC'),           updateWorkshop);
+router.post('/checkins',                  requireRole('CHECKIN_STAFF'), scanQR);
+router.post('/registrations',             requireRole('STUDENT'),     registerWorkshop);
 ```
 
 **Mapping Route → Allowed Roles (exhaustive list):**
@@ -194,22 +194,22 @@ router.post('/registrations',             requireRole('student'),     registerWo
 |---|---|---|---|
 | `/workshops` | GET | *(public, no JWT)* | — |
 | `/workshops/:id` | GET | *(public, no JWT)* | — |
-| `/registrations` | GET | `student` | requireRole('student') |
-| `/registrations/:id` | GET | `student` | requireRole('student') + owner check |
-| `/registrations` | POST | `student` | requireRole('student') |
-| `/payments` | POST | `student` | requireRole('student') + owner check |
-| `/admin/workshops` | POST | `btc` | requireRole('btc') |
-| `/admin/workshops/:id` | PATCH | `btc` | requireRole('btc') |
-| `/admin/workshops/:id` | DELETE | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/publish` | PATCH | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/registrations` | GET | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/stats` | GET | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/summary` | POST | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/summary` | GET | `btc` | requireRole('btc') |
-| `/admin/workshops/:id/summary/retry` | POST | `btc` | requireRole('btc') |
-| `/checkins` | POST | `checkin_staff` | requireRole('checkin_staff') |
-| `/checkins/history` | GET | `checkin_staff` | requireRole('checkin_staff') |
-| `/checkins/sync` | POST | `checkin_staff` | requireRole('checkin_staff') |
+| `/registrations` | GET | `student` | requireRole('STUDENT') |
+| `/registrations/:id` | GET | `student` | requireRole('STUDENT') + owner check |
+| `/registrations` | POST | `student` | requireRole('STUDENT') |
+| `/payments` | POST | `student` | requireRole('STUDENT') + owner check |
+| `/admin/workshops` | POST | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id` | PATCH | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id` | DELETE | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id/publish` | PATCH | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id/registrations` | GET | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id/stats` | GET | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id/summary` | POST | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id/summary` | GET | `btc` | requireRole('BTC') |
+| `/admin/workshops/:id/summary/retry` | POST | `btc` | requireRole('BTC') |
+| `/checkins` | POST | `checkin_staff` | requireRole('CHECKIN_STAFF') |
+| `/checkins/history` | GET | `checkin_staff` | requireRole('CHECKIN_STAFF') |
+| `/checkins/sync` | POST | `checkin_staff` | requireRole('CHECKIN_STAFF') |
 | `/auth/refresh` | POST | *(all authenticated)* | JWT only |
 | `/auth/logout` | POST | *(all authenticated)* | JWT only |
 
@@ -219,7 +219,7 @@ router.post('/registrations',             requireRole('student'),     registerWo
 |---|---|---|
 | Role không đủ quyền | 403 | `{ "error": "INSUFFICIENT_PERMISSION" }` |
 
-**Boundary của Lớp ②:** Lớp này chỉ kiểm tra *"role có được vào route không"*, KHÔNG kiểm tra *"resource này có thuộc về user không"*. Ví dụ: `requireRole('student')` trên `GET /registrations/:id` chỉ ngăn BTC và checkin_staff gọi endpoint đó — nó không ngăn student A xem QR của student B nếu student A biết registration ID. Đó là nhiệm vụ của Lớp ③.
+**Boundary của Lớp ②:** Lớp này chỉ kiểm tra *"role có được vào route không"*, KHÔNG kiểm tra *"resource này có thuộc về user không"*. Ví dụ: `requireRole('STUDENT')` trên `GET /registrations/:id` chỉ ngăn BTC và checkin_staff gọi endpoint đó — nó không ngăn student A xem QR của student B nếu student A biết registration ID. Đó là nhiệm vụ của Lớp ③.
 
 ---
 
@@ -260,7 +260,7 @@ WHERE id = :registration_id
 SELECT id FROM registrations
 WHERE id = :registration_id
   AND student_id = :current_user_id
-  AND status = 'pending';
+  AND status = 'PENDING';
 -- Nếu 0 row: registration không tồn tại HOẶC không thuộc về user này → 403
 ```
 
@@ -292,7 +292,7 @@ Client-side guard kiểm tra `role` từ JWT được lưu trong memory sau logi
 // Ví dụ: React Router guard
 function AdminGuard({ children }) {
   const { user } = useAuth();          // đọc từ JWT đã parse trong memory
-  if (!user || user.role !== 'btc') {
+  if (!user || user.role !== 'BTC') {
     return <Navigate to="/login" replace />;
   }
   return children;
@@ -324,8 +324,8 @@ Trang admin hiển thị khác nhau tùy role đang đăng nhập:
 ```typescript
 // Conditional render dựa trên role từ JWT:
 const { user } = useAuth();
-{user.role === 'btc' && <AdminWorkshopMenu />}
-{user.role === 'checkin_staff' && <CheckinMenu />}
+{user.role === 'BTC' && <AdminWorkshopMenu />}
+{user.role === 'CHECKIN_STAFF' && <CheckinMenu />}
 ```
 
 **Lưu ý thiết kế:** `checkin_staff` đăng nhập tại cùng endpoint `POST /auth/login` nhưng nhận JWT với `role: "checkin_staff"`. Trang admin web có thể dùng cho cả hai — routing phân nhánh theo role sau login. Trong thực tế, checkin_staff chủ yếu dùng mobile app.
@@ -398,7 +398,7 @@ Khi mobile sync batch check-in lên server (`POST /checkins/sync`), server thự
 
 ```
 Lớp ①: Verify JWT trong Authorization header
-Lớp ②: requireRole('checkin_staff')
+Lớp ②: requireRole('CHECKIN_STAFF')
 Lớp ③: Mỗi checkin record trong batch phải có registration_id hợp lệ
          → server verify từng record trước khi INSERT
          → INSERT với ON CONFLICT (registration_id) DO NOTHING

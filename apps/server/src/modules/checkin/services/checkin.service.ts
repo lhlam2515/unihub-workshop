@@ -1,87 +1,134 @@
 import { Injectable } from "@nestjs/common";
 
-import { ticketErrors } from "@/shared/response/errors";
+import { checkinErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
+import {
+  CheckinResultBuilder,
+  type CheckinResultDto,
+} from "../dto/checkin-result.dto";
 import {
   CheckinStatusBuilder,
   type CheckinStatusDto,
 } from "../dto/checkin-status.dto";
 import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
-import { TicketsRepository } from "../repositories/tickets.repository";
+import { RegistrationsRepository } from "../repositories/registrations.repository";
 
 @Injectable()
 export class CheckinService {
   constructor(
-    private readonly ticketsRepo: TicketsRepository,
+    private readonly registrationsRepo: RegistrationsRepository,
     private readonly checkinRecordsRepo: CheckinRecordsRepository
   ) {}
 
   /**
-   * Validates a QR token and records an online check-in.
+   * Validates a QR code and records an online check-in.
    *
    * Business rules:
-   * - Ticket must exist and belong to the given workshop.
-   * - Ticket must be ACTIVE (not VOID).
-   * - WorkshopScopeGuard on the controller enforces the staff's workshop assignment.
-   * - Duplicate scans are caught by the UNIQUE(ticket_id, workshop_id) constraint and returned as TICKET_ALREADY_CHECKEDIN.
+   * - Registration must exist and belong to the given workshop.
+   * - Registration status must be PAID or CONFIRMED.
+   * - Workshop must not be CANCELLED.
+   * - Duplicate scans are caught by UNIQUE(registration_id, workshop_id) constraint.
    *
    * Side effects:
    * - Inserts a record into `checkin_records` with source=ONLINE.
    *
-   * @param qrToken - The scanned QR token value.
+   * @param qrCode - The scanned QR code (UUID v4).
    * @param workshopId - UUID of the workshop where the scan is occurring.
-   * @param staffUserId - UUID of the CHECKIN_STAFF performing the scan (from jwt.sub).
-   * @param deviceId - Optional device identifier for audit tracking.
-   * @returns OkResult with the created checkin record, or FailResult (TICKET_NOT_FOUND, TICKET_VOID, TICKET_ALREADY_CHECKEDIN, INTERNAL_ERROR).
+   * @param staffUserId - UUID of the CHECKIN_STAFF performing the scan.
+   * @param checkedInAt - Timestamp of the scan from the device.
+   * @returns OkResult with CheckinResultDto, or FailResult (QR_INVALID, REGISTRATION_NOT_ACTIVE,
+   *   WORKSHOP_CANCELLED, WRONG_WORKSHOP, TICKET_ALREADY_CHECKEDIN).
    */
   async scanQR(
-    qrToken: string,
+    qrCode: string,
     workshopId: string,
     staffUserId: string,
-    deviceId?: string
-  ): Promise<Result<{ checkinId: string; checkedInAt: Date }>> {
-    const ticketResult = await this.ticketsRepo.findByQRToken(qrToken);
-    if (ticketResult.isFailure) return Result.fail(ticketResult.error);
+    checkedInAt: Date
+  ): Promise<Result<CheckinResultDto>> {
+    const regResult = await this.registrationsRepo.findByQRCode(qrCode);
+    if (regResult.isFailure) return Result.fail(regResult.error);
 
-    if (!ticketResult.data) {
-      return Result.fail(ticketErrors.notFound(qrToken));
+    const registration = regResult.data;
+    if (!registration) {
+      return Result.fail(checkinErrors.qrInvalid(qrCode));
     }
 
-    const ticket = ticketResult.data;
-
-    if (ticket.status === "VOID") {
-      return Result.fail(ticketErrors.void(ticket.ticketId));
+    if (registration.workshop.status === "CANCELLED") {
+      return Result.fail(
+        checkinErrors.registrationNotActive(registration.registrationId)
+      );
     }
 
-    if (ticket.registration.workshopId !== workshopId) {
-      return Result.fail(ticketErrors.notFound(qrToken));
+    if (registration.workshopId !== workshopId) {
+      return Result.fail(
+        checkinErrors.wrongWorkshop(registration.registrationId, workshopId)
+      );
+    }
+
+    if (registration.status !== "PAID" && registration.status !== "CONFIRMED") {
+      return Result.fail(
+        checkinErrors.registrationNotActive(registration.registrationId)
+      );
     }
 
     const now = new Date();
     const checkinResult = await this.checkinRecordsRepo.create({
-      registrationId: ticket.registrationId,
-      ticketId: ticket.ticketId,
-      studentId: ticket.registration.studentId,
+      registrationId: registration.registrationId,
+      studentId: registration.studentId,
       workshopId,
-      checkedInAt: now,
+      checkedInAt,
       checkedInBy: staffUserId,
       source: "ONLINE",
-      deviceId,
     });
 
     if (checkinResult.isFailure) return Result.fail(checkinResult.error);
 
     if (!checkinResult.data) {
-      return Result.fail(
-        ticketErrors.alreadyCheckedIn(ticket.ticketId, workshopId)
+      // Duplicate — fetch the original check-in record for the response
+      const existingResult =
+        await this.checkinRecordsRepo.findFirstByRegistrationId(
+          registration.registrationId
+        );
+
+      if (existingResult.isFailure || !existingResult.data) {
+        return Result.fail(
+          checkinErrors.alreadyCheckedIn(
+            registration.registrationId,
+            workshopId
+          )
+        );
+      }
+
+      return Result.ok(
+        CheckinResultBuilder.from({
+          checkinId: existingResult.data.checkinId,
+          registrationId: registration.registrationId,
+          checkedInAt: checkedInAt,
+          receivedAt: now,
+          student: {
+            studentCode: registration.student.studentId,
+            fullName: registration.student.fullName,
+          },
+          duplicate: true,
+          originallyCheckedInAt: existingResult.data.checkedInAt,
+        })
       );
     }
 
-    return Result.ok({
-      checkinId: checkinResult.data.checkinId,
-      checkedInAt: checkinResult.data.checkedInAt,
-    });
+    return Result.ok(
+      CheckinResultBuilder.from({
+        checkinId: checkinResult.data.checkinId,
+        registrationId: registration.registrationId,
+        checkedInAt: checkedInAt,
+        receivedAt: now,
+        student: {
+          studentCode: registration.student.studentId,
+          fullName: registration.student.fullName,
+        },
+        duplicate: false,
+      })
+    );
   }
 
   /**

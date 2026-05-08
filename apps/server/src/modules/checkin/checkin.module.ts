@@ -3,7 +3,7 @@
  *
  * Handles:
  * - QR code scanning (online and offline)
- * - Ticket management and validation
+ * - Registration lookup for check-in validation
  * - Check-in statistics and reporting
  *
  * Imports: DatabaseModule, CatalogModule (for workshop info)
@@ -14,26 +14,26 @@ import { Module } from "@nestjs/common";
 import { DatabaseModule } from "@/infra/database/database.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
-import { CheckinController } from "./controllers/checkin.controller";
-import { TicketsController } from "./controllers/tickets.controller";
+import {
+  CheckinController,
+  CheckinPreloadController,
+} from "./controllers/checkin.controller";
 import { CheckinRecordsRepository } from "./repositories/checkin-records.repository";
-import { TicketsRepository } from "./repositories/tickets.repository";
+import { RegistrationsRepository } from "./repositories/registrations.repository";
 import { CheckinService } from "./services/checkin.service";
 import { OfflineSyncService } from "./services/offline-sync.service";
-import { TicketService } from "./services/ticket.service";
 
 @Module({
   imports: [DatabaseModule, CatalogModule],
-  controllers: [CheckinController, TicketsController],
+  controllers: [CheckinController, CheckinPreloadController],
   providers: [
     // Services
     CheckinService,
-    TicketService,
     OfflineSyncService,
     // Repositories
-    TicketsRepository,
+    RegistrationsRepository,
     CheckinRecordsRepository,
   ],
-  exports: [TicketService],
+  exports: [RegistrationsRepository],
 })
 export class CheckinModule {}

@@ -1,20 +1,22 @@
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
+import { BullMQAdapter } from "./bullmq.adapter";
+import { MESSAGING_TOKEN } from "./messaging.constants";
 import { NotificationPublisher } from "./notification-publisher";
-import { NOTIFICATION_QUEUE } from "./queue.constants";
 
 describe("NotificationPublisher", () => {
   let publisher: NotificationPublisher;
-  let mockQueue: { add: jest.Mock };
+  let adapter: BullMQAdapter;
 
   beforeEach(async () => {
-    mockQueue = { add: jest.fn().mockResolvedValue({ id: "job-1" }) };
+    const mockQueue = { add: jest.fn().mockResolvedValue({ id: "job-1" }) };
+    adapter = new BullMQAdapter(mockQueue as any);
+    jest.spyOn(adapter, "enqueue");
 
     const module = await Test.createTestingModule({
       providers: [
         NotificationPublisher,
-        { provide: getQueueToken(NOTIFICATION_QUEUE), useValue: mockQueue },
+        { provide: MESSAGING_TOKEN.NOTIFICATION_QUEUE, useValue: adapter },
       ],
     }).compile();
 
@@ -28,7 +30,7 @@ describe("NotificationPublisher", () => {
       workshopId: "ws-1",
     });
 
-    expect(mockQueue.add).toHaveBeenCalledWith("registration.confirmed", {
+    expect(adapter.enqueue).toHaveBeenCalledWith("registration.confirmed", {
       registrationId: "reg-1",
       studentId: "stu-1",
       workshopId: "ws-1",
@@ -36,7 +38,7 @@ describe("NotificationPublisher", () => {
   });
 
   it("does not throw when the queue rejects", () => {
-    mockQueue.add.mockRejectedValue(new Error("Redis down"));
+    jest.spyOn(adapter, "enqueue").mockRejectedValue(new Error("Redis down"));
 
     expect(() => publisher.fire("registration.confirmed", {})).not.toThrow();
   });

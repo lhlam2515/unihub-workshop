@@ -1,20 +1,25 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { IamModule } from "@/modules/iam/iam.module";
 
 import { AiSummaryModule } from "../ai-summary/ai-summary.module";
 import { BookingModule } from "../booking/booking.module";
 import { CatalogModule } from "../catalog/catalog.module";
 import { CsvSyncModule } from "../csv-sync/csv-sync.module";
+import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
 import { SystemAdminController } from "./controllers/system-admin.controller";
 import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
+import { IdempotencyCleanupCron } from "./cron/idempotency-cleanup.cron";
+import { PaymentReconciliationCron } from "./cron/payment-reconciliation.cron";
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
+import { StudentSyncSchedulerCron } from "./cron/student-sync-scheduler.cron";
 import { WorkshopAutoCompleteCron } from "./cron/workshop-auto-complete.cron";
 import { SystemMonitorService } from "./services/system-monitor.service";
+import { WorkshopCancellationService } from "./services/workshop-cancellation.service";
 import { AiSummaryWorker } from "./workers/ai-summary.worker";
 import { NotificationWorker } from "./workers/notification.worker";
 import { StudentSyncWorker } from "./workers/student-sync.worker";
@@ -33,20 +38,21 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
  * - Registers cron schedules via @nestjs/schedule.
  * - Exposes admin HTTP endpoints for manual job management.
  *
- * @requires SharedQueueModule — provides BullMQ queue registrations.
+ * @requires MessagingModule — provides BullMQ queue registrations.
  * @requires BookingModule — provides RegistrationsService (reconciliation).
  * @requires CsvSyncModule — provides StudentSyncService (data sync).
  */
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    SharedQueueModule,
+    MessagingModule,
     BookingModule,
     CatalogModule,
     PaymentModule,
     IamModule,
     AiSummaryModule,
     CsvSyncModule,
+    NotificationModule,
   ],
   controllers: [SystemAdminController],
   providers: [
@@ -55,6 +61,12 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     ReconciliationCron,
     CircuitBreakerRecoveryCron,
     WorkshopAutoCompleteCron,
+    // New crons
+    IdempotencyCleanupCron,
+    PaymentReconciliationCron,
+    StudentSyncSchedulerCron,
+    // Services
+    WorkshopCancellationService,
     // Workers
     NotificationWorker,
     AiSummaryWorker,

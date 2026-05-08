@@ -22,7 +22,7 @@ export class UsersService {
    * - Results are sorted by `created_at` descending (newest first).
    * - The `password_hash` field is excluded via UserResponseBuilder.
    *
-   * @param role - Optional role filter (STUDENT | ORGANIZER | CHECKIN_STAFF).
+   * @param role - Optional role filter (STUDENT | BTC | CHECKIN_STAFF).
    * @param pagination.page - Page index (1-based, default 1).
    * @param pagination.limit - Items per page (default 20).
    * @returns OkResult with items array and total count, or FailResult with INTERNAL_ERROR.

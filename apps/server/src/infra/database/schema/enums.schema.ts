@@ -2,9 +2,13 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", [
   "STUDENT",
-  "ORGANIZER",
+  "BTC",
   "CHECKIN_STAFF",
 ]);
+
+export const staffRoleEnum = pgEnum("staff_role", ["BTC", "CHECKIN_STAFF"]);
+
+export const platformEnum = pgEnum("platform", ["IOS", "ANDROID"]);
 
 export const userStatusEnum = pgEnum("user_status", [
   "ACTIVE",
@@ -14,26 +18,25 @@ export const userStatusEnum = pgEnum("user_status", [
 
 export const workshopStatusEnum = pgEnum("workshop_status", [
   "DRAFT",
-  "PUBLISHED",
+  "OPEN",
   "CANCELLED",
   "COMPLETED",
 ]);
 
 export const registrationStatusEnum = pgEnum("registration_status", [
-  "PENDING_PAYMENT",
+  "PENDING",
   "CONFIRMED",
+  "PAID",
   "CANCELLED",
-  "WAITLISTED",
 ]);
 
 export const ticketStatusEnum = pgEnum("ticket_status", ["ACTIVE", "VOID"]);
 
 export const paymentStatusEnum = pgEnum("payment_status", [
-  "PENDING",
-  "SUCCESS",
+  "INITIATED",
+  "SUCCEEDED",
   "FAILED",
-  "REFUNDED",
-  "TIMEOUT",
+  "UNRESOLVED",
 ]);
 
 export const paymentGatewayEnum = pgEnum("payment_gateway", [
@@ -50,7 +53,10 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "WORKSHOP_CANCELLED",
   "PAYMENT_SUCCESS",
   "PAYMENT_FAILED",
+  "PAYMENT_CONFIRMED_LATE",
+  "PAYMENT_FAILED_RECONCILED",
   "CHECKIN_REMINDER",
+  "CSV_IMPORT_COMPLETED_WITH_ERRORS",
 ]);
 
 export const notificationChannelEnum = pgEnum("notification_channel", [
@@ -63,6 +69,7 @@ export const notificationStatusEnum = pgEnum("notification_status", [
   "PENDING",
   "SENT",
   "FAILED",
+  "TIMEOUT",
 ]);
 
 export const checkinSourceEnum = pgEnum("checkin_source", [
@@ -77,6 +84,12 @@ export const syncJobStatusEnum = pgEnum("sync_job_status", [
   "FAILED",
 ]);
 
+export const offlineSyncStatusEnum = pgEnum("offline_sync_status", [
+  "PENDING",
+  "SYNCED",
+  "CONFLICT",
+]);
+
 export const syncErrorReasonEnum = pgEnum("sync_error_reason", [
   "DUPLICATE",
   "INVALID_FORMAT",
@@ -84,8 +97,9 @@ export const syncErrorReasonEnum = pgEnum("sync_error_reason", [
   "UNKNOWN",
 ]);
 
-export const aiSummaryStatusEnum = pgEnum("ai_summary_status", [
-  "PENDING",
+export const summaryStatusEnum = pgEnum("summary_status", [
+  "NONE",
+  "QUEUED",
   "PROCESSING",
   "DONE",
   "FAILED",

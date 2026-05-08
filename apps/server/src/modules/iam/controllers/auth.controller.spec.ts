@@ -51,6 +51,8 @@ describe("AuthController", () => {
       const dto = {
         email: "test@test.com",
         password: "pass",
+        account_type: "student" as const,
+        student_id: "student-1",
         platform: "WEB" as const,
       };
       authService.login.mockResolvedValue(
@@ -73,6 +75,8 @@ describe("AuthController", () => {
       const dto = {
         email: "test@test.com",
         password: "pass",
+        account_type: "student" as const,
+        student_id: "student-1",
         platform: "WEB" as const,
       };
       authService.login.mockResolvedValue(

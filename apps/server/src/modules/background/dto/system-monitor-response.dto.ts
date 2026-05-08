@@ -4,28 +4,20 @@ import { z } from "zod";
  * SystemMonitorResponseDtos
  *
  * Multiple response shapes for different monitoring endpoints.
+ * All fields are camelCase per project convention.
  */
 
 /**
  * PaymentTimeoutJobStatusDto
  *
  * Status of payment timeout background job.
- *
- * Shape:
- * {
- *   pending_count: number (PENDING payments),
- *   timeout_count: number (payments with timeout_at < NOW()),
- *   last_run: DateTime,
- *   next_run: DateTime,
- *   job_status: 'RUNNING' | 'IDLE' | 'ERROR'
- * }
  */
 export const PaymentTimeoutJobStatusSchema = z.object({
-  pending_count: z.number().int().nonnegative(),
-  timeout_count: z.number().int().nonnegative(),
-  last_run: z.date(),
-  next_run: z.date(),
-  job_status: z.enum(["RUNNING", "IDLE", "ERROR"]),
+  pendingCount: z.number().int().nonnegative(),
+  timeoutCount: z.number().int().nonnegative(),
+  lastRun: z.date(),
+  nextRun: z.date(),
+  jobStatus: z.enum(["RUNNING", "IDLE", "ERROR"]),
 });
 
 export type PaymentTimeoutJobStatusDto = z.infer<
@@ -36,22 +28,13 @@ export type PaymentTimeoutJobStatusDto = z.infer<
  * ReconciliationJobStatusDto
  *
  * Status of seat reconciliation background job.
- *
- * Shape:
- * {
- *   total_workshops: number,
- *   discrepancies_found: number,
- *   last_run: DateTime,
- *   next_run: DateTime,
- *   last_alert?: string (last alert timestamp/message)
- * }
  */
 export const ReconciliationJobStatusSchema = z.object({
-  total_workshops: z.number().int().nonnegative(),
-  discrepancies_found: z.number().int().nonnegative(),
-  last_run: z.date(),
-  next_run: z.date(),
-  last_alert: z.string().optional(),
+  totalWorkshops: z.number().int().nonnegative(),
+  discrepanciesFound: z.number().int().nonnegative(),
+  lastRun: z.date(),
+  nextRun: z.date(),
+  lastAlert: z.string().optional(),
 });
 
 export type ReconciliationJobStatusDto = z.infer<
@@ -62,24 +45,14 @@ export type ReconciliationJobStatusDto = z.infer<
  * CircuitBreakerStatusDto
  *
  * Status of a single payment gateway circuit breaker.
- *
- * Shape:
- * {
- *   gateway: 'VNPAY' | 'MOMO' | 'STRIPE',
- *   state: 'CLOSED' | 'HALF_OPEN' | 'OPEN',
- *   failure_count: number,
- *   opened_at?: DateTime (when circuit was opened),
- *   last_attempt?: DateTime (last attempt timestamp),
- *   recovery_deadline?: DateTime (when circuit will auto-recover)
- * }
  */
 export const CircuitBreakerStatusSchema = z.object({
   gateway: z.enum(["VNPAY", "MOMO", "STRIPE"]),
   state: z.enum(["CLOSED", "HALF_OPEN", "OPEN"]),
-  failure_count: z.number().int().nonnegative(),
-  opened_at: z.date().optional(),
-  last_attempt: z.date().optional(),
-  recovery_deadline: z.date().optional(),
+  failureCount: z.number().int().nonnegative(),
+  openedAt: z.date().optional(),
+  lastAttempt: z.date().optional(),
+  recoveryDeadline: z.date().optional(),
 });
 
 export type CircuitBreakerStatusDto = z.infer<

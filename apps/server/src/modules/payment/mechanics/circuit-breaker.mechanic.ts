@@ -1,107 +1,97 @@
-/**
- * Circuit Breaker Mechanic
- *
- * Manages a CLOSED → OPEN → HALF_OPEN state machine per payment gateway
- * stored in Redis Hash `circuit:payment:{gateway}`.
- *
- * Transitions:
- * - CLOSED: normal operation, all requests proceed.
- * - OPEN: requests rejected, cooldown timer (30s) starts.
- * - HALF_OPEN: single canary request allowed, others rejected.
- *
- * Failure window: 5 failures within rolling window triggers OPEN.
- * Cooldown: 30 seconds before transitioning from OPEN → HALF_OPEN.
- * Recovery: 1 successful canary (HALF_OPEN → CLOSED).
- *
- * State fields (Redis Hash):
- * - state: CLOSED | OPEN | HALF_OPEN
- * - failure_count: number of consecutive failures
- * - opened_at: ISO timestamp when circuit was last opened
- * - last_attempt: ISO timestamp of the last request attempt
- *
- * Side effects:
- * - Reads and writes the Redis Hash `circuit:payment:{gateway}`.
- */
 import { Injectable } from "@nestjs/common";
 
-import { RedisService } from "@/infra/redis/redis.service";
 import { paymentErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
-const KEY_PREFIX = "circuit:payment";
 const FAILURE_THRESHOLD = 5;
 const COOLDOWN_MS = 30_000;
 const FAILURE_WINDOW_MS = 60_000;
+const FAILURE_RATE_THRESHOLD = 0.5;
+const HALF_OPEN_SUCCESS_THRESHOLD = 2;
+
+export interface CircuitState {
+  state: "CLOSED" | "OPEN" | "HALF_OPEN";
+  failureCount: number;
+  totalCount: number;
+  windowStart: number;
+  openedAt: number;
+  lastAttempt: number;
+  lastFailureAt: number;
+  halfOpenSuccessCount: number;
+}
+
+function createInitialState(): CircuitState {
+  return {
+    state: "CLOSED",
+    failureCount: 0,
+    totalCount: 0,
+    windowStart: Date.now(),
+    openedAt: 0,
+    lastAttempt: 0,
+    lastFailureAt: 0,
+    halfOpenSuccessCount: 0,
+  };
+}
 
 @Injectable()
 export class CircuitBreakerMechanic {
-  constructor(private readonly redisService: RedisService) {}
+  /** In-process memory per ADR-07. Single process = no distributed coordination needed. */
+  private readonly circuits = new Map<string, CircuitState>();
 
-  private buildKey(gateway: string): string {
-    return `${KEY_PREFIX}:${gateway}`;
+  private getState(gateway: string): CircuitState {
+    if (!this.circuits.has(gateway)) {
+      this.circuits.set(gateway, createInitialState());
+    }
+    return this.circuits.get(gateway)!;
   }
 
   /**
    * Checks whether a request to the given gateway is allowed.
    *
-   * Business rules:
+   * Business rules (ADR-07):
    * - CLOSED → allow.
    * - HALF_OPEN → reject (only one canary at a time).
    * - OPEN + cooldown expired (30s) → transition to HALF_OPEN, allow (canary).
-   * - OPEN + cooldown not expired → reject.
+   * - OPEN + cooldown not expired → reject with PAYMENT_GATEWAY_OPEN.
    *
    * Side effects:
    * - Transitions OPEN → HALF_OPEN when cooldown expires.
-   * - Updates last_attempt timestamp.
+   * - Resets halfOpenSuccessCount on HALF_OPEN transition.
+   * - Updates lastAttempt timestamp.
    *
    * @param gateway - The payment gateway identifier.
-   * @returns OkResult(true) if allowed, or FailResult PAYMENT_GATEWAY_OPEN if rejected.
+   * @returns OkResult(true) if allowed, or FailResult with PAYMENT_GATEWAY_OPEN.
    */
   async checkAndAllow(gateway: string): Promise<Result<boolean>> {
-    const key = this.buildKey(gateway);
-    const state = await this.redisService.hGetAll(key);
+    const state = this.getState(gateway);
 
-    const currentState = state.state ?? "CLOSED";
-
-    if (currentState === "CLOSED") {
-      await this.redisService.hSet(
-        key,
-        "last_attempt",
-        new Date().toISOString()
-      );
+    if (state.state === "CLOSED") {
+      state.lastAttempt = Date.now();
       return Result.ok(true);
     }
 
-    if (currentState === "HALF_OPEN") {
+    if (state.state === "HALF_OPEN") {
       return Result.fail(
         paymentErrors.gatewayOpen(
           gateway,
-          state.opened_at ?? new Date().toISOString()
+          new Date(state.openedAt).toISOString()
         )
       );
     }
 
-    // OPEN state - check cooldown
-    const openedAt = state.opened_at ? new Date(state.opened_at).getTime() : 0;
+    // OPEN state — check cooldown
     const now = Date.now();
-
-    if (now - openedAt >= COOLDOWN_MS) {
+    if (now - state.openedAt >= COOLDOWN_MS) {
       // Cooldown expired: transition to HALF_OPEN (canary)
-      await this.redisService.hSet(key, "state", "HALF_OPEN");
-      await this.redisService.hSet(
-        key,
-        "last_attempt",
-        new Date().toISOString()
-      );
+      state.state = "HALF_OPEN";
+      state.halfOpenSuccessCount = 0;
+      state.lastAttempt = now;
       return Result.ok(true);
     }
 
     // Still in cooldown — reject
     return Result.fail(
-      paymentErrors.gatewayOpen(
-        gateway,
-        state.opened_at ?? new Date().toISOString()
-      )
+      paymentErrors.gatewayOpen(gateway, new Date(state.openedAt).toISOString())
     );
   }
 
@@ -109,77 +99,97 @@ export class CircuitBreakerMechanic {
    * Records a successful gateway call.
    *
    * Business rules:
-   * - HALF_OPEN → transition to CLOSED, reset failure_count.
-   * - CLOSED → reset failure_count (keep state).
-   *
-   * Side effects:
-   * - Updates the Redis Hash fields for the gateway.
+   * - HALF_OPEN → increment halfOpenSuccessCount; close circuit when >= 2.
+   * - CLOSED → reset failureCount.
+   * - Always increments totalCount for rate calculation.
    *
    * @param gateway - The payment gateway identifier.
    */
   async recordSuccess(gateway: string): Promise<void> {
-    const key = this.buildKey(gateway);
-    const currentState = await this.redisService.hGet(key, "state");
+    const state = this.getState(gateway);
+    state.totalCount += 1;
 
-    if (currentState === "HALF_OPEN") {
-      await this.redisService.hSet(key, "state", "CLOSED");
+    if (state.state === "HALF_OPEN") {
+      state.halfOpenSuccessCount += 1;
+      if (state.halfOpenSuccessCount >= HALF_OPEN_SUCCESS_THRESHOLD) {
+        state.state = "CLOSED";
+        state.failureCount = 0;
+        state.halfOpenSuccessCount = 0;
+      }
+      return;
     }
 
-    await this.redisService.hSet(key, "failure_count", "0");
+    // CLOSED — reset failure count
+    state.failureCount = 0;
   }
 
   /**
    * Records a failed gateway call.
    *
    * Business rules:
-   * - Increments failure_count in the Redis Hash.
-   * - Resets counter if 60 seconds have elapsed since the last failure
-   *   (rolling window approximation).
-   * - At threshold (5) → transitions to OPEN with opened_at timestamp.
-   * - HALF_OPEN canary failure → transitions back to OPEN with new timestamp.
-   *
-   * Side effects:
-   * - Updates the Redis Hash state and counter fields.
+   * - Resets counters if 60s have elapsed since windowStart.
+   * - Increments failureCount AND totalCount.
+   * - Opens circuit when failureCount >= 5 OR failureRate >= 50% (min 3 requests).
+   * - HALF_OPEN canary failure → reset halfOpenSuccessCount, back to OPEN.
    *
    * @param gateway - The payment gateway identifier.
    */
   async recordFailure(gateway: string): Promise<void> {
-    const key = this.buildKey(gateway);
-    const currentState = await this.redisService.hGet(key, "state");
+    const state = this.getState(gateway);
 
-    if (currentState === "HALF_OPEN") {
-      // Canary failed: back to OPEN with fresh timestamp
-      await this.redisService.hSet(key, "state", "OPEN");
-      await this.redisService.hSet(key, "opened_at", new Date().toISOString());
+    if (state.state === "HALF_OPEN") {
+      state.state = "OPEN";
+      state.openedAt = Date.now();
+      state.halfOpenSuccessCount = 0;
       return;
     }
 
-    // Read current failure state
-    const rawCount = await this.redisService.hGet(key, "failure_count");
-    const lastFailure = await this.redisService.hGet(key, "last_failure_at");
+    const now = Date.now();
 
-    let currentCount = rawCount ? parseInt(rawCount, 10) : 0;
-
-    // Rolling window: reset count if 60 seconds since last failure
-    if (lastFailure) {
-      const elapsed = Date.now() - new Date(lastFailure).getTime();
-      if (elapsed > FAILURE_WINDOW_MS) {
-        currentCount = 0;
-      }
+    // Rolling window: reset counters if 60s since windowStart
+    if (now - state.windowStart > FAILURE_WINDOW_MS) {
+      state.failureCount = 0;
+      state.totalCount = 0;
+      state.windowStart = now;
     }
 
-    const newCount = currentCount + 1;
+    state.failureCount += 1;
+    state.totalCount += 1;
+    state.lastFailureAt = now;
 
-    await this.redisService.hSet(key, "failure_count", String(newCount));
-    await this.redisService.hSet(
-      key,
-      "last_failure_at",
-      new Date().toISOString()
-    );
+    // Check both conditions: consecutive failures OR rate >= 50%
+    const rateExceeded =
+      state.totalCount >= 3 &&
+      state.failureCount / state.totalCount >= FAILURE_RATE_THRESHOLD;
 
-    if (newCount >= FAILURE_THRESHOLD) {
-      await this.redisService.hSet(key, "state", "OPEN");
-      await this.redisService.hSet(key, "opened_at", new Date().toISOString());
+    if (state.failureCount >= FAILURE_THRESHOLD || rateExceeded) {
+      state.state = "OPEN";
+      state.openedAt = now;
     }
+  }
+
+  /**
+   * Returns the current state for a gateway (admin monitoring).
+   *
+   * @param gateway - The payment gateway identifier.
+   */
+  getGatewayState(gateway: string): CircuitState {
+    return { ...this.getState(gateway) };
+  }
+
+  /**
+   * Returns all known gateway states (admin monitoring).
+   */
+  getAllStates(): Map<string, CircuitState> {
+    return this.circuits;
+  }
+
+  /**
+   * Force-resets a gateway's circuit breaker to CLOSED (admin action).
+   *
+   * @param gateway - The payment gateway identifier.
+   */
+  reset(gateway: string): void {
+    this.circuits.set(gateway, createInitialState());
   }
 }

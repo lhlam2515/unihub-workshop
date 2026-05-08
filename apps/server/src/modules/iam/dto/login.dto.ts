@@ -2,16 +2,32 @@
  * Login DTO
  *
  * Request: POST /auth/login
- * Validate: { email, password, platform: 'WEB' | 'MOBILE' }
+ * Validate: { accountType, password, studentId?, email? }
+ *
+ * Conditional validation:
+ * - accountType = "student" → studentId is required
+ * - accountType = "staff"   → email is required
  */
 
-import { createZodDto } from "nestjs-zod/dto";
+import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 
-export const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-  platform: z.enum(["WEB", "MOBILE"]),
-});
+export const LoginSchema = z
+  .object({
+    accountType: z.enum(["student", "staff"]),
+    password: z.string().min(1),
+    studentId: z.string().optional(),
+    email: z.string().email().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.accountType === "student") return !!data.studentId;
+      return !!data.email;
+    },
+    {
+      message: "Required field missing for the selected account type",
+      path: ["accountType"],
+    }
+  );
 
 export class LoginDto extends createZodDto(LoginSchema) {}

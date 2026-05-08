@@ -10,6 +10,7 @@ import {
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { ListNotificationLogsQueryDto } from "../dto/notification-response.dto";
@@ -18,7 +19,8 @@ import { NotificationsService } from "../services/notifications.service";
 
 @Controller("/admin/notifications")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class NotificationsAdminController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
@@ -58,7 +60,7 @@ export class NotificationsAdminController {
    *
    * @returns All channel configs with is_active and config_json
    */
-  @Get("channels")
+  @Get("/admin/notification-channels")
   async listChannelConfigs() {
     return this.notificationsService.listChannelConfigs();
   }
@@ -66,15 +68,15 @@ export class NotificationsAdminController {
   /**
    * Update a channel configuration
    *
-   * @param channelType - Channel type to update
+   * @param channelId - Channel type to update
    * @param dto - Update payload
    * @returns Updated channel config
    */
-  @Patch("channels/:channelType")
+  @Patch("/admin/notification-channels/:channelId")
   async updateChannelConfig(
-    @Param("channelType") channelType: string,
+    @Param("channelId") channelId: string,
     @Body() dto: UpdateChannelConfigDto
   ) {
-    return this.notificationsService.updateChannelConfig(channelType, dto);
+    return this.notificationsService.updateChannelConfig(channelId, dto);
   }
 }

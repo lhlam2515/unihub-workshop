@@ -6,16 +6,19 @@
  * Type union aliases are duplicated from database enums to respect the
  * shared→database architectural boundary, kept in sync by convention.
  */
-type NotificationType =
+export type NotificationType =
   | "REGISTRATION_CONFIRMED"
   | "REGISTRATION_CANCELLED"
   | "WORKSHOP_UPDATED"
   | "WORKSHOP_CANCELLED"
   | "PAYMENT_SUCCESS"
   | "PAYMENT_FAILED"
-  | "CHECKIN_REMINDER";
+  | "PAYMENT_CONFIRMED_LATE"
+  | "PAYMENT_FAILED_RECONCILED"
+  | "CHECKIN_REMINDER"
+  | "CSV_IMPORT_COMPLETED_WITH_ERRORS";
 
-type NotificationChannel = "APP" | "EMAIL" | "TELEGRAM";
+export type NotificationChannel = "APP" | "EMAIL" | "TELEGRAM";
 
 type PaymentGateway = "VNPAY" | "STRIPE" | "MOMO" | "MOCK";
 

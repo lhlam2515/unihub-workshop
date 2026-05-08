@@ -2,7 +2,7 @@
  * Speakers Service
  *
  * Handles CRUD operations for speaker profiles.
- * Speakers are referenced by workshops and are managed by ORGANIZER roles.
+ * Speakers are referenced by workshops and are managed by BTC roles.
  */
 
 import { Injectable } from "@nestjs/common";
@@ -27,6 +27,36 @@ export class SpeakersService {
    *
    * @returns OkResult containing an array of speaker DTOs with name, title, bio, and avatar, or FailResult (INTERNAL_ERROR).
    */
+  /**
+   * Retrieves a single speaker by ID.
+   *
+   * @param id - The UUID of the speaker.
+   * @returns OkResult containing the speaker DTO, or FailResult (SPEAKER_NOT_FOUND).
+   */
+  async getSpeakerById(id: string): Promise<Result<SpeakerResponseDto>> {
+    const result = await this.speakersRepo.findById(id);
+    if (result.isFailure) return Result.fail(result.error);
+    if (!result.data) return Result.fail(speakerErrors.notFound(id));
+    return Result.ok(SpeakerResponseBuilder.from(result.data));
+  }
+
+  /**
+   * Deletes a speaker by ID.
+   *
+   * Side effects:
+   * - Deletes the speaker record from the database.
+   *
+   * @param id - The UUID of the speaker to delete.
+   * @returns OkResult<void>, or FailResult (SPEAKER_NOT_FOUND).
+   */
+  async deleteSpeaker(id: string): Promise<Result<void>> {
+    const existing = await this.speakersRepo.findById(id);
+    if (existing.isFailure) return Result.fail(existing.error);
+    if (!existing.data) return Result.fail(speakerErrors.notFound(id));
+
+    return this.speakersRepo.delete(id);
+  }
+
   async listSpeakers(): Promise<Result<SpeakerResponseDto[]>> {
     const result = await this.speakersRepo.findAll();
     if (result.isFailure) return Result.fail(result.error);

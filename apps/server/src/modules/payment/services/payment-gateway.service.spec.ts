@@ -1,13 +1,67 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
+import { Result } from "@/shared/response/result";
+
 import { PaymentGatewayService } from "./payment-gateway.service";
+import { PaymentGatewayFactory } from "../gateways/payment-gateway.factory";
+
+import type { IGatewayAdapter } from "../gateways/gateway-adapter.interface";
 
 describe("PaymentGatewayService", () => {
   let service: PaymentGatewayService;
 
+  const mockAdapter: IGatewayAdapter = {
+    gatewayName: "MOCK",
+    initiatePayment: jest.fn().mockResolvedValue(
+      Result.ok({
+        redirect_url: "https://mock-gateway.test/pay/demo-txn-123",
+        gateway_txn_id: "mock_txn_123_abc123",
+      })
+    ),
+    verifyHmacSignature: jest.fn().mockResolvedValue(Result.ok(true)),
+    checkPaymentStatus: jest
+      .fn()
+      .mockResolvedValue(Result.ok({ status: "SUCCEEDED" })),
+  };
+
+  const vnpayAdapter: IGatewayAdapter = {
+    gatewayName: "VNPAY",
+    initiatePayment: jest.fn().mockResolvedValue(
+      Result.fail({
+        category: "EXTERNAL",
+        code: "PAYMENT_GATEWAY_ERROR",
+        message: "Payment gateway returned an error. Please try again.",
+        context: { gateway: "VNPAY" },
+      })
+    ),
+    verifyHmacSignature: jest.fn().mockResolvedValue(
+      Result.fail({
+        category: "EXTERNAL",
+        code: "PAYMENT_GATEWAY_ERROR",
+        message: "Payment gateway returned an error. Please try again.",
+        context: { gateway: "VNPAY" },
+      })
+    ),
+    checkPaymentStatus: jest.fn().mockResolvedValue(
+      Result.fail({
+        category: "EXTERNAL",
+        code: "PAYMENT_GATEWAY_ERROR",
+        message: "Payment gateway returned an error. Please try again.",
+        context: { gateway: "VNPAY" },
+      })
+    ),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PaymentGatewayService],
+      providers: [
+        PaymentGatewayService,
+        {
+          provide: PaymentGatewayFactory,
+          useFactory: () =>
+            new PaymentGatewayFactory([mockAdapter, vnpayAdapter]),
+        },
+      ],
     }).compile();
 
     service = module.get<PaymentGatewayService>(PaymentGatewayService);
@@ -26,20 +80,6 @@ describe("PaymentGatewayService", () => {
 
     it("should return PAYMENT_GATEWAY_ERROR for VNPAY (not yet implemented)", async () => {
       const result = await service.initiatePayment("VNPAY", 50000, {});
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("PAYMENT_GATEWAY_ERROR");
-    });
-
-    it("should return PAYMENT_GATEWAY_ERROR for STRIPE (not yet implemented)", async () => {
-      const result = await service.initiatePayment("STRIPE", 50000, {});
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("PAYMENT_GATEWAY_ERROR");
-    });
-
-    it("should return PAYMENT_GATEWAY_ERROR for MOMO (not yet implemented)", async () => {
-      const result = await service.initiatePayment("MOMO", 50000, {});
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("PAYMENT_GATEWAY_ERROR");

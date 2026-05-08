@@ -6,13 +6,13 @@
  *
  * Endpoints:
  * - POST /payments — Create payment (STUDENT, requires X-Idempotency-Key).
- * - POST /webhooks/payment/{gateway} — Gateway webhook callback (PUBLIC + HMAC).
+ * - POST /payments/webhook/{gateway} — Gateway webhook callback (PUBLIC + HMAC).
  * - GET /students/me/payments — List own payments (STUDENT).
- * - GET /students/me/payments/{id} — Payment detail (STUDENT, IDOR-enforced).
+ * - GET /payments/{paymentId} — Payment detail (STUDENT, IDOR-enforced).
  *
  * Security:
- * - POST /payments, GET /students/me/payments/* → JWT + STUDENT role.
- * - POST /webhooks/payment/{gateway} → PUBLIC (HMAC signature verifies gateway).
+ * - POST /payments, GET /students/me/payments, GET /payments/{paymentId} → JWT + STUDENT role.
+ * - POST /payments/webhook/{gateway} → PUBLIC (HMAC signature verifies gateway).
  *
  * @see HmacSignatureGuard for webhook authentication details.
  */
@@ -40,6 +40,7 @@ import type { JwtPayload } from "@/types/jwt-payload";
 import { CreatePaymentDto } from "../dto/create-payment.dto";
 import { PaymentWebhookDto } from "../dto/payment-webhook.dto";
 import { PaymentsService } from "../services/payments.service";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -64,6 +65,10 @@ export class PaymentsController {
    * - REGISTRATION_NOT_FOUND (404)
    * - INTERNAL_ERROR (500)
    */
+  @RateLimit([
+    { tier: "T2", limit: 30, windowMs: 60000 },
+    { tier: "T3", limit: 5, windowMs: 60000 },
+  ])
   @Post("payments")
   @HttpCode(HttpStatus.CREATED)
   async createPayment(
@@ -75,7 +80,7 @@ export class PaymentsController {
   }
 
   /**
-   * POST /webhooks/payment/{gateway}
+   * POST /payments/webhook/{gateway}
    *
    * Processes payment gateway webhook callbacks.
    * Authenticated via HMAC-SHA256 signature, not JWT.
@@ -88,7 +93,7 @@ export class PaymentsController {
    * - PAYMENT_ALREADY_SUCCESS (409)
    * - INTERNAL_ERROR (500)
    */
-  @Post("webhooks/payment/:gateway")
+  @Post("payments/webhook/:gateway")
   @Public()
   @UseGuards(HmacSignatureGuard)
   @HttpCode(HttpStatus.OK)
@@ -118,18 +123,21 @@ export class PaymentsController {
   }
 
   /**
-   * GET /students/me/payments/{id}
+   * GET /payments/{paymentId}
    *
    * Retrieves a single payment's detail with IDOR enforcement.
    * Returns PAYMENT_NOT_FOUND for both missing and non-owned payments.
    *
-   * @param id - Payment UUID from path.
+   * @param paymentId - Payment UUID from path.
    * @param user - JWT payload providing student identity.
    * @returns PaymentResponseDto with payment details,
    * or PAYMENT_NOT_FOUND (404) if missing or owned by another student.
    */
-  @Get("students/me/payments/:id")
-  async getMyPayment(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
-    return this.paymentsService.getPaymentDetail(user.sub, id);
+  @Get("payments/:paymentId")
+  async getMyPayment(
+    @Param("paymentId") paymentId: string,
+    @CurrentUser() user: JwtPayload
+  ) {
+    return this.paymentsService.getPaymentDetail(user.sub, paymentId);
   }
 }

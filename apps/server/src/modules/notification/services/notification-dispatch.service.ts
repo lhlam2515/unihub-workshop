@@ -1,3 +1,5 @@
+import { setTimeout } from "node:timers/promises";
+
 import { Injectable, Logger } from "@nestjs/common";
 
 import { Result } from "@/shared/response/result";
@@ -11,6 +13,8 @@ import { NotificationLogsRepository } from "../repositories/notification-logs.re
 
 import type { INotificationChannel } from "../channels/notification-channel.interface";
 
+const CHANNEL_TIMEOUT_MS = 5000;
+
 /**
  * NotificationDispatchService
  *
@@ -22,13 +26,15 @@ import type { INotificationChannel } from "../channels/notification-channel.inte
  * 2. Load channel config
  * 3. Check is_active
  * 4. Resolve channel strategy from registry
- * 5. Delegate to channel.send()
+ * 5. Delegate to channel.send() with 5-second timeout
  * 6. Update log: SENT | FAILED
  *
  * Business rules:
  * - Terminal failures (missing log, missing config, inactive, unknown channel)
  *   DO NOT trigger BullMQ retries — the worker returns without throwing.
  * - Channel send failures DO trigger BullMQ retries (the worker throws).
+ * - Each channel.send() call is race-limited to 5 seconds — timeouts are
+ *   treated as FAILED deliveries with error_message "TIMEOUT".
  *
  * Side effects:
  * - Updates notification_logs.status and sent_at/error_message on each attempt
@@ -115,7 +121,9 @@ export class NotificationDispatchService {
         | string
         | undefined) ?? log.userId;
 
-    const sendResult = await channel.send(
+    // Channel send with 5-second timeout
+    const sendResult = await this.sendWithTimeout(
+      channel,
       recipient,
       log.payload as Record<string, unknown>,
       config.configJson as Record<string, unknown>
@@ -138,5 +146,41 @@ export class NotificationDispatchService {
     );
     this.logger.log(`Notification ${notificationId} sent via ${log.channel}`);
     return Result.ok();
+  }
+
+  /**
+   * Wraps a channel.send() call with a 5-second timeout.
+   *
+   * Uses Promise.race between the channel adapter and a timer.
+   * Timer rejection is caught and returned as a FailResult so
+   * the caller does not crash.
+   *
+   * @param channel - The channel adapter to call
+   * @param recipient - Recipient address/identifier
+   * @param payload - Notification template data
+   * @param config - Channel provider configuration
+   * @returns OkResult(void) from the channel, or FailResult on timeout
+   */
+  private async sendWithTimeout(
+    channel: INotificationChannel,
+    recipient: string,
+    payload: Record<string, unknown>,
+    config: Record<string, unknown>
+  ): Promise<Result<void>> {
+    const result = await Promise.race([
+      channel.send(recipient, payload, config),
+      setTimeout(CHANNEL_TIMEOUT_MS, "TIMEOUT" as const),
+    ]);
+
+    if (result === "TIMEOUT") {
+      return Result.fail(
+        notificationErrors.channelTimeout(
+          channel.channelType,
+          CHANNEL_TIMEOUT_MS
+        )
+      );
+    }
+
+    return result;
   }
 }

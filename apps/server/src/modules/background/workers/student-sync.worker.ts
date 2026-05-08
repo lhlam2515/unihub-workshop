@@ -3,9 +3,12 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 
 import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
-import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/queue.constants";
+import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/messaging.constants";
+import type { IJobHandler } from "@/infra/messaging/messaging.interfaces";
 import { RedisService } from "@/infra/redis/redis.service";
 import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
+import { UsersService } from "@/modules/iam/services/users.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 
 /**
  * StudentSyncWorker
@@ -27,18 +30,28 @@ import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.ser
  */
 @Injectable()
 @Processor(STUDENT_SYNC_QUEUE, { concurrency: 1 })
-export class StudentSyncWorker extends WorkerHost {
+export class StudentSyncWorker
+  extends WorkerHost
+  implements IJobHandler<StudentSyncJobData>
+{
   private readonly logger = new Logger(StudentSyncWorker.name);
 
   constructor(
     private readonly studentSyncService: StudentSyncService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly usersService: UsersService,
+    private readonly notificationLogProducer: NotificationLogProducer
   ) {
     super();
   }
 
+  /** BullMQ adapter — delegates to the typed handler. */
+  async process(job: Job<StudentSyncJobData>): Promise<void> {
+    return this.handle(job.data);
+  }
+
   /**
-   * Process a student sync job from the queue
+   * Process a student sync job from the queue.
    *
    * Acquires a Redis distributed lock before delegating to the service.
    * If another worker is already processing the same job, this invocation
@@ -48,10 +61,10 @@ export class StudentSyncWorker extends WorkerHost {
    * - Creates a Redis key `student-sync:job:{jobId}:lock` with TTL
    * - Removes the Redis key on completion
    *
-   * @param job - BullMQ job containing jobId and sourceFileName
+   * @param payload - Job data containing jobId and sourceFileName
    */
-  async process(job: Job<StudentSyncJobData>): Promise<void> {
-    const { jobId } = job.data;
+  async handle(payload: StudentSyncJobData): Promise<void> {
+    const { jobId } = payload;
 
     this.logger.log(`Processing sync job ${jobId}`);
 
@@ -73,14 +86,82 @@ export class StudentSyncWorker extends WorkerHost {
         return;
       }
 
-      this.logger.log(`Sync job ${jobId} completed successfully`);
+      const { totalRows, processedRows, errorRows } = result.data;
+
+      this.logger.log(
+        `Sync job ${jobId} completed successfully: ${processedRows}/${totalRows} rows processed, ${errorRows} errors`
+      );
+
+      // Notify BTC users if there are errors
+      if (errorRows > 0) {
+        await this.notifyBtcUsers({
+          jobId,
+          totalRows,
+          processedRows,
+          errorRows,
+        });
+      }
     } finally {
       await this.releaseLock(jobId);
     }
   }
 
   /**
-   * Acquire a distributed Redis lock for a sync job
+   * Sends CSV_IMPORT_COMPLETED_WITH_ERRORS notification to all BTC users.
+   *
+   * Business rules:
+   * - Finds all users with role BTC via UsersService.
+   * - Creates one notification per BTC user via batchCreateAndEnqueue.
+   * - Notification failures are logged but never throw (fire-and-forget).
+   *
+   * Side effects:
+   * - Inserts notification_log rows for each BTC user.
+   * - Enqueues notification.send jobs to the notification queue.
+   */
+  private async notifyBtcUsers(params: {
+    jobId: string;
+    totalRows: number;
+    processedRows: number;
+    errorRows: number;
+  }): Promise<void> {
+    try {
+      const usersResult = await this.usersService.listUsers("BTC", {
+        page: 1,
+        limit: 100,
+      });
+
+      if (usersResult.isFailure || usersResult.data.items.length === 0) {
+        this.logger.warn("No BTC users found to notify about sync errors");
+        return;
+      }
+
+      const btcUserIds = usersResult.data.items.map((user) => user.userId);
+
+      await this.notificationLogProducer.batchCreateAndEnqueue(
+        btcUserIds.map((userId) => ({
+          userId,
+          type: "CSV_IMPORT_COMPLETED_WITH_ERRORS" as const,
+          channel: "APP" as const,
+          payload: {
+            date: new Date().toISOString().slice(0, 10),
+            totalRows: params.totalRows,
+            successCount: params.processedRows,
+            failedCount: params.errorRows,
+            errorFileUrl: `/admin/imports/errors/${new Date().toISOString().slice(0, 10)}`,
+          },
+        }))
+      );
+
+      this.logger.log(
+        `Notified ${btcUserIds.length} BTC users about sync errors`
+      );
+    } catch (error) {
+      this.logger.error("Failed to notify BTC users about sync errors", error);
+    }
+  }
+
+  /**
+   * Acquire a distributed Redis lock for a sync job.
    *
    * Uses Redis SET NX to atomically create a lock key only if it does
    * not already exist. Prevents multiple workers from processing the
@@ -100,7 +181,7 @@ export class StudentSyncWorker extends WorkerHost {
   }
 
   /**
-   * Release a distributed Redis lock for a sync job
+   * Release a distributed Redis lock for a sync job.
    *
    * Deletes the lock key so other workers can process the job.
    *

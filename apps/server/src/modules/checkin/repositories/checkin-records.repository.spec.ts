@@ -46,7 +46,6 @@ function createMockDb() {
 const mockRecord = {
   checkinId: "ci-001",
   registrationId: "reg-001",
-  ticketId: "tkt-001",
   studentId: "stu-001",
   workshopId: "w-001",
   checkedInAt: new Date("2026-06-01T10:00:00Z"),
@@ -102,7 +101,6 @@ describe("CheckinRecordsRepository", () => {
 
       const result = await repo.create({
         registrationId: "reg-001",
-        ticketId: "tkt-001",
         studentId: "stu-001",
         workshopId: "w-001",
         checkedInAt: new Date("2026-06-01T10:00:00Z"),
@@ -121,7 +119,6 @@ describe("CheckinRecordsRepository", () => {
 
       const result = await repo.create({
         registrationId: "reg-001",
-        ticketId: "tkt-001",
         studentId: "stu-001",
         workshopId: "w-001",
         checkedInAt: new Date("2026-06-01T10:00:00Z"),
@@ -138,7 +135,6 @@ describe("CheckinRecordsRepository", () => {
 
       const result = await repo.create({
         registrationId: "reg-001",
-        ticketId: "tkt-001",
         studentId: "stu-001",
         workshopId: "w-001",
         checkedInAt: new Date("2026-06-01T10:00:00Z"),
@@ -162,7 +158,6 @@ describe("CheckinRecordsRepository", () => {
           student: {
             studentId: "stu-001",
             fullName: "John Doe",
-            studentCode: "STU001",
           },
         },
       ];

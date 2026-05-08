@@ -2,7 +2,7 @@
  * Rooms Service
  *
  * Handles CRUD operations for rooms.
- * Rooms are venues for workshops and are managed by ORGANIZER roles.
+ * Rooms are venues for workshops and are managed by BTC roles.
  */
 
 import { Injectable } from "@nestjs/common";
@@ -27,6 +27,19 @@ export class RoomsService {
    *
    * @returns OkResult containing an array of room DTOs with capacity, building, and facility info, or FailResult (INTERNAL_ERROR).
    */
+  /**
+   * Retrieves a single room by ID.
+   *
+   * @param id - The UUID of the room.
+   * @returns OkResult containing the room DTO, or FailResult (ROOM_NOT_FOUND).
+   */
+  async getRoomById(id: string): Promise<Result<RoomResponseDto>> {
+    const result = await this.roomsRepo.findById(id);
+    if (result.isFailure) return Result.fail(result.error);
+    if (!result.data) return Result.fail(roomErrors.notFound(id));
+    return Result.ok(RoomResponseBuilder.from(result.data));
+  }
+
   async listRooms(): Promise<Result<RoomResponseDto[]>> {
     const result = await this.roomsRepo.findAll();
     if (result.isFailure) return Result.fail(result.error);

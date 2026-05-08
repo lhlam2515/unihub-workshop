@@ -1,15 +1,18 @@
 import { z } from "zod";
 
 import {
-  aiSummaryStatusEnum,
+  summaryStatusEnum,
   checkinSourceEnum,
   documentUploadStatusEnum,
   notificationChannelEnum,
   notificationStatusEnum,
   notificationTypeEnum,
+  offlineSyncStatusEnum,
   paymentGatewayEnum,
   paymentStatusEnum,
+  platformEnum,
   registrationStatusEnum,
+  staffRoleEnum,
   syncErrorReasonEnum,
   syncJobStatusEnum,
   ticketStatusEnum,
@@ -20,6 +23,8 @@ import {
 
 export const userRoleSchema = z.enum(userRoleEnum.enumValues);
 export const userStatusSchema = z.enum(userStatusEnum.enumValues);
+export const staffRoleSchema = z.enum(staffRoleEnum.enumValues);
+export const platformSchema = z.enum(platformEnum.enumValues);
 export const workshopStatusSchema = z.enum(workshopStatusEnum.enumValues);
 export const registrationStatusSchema = z.enum(
   registrationStatusEnum.enumValues
@@ -37,13 +42,15 @@ export const notificationStatusSchema = z.enum(
 export const checkinSourceSchema = z.enum(checkinSourceEnum.enumValues);
 export const syncJobStatusSchema = z.enum(syncJobStatusEnum.enumValues);
 export const syncErrorReasonSchema = z.enum(syncErrorReasonEnum.enumValues);
-export const aiSummaryStatusSchema = z.enum(aiSummaryStatusEnum.enumValues);
+export const summaryStatusSchema = z.enum(summaryStatusEnum.enumValues);
 export const documentUploadStatusSchema = z.enum(
   documentUploadStatusEnum.enumValues
 );
 
 export type UserRole = z.infer<typeof userRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
+export type StaffRole = z.infer<typeof staffRoleSchema>;
+export type Platform = z.infer<typeof platformSchema>;
 export type WorkshopStatus = z.infer<typeof workshopStatusSchema>;
 export type RegistrationStatus = z.infer<typeof registrationStatusSchema>;
 export type TicketStatus = z.infer<typeof ticketStatusSchema>;
@@ -55,5 +62,8 @@ export type NotificationStatus = z.infer<typeof notificationStatusSchema>;
 export type CheckinSource = z.infer<typeof checkinSourceSchema>;
 export type SyncJobStatus = z.infer<typeof syncJobStatusSchema>;
 export type SyncErrorReason = z.infer<typeof syncErrorReasonSchema>;
-export type AiSummaryStatus = z.infer<typeof aiSummaryStatusSchema>;
+export type SummaryStatus = z.infer<typeof summaryStatusSchema>;
 export type DocumentUploadStatus = z.infer<typeof documentUploadStatusSchema>;
+
+export const offlineSyncStatusSchema = z.enum(offlineSyncStatusEnum.enumValues);
+export type OfflineSyncStatus = z.infer<typeof offlineSyncStatusSchema>;

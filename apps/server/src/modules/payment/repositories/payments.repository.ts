@@ -14,6 +14,7 @@
  */
 import { Injectable, Inject } from "@nestjs/common";
 import { and, desc, eq, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -22,6 +23,7 @@ import type {
   Payment,
   NewPayment,
 } from "@/infra/database/types/transaction.types";
+import type { PaymentStatus } from "@/infra/database/types/enums.types";
 import { lockTimeoutMapper, systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
@@ -210,34 +212,6 @@ export class PaymentsRepository {
   }
 
   /**
-   * Acquires a pessimistic lock (FOR UPDATE NOWAIT) on the workshop_slots row.
-   *
-   * Used during payment initiation to serialize concurrent payment creation
-   * for the same workshop. Fails fast with DB_LOCK_TIMEOUT if the row is
-   * already locked by another transaction.
-   *
-   * Side effects:
-   * - Locks the workshop_slots row within the current transaction.
-   *
-   * @param workshopId - The UUID of the workshop whose slot to lock.
-   * @param tx - Required transaction context.
-   * @returns OkResult(void) when lock acquired, or FailResult with DB_LOCK_TIMEOUT.
-   */
-  async lockWorkshopSlot(
-    workshopId: string,
-    tx: DrizzleTransaction
-  ): Promise<Result<void>> {
-    return tryCatch(async () => {
-      await tx
-        .select({ dummy: sql`1` })
-        .from(this.schema.workshopSlots)
-        .where(eq(this.schema.workshopSlots.workshopId, workshopId))
-        .for("update", { noWait: true })
-        .limit(1);
-    }, lockTimeoutMapper("workshop_slots"));
-  }
-
-  /**
    * Finds a payment by idempotency key with FOR UPDATE NOWAIT lock.
    *
    * Used during webhook processing to serialize concurrent webhook calls
@@ -282,10 +256,85 @@ export class PaymentsRepository {
           .from(this.schema.payments)
           .where(
             and(
-              eq(this.schema.payments.status, "PENDING"),
+              eq(this.schema.payments.status, "INITIATED"),
               sql`${this.schema.payments.timeoutAt} < NOW()`
             )
           );
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Attempts to acquire a PostgreSQL advisory lock (session-scoped).
+   *
+   * Uses pg_try_advisory_lock which returns false immediately if the
+   * lock cannot be acquired (non-blocking). Unlike pg_try_advisory_xact_lock,
+   * this lock persists across multiple SQL statements until manually released.
+   * Used by PaymentReconciliationService to prevent concurrent reconciliation runs.
+   *
+   * Business rules:
+   * - Lock persists across multiple statements (session-scoped, not transaction-scoped).
+   * - Must be released via releaseAdvisoryLock() when processing completes.
+   * - Returns false if another session holds the lock.
+   *
+   * Side effects:
+   * - Acquires a PostgreSQL advisory lock at the session level.
+   *
+   * @param lockId - A stable bigint lock identifier.
+   * @returns OkResult(true) if lock acquired, OkResult(false) if contended,
+   * or FailResult with INTERNAL_ERROR.
+   */
+  async tryAcquireAdvisoryLock(lockId: number): Promise<Result<boolean>> {
+    return tryCatch(
+      async () => {
+        const rows = await this.db.execute(
+          sql`SELECT pg_try_advisory_lock(${lockId}) as lock_acquired` as SQL<unknown>
+        );
+        const first = Array.isArray(rows) ? rows[0] : rows;
+        return first?.lock_acquired === true;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Releases a previously acquired session-scoped advisory lock.
+   *
+   * Called by PaymentReconciliationService after reconciliation completes
+   * to release the session-scoped lock. Safe to call even if the lock
+   * was not acquired — returns OkResult(void) in all cases.
+   *
+   * @param lockId - The same stable bigint lock identifier used during acquisition.
+   * @returns OkResult(void), or FailResult with INTERNAL_ERROR.
+   */
+  async releaseAdvisoryLock(lockId: number): Promise<Result<void>> {
+    return tryCatch(
+      async () => {
+        await this.db.execute(
+          sql`SELECT pg_advisory_unlock(${lockId})` as SQL<unknown>
+        );
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Finds payments by their status.
+   *
+   * Used by PaymentReconciliationService to identify unresolved payments
+   * that need gateway status checks.
+   *
+   * @param status - Payment status to filter by (e.g., "UNRESOLVED").
+   * @returns OkResult with an array of matching Payment entities, or FailResult with INTERNAL_ERROR.
+   */
+  async findByStatus(status: PaymentStatus): Promise<Result<Payment[]>> {
+    return tryCatch(
+      async () => {
+        return this.db
+          .select()
+          .from(this.schema.payments)
+          .where(eq(this.schema.payments.status, status));
       },
       (err) => systemErrors.internal(err)
     );
@@ -303,7 +352,7 @@ export class PaymentsRepository {
         const [{ count }] = await this.db
           .select({ count: sql<number>`count(*)::int` })
           .from(this.schema.payments)
-          .where(eq(this.schema.payments.status, "PENDING"));
+          .where(eq(this.schema.payments.status, "INITIATED"));
         return count;
       },
       (err) => systemErrors.internal(err)

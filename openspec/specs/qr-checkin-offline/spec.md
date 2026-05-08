@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Enable check-in staff to sync offline-scanned QR records to the server when connectivity is restored, with idempotent batch processing to prevent duplicate entries.
+
+## Requirements
 
 ### Requirement: Accept and idempotently persist offline check-in batch
 The system SHALL accept a batch of offline check-in records from the mobile app (`POST /checkin/sync`), look up each `qr_token`, and insert into `checkin_records` with `source = OFFLINE_SYNC` using `ON CONFLICT DO NOTHING`. The response SHALL report counts of synced, skipped (duplicate), and conflicted records.

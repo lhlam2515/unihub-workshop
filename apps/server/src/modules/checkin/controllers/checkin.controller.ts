@@ -4,91 +4,167 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
+  Res,
 } from "@nestjs/common";
+import type { Response } from "express";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { WorkshopScopeGuard } from "@/modules/iam/guards/workshop-scope.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
+import { Result } from "@/shared/response/result";
 
-import { OfflineSyncDto } from "../dto/offline-sync.dto";
-import { ScanQRDto } from "../dto/scan-qr.dto";
+import { CheckinCreateRequestDto } from "../dto/checkin-create-request.dto";
+import { CheckinSyncRequestDto } from "../dto/checkin-sync-request.dto";
+import { CachedRegistrationBuilder } from "../dto/cached-registration.dto";
 import { CheckinService } from "../services/checkin.service";
 import { OfflineSyncService } from "../services/offline-sync.service";
-import { TicketService } from "../services/ticket.service";
+import { RegistrationsRepository } from "../repositories/registrations.repository";
 
-@Controller("checkin")
+/**
+ * Handles online check-in (scan) and offline sync operations.
+ * Path prefix: /checkins
+ */
+@Controller("checkins")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("CHECKIN_STAFF")
 export class CheckinController {
   constructor(
     private readonly checkinService: CheckinService,
-    private readonly offlineSyncService: OfflineSyncService,
-    private readonly ticketService: TicketService
+    private readonly offlineSyncService: OfflineSyncService
   ) {}
 
   /**
-   * Retrieves all active tickets for a workshop for staff pre-load into mobile SQLite cache.
+   * Single online check-in via QR code scan.
    *
-   * @param workshopId - UUID of the workshop (validated against staff's allowed_workshop_ids by WorkshopScopeGuard).
-   * @returns List of active TicketResponseDto.
-   */
-  @Get("workshops/:id/tickets")
-  @UseGuards(WorkshopScopeGuard)
-  async getWorkshopTickets(@Param("id") workshopId: string) {
-    return this.ticketService.preloadActiveTickets(workshopId);
-  }
-
-  /**
-   * Validates a QR token and records an online check-in.
+   * POST /checkins
    *
-   * @param body - Validated scan payload (qr_token, workshop_id, device_id?).
+   * @param body - Scan payload with qrCode, workshopId, checkedInAt.
    * @param user - Authenticated CHECKIN_STAFF payload from JWT.
-   * @returns Checkin record details (checkin_id, checked_in_at).
+   * @returns CheckinResultDto with checkin details.
    */
-  @Post("scan")
+  @Post()
   @UseGuards(WorkshopScopeGuard)
-  @HttpCode(HttpStatus.OK)
-  async scanQR(@Body() body: ScanQRDto, @CurrentUser() user: JwtPayload) {
-    return this.checkinService.scanQR(
-      body.qr_token,
-      body.workshop_id,
+  @HttpCode(HttpStatus.CREATED)
+  async scanQR(
+    @Body() body: CheckinCreateRequestDto,
+    @CurrentUser() user: JwtPayload
+  ) {
+    const result = await this.checkinService.scanQR(
+      body.qrCode,
+      body.workshopId,
       user.sub,
-      body.device_id
+      body.checkedInAt
     );
+
+    if (result.isFailure) {
+      return result;
+    }
+
+    return result;
   }
 
   /**
-   * Accepts a batch of offline check-in records and persists them idempotently.
+   * Batch sync offline check-in records from mobile.
    *
-   * @param body - Validated sync payload (workshop_id, items[]).
+   * POST /checkins/sync
+   *
+   * @param body - Sync payload with deviceId and items array.
    * @param user - Authenticated CHECKIN_STAFF payload from JWT.
-   * @returns SyncResultDto with counts of synced, skipped, and conflicted records.
+   * @returns Per-item sync results array.
    */
   @Post("sync")
+  @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
   @UseGuards(WorkshopScopeGuard)
   @HttpCode(HttpStatus.OK)
   async syncOfflineData(
-    @Body() body: OfflineSyncDto,
+    @Body() body: CheckinSyncRequestDto,
     @CurrentUser() user: JwtPayload
   ) {
     return this.offlineSyncService.processSyncBatch(
-      body.items,
-      user.sub,
-      body.workshop_id
+      body.items.map((item) => ({
+        localId: item.localId,
+        qrCode: item.qrCode,
+        workshopId: item.workshopId,
+        checkedInAt: new Date(item.checkedInAt),
+      })),
+      user.sub
     );
+  }
+}
+
+/**
+ * Handles pre-load and status endpoints for the checkin module.
+ * Path prefix: /checkin
+ */
+@Controller("checkin")
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles("CHECKIN_STAFF")
+export class CheckinPreloadController {
+  constructor(
+    private readonly registrationsRepo: RegistrationsRepository,
+    private readonly checkinService: CheckinService
+  ) {}
+
+  /**
+   * Pre-load registrations for offline cache (mobile).
+   *
+   * Returns paginated registrations to populate the mobile app's
+   * `cached_registrations` SQLite table. Filters to status IN ('PAID', 'CONFIRMED').
+   *
+   * GET /checkin/workshops/{workshopId}/registrations
+   *
+   * @param workshopId - UUID of the workshop.
+   * @param cursor - Opaque cursor for pagination.
+   * @param limit - Page size (default 200, max 500).
+   * @param res - Express response object for X-Total-Count header.
+   * @returns Paginated list of CachedRegistrationDto with X-Total-Count header.
+   */
+  @Get("workshops/:id/registrations")
+  @UseGuards(WorkshopScopeGuard)
+  async preloadRegistrations(
+    @Param("id") workshopId: string,
+    @Query("cursor") cursor: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const parsedLimit = limit ? Math.min(parseInt(limit, 10) || 200, 500) : 200;
+
+    const result = await this.registrationsRepo.findActiveByWorkshopId(
+      workshopId,
+      { cursor, limit: parsedLimit }
+    );
+
+    if (result.isFailure) return Result.fail(result.error);
+
+    res.header("X-Total-Count", String(result.data.total));
+
+    return Result.ok({
+      data: result.data.data.map((r) =>
+        CachedRegistrationBuilder.from(r as any)
+      ),
+      pagination: {
+        limit: parsedLimit,
+        nextCursor: result.data.nextCursor,
+        hasMore: result.data.hasMore,
+      },
+    });
   }
 
   /**
-   * Retrieves real-time check-in statistics and recent activity for a workshop.
+   * Retrieves real-time check-in statistics for a workshop.
+   *
+   * GET /checkin/workshops/{workshopId}/status
    *
    * @param workshopId - UUID of the workshop to query.
-   * @returns CheckinStatusDto with confirmed/checked-in counts and last 20 check-ins.
+   * @returns CheckinStatusDto with confirmed/checked-in counts.
    */
   @Get("workshops/:id/status")
   @UseGuards(WorkshopScopeGuard)

@@ -3,14 +3,16 @@ import { AuthMeResponseBuilder } from "./auth-me-response.dto";
 /**
  * Response returned by POST /auth/login.
  *
- * Contains the access token with platform-specific expiry and role-appropriate
- * user profile. The refresh token is included for MOBILE; for WEB it is set
- * via HttpOnly cookie by the controller.
+ * Contains the access token (Bearer) with 15-minute expiry, optional refresh token,
+ * and the user's role alongside their basic profile. The refresh token is also set
+ * as an HttpOnly cookie by the controller for the WEB flow.
  */
 export interface LoginResponseDto {
-  access_token: string;
-  refresh_token?: string;
-  expires_in: number;
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: number;
+  refreshToken?: string;
+  role: string;
   user: ReturnType<typeof AuthMeResponseBuilder.from>;
 }
 
@@ -31,15 +33,16 @@ export class LoginResponseBuilder {
       allowedWorkshopIds?: string[];
     },
     studentProfile?: {
-      studentCode: string;
+      studentId: string;
       fullName: string;
-      faculty: string | null;
     }
   ): LoginResponseDto {
     return {
-      access_token: tokenPair.accessToken,
-      refresh_token: tokenPair.refreshToken,
-      expires_in: tokenPair.expiresIn,
+      accessToken: tokenPair.accessToken,
+      tokenType: "Bearer",
+      expiresIn: tokenPair.expiresIn,
+      refreshToken: tokenPair.refreshToken,
+      role: user.role,
       user: AuthMeResponseBuilder.from(user, studentProfile),
     };
   }

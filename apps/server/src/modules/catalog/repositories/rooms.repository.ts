@@ -92,7 +92,7 @@ export class RoomsRepository {
    * existing.starts_at < proposed.endsAt AND existing.ends_at > proposed.startsAt.
    * Only PUBLISHED workshops are considered as conflicts.
    *
-   * Drizzle operation: SELECT from workshops with compound WHERE on roomId, status='PUBLISHED',
+   * Drizzle operation: SELECT from workshops with compound WHERE on roomId, status='OPEN',
    * startsAt <= endsAt, endsAt >= startsAt. Optionally excludes a specific workshopId.
    *
    * @param roomId - The UUID of the room to check.
@@ -111,7 +111,7 @@ export class RoomsRepository {
       async () => {
         const conditions = [
           eq(this.schema.workshops.roomId, roomId),
-          eq(this.schema.workshops.status, "PUBLISHED"),
+          eq(this.schema.workshops.status, "OPEN"),
           lte(this.schema.workshops.startsAt, endsAt),
           gte(this.schema.workshops.endsAt, startsAt),
         ];

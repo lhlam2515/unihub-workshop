@@ -1,17 +1,19 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
+import { NotificationModule } from "@/modules/notification/notification.module";
 import { AiSummaryModule } from "@/modules/ai-summary/ai-summary.module";
 
 import { RoomsAdminController } from "./controllers/rooms-admin.controller";
+import { RoomsPublicController } from "./controllers/rooms-public.controller";
 import { SpeakersAdminController } from "./controllers/speakers-admin.controller";
+import { SpeakersPublicController } from "./controllers/speakers-public.controller";
 import { WorkshopsAdminController } from "./controllers/workshops-admin.controller";
 import { WorkshopsPublicController } from "./controllers/workshops-public.controller";
 import { RoomsRepository } from "./repositories/rooms.repository";
 import { SpeakersRepository } from "./repositories/speakers.repository";
-import { WorkshopSlotsRepository } from "./repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "./repositories/workshops.repository";
 import { RoomConflictService } from "./services/room-conflict.service";
 import { RoomsService } from "./services/rooms.service";
@@ -34,7 +36,8 @@ import { WorkshopsService } from "./services/workshops.service";
  * Imports:
  * - DatabaseModule — PostgreSQL access via Drizzle ORM
  * - RedisModule — seat:available counter management
- * - SharedQueueModule — BullMQ notification queue for workshop lifecycle events
+ * - MessagingModule — BullMQ notification queue for workshop lifecycle events
+ * - NotificationModule — notification log producer for workshop lifecycle events
  * - AiSummaryModule — document upload, storage, and AI summarization (extracted module)
  *
  * Exports:
@@ -43,12 +46,20 @@ import { WorkshopsService } from "./services/workshops.service";
  * - WorkshopNotificationPublisher — consumed by BackgroundModule (notification worker)
  */
 @Module({
-  imports: [DatabaseModule, RedisModule, SharedQueueModule, AiSummaryModule],
+  imports: [
+    DatabaseModule,
+    RedisModule,
+    MessagingModule,
+    NotificationModule,
+    AiSummaryModule,
+  ],
   controllers: [
     WorkshopsPublicController,
     WorkshopsAdminController,
     RoomsAdminController,
+    RoomsPublicController,
     SpeakersAdminController,
+    SpeakersPublicController,
   ],
   providers: [
     // Services
@@ -60,7 +71,6 @@ import { WorkshopsService } from "./services/workshops.service";
     WorkshopNotificationPublisher,
     // Repositories
     WorkshopsRepository,
-    WorkshopSlotsRepository,
     RoomsRepository,
     SpeakersRepository,
   ],
@@ -68,6 +78,7 @@ import { WorkshopsService } from "./services/workshops.service";
     WorkshopsService,
     SeatCounterService,
     WorkshopNotificationPublisher,
+    WorkshopsRepository,
   ],
 })
 export class CatalogModule {}

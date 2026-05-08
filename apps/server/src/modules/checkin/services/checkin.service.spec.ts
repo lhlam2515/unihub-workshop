@@ -4,18 +4,19 @@ import { Result } from "@/shared/response/result";
 
 import { CheckinService } from "./checkin.service";
 import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
-import { TicketsRepository } from "../repositories/tickets.repository";
+import { RegistrationsRepository } from "../repositories/registrations.repository";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockTicketsRepo = {
-  findByQRToken: jest.fn(),
+const mockRegistrationsRepo = {
+  findByQRCode: jest.fn(),
 };
 
 const mockCheckinRecordsRepo = {
   create: jest.fn(),
+  findFirstByRegistrationId: jest.fn(),
   countConfirmedRegistrationsByWorkshopId: jest.fn(),
   countByWorkshopId: jest.fn(),
   findByWorkshopId: jest.fn(),
@@ -25,47 +26,58 @@ const mockCheckinRecordsRepo = {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const validTicket = {
-  ticketId: "tkt-001",
+const validRegistration = {
   registrationId: "reg-001",
-  qrToken: "qr-valid-123",
-  status: "ACTIVE",
-  registration: {
-    registrationId: "reg-001",
-    studentId: "stu-001",
+  qrCode: "550e8400-e29b-41d4-a716-446655440001",
+  workshopId: "w-001",
+  studentId: "stu-001",
+  status: "CONFIRMED",
+  workshop: {
     workshopId: "w-001",
-    workshop: {
-      workshopId: "w-001",
-      title: "Workshop",
-      startsAt: new Date(),
-      endsAt: new Date(),
-    },
-    student: {
-      studentId: "stu-001",
-      fullName: "John Doe",
-      studentCode: "STU001",
-    },
+    title: "Workshop",
+    status: "PUBLISHED",
+    startsAt: new Date(),
+    endsAt: new Date(),
+  },
+  student: {
+    studentId: "stu-001",
+    fullName: "John Doe",
   },
 };
 
-const voidTicket = {
-  ...validTicket,
-  ticketId: "tkt-void",
-  status: "VOID",
+const paidRegistration = {
+  ...validRegistration,
+  registrationId: "reg-paid",
+  status: "PAID",
 };
 
-const wrongWorkshopTicket = {
-  ...validTicket,
-  ticketId: "tkt-other",
-  registration: {
-    ...validTicket.registration,
-    workshopId: "w-other",
-  },
+const pendingRegistration = {
+  ...validRegistration,
+  registrationId: "reg-pending",
+  status: "PENDING",
+};
+
+const cancelledWorkshopReg = {
+  ...validRegistration,
+  registrationId: "reg-cancelled",
+  workshop: { ...validRegistration.workshop, status: "CANCELLED" },
+};
+
+const wrongWorkshopReg = {
+  ...validRegistration,
+  registrationId: "reg-other",
+  workshopId: "w-other",
 };
 
 const checkinRecord = {
   checkinId: "ci-001",
   checkedInAt: new Date("2026-06-01T10:00:00Z"),
+};
+
+const existingCheckin = {
+  checkinId: "ci-001",
+  checkedInAt: new Date("2026-06-01T09:00:00Z"),
+  staffName: "Staff One",
 };
 
 // ---------------------------------------------------------------------------
@@ -81,7 +93,7 @@ describe("CheckinService", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CheckinService,
-        { provide: TicketsRepository, useValue: mockTicketsRepo },
+        { provide: RegistrationsRepository, useValue: mockRegistrationsRepo },
         { provide: CheckinRecordsRepository, useValue: mockCheckinRecordsRepo },
       ],
     }).compile();
@@ -93,21 +105,23 @@ describe("CheckinService", () => {
   // scanQR — FR-F07-002 (online QR validation + check-in)
   // -----------------------------------------------------------------------
   describe("scanQR — FR-F07-002", () => {
-    it("creates a checkin for a valid ACTIVE ticket", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(validTicket));
+    it("creates a checkin for a valid CONFIRMED registration", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(validRegistration)
+      );
       mockCheckinRecordsRepo.create.mockResolvedValue(Result.ok(checkinRecord));
 
-      const result = await service.scanQR("qr-valid-123", "w-001", "staff-001");
+      const result = await service.scanQR(
+        "550e8400-e29b-41d4-a716-446655440001",
+        "w-001",
+        "staff-001",
+        new Date()
+      );
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data).toEqual({
-        checkinId: "ci-001",
-        checkedInAt: checkinRecord.checkedInAt,
-      });
       expect(mockCheckinRecordsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           registrationId: "reg-001",
-          ticketId: "tkt-001",
           workshopId: "w-001",
           checkedInBy: "staff-001",
           source: "ONLINE",
@@ -115,51 +129,105 @@ describe("CheckinService", () => {
       );
     });
 
-    it("returns TICKET_NOT_FOUND when QR token does not match any ticket", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(null));
+    it("creates a checkin for a valid PAID registration", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(paidRegistration)
+      );
+      mockCheckinRecordsRepo.create.mockResolvedValue(Result.ok(checkinRecord));
 
       const result = await service.scanQR(
-        "qr-nonexistent",
+        "550e8400-e29b-41d4-a716-446655440001",
         "w-001",
-        "staff-001"
+        "staff-001",
+        new Date()
+      );
+
+      expect(result.isSuccess).toBe(true);
+    });
+
+    it("returns QR_INVALID when QR code does not match any registration", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(Result.ok(null));
+
+      const result = await service.scanQR(
+        "00000000-0000-0000-0000-000000000000",
+        "w-001",
+        "staff-001",
+        new Date()
       );
 
       expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("TICKET_NOT_FOUND");
+      expect(result.error.code).toBe("QR_INVALID");
     });
 
-    it("returns TICKET_VOID when ticket status is VOID", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(voidTicket));
-
-      const result = await service.scanQR("qr-void", "w-001", "staff-001");
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("TICKET_VOID");
-    });
-
-    it("returns TICKET_NOT_FOUND when ticket belongs to a different workshop", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(
-        Result.ok(wrongWorkshopTicket)
+    it("returns REGISTRATION_NOT_ACTIVE when registration status is PENDING", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(pendingRegistration)
       );
 
-      const result = await service.scanQR("qr-wrong", "w-001", "staff-001");
+      const result = await service.scanQR(
+        "550e8400-e29b-41d4-a716-446655440002",
+        "w-001",
+        "staff-001",
+        new Date()
+      );
 
       expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("TICKET_NOT_FOUND");
+      expect(result.error.code).toBe("REGISTRATION_NOT_ACTIVE");
     });
 
-    it("returns ALREADY_CHECKED_IN when create returns null (duplicate)", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(validTicket));
+    it("returns REGISTRATION_NOT_ACTIVE when workshop is CANCELLED", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(cancelledWorkshopReg)
+      );
+
+      const result = await service.scanQR(
+        "550e8400-e29b-41d4-a716-446655440003",
+        "w-001",
+        "staff-001",
+        new Date()
+      );
+
+      expect(result.isFailure).toBe(true);
+    });
+
+    it("returns WRONG_WORKSHOP when registration belongs to a different workshop", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(wrongWorkshopReg)
+      );
+
+      const result = await service.scanQR(
+        "550e8400-e29b-41d4-a716-446655440004",
+        "w-001",
+        "staff-001",
+        new Date()
+      );
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("WRONG_WORKSHOP");
+    });
+
+    it("returns duplicate=true when registration is already checked in", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(validRegistration)
+      );
       mockCheckinRecordsRepo.create.mockResolvedValue(Result.ok(null));
+      mockCheckinRecordsRepo.findFirstByRegistrationId.mockResolvedValue(
+        Result.ok(existingCheckin)
+      );
 
-      const result = await service.scanQR("qr-valid-123", "w-001", "staff-001");
+      const result = await service.scanQR(
+        "550e8400-e29b-41d4-a716-446655440001",
+        "w-001",
+        "staff-001",
+        new Date()
+      );
 
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("TICKET_ALREADY_CHECKEDIN");
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.duplicate).toBe(true);
     });
 
-    it("propagates repo failure from ticket lookup", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(
+    it("propagates repo failure from registration lookup", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
         Result.fail({
           category: "INTERNAL",
           code: "INTERNAL_ERROR",
@@ -167,14 +235,21 @@ describe("CheckinService", () => {
         })
       );
 
-      const result = await service.scanQR("qr-any", "w-001", "staff-001");
+      const result = await service.scanQR(
+        "550e8400-e29b-41d4-a716-446655440001",
+        "w-001",
+        "staff-001",
+        new Date()
+      );
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
     });
 
     it("propagates repo failure from checkin creation", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(validTicket));
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(validRegistration)
+      );
       mockCheckinRecordsRepo.create.mockResolvedValue(
         Result.fail({
           category: "INTERNAL",
@@ -183,7 +258,12 @@ describe("CheckinService", () => {
         })
       );
 
-      const result = await service.scanQR("qr-valid-123", "w-001", "staff-001");
+      const result = await service.scanQR(
+        "550e8400-e29b-41d4-a716-446655440001",
+        "w-001",
+        "staff-001",
+        new Date()
+      );
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
@@ -195,8 +275,6 @@ describe("CheckinService", () => {
   // -----------------------------------------------------------------------
   describe("getWorkshopCheckinStatus", () => {
     it("returns checkin status with counts and recent activity", async () => {
-      const confirmedCount = 50;
-      const checkedInCount = 30;
       const recentCheckins = [
         {
           checkinId: "ci-001",
@@ -204,17 +282,15 @@ describe("CheckinService", () => {
           source: "ONLINE",
           student: {
             fullName: "John Doe",
-            studentCode: "STU001",
+            studentId: "stu-001",
           },
         },
       ];
 
       mockCheckinRecordsRepo.countConfirmedRegistrationsByWorkshopId.mockResolvedValue(
-        Result.ok(confirmedCount)
+        Result.ok(50)
       );
-      mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(
-        Result.ok(checkedInCount)
-      );
+      mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(Result.ok(30));
       mockCheckinRecordsRepo.findByWorkshopId.mockResolvedValue(
         Result.ok(recentCheckins)
       );
@@ -248,25 +324,6 @@ describe("CheckinService", () => {
         Result.ok(50)
       );
       mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(
-        Result.fail({
-          category: "INTERNAL",
-          code: "INTERNAL_ERROR",
-          message: "DB down",
-        })
-      );
-
-      const result = await service.getWorkshopCheckinStatus("w-001");
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("INTERNAL_ERROR");
-    });
-
-    it("returns FailResult when recent checkins query fails", async () => {
-      mockCheckinRecordsRepo.countConfirmedRegistrationsByWorkshopId.mockResolvedValue(
-        Result.ok(50)
-      );
-      mockCheckinRecordsRepo.countByWorkshopId.mockResolvedValue(Result.ok(30));
-      mockCheckinRecordsRepo.findByWorkshopId.mockResolvedValue(
         Result.fail({
           category: "INTERNAL",
           code: "INTERNAL_ERROR",

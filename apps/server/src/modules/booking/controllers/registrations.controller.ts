@@ -14,53 +14,57 @@ import {
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { RegistrationsService } from "../services/registrations.service";
 
-@Controller()
+@Controller("registrations")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("STUDENT")
 export class RegistrationsController {
   constructor(private readonly registrationsService: RegistrationsService) {}
 
   /**
    * Creates a new workshop registration.
    *
-   * @param dto - Zod-validated body containing the target workshop_id (UUID).
-   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
-   * @returns HTTP 201 with RegistrationDto on success, or error response with codes:
-   * - RATE_LIMIT_EXCEEDED (429)
-   * - SEAT_UNAVAILABLE (409)
-   * - REGISTRATION_DUPLICATE (409)
-   * - WORKSHOP_NOT_FOUND (404)
-   * - WORKSHOP_NOT_PUBLISHED (422)
+   * POST /registrations
    *
-   * Security: Requires valid JWT with STUDENT role.
+   * @param dto - Zod-validated body containing the target workshop_id (UUID).
+   * @param idempotencyKey - Idempotency-Key header value for safe retry.
+   * @param user - JWT payload providing student identity.
+   * @returns HTTP 201 with RegistrationDto on success, or error response.
    */
-  @Post("registrations")
+  @RateLimit([
+    { tier: "T2", limit: 30, windowMs: 60000 },
+    { tier: "T3", limit: 5, windowMs: 60000 },
+  ])
+  @Roles("STUDENT")
+  @Post()
   @HttpCode(HttpStatus.CREATED)
   async createRegistration(
     @Body() dto: CreateRegistrationDto,
+    @IdempotencyKey() idempotencyKey: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.register(user.sub, dto);
+    return this.registrationsService.register(user.sub, dto, idempotencyKey);
   }
 
   /**
    * Lists the authenticated student's registration history.
    *
-   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
-   * @param status - Optional status filter (CONFIRMED, PENDING_PAYMENT, CANCELLED).
+   * GET /registrations
+   *
+   * @param user - JWT payload providing student identity.
+   * @param status - Optional status filter.
    * @param page - Page number for pagination (default 1).
    * @param limit - Items per page (default 20).
-   * @returns HTTP 200 with paginated list of RegistrationDto items.
-   *
-   * Security: Requires valid JWT with STUDENT role. IDOR-enforced — only own records returned.
+   * @returns HTTP 200 with paginated list of RegistrationDto.
    */
-  @Get("students/me/registrations")
+  @Roles("STUDENT")
+  @Get()
   async getMyRegistrations(
     @CurrentUser() user: JwtPayload,
     @Query("status") status?: string,
@@ -77,14 +81,14 @@ export class RegistrationsController {
   /**
    * Retrieves a single registration by ID with IDOR enforcement.
    *
-   * @param id - Registration UUID from the URL path.
-   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
-   * @returns HTTP 200 with RegistrationDto, or 404 if not found or not owned.
+   * GET /registrations/{id}
    *
-   * Security: Requires valid JWT with STUDENT role. Returns 404 for both missing
-   * and non-owned registrations to prevent information leakage.
+   * @param id - Registration UUID.
+   * @param user - JWT payload providing student identity.
+   * @returns HTTP 200 with RegistrationDto, or 404.
    */
-  @Get("students/me/registrations/:id")
+  @Roles("STUDENT")
+  @Get(":id")
   async getMyRegistration(
     @Param("id") id: string,
     @CurrentUser() user: JwtPayload
@@ -95,18 +99,16 @@ export class RegistrationsController {
   /**
    * Cancels the authenticated student's own registration.
    *
-   * Releases the reserved seat, voids any associated ticket, and releases the
-   * seat lock if the workshop was paid.
+   * DELETE /registrations/{id}
    *
-   * @param id - Registration UUID from the URL path.
-   * @param user - JWT payload injected by @CurrentUser() — provides student identity.
-   * @returns HTTP 200 with cancelled RegistrationDto, or error response with codes:
-   * - REGISTRATION_NOT_FOUND (404)
-   * - REGISTRATION_CANCELLED (409)
+   * Releases the reserved seat and seat lock.
    *
-   * Security: Requires valid JWT with STUDENT role. IDOR-enforced.
+   * @param id - Registration UUID.
+   * @param user - JWT payload providing student identity.
+   * @returns HTTP 200 with cancelled RegistrationDto.
    */
-  @Delete("registrations/:id")
+  @Roles("STUDENT")
+  @Delete(":id")
   @HttpCode(HttpStatus.OK)
   async cancelRegistration(
     @Param("id") id: string,

@@ -1,144 +1,83 @@
-/**
- * Seat Counter Service
- *
- * Manages Redis-based seat counters for real-time availability tracking.
- *
- * Key pattern: seat:available:{workshopId}
- *
- * Design rationale:
- * - Redis is the source of truth for seat availability to handle concurrent
- *   registration requests with atomic DECR operations.
- * - The counter is initialized when a workshop is published and deleted when
- *   it is cancelled.
- * - Other modules (e.g., Booking) use this service to decrement the counter
- *   during registration and increment during cancellation.
- *
- * @note This service is exported from CatalogModule for use by BookingModule
- *       (cross-module Service-to-Service communication only).
- */
-
 import { Injectable } from "@nestjs/common";
 
 import { RedisService } from "@/infra/redis/redis.service";
-import { seatErrors } from "@/shared/response/errors";
-import { Result } from "@/shared/response/result";
+import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 
-import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
+const CACHE_KEY_PREFIX = "cache:workshop";
+const SEAT_CACHE_TTL_SECONDS = 10;
 
 @Injectable()
 export class SeatCounterService {
-  private readonly keyPrefix = "seat:available";
-
   constructor(
     private readonly redisService: RedisService,
-    private readonly workshopSlotsRepo: WorkshopSlotsRepository
+    private readonly workshopsRepo: WorkshopsRepository
   ) {}
 
   /**
-   * Initializes the available seat counter in Redis for a workshop.
+   * Cache-Aside read for seat availability.
    *
-   * Business rules:
-   * - Sets the counter to the workshop's total capacity.
-   * - The key is persistent (no TTL) — it lives until the workshop is cancelled.
+   * GET cache → hit: return cached value.
+   * Miss → SELECT seats_available FROM workshops (PostgreSQL source of truth)
+   * → SET cache EX 10 → return value.
    *
-   * Side effects:
-   * - Creates or overwrites the `seat:available:{workshopId}` key in Redis.
-   *
-   * @param workshopId - The UUID of the workshop.
-   * @param capacity - Total seat capacity of the workshop.
-   */
-  async initialize(workshopId: string, capacity: number): Promise<void> {
-    await this.redisService.set(
-      `${this.keyPrefix}:${workshopId}`,
-      String(capacity)
-    );
-  }
-
-  /**
-   * Retrieves the current number of available seats for a workshop.
-   *
-   * Business rules:
-   * - Reads from Redis first for real-time accuracy (source of truth during booking).
-   * - Falls back to PostgreSQL workshop_slots (total_capacity - confirmed_count)
-   *   if the Redis key is missing (e.g., after Redis restart or delayed init).
-   * - Returns 0 if neither Redis nor DB has counter data.
+   * Used as a pre-filter before Optimistic Locking — NEVER as the final
+   * authority on seat availability. That is always WHERE seats_available > 0
+   * in PostgreSQL (ADR-03 enforcement layer).
    *
    * @param workshopId - The UUID of the workshop.
-   * @returns Available seat count from Redis (preferred) or DB (fallback), or 0 if no data exists.
+   * @returns Cached seat count, or 0 if workshop not found.
    */
-  async getAvailable(workshopId: string): Promise<number> {
-    // Redis-first: source of truth during concurrent booking
-    const value = await this.redisService.get(
-      `${this.keyPrefix}:${workshopId}`
-    );
-    if (value !== null) return parseInt(value, 10);
-
-    // DB fallback: totalCapacity - confirmedCount
-    const slotResult =
-      await this.workshopSlotsRepo.findByWorkshopId(workshopId);
-    if (slotResult.isSuccess && slotResult.data) {
-      return slotResult.data.totalCapacity - slotResult.data.confirmedCount;
+  async getCachedSeats(workshopId: string): Promise<number> {
+    const key = `${CACHE_KEY_PREFIX}:${workshopId}:seats`;
+    const cached = await this.redisService.get(key);
+    if (cached !== null) {
+      return parseInt(cached, 10);
     }
 
-    // No data available in either Redis or DB
-    return 0;
+    // Cache miss — read from PostgreSQL (source of truth)
+    const dbResult = await this.workshopsRepo.getSeatVersion(workshopId);
+    if (dbResult.isFailure || !dbResult.data) return 0;
+
+    const seats = dbResult.data.seatsAvailable;
+    await this.redisService.set(key, String(seats), SEAT_CACHE_TTL_SECONDS);
+    return seats;
   }
 
   /**
-   * Deletes the available seat counter from Redis.
-   *
-   * Business rules:
-   * - Idempotent: does not fail if the key does not exist.
+   * Write-Invalidate: deletes the seat cache key after a successful OL commit.
    *
    * Side effects:
-   * - Removes the `seat:available:{workshopId}` key from Redis.
+   * - DEL cache:workshop:{workshopId}:seats
+   *
+   * @param workshopId - The UUID of the workshop.
+   */
+  async invalidateCache(workshopId: string): Promise<void> {
+    await this.redisService.del(`${CACHE_KEY_PREFIX}:${workshopId}:seats`);
+  }
+
+  /**
+   * Initializes the seat cache for a newly published workshop.
+   *
+   * Side effects:
+   * - SET cache:workshop:{workshopId}:seats = seatsTotal EX 10
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param seatsTotal - Total seat count from the workshop record.
+   */
+  async initialize(workshopId: string, seatsTotal: number): Promise<void> {
+    await this.redisService.set(
+      `${CACHE_KEY_PREFIX}:${workshopId}:seats`,
+      String(seatsTotal),
+      SEAT_CACHE_TTL_SECONDS
+    );
+  }
+
+  /**
+   * Deletes the seat cache key for a workshop (cleanup).
    *
    * @param workshopId - The UUID of the workshop.
    */
   async delete(workshopId: string): Promise<void> {
-    await this.redisService.del(`${this.keyPrefix}:${workshopId}`);
-  }
-
-  /**
-   * Atomically decrements the available seat counter.
-   *
-   * Business rules:
-   * - Used by Booking module to reserve a seat during registration.
-   * - If the counter goes below 0, the decrement is rolled back via INCR
-   *   and the method returns FailResult (seat unavailable).
-   *
-   * Side effects:
-   * - Atomically decrements `seat:available:{workshopId}` in Redis.
-   * - May increment the key back (rollback) if the new value is negative.
-   *
-   * @param workshopId - The UUID of the workshop.
-   * @returns OkResult with void if seat was reserved, or FailResult (SEAT_UNAVAILABLE) if sold out.
-   */
-  async decrement(workshopId: string): Promise<Result<void>> {
-    const key = `${this.keyPrefix}:${workshopId}`;
-    const result = await this.redisService.decr(key);
-    if (result < 0) {
-      // Rollback: seat was already sold out
-      await this.redisService.incr(key);
-      return Result.fail(seatErrors.unavailable(workshopId));
-    }
-    return Result.ok();
-  }
-
-  /**
-   * Atomically increments the available seat counter.
-   *
-   * Business rules:
-   * - Used when a registration is cancelled or expires, releasing a seat.
-   * - Always succeeds since incrementing a counter cannot overflow for practical capacities.
-   *
-   * Side effects:
-   * - Atomically increments `seat:available:{workshopId}` in Redis.
-   *
-   * @param workshopId - The UUID of the workshop whose seat count to increment.
-   * @returns The new seat count after increment.
-   */
-  async increment(workshopId: string): Promise<number> {
-    return this.redisService.incr(`${this.keyPrefix}:${workshopId}`);
+    await this.redisService.del(`${CACHE_KEY_PREFIX}:${workshopId}:seats`);
   }
 }

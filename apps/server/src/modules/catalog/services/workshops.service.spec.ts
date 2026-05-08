@@ -1,7 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
-import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -111,9 +110,7 @@ describe("WorkshopsService", () => {
   let seatCounterService: jest.Mocked<SeatCounterService>;
   let speakersRepo: jest.Mocked<SpeakersRepository>;
   let roomsRepo: jest.Mocked<RoomsRepository>;
-  let workshopSlotsRepo: jest.Mocked<WorkshopSlotsRepository>;
-  // let workshopDocumentsRepo: jest.Mocked<WorkshopDocumentsRepository>;
-  let aiSummariesRepo: jest.Mocked<AiSummariesRepository>;
+  let notificationLogProducer: jest.Mocked<NotificationLogProducer>;
   let notificationPublisher: jest.Mocked<WorkshopNotificationPublisher>;
 
   beforeEach(async () => {
@@ -153,19 +150,10 @@ describe("WorkshopsService", () => {
           useValue: { findById: jest.fn() },
         },
         {
-          provide: WorkshopSlotsRepository,
+          provide: NotificationLogProducer,
           useValue: {
-            findByWorkshopId: jest.fn(),
-            create: jest.fn(),
+            createAndEnqueue: jest.fn(),
           },
-        },
-        {
-          provide: WorkshopDocumentsRepository,
-          useValue: {},
-        },
-        {
-          provide: AiSummariesRepository,
-          useValue: { findByWorkshopId: jest.fn() },
         },
         {
           provide: WorkshopNotificationPublisher,

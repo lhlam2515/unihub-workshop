@@ -14,11 +14,23 @@
  */
 import { Global, Module } from "@nestjs/common";
 
+import {
+  REDIS_CACHE,
+  REDIS_QUEUE,
+  REDIS_RATE_LIMIT,
+} from "./redis.constants";
 import { RedisService } from "./redis.service";
 
 @Global()
 @Module({
-  providers: [RedisService],
-  exports: [RedisService],
+  providers: [
+    RedisService,
+    // Aliases so consumers can be explicit about which logical DB they target.
+    // All resolve to the same RedisService instance (3 connections managed internally).
+    { provide: REDIS_CACHE, useExisting: RedisService },
+    { provide: REDIS_QUEUE, useExisting: RedisService },
+    { provide: REDIS_RATE_LIMIT, useExisting: RedisService },
+  ],
+  exports: [RedisService, REDIS_CACHE, REDIS_QUEUE, REDIS_RATE_LIMIT],
 })
 export class RedisModule {}

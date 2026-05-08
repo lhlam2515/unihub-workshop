@@ -15,30 +15,56 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- =============================================================================
 
 -- Design.md ADR-02: status cho registrations
--- 'confirmed' phân biệt free-workshop (không qua payment) với paid-workshop đang chờ thanh toán
--- Gap fix: user-flow analysis cho thấy free workshop không có terminal state rõ ràng nếu thiếu 'confirmed'
+-- 'CONFIRMED' phân biệt free-workshop (không qua payment) với paid-workshop đang chờ thanh toán
+-- Gap fix: user-flow analysis cho thấy free workshop không có terminal state rõ ràng nếu thiếu 'CONFIRMED'
 CREATE TYPE registration_status AS ENUM (
-    'pending',      -- Chờ thanh toán (chỉ workshop có phí, price > 0)
-    'confirmed',    -- Hoàn tất đăng ký (workshop miễn phí, price = 0) — KHÔNG qua payment flow
-    'paid',         -- Thanh toán thành công (workshop có phí)
-    'cancelled'     -- Đã hủy (bởi student hoặc BTC cancel workshop)
+    'PENDING',      -- Chờ thanh toán (chỉ workshop có phí, price > 0)
+    'CONFIRMED',    -- Hoàn tất đăng ký (workshop miễn phí, price = 0) — KHÔNG qua payment flow
+    'PAID',         -- Thanh toán thành công (workshop có phí)
+    'CANCELLED'     -- Đã hủy (bởi student hoặc BTC cancel workshop)
 );
 
--- Design.md dòng 97: status TEXT CHECK ('initiated','succeeded','failed','unresolved')
+-- Design.md dòng 97: status TEXT CHECK ('INITIATED','SUCCEEDED','FAILED','UNRESOLVED')
 CREATE TYPE payment_status AS ENUM (
-    'initiated',    -- Đã tạo payment record, đang gọi gateway
-    'succeeded',    -- Gateway trả 200 OK
-    'failed',       -- Gateway trả 4xx (declined)
-    'unresolved'    -- Gateway timeout/5xx — NON-TERMINAL, cần reconciliation
+    'INITIATED',    -- Đã tạo payment record, đang gọi gateway
+    'SUCCEEDED',    -- Gateway trả 200 OK
+    'FAILED',       -- Gateway trả 4xx (declined)
+    'UNRESOLVED'    -- Gateway timeout/5xx — NON-TERMINAL, cần reconciliation
 );
 
 CREATE TYPE payment_gateway AS ENUM ('VNPAY', 'STRIPE', 'MOMO', 'MOCK');
 
--- Design.md dòng 61: status TEXT CHECK ('draft','open','closed','cancelled')
-CREATE TYPE workshop_status AS ENUM ('draft', 'open', 'closed', 'cancelled');
+-- Design.md dòng 61: status TEXT CHECK ('DRAFT','OPEN','CLOSED','CANCELLED')
+CREATE TYPE workshop_status AS ENUM ('DRAFT', 'OPEN', 'COMPLETED', 'CANCELLED');
 
--- Design.md dòng 64-65: summary_status CHECK ('none','queued','processing','done','failed')
-CREATE TYPE summary_status AS ENUM ('none', 'queued', 'processing', 'done', 'failed');
+-- Design.md dòng 64-65: summary_status CHECK ('NONE','QUEUED','PROCESSING','DONE','FAILED')
+CREATE TYPE summary_status AS ENUM ('NONE', 'QUEUED', 'PROCESSING', 'DONE', 'FAILED');
+
+CREATE TYPE staff_role AS ENUM ('BTC', 'CHECKIN_STAFF');
+
+CREATE TYPE device_platform AS ENUM ('IOS', 'ANDROID');
+
+CREATE TYPE idempotency_resource_type AS ENUM ('REGISTRATION', 'PAYMENT');
+
+CREATE TYPE idempotency_status AS ENUM ('IN_PROGRESS', 'COMPLETED', 'UNRESOLVED');
+
+CREATE TYPE import_trigger AS ENUM ('CRON', 'MANUAL');
+
+CREATE TYPE import_status AS ENUM ('IN_PROGRESS', 'SUCCESS', 'FAILED');
+
+CREATE TYPE notification_delivery_status AS ENUM ('SENT', 'FAILED', 'TIMEOUT');
+
+CREATE TYPE notification_channel AS ENUM ('APP', 'EMAIL', 'TELEGRAM');
+
+CREATE TYPE notification_type AS ENUM (
+    'REGISTRATION_CONFIRMED',
+    'REGISTRATION_CANCELLED',
+    'WORKSHOP_UPDATED',
+    'WORKSHOP_CANCELLED',
+    'PAYMENT_SUCCESS',
+    'PAYMENT_FAILED',
+    'CHECKIN_REMINDER'
+);
 
 
 -- =============================================================================
@@ -71,7 +97,7 @@ CREATE TABLE staff (
     email         TEXT UNIQUE NOT NULL,
     full_name     TEXT NOT NULL,
     password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL CHECK (role IN ('btc', 'checkin_staff')),
+    role          staff_role NOT NULL,
     is_active     BOOLEAN NOT NULL DEFAULT true,
     created_at    TIMESTAMPTZ DEFAULT now()
 );
@@ -94,7 +120,7 @@ CREATE TABLE device_tokens (
     -- ON DELETE CASCADE: khi student bị xóa/deactivated, tokens tự xóa — không có orphan tokens
     token       TEXT NOT NULL,
     -- FCM token (Android) hoặc APNs device token (iOS) — sinh bởi Firebase/Apple SDK
-    platform    TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
+    platform    device_platform NOT NULL,
     is_active   BOOLEAN NOT NULL DEFAULT true,
     -- false khi: user logout, FCM trả "token_expired/unregistered", hoặc job đêm dọn stale tokens
     last_seen   TIMESTAMPTZ DEFAULT now(),
@@ -174,7 +200,7 @@ CREATE TABLE workshops (
     description     TEXT,
 
     -- Gap fix: FK thay cho location TEXT NOT NULL (ADR-02 original)
-    -- NULL cho phép ở status='draft' — BTC chưa cần chọn phòng khi tạo draft
+    -- NULL cho phép ở status='DRAFT' — BTC chưa cần chọn phòng khi tạo draft
     -- Khi publish (draft → open): application layer enforce room_id IS NOT NULL
     -- Lý do không dùng DB CHECK: không thể viết conditional NOT NULL đơn giản
     --   theo status trong PostgreSQL mà không có trigger — app-layer validation rõ ràng hơn
@@ -189,13 +215,11 @@ CREATE TABLE workshops (
     seats_total     INT NOT NULL CHECK (seats_total > 0),
     seats_available INT NOT NULL CHECK (seats_available >= 0 AND seats_available <= seats_total),
     price           NUMERIC(10,2) NOT NULL DEFAULT 0,  -- 0 = free workshop
-    status          TEXT NOT NULL DEFAULT 'draft'
-                    CHECK (status IN ('draft', 'open', 'closed', 'cancelled')),
+    status          workshop_status NOT NULL DEFAULT 'DRAFT',
     -- ADR-14: Summary fields gộp trực tiếp trên workshops (không tách bảng riêng)
     pdf_url         TEXT,
     summary_text    TEXT,
-    summary_status  TEXT DEFAULT 'none'
-                    CHECK (summary_status IN ('none', 'queued', 'processing', 'done', 'failed')),
+    summary_status  summary_status DEFAULT 'NONE',
     created_by      UUID REFERENCES staff(id),
     -- ADR-03: Optimistic Lock; BIGINT tránh overflow dưới spike đăng ký
     version         BIGINT NOT NULL DEFAULT 0,
@@ -232,7 +256,7 @@ COMMENT ON COLUMN workshops.version IS
     'BIGINT (không INT) — tránh overflow dưới spike đăng ký (ADR-02).';
 
 -- Partial index: chỉ index workshop đang open để scan nhanh
-CREATE INDEX idx_workshops_status_starts ON workshops(status, starts_at) WHERE status = 'open';
+CREATE INDEX idx_workshops_status_starts ON workshops(status, starts_at) WHERE status = 'OPEN';
 
 -- Gap fix: index cho lookup theo phòng (BTC xem lịch sử phòng, conflict detection)
 CREATE INDEX idx_workshops_room ON workshops(room_id, starts_at);
@@ -249,14 +273,14 @@ CREATE TABLE registrations (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workshop_id   UUID NOT NULL REFERENCES workshops(id),
     student_id    TEXT NOT NULL REFERENCES students(student_id),
-    -- Gap fix: thêm 'confirmed' cho free workshop (price = 0)
+    -- Gap fix: thêm 'CONFIRMED' cho free workshop (price = 0)
     -- State machine:
-    --   Free:  [INSERT] → 'confirmed' (terminal, không qua payment)
-    --   Paid:  [INSERT] → 'pending' → 'paid' (payment succeeded)
-    --                             → 'cancelled' (payment failed / BTC cancel)
-    -- Ảnh hưởng check-in (Flow 5): query WHERE status IN ('paid', 'confirmed')
-    --   Nếu chỉ check 'paid', free-workshop registrations bị từ chối check-in → bug nghiệp vụ
-    status        TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'paid', 'cancelled')),
+    --   Free:  [INSERT] → 'CONFIRMED' (terminal, không qua payment)
+    --   Paid:  [INSERT] → 'PENDING' → 'PAID' (payment succeeded)
+    --                             → 'CANCELLED' (payment failed / BTC cancel)
+    -- Ảnh hưởng check-in (Flow 5): query WHERE status IN ('PAID', 'CONFIRMED')
+    --   Nếu chỉ check 'PAID', free-workshop registrations bị từ chối check-in → bug nghiệp vụ
+    status        registration_status NOT NULL,
     qr_code       TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
     registered_at TIMESTAMPTZ DEFAULT now(),
 
@@ -268,7 +292,7 @@ COMMENT ON TABLE registrations IS
     'Đơn đăng ký workshop. qr_code là UUID v4 độc lập (không dùng id) — '
     'ngăn brute-force scan từ registration ID (xem design.md rationale dòng 186-187). '
     'status=confirmed dành cho free workshops (price=0), status=paid cho paid workshops. '
-    'Check-in staff query: WHERE status IN (''paid'', ''confirmed'') — không thể chỉ check ''paid''.';
+    'Check-in staff query: WHERE status IN (''PAID'', ''CONFIRMED'') — không thể chỉ check ''PAID''.';
 
 COMMENT ON COLUMN registrations.status IS
     'pending: chờ payment (chỉ paid workshop). '
@@ -288,8 +312,8 @@ CREATE TABLE payments (
     amount             NUMERIC(10,2) NOT NULL,
     currency           TEXT NOT NULL DEFAULT 'VND',
     gateway_charge_id  TEXT,                    -- ID từ gateway, NULL nếu chưa nhận response
-    status             TEXT NOT NULL CHECK (status IN ('initiated', 'succeeded', 'failed', 'unresolved')),
-    idempotency_key    TEXT NOT NULL REFERENCES idempotency_keys(key),
+    status             payment_status NOT NULL,
+    idempotency_key    TEXT NOT NULL,
     created_at         TIMESTAMPTZ DEFAULT now(),
     resolved_at        TIMESTAMPTZ
 );
@@ -304,7 +328,7 @@ COMMENT ON COLUMN payments.gateway_charge_id IS
 
 -- Partial index: monitor initiated + unresolved payments (cần timeout job hoặc reconciliation)
 CREATE INDEX idx_payments_status_created ON payments(status, created_at)
-    WHERE status IN ('initiated', 'unresolved');
+    WHERE status IN ('INITIATED', 'UNRESOLVED');
 
 
 -- Design.md dòng 106-115
@@ -333,11 +357,11 @@ CREATE INDEX idx_checkins_staff_received ON checkins(checked_by, received_at);
 -- Design.md dòng 121-137. ADR-03 và ADR-08 dùng chung bảng này (resource_type phân cách)
 CREATE TABLE idempotency_keys (
     key            TEXT PRIMARY KEY,            -- UUID v4 sinh từ client trước khi gửi request
-    resource_type  TEXT NOT NULL CHECK (resource_type IN ('registration', 'payment')),
-    status         TEXT NOT NULL CHECK (status IN ('in_progress', 'completed', 'unresolved')),
-    -- 'in_progress'  : đang xử lý, locked_until còn hiệu lực
-    -- 'completed'    : kết quả xác định (200/4xx) — terminal, response_body đáng tin để cache
-    -- 'unresolved'   : đã gọi gateway nhưng không nhận được response (timeout/network drop)
+    resource_type  idempotency_resource_type NOT NULL,
+    status         idempotency_status NOT NULL,
+    -- 'IN_PROGRESS'  : đang xử lý, locked_until còn hiệu lực
+    -- 'COMPLETED'    : kết quả xác định (200/4xx) — terminal, response_body đáng tin để cache
+    -- 'UNRESOLVED'   : đã gọi gateway nhưng không nhận được response (timeout/network drop)
     --                  KHÔNG terminal — retry với cùng key (xem ADR-08)
     response_body  JSONB,                       -- NULL khi in_progress/unresolved
     status_code    INT,
@@ -372,8 +396,8 @@ CREATE TABLE import_logs (
     success_count   INT,
     failed_count    INT,
     error_file_path TEXT,                     -- Đường dẫn file errors/YYYY-MM-DD.csv (local filesystem)
-    triggered_by    TEXT NOT NULL CHECK (triggered_by IN ('cron', 'manual')),
-    status          TEXT NOT NULL CHECK (status IN ('in_progress', 'success', 'failed'))
+    triggered_by    import_trigger NOT NULL,
+    status          import_status NOT NULL
 );
 
 COMMENT ON TABLE import_logs IS
@@ -391,9 +415,9 @@ COMMENT ON COLUMN import_logs.error_file_path IS
 CREATE TABLE notification_logs (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     TEXT NOT NULL,                      -- student_id hoặc staff.id
-    event_type  TEXT NOT NULL,                      -- 'registration_confirmed', 'workshop_cancelled', ...
-    channel     TEXT NOT NULL,                      -- 'email', 'in_app', 'telegram'
-    status      TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'timeout')),
+    event_type  notification_type NOT NULL,
+    channel     notification_channel NOT NULL,
+    status      notification_delivery_status NOT NULL,
     error_msg   TEXT,                               -- NULL nếu sent
     payload     JSONB,                              -- Snapshot payload để retry thủ công nếu cần
     created_at  TIMESTAMPTZ DEFAULT now()
@@ -404,14 +428,14 @@ COMMENT ON TABLE notification_logs IS
     'Partial index idx_notif_logs_failed dùng cho retry job.';
 
 CREATE INDEX idx_notif_logs_failed ON notification_logs(status, created_at)
-    WHERE status IN ('failed', 'timeout');
+    WHERE status IN ('FAILED', 'TIMEOUT');
 
 
 -- Bảng hỗ trợ ADR-09: cấu hình channel (không có trong design.md schema block,
 -- nhưng cần cho Strategy Pattern của notification system)
 CREATE TABLE notification_channel_configs (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    channel_type    TEXT NOT NULL UNIQUE,          -- 'email', 'in_app', 'telegram'
+    channel_type    notification_channel NOT NULL UNIQUE,
     is_active       BOOLEAN NOT NULL DEFAULT true,
     config_json     JSONB NOT NULL DEFAULT '{}',   -- Endpoint, API key pattern, template ID, v.v.
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -475,7 +499,7 @@ SELECT
     w.seats_available,
     (w.seats_total - w.seats_available) AS reserved_count,
     w.price,
-    -- Room info (nullable: NULL nếu workshop ở status='draft' chưa assign phòng)
+    -- Room info (nullable: NULL nếu workshop ở status='DRAFT' chưa assign phòng)
     r.id            AS room_id,
     r.name          AS room_name,
     r.building      AS room_building,
@@ -490,7 +514,7 @@ SELECT
 FROM workshops w
 LEFT JOIN rooms    r ON w.room_id    = r.id
 LEFT JOIN speakers s ON w.speaker_id = s.id
-WHERE w.status = 'open';
+WHERE w.status = 'OPEN';
 
 COMMENT ON VIEW v_workshop_availability IS
     'Workshop đang mở với thông tin phòng và diễn giả đầy đủ. '

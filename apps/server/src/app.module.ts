@@ -5,8 +5,10 @@ import { ZodValidationPipe } from "nestjs-zod";
 
 import {
   appConfig,
+  aiProviderConfig,
   corsConfig,
   dbConfig,
+  gatewayConfig,
   jwtConfig,
   loggingConfig,
   paymentConfig,
@@ -20,7 +22,8 @@ import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { DatabaseModule } from "./infra/database/database.module";
-import { SharedQueueModule } from "./infra/messaging/queue.module";
+import { HttpClientModule } from "./infra/http-client/http-client.module";
+import { MessagingModule } from "./infra/messaging/messaging.module";
 import { RedisModule } from "./infra/redis/redis.module";
 import { StorageModule } from "./infra/storage/storage.module";
 import { AiSummaryModule } from "./modules/ai-summary/ai-summary.module";
@@ -50,7 +53,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
  *   because BookingModule imports CatalogModule for SeatCounterService.
  * - PaymentModule follows BookingModule (BookingModule imports PaymentModule).
  * - NotificationModule is event-driven; placed after domain modules.
- * - SharedQueueModule is a shared BullMQ infrastructure module consumed
+ * - MessagingModule is a shared BullMQ infrastructure module consumed
  *   by Catalog, Booking, Payment, Notification, and Background modules.
  */
 @Module({
@@ -67,6 +70,8 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
         paymentConfig,
         loggingConfig,
         corsConfig,
+        gatewayConfig,
+        aiProviderConfig,
       ],
     }),
     DatabaseModule,
@@ -84,7 +89,8 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
           config.get<number>("r2.maxFileSizeBytes") ?? 52_428_800,
       }),
     }),
-    SharedQueueModule,
+    HttpClientModule,
+    MessagingModule,
     RateLimitModule,
     IamModule,
     CatalogModule,

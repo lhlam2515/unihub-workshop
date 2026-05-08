@@ -7,17 +7,22 @@ import { z } from "zod";
 
 import {
   checkinRecords,
+  idempotencyKeys,
   offlineCheckinQueue,
   payments,
   registrations,
   tickets,
 } from "@/infra/database/schema";
 
-const offlineCheckinSyncStatusSchema = z.enum([
-  "PENDING",
-  "SYNCED",
-  "CONFLICT",
-]);
+import { offlineSyncStatusSchema as offlineCheckinSyncStatusSchema } from "./enums.types";
+
+export const idempotencyKeysSelectSchema = createSelectSchema(idempotencyKeys);
+export const idempotencyKeysInsertSchema = createInsertSchema(idempotencyKeys);
+export const idempotencyKeysUpdateSchema = createUpdateSchema(idempotencyKeys);
+
+export type IdempotencyKey = z.infer<typeof idempotencyKeysSelectSchema>;
+export type NewIdempotencyKey = z.infer<typeof idempotencyKeysInsertSchema>;
+export type IdempotencyKeyUpdate = z.infer<typeof idempotencyKeysUpdateSchema>;
 
 export const registrationsSelectSchema = createSelectSchema(registrations);
 export const registrationsInsertSchema = createInsertSchema(registrations);

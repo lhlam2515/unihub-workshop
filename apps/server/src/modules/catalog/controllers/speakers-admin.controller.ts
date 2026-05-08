@@ -1,8 +1,8 @@
 /**
  * Speakers Admin Controller
  *
- * Handles ORGANIZER-only speaker management endpoints.
- * All endpoints require JWT authentication and ORGANIZER role.
+ * Handles BTC-only speaker management endpoints.
+ * All endpoints require JWT authentication and BTC role.
  *
  * Endpoints:
  * - GET /admin/speakers — list all speakers
@@ -13,14 +13,18 @@ import {
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { CreateSpeakerDto } from "../dto/create-speaker.dto";
@@ -29,7 +33,8 @@ import { SpeakersService } from "../services/speakers.service";
 
 @Controller("admin/speakers")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class SpeakersAdminController {
   constructor(private readonly speakersService: SpeakersService) {}
 
@@ -39,7 +44,7 @@ export class SpeakersAdminController {
    * Returns all registered speakers with their profile information
    * including name, title, bio, and avatar.
    *
-   * Security context: Requires ORGANIZER role.
+   * Security context: Requires BTC role.
    *
    * @returns Array of speaker DTOs.
    */
@@ -53,7 +58,7 @@ export class SpeakersAdminController {
    *
    * Validates input with CreateSpeakerSchema before persisting.
    *
-   * Security context: Requires ORGANIZER role.
+   * Security context: Requires BTC role.
    *
    * @param body - Speaker creation payload (full_name, title?, bio?, avatar_url?).
    * @returns The newly created speaker DTO.
@@ -68,14 +73,28 @@ export class SpeakersAdminController {
    *
    * Only provided fields are updated; omitted fields retain their existing values.
    *
-   * Security context: Requires ORGANIZER role.
+   * Security context: Requires BTC role.
    *
    * @param id - The UUID of the speaker to update.
    * @param body - Partial speaker update payload.
    * @returns The updated speaker DTO.
    */
-  @Put(":id")
+  @Patch(":id")
   async updateSpeaker(@Param("id") id: string, @Body() dto: UpdateSpeakerDto) {
     return this.speakersService.updateSpeaker(id, dto);
+  }
+
+  /**
+   * Deletes a speaker profile.
+   *
+   * DELETE /admin/speakers/{id}
+   *
+   * @param id - The UUID of the speaker to delete.
+   * @returns 204 No Content on success, or 404 if not found.
+   */
+  @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSpeaker(@Param("id") id: string) {
+    return this.speakersService.deleteSpeaker(id);
   }
 }

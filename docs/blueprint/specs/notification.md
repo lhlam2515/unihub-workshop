@@ -2,7 +2,7 @@
 
 > **ASR hiện thực hóa:** ASR-3 (Extensibility — thêm Telegram không sửa code cũ), ASR-7 (Async Processing)
 >
-> **ADR tham chiếu:** ADR-09 (Strategy Pattern in-process), ADR-10 (Redis Streams — async dispatch), ADR-02 (Schema — notification_logs)
+> **ADR tham chiếu:** ADR-09 (Strategy Pattern in-process), ADR-10 (BullMQ — async dispatch), ADR-02 (Schema — notification_logs)
 >
 > **Trade-off chủ đạo:** Best-effort over Exactly-once. Notification là enrichment, không phải critical path. Nếu email gửi thất bại, đăng ký vẫn hợp lệ. Nếu cần exactly-once guarantee, xem specs/notification-outbox.md.
 
@@ -12,7 +12,7 @@
 
 Notification Service dispatch thông báo đến user qua nhiều kênh (Email, In-app, [Telegram — tương lai]) khi có business event. Service dùng Strategy Pattern — mỗi kênh là một `NotificationChannel` adapter độc lập. Thêm kênh mới = thêm adapter + uncomment 1 dòng tại composition root, không sửa code cũ (OCP).
 
-Dispatch chạy async trong `notification-worker` consumer (Redis Streams, ADR-10). Business flow không chờ notification hoàn thành.
+Dispatch chạy async trong `notification-worker` consumer (BullMQ, ADR-10). Business flow không chờ notification hoàn thành.
 
 ---
 
@@ -21,9 +21,9 @@ Dispatch chạy async trong `notification-worker` consumer (Redis Streams, ADR-1
 ### 2.1 Event Producer (Business Layer → Stream)
 
 ```
-Khi business event xảy ra, producer XADD vào stream:
+Khi business event xảy ra, producer addJob vào queue:
 
-XADD stream:notifications * {
+addJob Queue: notification * {
   event_type:  'registration_confirmed',
   user_id:     :student_id,
   payload:     JSON string
@@ -68,9 +68,9 @@ csv_import_completed_with_errors:
 Consumer group: notification-workers
 Consumer name:  notification-worker-1  (scale nếu cần)
 
-XREADGROUP GROUP notification-workers notification-worker-1
+@Processor GROUP notification-workers notification-worker-1
   COUNT 10 BLOCK 5000
-  STREAMS stream:notifications >
+  STREAMS Queue: notification >
 
 FOR EACH message:
 
@@ -80,14 +80,14 @@ FOR EACH message:
   -- Xem Section 2.3
 
   Nếu dispatch hoàn thành (kể cả có channel fail):
-    XACK stream:notifications notification-workers {message_id}
+    auto-ack Queue: notification notification-workers {message_id}
 
   Nếu dispatch throw uncaught exception:
     Tăng retry_count
     IF retry_count < 2:
-      XACK + XADD lại stream:notifications (re-queue)
+      auto-ack + addJob lại Queue: notification (re-queue)
     ELSE:
-      XACK + XADD stream:notifications-dlq
+      auto-ack + addJob Queue: notification-dlq
       -- Admin điều tra
 ```
 
@@ -115,11 +115,11 @@ async dispatch(userId, event, payload):
       try:
         await sendWithTimeout(ch)
         await logRepo.log({ userId, event, channel: ch.channelName,
-                            status: 'sent', payload })
+                            status: 'SENT', payload })
       catch (err):
         await logRepo.log({ userId, event, channel: ch.channelName,
                             status: err.message == 'CHANNEL_TIMEOUT'
-                                    ? 'timeout' : 'failed',
+                                    ? 'TIMEOUT' : 'FAILED',
                             errorMsg: err.message, payload })
         throw err    // re-throw để Promise.allSettled record
     })
@@ -158,12 +158,12 @@ Khi BTC cancel workshop:
 
   SELECT student_id FROM registrations
   WHERE workshop_id = :workshop_id
-    AND status IN ('pending', 'paid');
+    AND status IN ('PENDING', 'PAID');
 
   -- Chia batch để tránh memory explosion
   FOR EACH batch of 100 student_ids:
     FOR EACH student_id:
-      XADD stream:notifications * {
+      addJob Queue: notification * {
         event_type: 'workshop_cancelled',
         user_id:    :student_id,
         payload:    { workshop_title, original_starts_at, reason }
@@ -181,7 +181,7 @@ Khi BTC cancel workshop:
 ```
 Điều kiện: EmailAdapter.send() không trả về sau 5 giây
 Hành vi: Promise.race timeout → throw 'CHANNEL_TIMEOUT'
-         notification_logs: status = 'timeout', error_msg = 'CHANNEL_TIMEOUT'
+         notification_logs: status = 'TIMEOUT', error_msg = 'CHANNEL_TIMEOUT'
          InAppAdapter.send() vẫn chạy bình thường (Promise.allSettled)
 Không cascade sang channel khác
 ```
@@ -189,7 +189,7 @@ Không cascade sang channel khác
 ### E-02: Channel fail — invalid email address
 ```
 Điều kiện: EmailAdapter.send() throw Error('INVALID_RECIPIENT')
-Hành vi: notification_logs: status = 'failed', error_msg = 'INVALID_RECIPIENT'
+Hành vi: notification_logs: status = 'FAILED', error_msg = 'INVALID_RECIPIENT'
          Các channel khác vẫn chạy
 ```
 
@@ -197,28 +197,28 @@ Hành vi: notification_logs: status = 'failed', error_msg = 'INVALID_RECIPIENT'
 ```
 Điều kiện: Email timeout + InApp DB error
 Hành vi: Promise.allSettled resolve (không throw)
-         notification_logs: 2 rows với status='timeout'/'failed'
-         XACK message (worker tiếp tục với message kế tiếp)
+         notification_logs: 2 rows với status='TIMEOUT'/'FAILED'
+         auto-ack message (worker tiếp tục với message kế tiếp)
          Notification bị mất — không retry tự động
 Note: Đây là best-effort design. Nếu cần retry per-user,
       xem specs/notification-outbox.md
 ```
 
-### E-04: Worker crash sau XREADGROUP, trước XACK
+### E-04: Worker crash sau @Processor, trước auto-ack
 ```
-Điều kiện: Process kill sau khi nhận message nhưng trước XACK
-Hành vi: Message ở lại PEL (Pending Entries List)
-         Worker restart: XAUTOCLAIM messages đã idle > 10 phút
+Điều kiện: Process kill sau khi nhận message nhưng trước auto-ack
+Hành vi: Message ở lại pending job list
+         Worker restart: stalled job detection messages đã idle > 10 phút
          Message được re-processed → có thể duplicate notification
 Note: Best-effort có thể gây duplicate notification.
       Acceptable vì notification là enrichment, không phải transaction.
       Nếu cần exactly-once: xem specs/notification-outbox.md
 ```
 
-### E-05: Redis Streams down
+### E-05: BullMQ down
 ```
-Điều kiện: Redis unavailable khi producer XADD
-Hành vi: XADD fail — notification không được queue
+Điều kiện: Redis unavailable khi producer addJob
+Hành vi: addJob fail — notification không được queue
          Business event đã thành công (registration, payment commit đã xong)
          Notification bị mất hoàn toàn
 Acceptable: Redis down là degraded mode; notification loss < business data loss
@@ -228,7 +228,7 @@ Acceptable: Redis down là degraded mode; notification loss < business data loss
 ```
 Điều kiện: Workshop có 10,000 registrants, tất cả cần notification
 Hành vi: KHÔNG gọi dispatch() cho 10,000 users cùng lúc
-         Batch thành 100 XADD operations → 100 messages trong stream
+         Batch thành 100 addJob operations → 100 messages trong stream
          Worker xử lý tuần tự 100 messages × dispatch(1 user) mỗi lần
          Throughput: ~100 users/5s (2 channels × 5s timeout = 10s max per user, 
                                      với 2 channels parallel = 5s)
@@ -255,12 +255,12 @@ Mọi failure (timeout, error) phải được ghi vào `notification_logs`.
 "Best-effort" không có nghĩa là "không có log".
 
 **INV-05 — Notification Không Block Business Flow:**
-XADD vào stream là fire-and-forget — nếu XADD fail, business transaction đã committed không bị rollback.
+addJob vào stream là fire-and-forget — nếu addJob fail, business transaction đã committed không bị rollback.
 Notification là decoupled hoàn toàn khỏi critical path.
 
 **INV-06 — Batch Fan-out Tối Đa 100 Users/Message:**
-Fan-out cho workshop event (nhiều users) phải được chia batch ≤ 100 users/XADD.
-Không được XADD 1 message với 10,000 user_ids — worker phải fan-out.
+Fan-out cho workshop event (nhiều users) phải được chia batch ≤ 100 users/addJob.
+Không được addJob 1 message với 10,000 user_ids — worker phải fan-out.
 
 ---
 
@@ -269,11 +269,11 @@ Không được XADD 1 message với 10,000 user_ids — worker phải fan-out.
 **AC-01 — Happy path single user:**
 Event 'registration_confirmed' cho student S.
 Then: Email sent, In-app notification created.
-notification_logs: 2 rows, status='sent'.
+notification_logs: 2 rows, status='SENT'.
 
 **AC-02 — Channel failure isolation:**
 Email SMTP down. Event dispatch.
-Then: In-app vẫn sent. notification_logs: email row status='failed', inapp row status='sent'.
+Then: In-app vẫn sent. notification_logs: email row status='FAILED', inapp row status='SENT'.
 
 **AC-03 — OCP — Add Telegram:**
 Tạo TelegramAdapter.ts + uncomment 1 dòng tại main.ts.
@@ -282,12 +282,12 @@ EmailAdapter và InAppAdapter code không được thay đổi (verify bằng gi
 
 **AC-04 — Fan-out workshop_cancelled:**
 Workshop với 500 registrants bị cancel.
-Then: 500 XADD messages vào stream. notification_logs: 500 × 2 channels = 1000 rows.
+Then: 500 addJob messages vào stream. notification_logs: 500 × 2 channels = 1000 rows.
 Memory usage tại thời điểm peak < 50MB (streaming, không load all at once).
 
-**AC-05 — XAUTOCLAIM recovery:**
-Worker crash sau XREADGROUP, trước XACK. Message ở lại PEL.
-After 10 phút: XAUTOCLAIM reclaim message. Re-dispatch.
+**AC-05 — stalled job detection recovery:**
+Worker crash sau @Processor, trước auto-ack. Message ở lại pending jobs.
+After 10 phút: stalled job detection reclaim message. Re-dispatch.
 Then: Notification được gửi (có thể duplicate — acceptable).
 
 **AC-06 — Notification log retention:**

@@ -8,7 +8,6 @@ import { z } from "zod";
 import {
   rooms,
   speakers,
-  workshopSlots,
   workshops,
 } from "@/infra/database/schema";
 
@@ -35,11 +34,3 @@ export const workshopsUpdateSchema = createUpdateSchema(workshops);
 export type Workshop = z.infer<typeof workshopsSelectSchema>;
 export type NewWorkshop = z.infer<typeof workshopsInsertSchema>;
 export type WorkshopUpdate = z.infer<typeof workshopsUpdateSchema>;
-
-export const workshopSlotsSelectSchema = createSelectSchema(workshopSlots);
-export const workshopSlotsInsertSchema = createInsertSchema(workshopSlots);
-export const workshopSlotsUpdateSchema = createUpdateSchema(workshopSlots);
-
-export type WorkshopSlot = z.infer<typeof workshopSlotsSelectSchema>;
-export type NewWorkshopSlot = z.infer<typeof workshopSlotsInsertSchema>;
-export type WorkshopSlotUpdate = z.infer<typeof workshopSlotsUpdateSchema>;

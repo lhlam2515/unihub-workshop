@@ -9,6 +9,7 @@ import {
 
 import {
   checkinSourceEnum,
+  offlineSyncStatusEnum,
   paymentGatewayEnum,
   paymentStatusEnum,
   registrationStatusEnum,
@@ -17,21 +18,24 @@ import {
 import { workshops } from "./event-core.schema";
 import { students, users } from "./identity.schema";
 
+// ---------------------------------------------------------------------------
+// Registrations
+// ---------------------------------------------------------------------------
+
 export const registrations = pgTable(
   "registrations",
   (t) => ({
     registrationId: t.uuid("registration_id").primaryKey().defaultRandom(),
     studentId: t
-      .uuid("student_id")
+      .text("student_id")
       .notNull()
       .references(() => students.studentId),
     workshopId: t
       .uuid("workshop_id")
       .notNull()
       .references(() => workshops.workshopId),
-    status: registrationStatusEnum("status")
-      .notNull()
-      .default("PENDING_PAYMENT"),
+    status: registrationStatusEnum("status").notNull().default("PENDING"),
+    qrCode: t.text("qr_code").notNull().unique(),
     registeredAt: t
       .timestamp("registered_at", { withTimezone: true })
       .notNull()
@@ -39,6 +43,7 @@ export const registrations = pgTable(
     confirmedAt: t.timestamp("confirmed_at", { withTimezone: true }),
     cancelledAt: t.timestamp("cancelled_at", { withTimezone: true }),
     cancellationReason: t.text("cancellation_reason"),
+    version: t.bigint("version", { mode: "number" }).notNull().default(0),
     updatedAt: t
       .timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -51,8 +56,13 @@ export const registrations = pgTable(
     index("idx_registrations_student_id").on(table.studentId),
     index("idx_registrations_workshop_id").on(table.workshopId),
     index("idx_registrations_status").on(table.status),
+    index("idx_registrations_qr_code").on(table.qrCode),
   ]
 );
+
+// ---------------------------------------------------------------------------
+// Tickets
+// ---------------------------------------------------------------------------
 
 export const tickets = pgTable(
   "tickets",
@@ -82,6 +92,10 @@ export const tickets = pgTable(
   ]
 );
 
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
 export const payments = pgTable(
   "payments",
   (t) => ({
@@ -91,14 +105,14 @@ export const payments = pgTable(
       .notNull()
       .references(() => registrations.registrationId),
     studentId: t
-      .uuid("student_id")
+      .text("student_id")
       .notNull()
       .references(() => students.studentId),
     amount: t.numeric("amount", { precision: 12, scale: 2 }).notNull(),
     currency: t.char("currency", { length: 3 }).notNull().default("VND"),
     gateway: paymentGatewayEnum("gateway").notNull(),
-    status: paymentStatusEnum("status").notNull().default("PENDING"),
-    idempotencyKey: t.varchar("idempotency_key", { length: 255 }).notNull(),
+    status: paymentStatusEnum("status").notNull().default("INITIATED"),
+    idempotencyKey: t.text("idempotency_key").notNull(),
     gatewayTxnId: t.varchar("gateway_txn_id", { length: 255 }),
     initiatedAt: t
       .timestamp("initiated_at", { withTimezone: true })
@@ -111,7 +125,6 @@ export const payments = pgTable(
       .$type<Record<string, unknown>>(),
   }),
   (table) => [
-    unique("uq_payments_idempotency").on(table.idempotencyKey),
     check("chk_payments_amount", sql`${table.amount} > 0`),
     index("idx_payments_registration_id").on(table.registrationId),
     index("idx_payments_student_id").on(table.studentId),
@@ -119,9 +132,13 @@ export const payments = pgTable(
     index("idx_payments_gateway").on(table.gateway),
     index("idx_payments_pending")
       .on(table.initiatedAt)
-      .where(sql`${table.status} = 'PENDING'`),
+      .where(sql`${table.status} = 'INITIATED'`),
   ]
 );
+
+// ---------------------------------------------------------------------------
+// Check-in Records
+// ---------------------------------------------------------------------------
 
 export const checkinRecords = pgTable(
   "checkin_records",
@@ -131,12 +148,8 @@ export const checkinRecords = pgTable(
       .uuid("registration_id")
       .notNull()
       .references(() => registrations.registrationId),
-    ticketId: t
-      .uuid("ticket_id")
-      .notNull()
-      .references(() => tickets.ticketId),
     studentId: t
-      .uuid("student_id")
+      .text("student_id")
       .notNull()
       .references(() => students.studentId),
     workshopId: t
@@ -153,7 +166,10 @@ export const checkinRecords = pgTable(
     deviceId: t.varchar("device_id", { length: 100 }),
   }),
   (table) => [
-    unique("uq_checkin_ticket_workshop").on(table.ticketId, table.workshopId),
+    unique("uq_checkin_registration_workshop").on(
+      table.registrationId,
+      table.workshopId
+    ),
     index("idx_checkin_workshop_id").on(table.workshopId),
     index("idx_checkin_student_id").on(table.studentId),
     index("idx_checkin_source")
@@ -171,17 +187,11 @@ export const offlineCheckinQueue = pgTable(
     checkedInAt: t.timestamp("checked_in_at", { withTimezone: true }).notNull(),
     deviceId: t.varchar("device_id", { length: 100 }).notNull(),
     checkedInBy: t.uuid("checked_in_by").notNull(),
-    syncStatus: t
-      .varchar("sync_status", { length: 20 })
+    syncStatus: offlineSyncStatusEnum("sync_status")
       .notNull()
       .default("PENDING"),
     syncedAt: t.timestamp("synced_at", { withTimezone: true }),
     conflictReason: t.text("conflict_reason"),
   }),
-  (table) => [
-    check(
-      "offline_checkin_queue_sync_status_check",
-      sql`${table.syncStatus} IN ('PENDING', 'SYNCED', 'CONFLICT')`
-    ),
-  ]
+  () => []
 );

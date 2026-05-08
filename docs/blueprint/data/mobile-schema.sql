@@ -12,12 +12,12 @@
 -- Nguồn:    GET /checkin/workshops/{id}/registrations (khi online)
 -- Dùng để: Tra cứu qr_code khi offline — phải cực nhanh.
 --
--- PRE-LOAD FILTER: chỉ cache status IN ('paid', 'confirmed').
---   'paid'      → workshop có phí, đã thanh toán thành công
---   'confirmed' → workshop miễn phí (price = 0), đăng ký hoàn tất
---   'pending'   → KHÔNG cache: chưa hoàn tất registration (chờ payment)
+-- PRE-LOAD FILTER: chỉ cache status IN ('PAID', 'CONFIRMED').
+--   'PAID'      → workshop có phí, đã thanh toán thành công
+--   'CONFIRMED' → workshop miễn phí (price = 0), đăng ký hoàn tất
+--   'PENDING'   → KHÔNG cache: chưa hoàn tất registration (chờ payment)
 --                 → cho check-in sẽ là bug (người chưa trả tiền được vào)
---   'cancelled' → KHÔNG cache: đăng ký đã hủy, QR không hợp lệ
+--   'CANCELLED' → KHÔNG cache: đăng ký đã hủy, QR không hợp lệ
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS cached_registrations (
@@ -34,13 +34,13 @@ CREATE TABLE IF NOT EXISTS cached_registrations (
     student_id          TEXT NOT NULL,
 
     -- Trạng thái đăng ký.
-    -- Gap fix (M2): thêm 'confirmed' để mirror server schema (design.md ADR-02).
+    -- Gap fix (M2): thêm 'CONFIRMED' để mirror server schema (design.md ADR-02).
     -- Server hiện có 4 states: pending / confirmed / paid / cancelled.
-    -- App chỉ pre-load 'paid' và 'confirmed' (xem filter comment ở trên).
-    -- Giữ 'pending' và 'cancelled' trong CHECK để app có thể detect nếu server
+    -- App chỉ pre-load 'PAID' và 'CONFIRMED' (xem filter comment ở trên).
+    -- Giữ 'PENDING' và 'CANCELLED' trong CHECK để app có thể detect nếu server
     -- trả về status bất ngờ (e.g., status thay đổi sau khi cache) — log warning.
-    registration_status TEXT NOT NULL DEFAULT 'paid'
-                        CHECK (registration_status IN ('pending', 'confirmed', 'paid', 'cancelled')),
+    registration_status TEXT NOT NULL DEFAULT 'PAID'
+                        CHECK (registration_status IN ('PENDING', 'CONFIRMED', 'PAID', 'CANCELLED')),
 
     -- Metadata cache
     cached_at           INTEGER NOT NULL,   -- Unix timestamp (ms)
@@ -176,7 +176,8 @@ CREATE TABLE IF NOT EXISTS app_session (
     -- Identity (decode từ JWT payload, không cần gọi server)
     user_id             TEXT NOT NULL,
     email               TEXT NOT NULL,
-    role                TEXT NOT NULL DEFAULT 'CHECKIN_STAFF',
+    role                TEXT NOT NULL DEFAULT 'CHECKIN_STAFF'
+                        CHECK (role IN ('CHECKIN_STAFF')),
 
     -- Scope — danh sách workshop được phân công (từ JWT payload)
     allowed_workshop_ids TEXT NOT NULL DEFAULT '[]',

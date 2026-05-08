@@ -17,6 +17,7 @@ export interface RegistrationWithWorkshopTitle extends Registration {
 
 export interface CancelResult {
   cancelledCount: number;
+  affectedStudentIds: string[];
 }
 
 @Injectable()
@@ -27,6 +28,25 @@ export class RegistrationsRepository {
     @Inject(DATABASE_SCHEMA)
     private readonly schema: DatabaseSchema
   ) {}
+
+  /**
+   * Executes a callback within a Drizzle database transaction.
+   *
+   * All repository methods accept an optional tx parameter — pass the tx
+   * from this callback to participate in the same ACID transaction.
+   * Used by OL seat decrement + registration INSERT atomicity (ADR-03).
+   *
+   * Side effects:
+   * - Opens a database transaction; commits on success, rolls back on thrown error.
+   *
+   * @param callback - Async function receiving the transaction client.
+   * @returns The value returned by the callback.
+   */
+  async transaction<T>(
+    callback: (tx: DrizzleTransaction) => Promise<T>
+  ): Promise<T> {
+    return this.db.transaction(callback);
+  }
 
   /**
    * Finds a single registration by its primary key.
@@ -156,6 +176,61 @@ export class RegistrationsRepository {
   }
 
   /**
+   * Updates a registration's status with optimistic locking version check.
+   *
+   * Only applies the update if the current version matches expectedVersion.
+   * Atomically increments the version on success.
+   * Automatically sets confirmedAt for CONFIRMED status and cancelledAt for
+   * CANCELLED status.
+   *
+   * Side effects:
+   * - Updates a row in the registrations table with version check.
+   *
+   * @param id - The registration UUID.
+   * @param status - New status value (CONFIRMED, CANCELLED, etc.).
+   * @param expectedVersion - The version expected by the caller.
+   * @param tx - Optional transaction handle for multi-statement operations.
+   * @returns OkResult with the updated Registration entity, or null if version mismatch.
+   * - May return FailResult with INTERNAL_ERROR on database failure.
+   */
+  async updateWithVersion(
+    id: string,
+    status: string,
+    expectedVersion: number,
+    tx?: DrizzleTransaction
+  ): Promise<Result<Registration | null>> {
+    const conn = tx ?? this.db;
+    return tryCatch(
+      async () => {
+        const updateData: Record<string, unknown> = {
+          status,
+          version: sql`${this.schema.registrations.version} + 1`,
+          updatedAt: new Date(),
+        };
+
+        if (status === "CONFIRMED") {
+          updateData.confirmedAt = new Date();
+        } else if (status === "CANCELLED") {
+          updateData.cancelledAt = new Date();
+        }
+
+        const [result] = await conn
+          .update(this.schema.registrations)
+          .set(updateData)
+          .where(
+            and(
+              eq(this.schema.registrations.registrationId, id),
+              eq(this.schema.registrations.version, expectedVersion)
+            )
+          )
+          .returning();
+        return result ?? null;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
    * Lists registrations belonging to a student, with workshop titles.
    *
    * Performs a LEFT JOIN with the workshops table to include the workshop
@@ -257,13 +332,16 @@ export class RegistrationsRepository {
               eq(this.schema.registrations.workshopId, workshopId),
               inArray(this.schema.registrations.status, [
                 "CONFIRMED",
-                "PENDING_PAYMENT",
+                "PENDING",
               ])
             )
           )
           .returning();
 
-        return { cancelledCount: result.length };
+        return {
+          cancelledCount: result.length,
+          affectedStudentIds: result.map((r) => r.studentId),
+        };
       },
       (err) => systemErrors.internal(err)
     );

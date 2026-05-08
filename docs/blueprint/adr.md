@@ -1,8 +1,8 @@
 # UniHub Workshop — Architecture Decision Records (ADR)
 
-> **Mục đích tài liệu này:** Ghi nhận *quyết định kiến trúc* — trả lời câu hỏi "Tại sao chọn A trong n phương án?" cho mỗi lựa chọn kỹ thuật quan trọng. Không chứa pseudocode hay schema chi tiết.
+> **Mục đích tài liệu này:** Ghi nhận _quyết định kiến trúc_ — trả lời câu hỏi "Tại sao chọn A trong n phương án?" cho mỗi lựa chọn kỹ thuật quan trọng. Không chứa pseudocode hay schema chi tiết.
 >
-> **Cách đọc:** ADR được viết theo thứ tự *nhân quả*, không phải thứ tự số. ADR-02 và ADR-03 là cause; ADR-13 phải được co-design với ADR-03. ADR-01 là label tổng kết sau khi các ADR cụ thể đã chốt.
+> **Cách đọc:** ADR được viết theo thứ tự _nhân quả_, không phải thứ tự số. ADR-02 và ADR-03 là cause; ADR-13 phải được co-design với ADR-03. ADR-01 là label tổng kết sau khi các ADR cụ thể đã chốt.
 >
 > **Tài liệu liên quan:**
 >
@@ -17,28 +17,28 @@
 
 ### 1. Quyết định
 
-**PostgreSQL** làm primary database duy nhất — source of truth cho mọi trạng thái nghiệp vụ. **Redis** làm lớp phụ trợ cho ba mục đích cụ thể: cache `seats_available` (TTL ngắn), sliding window counters cho Rate Limiting (volatile), và Redis Streams cho async job queue. Redis không bao giờ là source of truth.
+**PostgreSQL** làm primary database duy nhất — source of truth cho mọi trạng thái nghiệp vụ. **Redis** làm lớp phụ trợ cho ba mục đích cụ thể: cache `seats_available` (TTL ngắn), sliding window counters cho Rate Limiting (volatile), và BullMQ cho async job queue. Redis không bao giờ là source of truth.
 
 Schema đầy đủ → `data/schema.sql`.
 
 ### 2. Lý do chọn
 
-**PostgreSQL được force bởi ADR-03:** Optimistic Locking đòi `UPDATE ... WHERE version = ?` trả về *số rows affected* chính xác, và bảo đảm constraint `seats_available >= 0` không vi phạm. Đây là ACID transaction cấp row — không phải cấp document.
+**PostgreSQL được force bởi ADR-03:** Optimistic Locking đòi `UPDATE ... WHERE version = ?` trả về _số rows affected_ chính xác, và bảo đảm constraint `seats_available >= 0` không vi phạm. Đây là ACID transaction cấp row — không phải cấp document.
 
 Khi đã có PostgreSQL, các bài toán khác được giải miễn phí:
 
-| Bài toán | PostgreSQL native solution |
-|---|---|
-| Idempotency (ADR-08) | `UNIQUE` constraint + `INSERT ... ON CONFLICT DO NOTHING` là atomic check-and-insert |
-| CSV upsert (ADR-12) | `INSERT ... ON CONFLICT DO UPDATE` — chạy lại nhiều lần cùng kết quả |
-| Ngăn đăng ký trùng | `UNIQUE (workshop_id, student_id)` — defense layer sau idempotency key |
-| First-check-in-wins (ADR-11) | `UNIQUE (registration_id)` trên `checkins` — không cần lock |
+| Bài toán                     | PostgreSQL native solution                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| Idempotency (ADR-08)         | `UNIQUE` constraint + `INSERT ... ON CONFLICT DO NOTHING` là atomic check-and-insert |
+| CSV upsert (ADR-12)          | `INSERT ... ON CONFLICT DO UPDATE` — chạy lại nhiều lần cùng kết quả                 |
+| Ngăn đăng ký trùng           | `UNIQUE (workshop_id, student_id)` — defense layer sau idempotency key               |
+| First-check-in-wins (ADR-11) | `UNIQUE (registration_id)` trên `checkins` — không cần lock                          |
 
 **Tách bảng `students` và `staff`:** Lifecycle hoàn toàn khác nhau — students sync từ CSV đêm (ADR-12), staff được provision thủ công. Gộp một bảng tạo nhiều cột nullable và làm mờ ranh giới lifecycle.
 
 **`qr_code` là UUID v4 riêng biệt, không phải `registrations.id`:** Registration ID có thể predictable (sequential). UUID v4 random 122-bit entropy không brute-force được. Tách cho phép re-issue QR mà không đổi registration ID.
 
-**Redis cho ba việc, không hơn:** Cache (performance hint), Rate Limit counters (volatile — mất là tự reset), job queue (Streams với persistence). Giới hạn rõ vai trò để tránh Redis trở thành implicit source of truth.
+**Redis cho ba việc, không hơn:** Cache (performance hint), Rate Limit counters (volatile — mất là tự reset), job queue (BullMQ với persistence). Giới hạn rõ vai trò để tránh Redis trở thành implicit source of truth.
 
 ### 3. Trade-off và rủi ro
 
@@ -46,7 +46,7 @@ Khi đã có PostgreSQL, các bài toán khác được giải miễn phí:
 
 **Không scale ngang.** Với 12,000 user/10 phút ≈ 20 req/s trung bình, không cần scale ngang. Nếu đồ án sau đòi 10× traffic, PostgreSQL là điểm phải xem lại đầu tiên.
 
-**FK cycle giữa `payments` và `idempotency_keys`.** Job dọn key đêm phải skip key đang được reference bởi `payments.status='unresolved'`. Giải pháp: subquery trong điều kiện DELETE — xem `database-schema.md`.
+**FK cycle giữa `payments` và `idempotency_keys`.** Job dọn key đêm phải skip key đang được reference bởi `payments.status='UNRESOLVED'`. Giải pháp: subquery trong điều kiện DELETE — xem `database-schema.md`.
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
@@ -66,7 +66,7 @@ Khi đã có PostgreSQL, các bài toán khác được giải miễn phí:
 
 **Optimistic Locking (OL)** tại tầng database với cột `version BIGINT` trên bảng `workshops`, kết hợp **pre-check Redis** để lọc request không có cơ hội thành công trước khi chạm DB.
 
-Cơ chế cốt lõi: đọc *không lock* (không dùng `FOR SHARE`/`FOR UPDATE`), kiểm tra `version` khi ghi. Nếu `version` đã thay đổi giữa lúc đọc và lúc ghi → `rowsAffected = 0` → retry. MAX_RETRIES = 1 (2 attempts tổng). Retry không quay lại bước claim idempotency key.
+Cơ chế cốt lõi: đọc _không lock_ (không dùng `FOR SHARE`/`FOR UPDATE`), kiểm tra `version` khi ghi. Nếu `version` đã thay đổi giữa lúc đọc và lúc ghi → `rowsAffected = 0` → retry. MAX_RETRIES = 1 (2 attempts tổng). Retry không quay lại bước claim idempotency key.
 
 Pseudocode đầy đủ → `design/04_safety-mechanism.md` và `specs/registration-paid.md`.
 
@@ -159,7 +159,7 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 **Điều này KHÔNG có nghĩa là:**
 
-- Mọi request đều đồng bộ (AI summary và batch notification vẫn async qua Redis Streams — ADR-10)
+- Mọi request đều đồng bộ (AI summary và batch notification vẫn async qua BullMQ — ADR-10)
 - Không thể tách thành Microservices sau này (ranh giới module được thiết kế để dễ extract)
 
 ---
@@ -172,13 +172,13 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 **Tham số vận hành:**
 
-| Tham số | Giá trị | Lý do |
-|---|---|---|
-| Failure threshold | 5 lỗi liên tiếp **HOẶC** ≥ 50% trong 60s | OR logic: bắt cả burst failure và sustained degradation |
-| Per-request timeout | 5 giây | Gateway thường < 2s; 5s đủ buffer |
-| Thời gian giữ OPEN | 30 giây | Đủ thời gian gateway restart |
-| Probe (HALF-OPEN) | 1 request, atomic CAS | Tránh thundering herd |
-| Close threshold | 2 successes liên tiếp | 1 success có thể là fluke |
+| Tham số             | Giá trị                                  | Lý do                                                   |
+| ------------------- | ---------------------------------------- | ------------------------------------------------------- |
+| Failure threshold   | 5 lỗi liên tiếp **HOẶC** ≥ 50% trong 60s | OR logic: bắt cả burst failure và sustained degradation |
+| Per-request timeout | 5 giây                                   | Gateway thường < 2s; 5s đủ buffer                       |
+| Thời gian giữ OPEN  | 30 giây                                  | Đủ thời gian gateway restart                            |
+| Probe (HALF-OPEN)   | 1 request, atomic CAS                    | Tránh thundering herd                                   |
+| Close threshold     | 2 successes liên tiếp                    | 1 success có thể là fluke                               |
 
 **Graceful degradation khi OPEN:** Workshop miễn phí không bị ảnh hưởng. Workshop có phí trả 503 có nghĩa. Các tính năng khác (xem workshop, check-in) tiếp tục bình thường.
 
@@ -186,7 +186,7 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 ### 2. Lý do chọn
 
-**Tại sao in-memory:** Với Modular Monolith một process, tất cả request đều qua cùng một CB instance — không có race condition cross-process. Redis-based CB chỉ cần khi có nhiều application instances. Restart process reset CB về CLOSED — đây là *correctness guarantee*, không phải limitation: process mới không có failure history cũ, gateway có thể đã phục hồi.
+**Tại sao in-memory:** Với Modular Monolith một process, tất cả request đều qua cùng một CB instance — không có race condition cross-process. Redis-based CB chỉ cần khi có nhiều application instances. Restart process reset CB về CLOSED — đây là _correctness guarantee_, không phải limitation: process mới không có failure history cũ, gateway có thể đã phục hồi.
 
 **Tại sao OR logic cho threshold:** 5 lỗi liên tiếp bắt burst failure (gateway crash đột ngột). 50%/60s bắt sustained degradation (gateway trả lỗi xen kẽ success trong thời gian dài). Chỉ dùng một điều kiện bỏ sót một pattern.
 
@@ -194,7 +194,7 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 ### 3. Trade-off và rủi ro
 
-**Timeout là failure loại đặc biệt.** Gateway timeout → CB ghi failure (đóng góp vào threshold) → idempotency key mark `unresolved` (không phải `completed`). Client retry với cùng key → gateway dedup. Chi tiết → `design/04_safety-mechanism.md` và ADR-08.
+**Timeout là failure loại đặc biệt.** Gateway timeout → CB ghi failure (đóng góp vào threshold) → idempotency key mark `UNRESOLVED` (không phải `COMPLETED`). Client retry với cùng key → gateway dedup. Chi tiết → `design/04_safety-mechanism.md` và ADR-08.
 
 **HALF-OPEN race với concurrent probes.** Hai request đến cùng lúc trong HALF-OPEN đều nghĩ mình là probe. Implementation bắt buộc dùng atomic CAS trên `probe_sent` flag — chỉ request đầu tiên đi qua.
 
@@ -216,9 +216,9 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 **3 trạng thái:**
 
-- `in_progress` — đang xử lý, có `locked_until` (~30s) cho crash recovery
-- `completed` — kết quả xác định (200/4xx), response đã cache, terminal state
-- `unresolved` — đã gọi gateway nhưng timeout/network drop, **không terminal** — retry với cùng key để gateway dedup
+- `IN_PROGRESS` — đang xử lý, có `locked_until` (~30s) cho crash recovery
+- `COMPLETED` — kết quả xác định (200/4xx), response đã cache, terminal state
+- `UNRESOLVED` — đã gọi gateway nhưng timeout/network drop, **không terminal** — retry với cùng key để gateway dedup
 
 Flow đầy đủ → `design/04_safety-mechanism.md`. Behavioral spec → `specs/registration-paid.md`.
 
@@ -236,7 +236,7 @@ Flow đầy đủ → `design/04_safety-mechanism.md`. Behavioral spec → `spec
 
 ### 3. Trade-off và rủi ro
 
-**Worst case — client không retry:** Sau 24h, idempotency key bị xóa (với bảo vệ FK). `payments.status='unresolved'` không bị xóa theo. Reconciliation job chạy mỗi 5 phút query `payments WHERE status='unresolved'` → gọi gateway để biết kết quả thực. Chi tiết → `specs/payment-reconciliation.md`.
+**Worst case — client không retry:** Sau 24h, idempotency key bị xóa (với bảo vệ FK). `payments.status='UNRESOLVED'` không bị xóa theo. Reconciliation job chạy mỗi 5 phút query `payments WHERE status='UNRESOLVED'` → gọi gateway để biết kết quả thực. Chi tiết → `specs/payment-reconciliation.md`.
 
 **Key validation:** Server phải validate format UUID v4 tại middleware. Key giả mạo (`"admin-free-pass"`) không có ý nghĩa về security (key chỉ là dedup token) nhưng validation giữ schema sạch.
 
@@ -290,7 +290,7 @@ JWT payload → `access-control.md`. HTTP contract → `specs/authentication.md`
 
 ### 1. Quyết định
 
-**RBAC** với 3 roles cứng (`student`, `btc`, `checkin_staff`), không có role hierarchy, không có ABAC trong phạm vi đồ án. Permission gắn với role tại deployment time — không lưu trong DB, không thay đổi runtime. Enforcement tại 3 điểm theo thứ tự: JWT middleware (Layer ①) → Route RBAC middleware (Layer ②) → Query-level filter (Layer ③).
+**RBAC** với 3 roles cứng (`STUDENT`, `BTC`, `CHECKIN_STAFF`), không có role hierarchy, không có ABAC trong phạm vi đồ án. Permission gắn với role tại deployment time — không lưu trong DB, không thay đổi runtime. Enforcement tại 3 điểm theo thứ tự: JWT middleware (Layer ①) → Route RBAC middleware (Layer ②) → Query-level filter (Layer ③).
 
 Permission matrix đầy đủ và route mapping → `specs/authorization.md`. Implementation 3 lớp → `access-control.md`.
 
@@ -298,13 +298,13 @@ Permission matrix đầy đủ và route mapping → `specs/authorization.md`. I
 
 **RBAC là fit tự nhiên** khi permission phân theo nhóm người dùng, không theo attribute của resource. 3 roles có permission hoàn toàn tách biệt — không có overlap hay conditional.
 
-**Layer ③ (Query-level filter) là điểm dễ bị bỏ qua nhất.** Middleware Layer ② bảo đảm *"student được vào endpoint này"*. Query filter Layer ③ bảo đảm *"student chỉ thấy data của mình"*. Hai điều khác nhau hoàn toàn — thiếu Layer ③ là security bug.
+**Layer ③ (Query-level filter) là điểm dễ bị bỏ qua nhất.** Middleware Layer ② bảo đảm _"student được vào endpoint này"_. Query filter Layer ③ bảo đảm _"student chỉ thấy data của mình"_. Hai điều khác nhau hoàn toàn — thiếu Layer ③ là security bug.
 
 ### 3. Trade-off và rủi ro
 
-**Role cứng không xử lý attribute-level permission.** *"BTC chỉ sửa workshop do mình tạo"* đòi ABAC. Hiện tại mọi BTC được trust như nhau — quyết định có ý thức vì không có multi-BTC competition. Schema có `workshops.created_by` để mở rộng sau chỉ cần thêm WHERE clause tại Layer ③.
+**Role cứng không xử lý attribute-level permission.** _"BTC chỉ sửa workshop do mình tạo"_ đòi ABAC. Hiện tại mọi BTC được trust như nhau — quyết định có ý thức vì không có multi-BTC competition. Schema có `workshops.created_by` để mở rộng sau chỉ cần thêm WHERE clause tại Layer ③.
 
-**Role trong JWT không revoke real-time.** Downgrade BTC → student: JWT cũ có role `btc` tối đa 15 phút. Nếu cần immediate revoke → `specs/auth-revocation.md`.
+**Role trong JWT không revoke real-time.** Downgrade BTC → student: JWT cũ có role `BTC` tối đa 15 phút. Nếu cần immediate revoke → `specs/auth-revocation.md`.
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
@@ -322,11 +322,11 @@ Permission matrix đầy đủ và route mapping → `specs/authorization.md`. I
 
 **Sliding Window Counter** với Redis Sorted Set, 3 tier độc lập:
 
-| Tier | Key Pattern | Limit | Window | Scope |
-|---|---|---|---|---|
-| T1 — IP | `rl:ip:{ip}` | 60 req | 60s | Unauthenticated (login, public) |
-| T2 — User | `rl:user:{user_id}` | 30 req | 60s | Tất cả authenticated endpoints |
-| T3 — User×Workshop | `rl:reg:{user_id}:{workshop_id}` | 5 req | 60s | POST register + POST payment |
+| Tier               | Key Pattern                      | Limit  | Window | Scope                           |
+| ------------------ | -------------------------------- | ------ | ------ | ------------------------------- |
+| T1 — IP            | `rl:ip:{ip}`                     | 60 req | 60s    | Unauthenticated (login, public) |
+| T2 — User          | `rl:user:{user_id}`              | 30 req | 60s    | Tất cả authenticated endpoints  |
+| T3 — User×Workshop | `rl:reg:{user_id}:{workshop_id}` | 5 req  | 60s    | POST register + POST payment    |
 
 Kiểm tra T1→T2→T3, dừng khi tier đầu tiên vi phạm. Fail-open khi Redis down.
 
@@ -334,7 +334,7 @@ Thuật toán MULTI/EXEC chi tiết → `design/04_safety-mechanism.md`. HTTP co
 
 ### 2. Lý do chọn
 
-**Sliding Window** tránh *boundary burst* của Fixed Window: user gửi 5 req ở giây 59 + 5 req ở giây 61 = 10 req trong 2 giây nhưng Fixed Window không bắt được. Sliding Window tính "N req trong 60s bất kỳ tính đến hiện tại".
+**Sliding Window** tránh _boundary burst_ của Fixed Window: user gửi 5 req ở giây 59 + 5 req ở giây 61 = 10 req trong 2 giây nhưng Fixed Window không bắt được. Sliding Window tính "N req trong 60s bất kỳ tính đến hiện tại".
 
 **T3 (per user per workshop) là tier quan trọng nhất:** Giảm hot-row contention tại `workshops.version` (ADR-03). Người dùng spam 20 lần trong 5 giây → chỉ 5 requests vào backend → eliminates impatient-client retry storm.
 
@@ -366,7 +366,7 @@ Implementation detail và TypeScript interface → `access-control.md`. Behavior
 
 ### 2. Lý do chọn
 
-**Throughput thực tế không đòi Pub/Sub.** 12,000 notification/event ≈ vài chục msg/s trong vài phút. Redis Streams (ADR-10) xử lý batch async đủ. Kafka/RabbitMQ = cluster 3 nodes + operational overhead cho bài toán này.
+**Throughput thực tế không đòi Pub/Sub.** 12,000 notification/event ≈ vài chục msg/s trong vài phút. BullMQ (ADR-10) xử lý batch async đủ. Kafka/RabbitMQ = cluster 3 nodes + operational overhead cho bài toán này.
 
 **In-process đủ isolation nhờ `Promise.allSettled`.** `TelegramAdapter.send()` throw → không cancel `EmailAdapter.send()`. Failure của một channel bị log và bị bỏ qua.
 
@@ -394,36 +394,55 @@ Implementation detail và TypeScript interface → `access-control.md`. Behavior
 
 ### 1. Quyết định
 
-**Redis Streams** làm job queue cho async tasks:
+**BullMQ** làm job queue cho async tasks:
 
-| Task | Stream | Retry | DLQ |
-|---|---|---|---|
-| AI PDF summary | `stream:ai-summary` | 3 lần (exponential backoff) | `stream:ai-summary-dlq` |
-| Batch notification | `stream:notifications` | 2 lần | `stream:notifications-dlq` |
+| Task               | Stream                | Retry                       | DLQ                       |
+| ------------------ | --------------------- | --------------------------- | ------------------------- |
+| AI PDF summary     | `Queue: ai-summary`   | 3 lần (exponential backoff) | `Queue: ai-summary-dlq`   |
+| Batch notification | `Queue: notification` | 2 lần                       | `Queue: notification-dlq` |
 
-Consumer group pattern với `XREADGROUP` + `XACK` sau khi hoàn thành. `XAUTOCLAIM` để reclaim messages từ PEL khi worker crash trước XACK. DLQ chỉ lưu — admin can thiệp thủ công.
+BullMQ xử lý job lifecycle tự động: job được đưa vào queue → worker nhận job qua `@Processor` decorator → auto-ack khi hoàn thành. Stalled job detection reclaim job khi worker crash. Failed job tự động retry với backoff, sau đó chuyển vào DLQ khi exhausted. DLQ chỉ lưu — admin can thiệp thủ công.
 
-Redis commands và retry flow chi tiết → `specs/ai-summary.md` và `specs/notification.md`.
+Job và retry flow chi tiết → `specs/ai-summary.md` và `specs/notification.md`.
 
 ### 2. Lý do chọn
 
-**Redis đã có sẵn** (ADR-13 cache, ADR-06 rate limiting) — không add infrastructure mới. Redis Streams persistent hơn Redis Pub/Sub (Pub/Sub là fire-and-forget, Streams có offset như Kafka mini).
+**Redis đã có sẵn** (ADR-13 cache, ADR-06 rate limiting) — không add infrastructure mới. BullMQ tận dụng Redis persistence cho job durability, built-in retry/backoff, và job lifecycle management.
 
 **Boundary:** Redis crash mà không có AOF → pending jobs bị mất. Acceptable cho đồ án — production cần AOF `appendfsync everysec` hoặc Redis Sentinel.
 
 ### 3. Trade-off và rủi ro
 
-**PEL tích lũy khi worker crash không XACK.** XAUTOCLAIM bắt buộc — implementation detail không phải optional.
+**Stalled job detection** — BullMQ tự động reclaim job khi worker crash không ack. Đây là built-in mechanism, không cần implement thủ công.
 
-**Một Redis instance cho cache + rate limit + streams.** Nếu AI summary tiêu thụ nhiều memory → evict cache entries. Giải pháp: dùng Redis 16 DB slots với `maxmemory-policy` khác nhau (DB 0 cache: `allkeys-lru`, DB 1 streams: `noeviction`, DB 2 rate limit: `volatile-ttl`).
+**Một Redis instance cho cache + rate limit + queue.** Nếu AI summary tiêu thụ nhiều memory → evict cache entries. Giải pháp: dùng Redis 16 DB slots với `maxmemory-policy` khác nhau (DB 0 cache: `allkeys-lru`, DB 1 queue: `noeviction`, DB 2 rate limit: `volatile-ttl`).
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
 **RabbitMQ:** Feature-rich nhưng thêm Docker container mới chỉ cho job queue khi Redis đã có sẵn. YAGNI.
 
-**BullMQ:** Abstraction tốt cho production nhưng hides Redis internals — cho đồ án học, hiểu Streams raw tốt hơn.
+**Redis Streams raw:** Cho phép hiểu sâu Redis internals, nhưng thiếu built-in retry, backoff, job lifecycle management. BullMQ giảm boilerplate code và production bugs.
 
 **In-memory queue (EventEmitter):** Zero persistence — không acceptable cho AI summary có thể mất vài phút xử lý.
+
+### 5. Revision 2026-05 — Abstraction Layer (HYBRID)
+
+Bổ sung abstraction layer type-safe cho producers, giữ nguyên `@nestjs/bullmq` infrastructure.
+
+**Thay đổi:**
+
+- `queue.module.ts` → `messaging.module.ts`, `queue.constants.ts` → `messaging.constants.ts`
+- Thêm `ITypedMessageQueue` + `BullMQAdapter` — producers inject typed interface thay vì raw `Queue` qua `@InjectQueue`
+- Thêm `MESSAGING_TOKEN` — Symbol-based DI tokens cho từng queue
+- Thêm `IJobHandler<T>` — consumer contract cho workers (side contract, không thay thế `@Processor`)
+- Thêm `JobName` union type + `JobPayloadMap` — compile-time check job names
+- Workers giữ `@Processor` + `WorkerHost` (infra boundary)
+
+**Lý do:**
+
+- Business modules không cần import `bullmq` package trực tiếp
+- Job names được type-checked compile-time
+- Smoother migration path khi cần swap queue implementation sau này
 
 ---
 
@@ -501,7 +520,7 @@ SQLite schema và sync flow → `specs/checkin-offline.md`.
 
 ### 1. Quyết định
 
-**Async AI Summary** qua Redis Streams (ADR-10). Provider: OpenAI GPT-4o-mini, abstracted qua interface để dễ swap:
+**Async AI Summary** qua BullMQ (ADR-10). Provider: OpenAI GPT-4o-mini, abstracted qua interface để dễ swap:
 
 ```typescript
 interface AIProvider {
@@ -509,7 +528,7 @@ interface AIProvider {
 }
 ```
 
-Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thái: `none`/`queued`/`processing`/`done`/`failed`) trên bảng `workshops` — không tách bảng riêng (1-1 với workshop).
+Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thái: `NONE`/`QUEUED`/`PROCESSING`/`DONE`/`FAILED`) trên bảng `workshops` — không tách bảng riêng (1-1 với workshop).
 
 3-stage async flow và failure handling → `specs/ai-summary.md`.
 
@@ -531,7 +550,7 @@ Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thá
 
 **Privacy:** Nội dung PDF gửi sang external API. Document trong UI: "Không upload PDF chứa thông tin cá nhân".
 
-**PDF scan (image, không có text layer):** `pdf-parse` trả empty → detect `text.length < 100` → mark `failed` với reason `pdf_no_text`.
+**PDF scan (image, không có text layer):** `pdf-parse` trả empty → detect `text.length < 100` → mark `FAILED` với reason `pdf_no_text`.
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
@@ -549,14 +568,14 @@ Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thá
 
 **Idempotency key được truyền trong HTTP header**, không phải trong request body.
 
-| Endpoint | Header | Ghi chú |
-|---|---|---|
-| `POST /registrations` | `Idempotency-Key: <UUID v4>` | Dedup lần đăng ký |
-| `POST /payments` | `Idempotency-Key: <UUID v4>` | Dedup + server forward đến gateway |
+| Endpoint              | Header                       | Ghi chú                            |
+| --------------------- | ---------------------------- | ---------------------------------- |
+| `POST /registrations` | `Idempotency-Key: <UUID v4>` | Dedup lần đăng ký                  |
+| `POST /payments`      | `Idempotency-Key: <UUID v4>` | Dedup + server forward đến gateway |
 
 Cả hai endpoint dùng cùng header name `Idempotency-Key` — thống nhất convention, không phân biệt field name theo endpoint. Server forward giá trị này làm `Idempotency-Key` header khi gọi ra payment gateway (ADR-08 INV-04).
 
-Cơ chế xử lý và 3-state lifecycle (`in_progress` / `completed` / `unresolved`) không thay đổi — ADR-15 chỉ quyết định transport location, không quyết định behavior.
+Cơ chế xử lý và 3-state lifecycle (`IN_PROGRESS` / `COMPLETED` / `UNRESOLVED`) không thay đổi — ADR-15 chỉ quyết định transport location, không quyết định behavior.
 
 > **Lịch sử:** `registration-paid.md` ban đầu đặt key trong body (`idempotency_key`, `payment_key`). ADR-15 chốt dùng header — `registration-paid.md` cần cập nhật AC tương ứng.
 

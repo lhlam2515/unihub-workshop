@@ -144,6 +144,10 @@ describe("IAM Module — Integration", () => {
       ...OLD_ENV,
       JWT_SECRET: "test-jwt-secret",
       JWT_REFRESH_SECRET: "test-refresh-secret",
+      JWT_PRIVATE_KEY:
+        "dGVzdC1wcml2YXRlLWtleS1iYXNlNjQtcGxhY2Vob2xkZXItZm9yLXRlc3RpbmctcHVycG9zZXMtb25seQ==",
+      JWT_PUBLIC_KEY:
+        "dGVzdC1wdWJsaWMta2V5LWJhc2U2NC1wbGFjZWhvbGRlci1mb3ItdGVzdGluZy1wdXJwb3Nlcy1vbmx5",
     };
   });
 
@@ -201,6 +205,8 @@ describe("IAM Module — Integration", () => {
         {
           email: "student@university.edu",
           password: "password123",
+          account_type: "student",
+          student_id: "STU001",
           platform: "WEB",
         },
         mockResponse
@@ -224,6 +230,8 @@ describe("IAM Module — Integration", () => {
         {
           email: "student@university.edu",
           password: "password123",
+          account_type: "student",
+          student_id: "STU001",
           platform: "MOBILE",
         },
         mockResponse
@@ -246,6 +254,8 @@ describe("IAM Module — Integration", () => {
         {
           email: "student@university.edu",
           password: "wrong-password",
+          account_type: "student",
+          student_id: "STU001",
           platform: "WEB",
         },
         mockResponse
@@ -262,6 +272,8 @@ describe("IAM Module — Integration", () => {
         {
           email: "suspended@university.edu",
           password: "password123",
+          account_type: "student",
+          student_id: "STU001",
           platform: "WEB",
         },
         mockResponse
@@ -284,6 +296,8 @@ describe("IAM Module — Integration", () => {
         {
           email: "nonexistent@university.edu",
           password: "password123",
+          account_type: "student",
+          student_id: "STU001",
           platform: "WEB",
         },
         mockResponse
@@ -304,6 +318,7 @@ describe("IAM Module — Integration", () => {
         {
           email: "staff@university.edu",
           password: "password123",
+          account_type: "staff",
           platform: "WEB",
         },
         mockResponse

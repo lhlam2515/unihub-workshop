@@ -100,7 +100,7 @@ tags:
 - name: AI Summary
   description: 'Module `ai-summary` — PDF upload + async AI processing pipeline
 
-    (ADR-14 Pipe-and-Filter, ADR-10 Redis Streams).
+    (ADR-14 Pipe-and-Filter, ADR-10 BullMQs).
 
     '
 - name: CSV Import
@@ -192,7 +192,7 @@ paths:
                       fullName: Nguyễn Văn A
                       email: 21127001@uni.edu.vn
                     refreshToken: null
-                checkin_staff_mobile:
+                checkinStaffMobile:
                   summary: Check-in staff login (mobile — refresh_token in body)
                   value:
                     accessToken: eyJhbGc...
@@ -265,7 +265,7 @@ paths:
             schema:
               type: object
               properties:
-                refresh_token:
+                refreshToken:
                   type: string
                   description: Mobile only — the stored refresh token from login response
                     body
@@ -392,7 +392,7 @@ paths:
       tags:
       - Catalog
       summary: List workshops (public)
-      description: 'Returns workshops the student can see. By default, only `status=''open''`.
+      description: 'Returns workshops the student can see. By default, only `status='OPEN'`.
 
         Heavily cached (10s TTL via Redis cache-aside). Hot endpoint — sized for
 
@@ -479,7 +479,7 @@ paths:
       summary: Get workshop detail
       description: 'Full workshop detail page including speaker bio, room floor plan,
 
-        and AI summary (if `summary_status=''done''`).
+        and AI summary (if `summary_status='DONE'`).
 
         '
       operationId: getWorkshop
@@ -603,10 +603,10 @@ paths:
         schema:
           type: string
           enum:
-          - draft
-          - open
-          - closed
-          - cancelled
+          - DRAFT
+          - OPEN
+          - COMPLETED
+          - CANCELLED
       - name: q
         in: query
         description: Search by title (ILIKE)
@@ -809,7 +809,7 @@ paths:
                   type: string
                   minLength: 5
                   maxLength: 500
-                notify_registered:
+                notifyRegistered:
                   type: boolean
                   default: true
       responses:
@@ -921,6 +921,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Speaker'
+    delete:
+      tags:
+      - Catalog Admin
+      summary: Delete speaker
+      operationId: adminDeleteSpeaker
+      responses:
+        '204':
+          description: No Content — speaker deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
   /admin/rooms:
     get:
       tags:
@@ -1026,8 +1036,8 @@ paths:
         \ -= 1, version += 1\n      WHERE id=? AND version=? AND seats_available >\
         \ 0`.\n   - On version mismatch → ROLLBACK and retry.\n5. Mark idempotency\
         \ `completed`.\n6. Invalidate cache key (fire-and-forget).\n7. Enqueue confirmation\
-        \ notification via Redis Stream (async).\n8. Return `201` with `qr_code`.\n\
-        \n## Paid workshop flow\n\nSame as free up to step 5, but `status='pending'`\
+        \ notification via BullMQ (async).\n8. Return `201` with `qr_code`.\n\
+        \n## Paid workshop flow\n\nSame as free up to step 5, but `status='PENDING'`\
         \ and **no QR code**.\nThe response `next_step` directs the client to call\
         \ `POST /payments`.\n"
       operationId: createRegistration
@@ -1083,7 +1093,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Registration'
         '400':
-          description: '`registration.workshop_not_open` — workshop is not in `status=''open''`.
+          description: '`registration.workshop_not_open` — workshop is not in `status='OPEN'`.
 
             '
           content:
@@ -1146,10 +1156,10 @@ paths:
           items:
             type: string
             enum:
-            - pending
-            - confirmed
-            - paid
-            - cancelled
+            - PENDING
+            - CONFIRMED
+            - PAID
+            - CANCELLED
         style: form
         explode: false
       - name: upcoming
@@ -1207,7 +1217,7 @@ paths:
       tags:
       - Booking
       summary: Cancel my registration
-      description: 'Sets `status=''cancelled''` and refunds the seat. For paid registrations,
+      description: 'Sets `status=''CANCELLED''` and refunds the seat. For paid registrations,
 
         also enqueues a refund job.
 
@@ -1252,10 +1262,10 @@ paths:
           items:
             type: string
             enum:
-            - pending
-            - confirmed
-            - paid
-            - cancelled
+            - PENDING
+            - CONFIRMED
+            - PAID
+            - CANCELLED
         style: form
         explode: false
       - $ref: '#/components/parameters/CursorParam'
@@ -1374,12 +1384,12 @@ paths:
                 - $ref: '#/components/schemas/ErrorEnvelope'
                 - type: object
                   properties:
-                    idempotency_key:
+                    idempotencyKey:
                       type: string
                       format: uuid
                       description: Echo of the request Idempotency-Key header — reuse
                         on retry
-                    retry_after:
+                    retryAfter:
                       type: integer
                       description: Suggested seconds to wait before retry (e.g. 30)
   /payments/{paymentId}:
@@ -1471,7 +1481,7 @@ paths:
 
         `cached_registrations` SQLite table before entering low-network areas.
 
-        Filters server-side to `status IN (''paid'', ''confirmed'')` (mirrors
+        Filters server-side to `status IN (''PAID'', ''CONFIRMED'')` (mirrors
 
         mobile schema''s `cached_registrations` filter).
 
@@ -1575,7 +1585,7 @@ paths:
         '403':
           description: '`checkin.workshop_not_assigned` or `checkin.registration_not_active`
 
-            (registration `status NOT IN (''paid'',''confirmed'')`).
+            (registration `status NOT IN (''PAID'',''CONFIRMED'')`).
 
             '
           content:
@@ -1664,9 +1674,9 @@ paths:
       tags:
       - AI Summary
       summary: Upload PDF for AI summary
-      description: 'Multipart upload. Stores the PDF, sets `summary_status=''queued''`,
+      description: 'Multipart upload. Stores the PDF, sets `summary_status=''QUEUED''`,
 
-        and emits a job to Redis Stream `summary-jobs`. Returns `202 Accepted`
+        and emits a job to BullMQ `summary-jobs`. Returns `202 Accepted`
 
         immediately; client polls `GET` to track progress.
 
@@ -1693,14 +1703,14 @@ paths:
               schema:
                 type: object
                 properties:
-                  workshop_id:
+                  workshopId:
                     type: string
                     format: uuid
-                  summary_status:
+                  summaryStatus:
                     type: string
                     enum:
-                    - queued
-                  poll_url:
+                    - QUEUED
+                  pollUrl:
                     type: string
         '413':
           description: File too large
@@ -1730,7 +1740,7 @@ paths:
       tags:
       - AI Summary
       summary: Manual override of AI-generated text
-      description: 'Sets `summary_status=''done''` and replaces `summary_text` with
+      description: 'Sets `summary_status='DONE'` and replaces `summary_text` with
         the
 
         provided value. Useful when the BTC wants to edit the AI output.
@@ -1762,7 +1772,7 @@ paths:
       tags:
       - AI Summary
       summary: Re-trigger AI summary after failure
-      description: Re-enqueues the summary job. Allowed only when `summary_status='failed'`.
+      description: Re-enqueues the summary job. Allowed only when `summary_status='FAILED'`.
       operationId: retrySummary
       parameters:
       - $ref: '#/components/parameters/WorkshopIdPath'
@@ -1774,13 +1784,13 @@ paths:
               schema:
                 type: object
                 properties:
-                  workshop_id:
+                  workshopId:
                     type: string
                     format: uuid
-                  summary_status:
+                  summaryStatus:
                     type: string
                     enum:
-                    - queued
+                    - QUEUED
         '409':
           description: '`summary.not_in_failed_state`'
           content:
@@ -1795,7 +1805,7 @@ paths:
       description: 'Each nightly cron run produces one row. Manual triggers also appear
         here
 
-        (`triggered_by=''manual''`).
+        (`triggered_by=''MANUAL''`).
 
         '
       operationId: listImports
@@ -1805,9 +1815,9 @@ paths:
         schema:
           type: string
           enum:
-          - in_progress
-          - success
-          - failed
+          - IN_PROGRESS
+          - SUCCESS
+          - FAILED
       - $ref: '#/components/parameters/CursorParam'
       - $ref: '#/components/parameters/LimitParam'
       responses:
@@ -1881,7 +1891,7 @@ paths:
       summary: Manually trigger an import
       description: 'Runs the import pipeline outside the cron schedule. Concurrency-guarded:
 
-        if any `import_logs` row has `status=''in_progress''`, returns `409`.
+        if any `import_logs` row has `status=''IN_PROGRESS''`, returns `409`.
 
         '
       operationId: triggerImport
@@ -1894,7 +1904,7 @@ paths:
               required:
               - file_path
               properties:
-                file_path:
+                filePath:
                   type: string
                   description: Absolute path inside the container's `/input` volume
                   example: /input/students_2026-05-12-supplement.csv
@@ -2005,7 +2015,7 @@ paths:
         advisory lock: if the cron is already running, returns 409.
 
 
-        The job queries the gateway for each `payments WHERE status=''unresolved''
+        The job queries the gateway for each `payments WHERE status=''UNRESOLVED''
 
         AND created_at BETWEEN now()-24h AND now()-5min`. Results update both
 
@@ -2021,13 +2031,13 @@ paths:
               schema:
                 type: object
                 properties:
-                  job_id:
+                  jobId:
                     type: string
                     format: uuid
-                  started_at:
+                  startedAt:
                     type: string
                     format: date-time
-                  unresolved_count:
+                  unresolvedCount:
                     type: integer
                     description: Number of payments queued for reconciliation
         '409':
@@ -2091,9 +2101,9 @@ paths:
             schema:
               type: object
               properties:
-                is_active:
+                isActive:
                   type: boolean
-                config_json:
+                configJson:
                   type: object
                   additionalProperties: true
       responses:
@@ -2120,17 +2130,17 @@ paths:
         schema:
           type: string
           enum:
-          - sent
-          - failed
-          - timeout
+          - SENT
+          - FAILED
+          - TIMEOUT
       - name: channel
         in: query
         schema:
           type: string
           enum:
-          - email
-          - in_app
-          - telegram
+          - EMAIL
+          - APP
+          - TELEGRAM
       - name: from
         in: query
         schema:
@@ -2328,7 +2338,7 @@ components:
               detail: Bạn đã gửi quá nhiều lần đăng ký workshop này. Vui lòng thử
                 lại sau 23 giây.
             tier: T3_user_workshop
-            retry_after: 23
+            retryAfter: 23
   schemas:
     ErrorEnvelope:
       type: object
@@ -2398,8 +2408,8 @@ components:
         accountType:
           type: string
           enum:
-          - student
-          - staff
+          - STUDENT
+          - STAFF
         studentId:
           type: string
           description: 'Required when `account_type=student`. MSSV format (e.g., `21127001`).
@@ -2418,12 +2428,12 @@ components:
       examples:
         student:
           value:
-            account_type: student
-            student_id: '21127001'
+            accountType: student
+            studentId: '21127001'
             password: '...'
         staff:
           value:
-            account_type: staff
+            accountType: staff
             email: btc01@unihub.edu.vn
             password: '...'
     LoginResponse:
@@ -2455,9 +2465,9 @@ components:
         role:
           type: string
           enum:
-          - student
-          - btc
-          - checkin_staff
+          - STUDENT
+          - BTC
+          - CHECKIN_STAFF
         refreshToken:
           type: string
           nullable: true
@@ -2488,9 +2498,9 @@ components:
         role:
           type: string
           enum:
-          - student
-          - btc
-          - checkin_staff
+          - STUDENT
+          - BTC
+          - CHECKIN_STAFF
         fullName:
           type: string
         email:
@@ -2515,8 +2525,8 @@ components:
         platform:
           type: string
           enum:
-          - ios
-          - android
+          - IOS
+          - ANDROID
     DeviceToken:
       type: object
       required:
@@ -2531,8 +2541,8 @@ components:
         platform:
           type: string
           enum:
-          - ios
-          - android
+          - IOS
+          - ANDROID
         isActive:
           type: boolean
         lastSeen:
@@ -2581,10 +2591,10 @@ components:
         status:
           type: string
           enum:
-          - draft
-          - open
-          - closed
-          - cancelled
+          - DRAFT
+          - OPEN
+          - COMPLETED
+          - CANCELLED
         speaker:
           allOf:
           - $ref: '#/components/schemas/SpeakerSummary'
@@ -2699,9 +2709,9 @@ components:
         status:
           type: string
           enum:
-          - draft
-          - open
-          default: draft
+          - DRAFT
+          - OPEN
+          default: DRAFT
     WorkshopPatchRequest:
       type: object
       description: All fields optional (PATCH semantics)
@@ -2894,10 +2904,10 @@ components:
         status:
           type: string
           enum:
-          - pending
-          - confirmed
-          - paid
-          - cancelled
+          - PENDING
+          - CONFIRMED
+          - PAID
+          - CANCELLED
         qrCode:
           type: string
           nullable: true
@@ -2917,7 +2927,7 @@ components:
             action:
               type: string
               enum:
-              - create_payment
+              - CREATE_PAYMENT
             endpoint:
               type: string
               example: /api/v1/payments
@@ -2948,10 +2958,10 @@ components:
         status:
           type: string
           enum:
-          - pending
-          - confirmed
-          - paid
-          - cancelled
+          - PENDING
+          - CONFIRMED
+          - PAID
+          - CANCELLED
         qrCode:
           type: string
           nullable: true
@@ -2986,10 +2996,10 @@ components:
         status:
           type: string
           enum:
-          - pending
-          - confirmed
-          - paid
-          - cancelled
+          - PENDING
+          - CONFIRMED
+          - PAID
+          - CANCELLED
         registeredAt:
           type: string
           format: date-time
@@ -3062,10 +3072,10 @@ components:
         status:
           type: string
           enum:
-          - initiated
-          - succeeded
-          - failed
-          - unresolved
+          - INITIATED
+          - SUCCEEDED
+          - FAILED
+          - UNRESOLVED
           description: '`initiated` — call in flight.
 
             `succeeded` — gateway confirmed.
@@ -3116,8 +3126,8 @@ components:
         registrationStatus:
           type: string
           enum:
-          - paid
-          - confirmed
+          - PAID
+          - CONFIRMED
         workshopStartsAt:
           type: string
           format: date-time
@@ -3242,9 +3252,9 @@ components:
         result:
           type: string
           enum:
-          - ok
-          - duplicate
-          - rejected
+          - OK
+          - DUPLICATE
+          - REJECTED
           description: "- `ok` → inserted on server; mobile sets `local_checkins.status\
             \ = 'synced'`.\n- `duplicate` → registration already checked in (first-check-in-wins);\n\
             \  mobile sets `local_checkins.status = 'duplicate'`.\n- `rejected` →\
@@ -3272,9 +3282,9 @@ components:
         reason:
           type: string
           enum:
-          - qr_invalid
-          - workshop_cancelled
-          - not_paid
+          - QR_INVALID
+          - WORKSHOP_CANCELLED
+          - NOT_PAID
           nullable: true
           description: When `result=rejected` — the specific rejection cause.
     AiSummary:
@@ -3285,11 +3295,11 @@ components:
         status:
           type: string
           enum:
-          - none
-          - queued
-          - processing
-          - done
-          - failed
+          - NONE
+          - QUEUED
+          - PROCESSING
+          - DONE
+          - FAILED
         text:
           type: string
           nullable: true
@@ -3319,14 +3329,14 @@ components:
         triggeredBy:
           type: string
           enum:
-          - cron
-          - manual
+          - CRON
+          - MANUAL
         status:
           type: string
           enum:
-          - in_progress
-          - success
-          - failed
+          - IN_PROGRESS
+          - SUCCESS
+          - FAILED
         totalRows:
           type: integer
           nullable: true
@@ -3353,9 +3363,9 @@ components:
         channelType:
           type: string
           enum:
-          - email
-          - in_app
-          - telegram
+          - EMAIL
+          - APP
+          - TELEGRAM
         isActive:
           type: boolean
         configJson:
@@ -3391,15 +3401,15 @@ components:
         channel:
           type: string
           enum:
-          - email
-          - in_app
-          - telegram
+          - EMAIL
+          - APP
+          - TELEGRAM
         status:
           type: string
           enum:
-          - sent
-          - failed
-          - timeout
+          - SENT
+          - FAILED
+          - TIMEOUT
         errorMsg:
           type: string
           nullable: true

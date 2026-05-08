@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, pgTable, unique } from "drizzle-orm/pg-core";
 
 import {
-  aiSummaryStatusEnum,
+  summaryStatusEnum,
   documentUploadStatusEnum,
   notificationChannelEnum,
   notificationStatusEnum,
@@ -39,16 +39,13 @@ export const notificationLogs = pgTable(
   "notification_logs",
   (t) => ({
     notificationId: t.uuid("notification_id").primaryKey().defaultRandom(),
-    userId: t
-      .uuid("user_id")
-      .notNull()
-      .references(() => users.userId),
+    userId: t.text("user_id").notNull(),
     workshopId: t.uuid("workshop_id").references(() => workshops.workshopId, {
       onDelete: "set null",
     }),
     type: notificationTypeEnum("type").notNull(),
     channel: notificationChannelEnum("channel").notNull(),
-    status: notificationStatusEnum("status").notNull().default("PENDING"),
+    status: notificationStatusEnum("status").notNull().default("SENT"),
     payload: t
       .jsonb("payload")
       .notNull()
@@ -65,7 +62,7 @@ export const notificationLogs = pgTable(
     index("idx_notif_workshop_id").on(table.workshopId),
     index("idx_notif_status")
       .on(table.status)
-      .where(sql`${table.status} = 'PENDING'`),
+      .where(sql`${table.status} IN ('FAILED', 'TIMEOUT')`),
   ]
 );
 
@@ -114,7 +111,7 @@ export const aiSummaries = pgTable(
     rawText: t.text("raw_text"),
     summaryText: t.text("summary_text"),
     modelUsed: t.varchar("model_used", { length: 100 }),
-    status: aiSummaryStatusEnum("status").notNull().default("PENDING"),
+    status: summaryStatusEnum("status").notNull().default("NONE"),
     generatedAt: t.timestamp("generated_at", { withTimezone: true }),
     errorMessage: t.text("error_message"),
     createdAt: t
@@ -127,7 +124,7 @@ export const aiSummaries = pgTable(
     index("idx_summary_workshop_id").on(table.workshopId),
     index("idx_summary_status")
       .on(table.status)
-      .where(sql`${table.status} IN ('PENDING', 'PROCESSING')`),
+      .where(sql`${table.status} IN ('QUEUED', 'PROCESSING')`),
   ]
 );
 

@@ -1,14 +1,14 @@
 /**
  * Workshops Admin Controller
  *
- * Handles ORGANIZER-only workshop management endpoints.
- * All endpoints require JWT authentication and ORGANIZER role.
+ * Handles BTC-only workshop management endpoints.
+ * All endpoints require JWT authentication and BTC role.
  *
  * Endpoints:
  * - GET /admin/workshops — list all workshops (any status)
  * - POST /admin/workshops — create a new workshop
  * - GET /admin/workshops/:id — get admin detail
- * - PUT /admin/workshops/:id — update a draft workshop
+ * - PATCH /admin/workshops/:id — update a draft workshop
  * - POST /admin/workshops/:id/publish — publish workshop and init Redis counter
  * - PATCH /admin/workshops/:id/emergency-update — emergency update published workshop
  * - POST /admin/workshops/:id/cancel — cancel workshop and cascade void tickets
@@ -19,18 +19,20 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Patch,
   Body,
   Param,
   Query,
   UseGuards,
+  Headers,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import { parseIfMatch } from "@/shared/utils/etag.utils";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateWorkshopDto } from "../dto/create-workshop.dto";
@@ -41,7 +43,8 @@ import { WorkshopsService } from "../services/workshops.service";
 
 @Controller("admin/workshops")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class WorkshopsAdminController {
   constructor(private readonly workshopsService: WorkshopsService) {}
 
@@ -49,7 +52,7 @@ export class WorkshopsAdminController {
    * Lists all workshops (any status) for admin management.
    *
    * Route: GET /admin/workshops
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Supports optional filtering by status, with pagination.
    *
    * @param query - Query parameters for filtering (status, page, limit).
@@ -64,7 +67,7 @@ export class WorkshopsAdminController {
    * Creates a new workshop as a DRAFT.
    *
    * Route: POST /admin/workshops
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    *
    * @param body - Workshop creation payload (title, description, speaker_id, room_id, starts_at, ends_at, capacity, is_paid, price?).
    * @param user - Authenticated user JWT payload containing the creator's sub.
@@ -82,7 +85,7 @@ export class WorkshopsAdminController {
    * Retrieves full admin detail for a single workshop by ID.
    *
    * Route: GET /admin/workshops/:id
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Includes slot counters (confirmed_count, locked_count), creator ID,
    * and workflow status.
    *
@@ -97,28 +100,32 @@ export class WorkshopsAdminController {
   /**
    * Updates a draft workshop.
    *
-   * Route: PUT /admin/workshops/:id
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Route: PATCH /admin/workshops/:id
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Only workshops in DRAFT status can be modified. Room time conflicts
    * are re-validated if room or time fields are changed.
+   * Uses If-Match header for optimistic locking.
    *
    * @param id - The UUID of the workshop to update.
    * @param body - Partial workshop update payload.
+   * @param ifMatch - If-Match header for optimistic locking.
    * @returns The updated workshop admin detail DTO.
    */
-  @Put(":id")
+  @Patch(":id")
   async updateWorkshop(
     @Param("id") id: string,
-    @Body() dto: UpdateWorkshopDto
+    @Body() dto: UpdateWorkshopDto,
+    @Headers("if-match") ifMatch?: string
   ) {
-    return this.workshopsService.updateWorkshop(id, dto);
+    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
+    return this.workshopsService.updateWorkshop(id, dto, expectedVersion);
   }
 
   /**
    * Publishes a draft workshop, making it visible and bookable by students.
    *
    * Route: POST /admin/workshops/:id/publish
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Transitions status from DRAFT to PUBLISHED and initializes the Redis
    * seat counter with the workshop's capacity.
    *
@@ -134,7 +141,7 @@ export class WorkshopsAdminController {
    * Updates scheduling fields of a published workshop without re-publishing.
    *
    * Route: PATCH /admin/workshops/:id/emergency-update
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Allows modifying room, start time, or end time of an already published
    * workshop. Room time conflicts are re-validated against the new schedule.
    *
@@ -145,16 +152,18 @@ export class WorkshopsAdminController {
   @Patch(":id/emergency-update")
   async emergencyUpdate(
     @Param("id") id: string,
-    @Body() dto: EmergencyUpdateWorkshopDto
+    @Body() dto: EmergencyUpdateWorkshopDto,
+    @Headers("if-match") ifMatch?: string
   ) {
-    return this.workshopsService.emergencyUpdate(id, dto);
+    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
+    return this.workshopsService.emergencyUpdate(id, dto, expectedVersion);
   }
 
   /**
    * Cancels a workshop, transitioning it to CANCELLED status.
    *
    * Route: POST /admin/workshops/:id/cancel
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Transitions status to CANCELLED and removes the Redis seat counter
    * if the workshop was previously PUBLISHED.
    *
@@ -170,7 +179,7 @@ export class WorkshopsAdminController {
    * Retrieves real-time statistics for a specific workshop.
    *
    * Route: GET /admin/workshops/:id/stats
-   * Security: Requires ORGANIZER role (JwtAuthGuard + RolesGuard).
+   * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Returns confirmed registration count, locked seat count, and remaining
    * available seats sourced from Redis for real-time accuracy.
    *

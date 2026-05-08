@@ -1,11 +1,9 @@
-/**
- * Retrieves and persists workshop records with optional joins to related entities.
- */
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, count, gte, lte, lt } from "drizzle-orm";
+import { eq, and, desc, gte, lte, lt, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
+import type { DrizzleTransaction } from "@/infra/database/types/drizzle.types";
 import type { WorkshopStatus } from "@/infra/database/types/enums.types";
 import type {
   Workshop,
@@ -14,8 +12,16 @@ import type {
   Speaker,
   Room,
 } from "@/infra/database/types/event-core.types";
+import {
+  decodeCursor,
+  encodeCursor,
+  type CursorPaginationInput,
+  type CursorPaginationResult,
+} from "@/shared/pagination/cursor-pagination.helper";
 import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
+
+export type PublishedBasic = { workshopId: string; seatsTotal: number };
 
 @Injectable()
 export class WorkshopsRepository {
@@ -26,15 +32,6 @@ export class WorkshopsRepository {
     private readonly schema: DatabaseSchema
   ) {}
 
-  /**
-   * Inserts a new workshop record into the database.
-   *
-   * Side effects:
-   * - Executes INSERT on the workshops table.
-   *
-   * @param data - The workshop attributes to insert (title, speakerId, roomId, startsAt, endsAt, capacity, etc.).
-   * @returns OkResult containing the newly created Workshop record, or FailResult (INTERNAL_ERROR).
-   */
   async create(data: NewWorkshop): Promise<Result<Workshop>> {
     return tryCatch(
       async () => {
@@ -48,14 +45,6 @@ export class WorkshopsRepository {
     );
   }
 
-  /**
-   * Retrieves a workshop by ID with left-joined speaker and room data.
-   *
-   * Drizzle operation: SELECT from workshops with LEFT JOIN on speakers (speakerId) and rooms (roomId).
-   *
-   * @param id - The UUID of the workshop to look up.
-   * @returns OkResult containing { workshops, speakers, rooms }, or null if not found, or FailResult (INTERNAL_ERROR).
-   */
   async findById(id: string): Promise<
     Result<{
       workshops: Workshop;
@@ -84,16 +73,6 @@ export class WorkshopsRepository {
     );
   }
 
-  /**
-   * Retrieves a workshop by ID filtered by its current workflow status.
-   *
-   * Useful for verifying a workshop is in a specific lifecycle state before performing
-   * status-dependent operations. Combines workshopId and status in a single WHERE clause.
-   *
-   * @param id - The UUID of the workshop.
-   * @param status - The expected workflow status value (e.g. "PUBLISHED", "DRAFT", "CANCELLED").
-   * @returns OkResult containing the Workshop record, or null if not found or status does not match, or FailResult (INTERNAL_ERROR).
-   */
   async findByIdAndStatus(
     id: string,
     status: WorkshopStatus
@@ -116,33 +95,12 @@ export class WorkshopsRepository {
     );
   }
 
-  /**
-   * Retrieves published workshops with optional date and payment filters, paginated.
-   *
-   * Business rules:
-   * - Only returns workshops with status "PUBLISHED".
-   * - Results are ordered by start date descending (soonest last).
-   *
-   * Drizzle operation: SELECT with LEFT JOIN on speakers and rooms, filtered by PUBLISHED status
-   * and optional date range (gte/lte on startsAt) and isPaid equality. Paginated with LIMIT/OFFSET.
-   *
-   * @param filters.dateFrom - Optional lower bound for workshop start date.
-   * @param filters.dateTo - Optional upper bound for workshop start date.
-   * @param filters.isPaid - Optional filter for paid vs free workshops.
-   * @param filters.page - The page number (1-based).
-   * @param filters.limit - The number of items per page.
-   * @returns OkResult containing { items: Workshop[] (with joined speaker/room), total: number }, or FailResult (INTERNAL_ERROR).
-   */
-  async findPublished(filters: {
-    dateFrom?: Date;
-    dateTo?: Date;
-    isPaid?: boolean;
-    page: number;
-    limit: number;
-  }): Promise<Result<{ items: any[]; total: number }>> {
+  async findPublished(
+    filters: { dateFrom?: Date; dateTo?: Date } & CursorPaginationInput
+  ): Promise<Result<CursorPaginationResult<any>>> {
     return tryCatch(
       async () => {
-        const conditions = [eq(this.schema.workshops.status, "PUBLISHED")];
+        const conditions = [eq(this.schema.workshops.status, "OPEN")];
         if (filters.dateFrom) {
           conditions.push(
             gte(this.schema.workshops.startsAt, filters.dateFrom)
@@ -151,16 +109,14 @@ export class WorkshopsRepository {
         if (filters.dateTo) {
           conditions.push(lte(this.schema.workshops.startsAt, filters.dateTo));
         }
-        if (filters.isPaid !== undefined) {
-          conditions.push(eq(this.schema.workshops.isPaid, filters.isPaid));
+
+        // Cursor-based pagination: decode cursor and filter by startsAt
+        if (filters.cursor) {
+          const cursorDate = new Date(decodeCursor(filters.cursor));
+          conditions.push(lt(this.schema.workshops.startsAt, cursorDate));
         }
 
         const where = and(...conditions);
-        const [totalResult] = await this.db
-          .select({ count: count() })
-          .from(this.schema.workshops)
-          .where(where);
-
         const items = await this.db
           .select()
           .from(this.schema.workshops)
@@ -174,34 +130,25 @@ export class WorkshopsRepository {
           )
           .where(where)
           .orderBy(desc(this.schema.workshops.startsAt))
-          .limit(filters.limit)
-          .offset((filters.page - 1) * filters.limit);
+          .limit(filters.limit + 1); // fetch one extra to detect hasMore
 
-        return { items, total: Number(totalResult.count) };
+        const hasMore = items.length > filters.limit;
+        if (hasMore) items.pop();
+
+        const nextCursor =
+          items.length > 0
+            ? encodeCursor(items[items.length - 1].workshops.startsAt)
+            : null;
+
+        return { items, nextCursor, hasMore };
       },
       (err) => systemErrors.internal(err)
     );
   }
 
-  /**
-   * Retrieves all workshops for admin management with optional status filter, paginated.
-   *
-   * Joins with workshop_slots (INNER JOIN), speakers (LEFT JOIN), and rooms (LEFT JOIN)
-   * to provide a complete admin view. Results ordered by createdAt descending.
-   *
-   * Drizzle operation: SELECT with INNER JOIN on workshopSlots and LEFT JOIN on speakers and rooms.
-   * Optional WHERE on status. Paginated with LIMIT/OFFSET.
-   *
-   * @param filters.status - Optional status to filter by (e.g. "DRAFT", "PUBLISHED", "CANCELLED").
-   * @param filters.page - The page number (1-based).
-   * @param filters.limit - The number of items per page.
-   * @returns OkResult containing { items: Workshop[] (with joined slot, speaker, room), total: number }, or FailResult (INTERNAL_ERROR).
-   */
-  async listAdmin(filters: {
-    status?: WorkshopStatus;
-    page: number;
-    limit: number;
-  }): Promise<Result<{ items: any[]; total: number }>> {
+  async listAdmin(
+    filters: { status?: WorkshopStatus } & CursorPaginationInput
+  ): Promise<Result<CursorPaginationResult<any>>> {
     return tryCatch(
       async () => {
         const conditions: ReturnType<typeof eq>[] = [];
@@ -209,23 +156,17 @@ export class WorkshopsRepository {
           conditions.push(eq(this.schema.workshops.status, filters.status));
         }
 
-        const where = conditions.length > 0 ? and(...conditions) : undefined;
+        // Cursor-based pagination: decode cursor and filter by createdAt
+        if (filters.cursor) {
+          const cursorDate = new Date(decodeCursor(filters.cursor));
+          conditions.push(lt(this.schema.workshops.createdAt, cursorDate));
+        }
 
-        const [totalResult] = await this.db
-          .select({ count: count() })
-          .from(this.schema.workshops)
-          .where(where);
+        const where = conditions.length > 0 ? and(...conditions) : undefined;
 
         const items = await this.db
           .select()
           .from(this.schema.workshops)
-          .innerJoin(
-            this.schema.workshopSlots,
-            eq(
-              this.schema.workshops.workshopId,
-              this.schema.workshopSlots.workshopId
-            )
-          )
           .leftJoin(
             this.schema.speakers,
             eq(this.schema.workshops.speakerId, this.schema.speakers.speakerId)
@@ -236,49 +177,63 @@ export class WorkshopsRepository {
           )
           .where(where)
           .orderBy(desc(this.schema.workshops.createdAt))
-          .limit(filters.limit)
-          .offset((filters.page - 1) * filters.limit);
+          .limit(filters.limit + 1); // fetch one extra to detect hasMore
 
-        return { items, total: Number(totalResult.count) };
+        const hasMore = items.length > filters.limit;
+        if (hasMore) items.pop();
+
+        const nextCursor =
+          items.length > 0
+            ? encodeCursor(items[items.length - 1].workshops.createdAt)
+            : null;
+
+        return { items, nextCursor, hasMore };
       },
       (err) => systemErrors.internal(err)
     );
   }
 
   /**
-   * Updates a workshop record with partial data.
+   * Updates a workshop record with partial data using optimistic locking.
+   *
+   * Only applies the update if the current version matches expectedVersion.
+   * Atomically increments the version on success.
    *
    * Side effects:
-   * - Executes UPDATE on the workshops table for the given ID.
+   * - Executes UPDATE on the workshops table for the given ID with version check.
    *
    * @param id - The UUID of the workshop to update.
    * @param data - The partial workshop attributes to apply.
-   * @returns OkResult containing the updated Workshop record, or FailResult (INTERNAL_ERROR).
+   * @param expectedVersion - The version expected by the caller (from If-Match header).
+   * @returns OkResult containing the updated Workshop record, or null if version mismatch, or FailResult (INTERNAL_ERROR).
    */
-  async update(id: string, data: WorkshopUpdate): Promise<Result<Workshop>> {
+  async update(
+    id: string,
+    data: WorkshopUpdate,
+    expectedVersion: number
+  ): Promise<Result<Workshop | null>> {
     return tryCatch(
       async () => {
         const [result] = await this.db
           .update(this.schema.workshops)
-          .set(data)
-          .where(eq(this.schema.workshops.workshopId, id))
+          .set({
+            ...data,
+            version: sql`${this.schema.workshops.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(this.schema.workshops.workshopId, id),
+              eq(this.schema.workshops.version, expectedVersion)
+            )
+          )
           .returning();
-        return result;
+        return result ?? null;
       },
       (err) => systemErrors.internal(err)
     );
   }
 
-  /**
-   * Updates only the status column of a workshop (status transition).
-   *
-   * Side effects:
-   * - Executes UPDATE workshops SET status WHERE workshopId = id.
-   *
-   * @param id - The UUID of the workshop.
-   * @param status - The new status value (e.g. "PUBLISHED", "CANCELLED").
-   * @returns OkResult containing the updated Workshop record, or FailResult (INTERNAL_ERROR).
-   */
   async updateStatus(
     id: string,
     status: WorkshopStatus
@@ -296,20 +251,7 @@ export class WorkshopsRepository {
     );
   }
 
-  /**
-   * Transitions PUBLISHED workshops whose end time has passed to COMPLETED status.
-   *
-   * Business rules:
-   * - Only PUBLISHED workshops with endsAt < now() are eligible.
-   * - Transition is idempotent — workshops in DRAFT, CANCELLED, or already COMPLETED
-   *   are excluded by the WHERE clause.
-   *
-   * Side effects:
-   * - Executes UPDATE workshops SET status = 'COMPLETED' WHERE status = 'PUBLISHED' AND endsAt < now().
-   *
-   * @returns OkResult containing the count of workshops transitioned, or FailResult (INTERNAL_ERROR).
-   */
-  async completePastPublished(): Promise<Result<number>> {
+  async completePastOpen(): Promise<Result<number>> {
     return tryCatch(
       async () => {
         const now = new Date();
@@ -318,7 +260,7 @@ export class WorkshopsRepository {
           .set({ status: "COMPLETED" })
           .where(
             and(
-              eq(this.schema.workshops.status, "PUBLISHED"),
+              eq(this.schema.workshops.status, "OPEN"),
               lt(this.schema.workshops.endsAt, now)
             )
           );
@@ -328,26 +270,125 @@ export class WorkshopsRepository {
     );
   }
 
-  /**
-   * Retrieves workshopId and capacity for all PUBLISHED workshops.
-   *
-   * Lightweight query used by the background reconciliation cron to iterate
-   * over active workshops without loading full entity data.
-   *
-   * @returns OkResult containing { workshopId, capacity }[], or FailResult (INTERNAL_ERROR).
-   */
-  async findPublishedBasic(): Promise<
-    Result<{ workshopId: string; capacity: number }[]>
-  > {
+  async findOpenBasic(): Promise<Result<PublishedBasic[]>> {
     return tryCatch(
       async () => {
         return this.db
           .select({
             workshopId: this.schema.workshops.workshopId,
-            capacity: this.schema.workshops.capacity,
+            seatsTotal: this.schema.workshops.seatsTotal,
           })
           .from(this.schema.workshops)
-          .where(eq(this.schema.workshops.status, "PUBLISHED"));
+          .where(eq(this.schema.workshops.status, "OPEN"));
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Atomically decrements seats_available with optimistic locking.
+   *
+   * Only applies the update if the current version matches expectedVersion
+   * AND seats_available > 0. Used as the enforcement layer (ADR-03) during
+   * registration — PostgreSQL is the sole source of truth for seat counts.
+   *
+   * Business rules:
+   * - Version must match expectedVersion (optimistic lock).
+   * - seats_available must be > 0 (prevents overselling at DB level).
+   * - Returns rowsAffected: 0 means version conflict OR sold out.
+   *
+   * Side effects:
+   * - UPDATE workshops SET seats_available = seats_available - 1, version = version + 1.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param expectedVersion - The version read before the update attempt.
+   * @param tx - Optional transaction handle for multi-statement atomicity.
+   * @returns OkResult with { rowsAffected, newVersion }, or FailResult (INTERNAL_ERROR).
+   */
+  async decrementSeat(
+    workshopId: string,
+    expectedVersion: number,
+    tx?: DrizzleTransaction
+  ): Promise<Result<{ rowsAffected: number; newVersion: number }>> {
+    const conn = tx ?? this.db;
+    return tryCatch(
+      async () => {
+        const result = await conn
+          .update(this.schema.workshops)
+          .set({
+            seatsAvailable: sql`${this.schema.workshops.seatsAvailable} - 1`,
+            version: sql`${this.schema.workshops.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(this.schema.workshops.workshopId, workshopId),
+              eq(this.schema.workshops.version, expectedVersion),
+              sql`${this.schema.workshops.seatsAvailable} > 0`
+            )
+          );
+        return {
+          rowsAffected: result.rowCount ?? 0,
+          newVersion: expectedVersion + 1,
+        };
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Increments seats_available for seat release (cancel, timeout, payment failure).
+   *
+   * No optimistic locking — seat release has no contention (adding seats back).
+   * Still increments version for audit trail consistency.
+   *
+   * Side effects:
+   * - UPDATE workshops SET seats_available = seats_available + 1, version = version + 1.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param tx - Optional transaction handle.
+   * @returns OkResult(void), or FailResult (INTERNAL_ERROR).
+   */
+  async incrementSeat(
+    workshopId: string,
+    tx?: DrizzleTransaction
+  ): Promise<Result<void>> {
+    const conn = tx ?? this.db;
+    return tryCatch(
+      async () => {
+        await conn
+          .update(this.schema.workshops)
+          .set({
+            seatsAvailable: sql`${this.schema.workshops.seatsAvailable} + 1`,
+            version: sql`${this.schema.workshops.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(this.schema.workshops.workshopId, workshopId));
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Reads the current version and seats_available for optimistic locking pre-read.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with { version, seatsAvailable }, or null if not found.
+   */
+  async getSeatVersion(
+    workshopId: string
+  ): Promise<Result<{ version: number; seatsAvailable: number } | null>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .select({
+            version: this.schema.workshops.version,
+            seatsAvailable: this.schema.workshops.seatsAvailable,
+          })
+          .from(this.schema.workshops)
+          .where(eq(this.schema.workshops.workshopId, workshopId))
+          .limit(1);
+        return result ?? null;
       },
       (err) => systemErrors.internal(err)
     );

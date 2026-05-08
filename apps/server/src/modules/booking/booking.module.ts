@@ -1,19 +1,18 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { MessagingModule } from "@/infra/messaging/messaging.module";
 import { RedisModule } from "@/infra/redis/redis.module";
 import { RateLimitModule } from "@/modules/rate-limit/rate-limit.module";
 
 import { CatalogModule } from "../catalog/catalog.module";
 import { IamModule } from "../iam/iam.module";
+import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
 import { RegistrationsController } from "./controllers/registrations.controller";
 import { SeatLockMechanic } from "./mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "./repositories/registrations.repository";
-import { TicketsRepository } from "./repositories/tickets.repository";
 import { RegistrationsService } from "./services/registrations.service";
-import { TicketsService } from "./services/tickets.service";
 
 /**
  * Booking Module
@@ -22,41 +21,21 @@ import { TicketsService } from "./services/tickets.service";
  *
  * Domain responsibilities:
  * - Workshop registration with seat locking (Redis)
- * - Ticket generation after registration confirmation
- *
- * Imports:
- * - DatabaseModule — PostgreSQL access via Drizzle ORM
- * - RedisModule — distributed locks, rate counters
- * - CatalogModule — SeatCounterService for seat availability checks
- * - SharedQueueModule — BullMQ queue definitions
- * - PaymentModule — payments, circuit breaker, idempotency
- * - RateLimitModule — rate limiting (global + per-endpoint)
- *
- * Exports:
- * - RegistrationsService — consumed by BackgroundModule (reconciliation cron)
- * - SeatLockMechanic — consumed by PaymentModule (payment processing)
+ * - QR code generation for confirmed registrations
  */
 @Module({
   imports: [
     DatabaseModule,
     RedisModule,
     CatalogModule,
-    SharedQueueModule,
+    MessagingModule,
     IamModule,
-    PaymentModule,
+    NotificationModule,
+    forwardRef(() => PaymentModule),
     RateLimitModule,
   ],
   controllers: [RegistrationsController],
-  providers: [
-    // Services
-    RegistrationsService,
-    TicketsService,
-    // Mechanics
-    SeatLockMechanic,
-    // Repositories
-    RegistrationsRepository,
-    TicketsRepository,
-  ],
-  exports: [RegistrationsService, SeatLockMechanic],
+  providers: [RegistrationsService, SeatLockMechanic, RegistrationsRepository],
+  exports: [RegistrationsService, SeatLockMechanic, RegistrationsRepository],
 })
 export class BookingModule {}

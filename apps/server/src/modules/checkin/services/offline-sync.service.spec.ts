@@ -4,52 +4,81 @@ import { Result } from "@/shared/response/result";
 
 import { OfflineSyncService } from "./offline-sync.service";
 import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
-import { TicketsRepository } from "../repositories/tickets.repository";
+import { RegistrationsRepository } from "../repositories/registrations.repository";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockTicketsRepo = {
-  findByQRToken: jest.fn(),
+const mockRegistrationsRepo = {
+  findByQRCode: jest.fn(),
 };
 
 const mockCheckinRecordsRepo = {
   create: jest.fn(),
+  findFirstByRegistrationId: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const validTicket = {
-  ticketId: "tkt-001",
+const validRegistration = {
   registrationId: "reg-001",
-  qrToken: "qr-valid-123",
-  status: "ACTIVE",
-  registration: {
-    registrationId: "reg-001",
-    studentId: "stu-001",
+  qrCode: "550e8400-e29b-41d4-a716-446655440001",
+  workshopId: "w-001",
+  studentId: "stu-001",
+  status: "CONFIRMED",
+  workshop: {
     workshopId: "w-001",
+    title: "Workshop",
+    status: "PUBLISHED",
+    startsAt: new Date(),
+    endsAt: new Date(),
+  },
+  student: {
+    studentId: "stu-001",
+    fullName: "John Doe",
   },
 };
 
-const voidTicket = {
-  ...validTicket,
-  ticketId: "tkt-void",
-  qrToken: "qr-void-456",
-  status: "VOID",
+const pendingRegistration = {
+  ...validRegistration,
+  registrationId: "reg-pending",
+  status: "PENDING",
 };
 
-const wrongWorkshopTicket = {
-  ...validTicket,
-  ticketId: "tkt-other",
-  qrToken: "qr-other-789",
-  registration: {
-    ...validTicket.registration,
-    workshopId: "w-other",
-  },
+const cancelledWorkshopReg = {
+  ...validRegistration,
+  registrationId: "reg-cancelled",
+  workshop: { ...validRegistration.workshop, status: "CANCELLED" },
 };
+
+const checkinRecord = {
+  checkinId: "ci-001",
+  checkedInAt: new Date(),
+};
+
+const existingCheckin = {
+  checkinId: "ci-001",
+  checkedInAt: new Date(),
+  staffName: "Staff One",
+};
+
+const makeItem = (
+  overrides: Partial<{
+    localId: string;
+    qrCode: string;
+    workshopId: string;
+    checkedInAt: Date;
+  }> = {}
+) => ({
+  localId: "00000000-0000-0000-0000-000000000010",
+  qrCode: "550e8400-e29b-41d4-a716-446655440001",
+  workshopId: "w-001",
+  checkedInAt: new Date(),
+  ...overrides,
+});
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -64,7 +93,7 @@ describe("OfflineSyncService", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OfflineSyncService,
-        { provide: TicketsRepository, useValue: mockTicketsRepo },
+        { provide: RegistrationsRepository, useValue: mockRegistrationsRepo },
         { provide: CheckinRecordsRepository, useValue: mockCheckinRecordsRepo },
       ],
     }).compile();
@@ -76,133 +105,110 @@ describe("OfflineSyncService", () => {
   // processSyncBatch — FR-F07-004
   // -----------------------------------------------------------------------
   describe("processSyncBatch — FR-F07-004", () => {
-    it("processes a mixed batch: syncs valid, skips duplicate, conflicts on VOID", async () => {
-      mockTicketsRepo.findByQRToken
-        .mockResolvedValueOnce(Result.ok(validTicket)) // item 1: valid
-        .mockResolvedValueOnce(Result.ok(validTicket)) // item 2: valid (duplicate → skip)
-        .mockResolvedValueOnce(Result.ok(voidTicket)) // item 3: VOID → conflict
-        .mockResolvedValueOnce(Result.ok(wrongWorkshopTicket)); // item 4: wrong workshop → conflict
+    it("processes a mixed batch: OK for valid, DUPLICATE for repeat, REJECTED for invalid", async () => {
+      mockRegistrationsRepo.findByQRCode
+        .mockResolvedValueOnce(Result.ok(validRegistration))
+        .mockResolvedValueOnce(Result.ok(validRegistration))
+        .mockResolvedValueOnce(Result.ok(null))
+        .mockResolvedValueOnce(Result.ok(pendingRegistration));
 
       mockCheckinRecordsRepo.create
-        .mockResolvedValueOnce(
-          Result.ok({
-            // item 1: synced
-            checkinId: "ci-001",
-            checkedInAt: new Date(),
-          })
-        )
-        .mockResolvedValueOnce(Result.ok(null)); // item 2: skipped (duplicate)
+        .mockResolvedValueOnce(Result.ok(checkinRecord))
+        .mockResolvedValueOnce(Result.ok(null));
+
+      mockCheckinRecordsRepo.findFirstByRegistrationId.mockResolvedValue(
+        Result.ok(existingCheckin)
+      );
 
       const items = [
-        { qr_token: "qr-valid-123", checked_in_at: new Date() },
-        { qr_token: "qr-valid-123", checked_in_at: new Date() }, // duplicate
-        { qr_token: "qr-void-456", checked_in_at: new Date() }, // VOID
-        { qr_token: "qr-other-789", checked_in_at: new Date() }, // wrong workshop
+        makeItem({ localId: "00000000-0000-0000-0000-000000000001" }),
+        makeItem({ localId: "00000000-0000-0000-0000-000000000002" }),
+        makeItem({
+          localId: "00000000-0000-0000-0000-000000000003",
+          qrCode: "00000000-0000-0000-0000-000000000000",
+        }),
+        makeItem({
+          localId: "00000000-0000-0000-0000-000000000004",
+          qrCode: "550e8400-e29b-41d4-a716-446655440002",
+        }),
       ];
 
-      const result = await service.processSyncBatch(
-        items,
-        "staff-001",
-        "w-001"
-      );
+      const result = await service.processSyncBatch(items, "staff-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.synced_count).toBe(1);
-      expect(result.data.skipped_count).toBe(1);
-      expect(result.data.conflicts_count).toBe(2);
+      expect(result.data.results).toHaveLength(4);
+      expect(result.data.results[0].result).toBe("OK");
+      expect(result.data.results[1].result).toBe("DUPLICATE");
+      expect(result.data.results[2].result).toBe("REJECTED");
+      expect(result.data.results[3].result).toBe("REJECTED");
     });
 
-    it("counts VOID ticket as conflict (FR-F07-004 business rule)", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(voidTicket));
-
-      const result = await service.processSyncBatch(
-        [{ qr_token: "qr-void-456", checked_in_at: new Date() }],
-        "staff-001",
-        "w-001"
+    it("marks PENDING registration as REJECTED with NOT_PAID reason", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(pendingRegistration)
       );
 
+      const result = await service.processSyncBatch([makeItem()], "staff-001");
+
       expect(result.isSuccess).toBe(true);
-      expect(result.data.conflicts_count).toBe(1);
-      expect(result.data.synced_count).toBe(0);
+      expect(result.data.results[0].result).toBe("REJECTED");
+      expect(result.data.results[0].reason).toBe("NOT_PAID");
       expect(mockCheckinRecordsRepo.create).not.toHaveBeenCalled();
     });
 
-    it("counts wrong-workshop ticket as conflict", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(
-        Result.ok(wrongWorkshopTicket)
+    it("marks CANCELLED workshop registration as REJECTED", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(
+        Result.ok(cancelledWorkshopReg)
       );
 
-      const result = await service.processSyncBatch(
-        [{ qr_token: "qr-other-789", checked_in_at: new Date() }],
-        "staff-001",
-        "w-001"
-      );
+      const result = await service.processSyncBatch([makeItem()], "staff-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.conflicts_count).toBe(1);
-      expect(result.data.synced_count).toBe(0);
-      expect(mockCheckinRecordsRepo.create).not.toHaveBeenCalled();
+      expect(result.data.results[0].result).toBe("REJECTED");
+      expect(result.data.results[0].reason).toBe("WORKSHOP_CANCELLED");
     });
 
-    it("counts null ticket (not found) as conflict", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(null));
+    it("marks null registration (QR not found) as REJECTED", async () => {
+      mockRegistrationsRepo.findByQRCode.mockResolvedValue(Result.ok(null));
 
-      const result = await service.processSyncBatch(
-        [{ qr_token: "qr-nonexistent", checked_in_at: new Date() }],
-        "staff-001",
-        "w-001"
-      );
+      const result = await service.processSyncBatch([makeItem()], "staff-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.conflicts_count).toBe(1);
-    });
-
-    it("returns FailResult when ticket repo lookup fails", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(
-        Result.fail({
-          category: "INTERNAL",
-          code: "INTERNAL_ERROR",
-          message: "DB down",
-        })
-      );
-
-      const result = await service.processSyncBatch(
-        [{ qr_token: "qr-any", checked_in_at: new Date() }],
-        "staff-001",
-        "w-001"
-      );
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("INTERNAL_ERROR");
-    });
-
-    it("returns FailResult when checkin creation fails", async () => {
-      mockTicketsRepo.findByQRToken.mockResolvedValue(Result.ok(validTicket));
-      mockCheckinRecordsRepo.create.mockResolvedValue(
-        Result.fail({
-          category: "INTERNAL",
-          code: "INTERNAL_ERROR",
-          message: "DB down",
-        })
-      );
-
-      const result = await service.processSyncBatch(
-        [{ qr_token: "qr-valid-123", checked_in_at: new Date() }],
-        "staff-001",
-        "w-001"
-      );
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("INTERNAL_ERROR");
+      expect(result.data.results[0].result).toBe("REJECTED");
+      expect(result.data.results[0].reason).toBe("QR_INVALID");
     });
 
     it("handles empty batch gracefully", async () => {
-      const result = await service.processSyncBatch([], "staff-001", "w-001");
+      const result = await service.processSyncBatch([], "staff-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.synced_count).toBe(0);
-      expect(result.data.skipped_count).toBe(0);
-      expect(result.data.conflicts_count).toBe(0);
+      expect(result.data.results).toHaveLength(0);
+    });
+
+    it("continues processing after individual item failures (repo error)", async () => {
+      mockRegistrationsRepo.findByQRCode
+        .mockResolvedValueOnce(
+          Result.fail({
+            category: "INTERNAL",
+            code: "INTERNAL_ERROR",
+            message: "DB down",
+          })
+        )
+        .mockResolvedValueOnce(Result.ok(validRegistration));
+
+      mockCheckinRecordsRepo.create.mockResolvedValue(Result.ok(checkinRecord));
+
+      const items = [
+        makeItem({ localId: "00000000-0000-0000-0000-000000000001" }),
+        makeItem({ localId: "00000000-0000-0000-0000-000000000002" }),
+      ];
+
+      const result = await service.processSyncBatch(items, "staff-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.results).toHaveLength(2);
+      expect(result.data.results[0].result).toBe("REJECTED");
+      expect(result.data.results[1].result).toBe("OK");
     });
   });
 });

@@ -43,7 +43,7 @@ Validate format: UUID v4 — nếu không đúng format, hiển thị lỗi ngay
 ```
 SELECT * FROM local_checkins
 WHERE qr_code = :qr_code
-  AND status IN ('pending', 'synced');
+  AND status IN ('PENDING', 'SYNCED');
 
 Nếu tồn tại:
   → Hiển thị: "QR này đã được quét [status: đã sync / chờ sync]"
@@ -60,7 +60,7 @@ VALUES
   (UUID.v4(),           -- sinh offline, KHÔNG dùng server ID
    :qr_code,
    now_device_iso8601,  -- lưu timezone của device
-   'pending',
+   'PENDING',
    now_device_iso8601);
 
 → Hiển thị ngay: "✓ Check-in ghi nhận, đang đồng bộ..."
@@ -85,7 +85,7 @@ Nếu không có kết nối:
 ```
 Trigger:
   (a) Network Change Listener: kết nối mạng phục hồi
-  (b) Timer: mỗi 30 giây nếu có row status='pending'
+  (b) Timer: mỗi 30 giây nếu có row status='PENDING'
   (c) Sau mỗi lần ghi local_checkin thành công (nếu có mạng)
 ```
 
@@ -93,7 +93,7 @@ Trigger:
 ```
 SELECT local_id, qr_code, checked_at
 FROM local_checkins
-WHERE status = 'pending'
+WHERE status = 'PENDING'
 ORDER BY created_at ASC
 LIMIT 50;   -- max 50 records per request
 
@@ -125,14 +125,14 @@ Server response:
 FOR EACH item in response:
   UPDATE local_checkins
     SET status            = CASE item.result
-                              WHEN 'ok'        THEN 'synced'
-                              WHEN 'duplicate' THEN 'duplicate'
-                              WHEN 'rejected'  THEN 'rejected'
+                              WHEN 'ok'        THEN 'SYNCED'
+                              WHEN 'DUPLICATE' THEN 'DUPLICATE'
+                              WHEN 'REJECTED'  THEN 'REJECTED'
                             END,
         server_id         = item.server_id,       -- NULL nếu không phải 'ok'
         sync_error        = item.reason,           -- NULL nếu 'ok'
         first_checkin_info = item.first_checkin_at || ' by ' || item.first_staff_name
-                             -- chỉ populated nếu 'duplicate'
+                             -- chỉ populated nếu 'DUPLICATE'
   WHERE local_id = item.local_id;
 
 → UI update từng item (real-time feedback cho staff đang xem danh sách)
@@ -144,7 +144,7 @@ FOR EACH item in response:
 
 ```
 Endpoint: POST /checkins/sync
-Auth: JWT với role = 'checkin_staff'
+Auth: JWT với role = 'CHECKIN_STAFF'
 Rate limit: 30 req/60s per user (T2 — xem ADR-06)
 ```
 
@@ -164,11 +164,11 @@ FOR EACH item IN request_body:
     → append { local_id, result: "rejected", reason: "qr_invalid" }
     CONTINUE
 
-  Nếu r.status != 'paid':
+  Nếu r.status != 'PAID':
     → append { local_id, result: "rejected", reason: "not_paid" }
     CONTINUE
 
-  Nếu w.status = 'cancelled':
+  Nếu w.status = 'CANCELLED':
     → append { local_id, result: "rejected", reason: "workshop_cancelled" }
     CONTINUE
 
@@ -212,20 +212,20 @@ RETURN results_array
 ```
 Điều kiện: Không có registration nào có qr_code khớp
 Hành vi server: Trả result = "rejected", reason = "qr_invalid"
-Hành vi mobile: local_checkins.status = 'rejected', sync_error = 'qr_invalid'
+Hành vi mobile: local_checkins.status = 'REJECTED', sync_error = 'qr_invalid'
 UI: "QR code không hợp lệ hoặc đã hết hiệu lực"
 ```
 
 ### E-02: Student chưa thanh toán
 ```
-Điều kiện: registrations.status = 'pending' (chưa thanh toán)
+Điều kiện: registrations.status = 'PENDING' (chưa thanh toán)
 Hành vi server: Trả result = "rejected", reason = "not_paid"
 UI: "Sinh viên này chưa hoàn tất thanh toán"
 ```
 
 ### E-03: Workshop đã bị hủy
 ```
-Điều kiện: workshops.status = 'cancelled'
+Điều kiện: workshops.status = 'CANCELLED'
 Hành vi server: Trả result = "rejected", reason = "workshop_cancelled"
 UI: "Workshop này đã bị hủy"
 ```
@@ -250,7 +250,7 @@ Action: Staff B ghi nhận và tiếp tục (không phải lỗi — là expecte
 ### E-05: Mạng không phục hồi trong thời gian sự kiện (extreme case)
 ```
 Điều kiện: Device không kết nối lại trong suốt sự kiện
-Hành vi: local_checkins.status = 'pending' mãi mãi
+Hành vi: local_checkins.status = 'PENDING' mãi mãi
 Hậu quả: Check-in data không được sync lên server
 Mitigation: Đây là acceptable loss — check-in là operational tracking, không phải financial transaction.
             BTC dùng danh sách backup in ra giấy cho audit nếu cần.
@@ -271,7 +271,7 @@ Operational note: Staff refresh token khi về khu vực có sóng trước khi 
 Điều kiện: Server quá tải, response > 10s
 Hành vi: Batch không được update status
          Timer 30s trigger sync lại
-         local_checkins.status = 'pending' vẫn giữ nguyên cho đến khi sync thành công
+         local_checkins.status = 'PENDING' vẫn giữ nguyên cho đến khi sync thành công
 ```
 
 ### E-08: Đồng hồ device lệch giờ
@@ -286,7 +286,7 @@ Mitigation: Server lưu received_at = now() (server time, luôn đúng) trong b�
 
 ### E-09: QR bị scan 2 lần trên cùng device (staff bấm nhầm)
 ```
-Điều kiện: Cùng qr_code đã có trong local_checkins với status != 'rejected'
+Điều kiện: Cùng qr_code đã có trong local_checkins với status != 'REJECTED'
 Hành vi: Bước 2 của luồng quét QR phát hiện → dừng, KHÔNG ghi thêm
 UI: "QR này đã được quét [trạng thái: synced / chờ sync]"
 ```
@@ -348,8 +348,8 @@ Then: UI hiển thị "✓" ngay (< 100ms — từ local write). Server nhận c
 
 **AC-02 — Happy path offline:**
 Staff quét QR hợp lệ, không có mạng.
-Then: UI hiển thị "✓ (offline)" ngay. local_checkins.status = 'pending'.
-When mạng phục hồi: sync tự động. local_checkins.status = 'synced'. checkins +1 row.
+Then: UI hiển thị "✓ (offline)" ngay. local_checkins.status = 'PENDING'.
+When mạng phục hồi: sync tự động. local_checkins.status = 'SYNCED'. checkins +1 row.
 
 **AC-03 — First check-in wins (concurrent offline):**
 Staff A và B cùng quét QR X offline. A sync trước.
@@ -358,7 +358,7 @@ DB: checkins chỉ có 1 row cho registration này.
 
 **AC-04 — Rejected invalid QR:**
 Staff quét QR không tồn tại trong DB.
-Then: local write với status='pending'. Sau sync: status='rejected', sync_error='qr_invalid'.
+Then: local write với status='PENDING'. Sau sync: status='REJECTED', sync_error='qr_invalid'.
 UI: "QR code không hợp lệ".
 
 **AC-05 — Batch sync:**
@@ -375,5 +375,5 @@ Staff ở khu vực mất mạng, token còn hạn.
 Then: Có thể quét QR và ghi local. Không gọi server để validate JWT.
 
 **AC-08 — Timer trigger:**
-Sau 30 giây có row 'pending' và có mạng.
+Sau 30 giây có row 'PENDING' và có mạng.
 Then: Sync tự động chạy mà không cần staff thao tác.

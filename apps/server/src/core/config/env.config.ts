@@ -32,6 +32,16 @@ export const envSchema = z.object({
   REDIS_URL: z.string().url({ message: "REDIS_URL is required" }),
 
   // JWT
+  JWT_PRIVATE_KEY: z
+    .string()
+    .min(1, {
+      message: "JWT_PRIVATE_KEY is required (base64-encoded RSA PEM)",
+    }),
+  JWT_PUBLIC_KEY: z
+    .string()
+    .min(1, {
+      message: "JWT_PUBLIC_KEY is required (base64-encoded RSA PEM)",
+    }),
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
 
@@ -54,6 +64,14 @@ export const envSchema = z.object({
     .string()
     .min(1, { message: "DEEPSEEK_API_KEY is required" }),
   AI_SUMMARY_MODEL: z.string().default("deepseek-v4-pro"),
+
+  // Payment Gateway HTTP Client
+  GATEWAY_BASE_URL: z.string().url().optional(),
+  GATEWAY_API_KEY: z.string().optional(),
+
+  // AI Provider HTTP Client
+  AI_PROVIDER_BASE_URL: z.string().url().optional(),
+  AI_PROVIDER_API_KEY: z.string().optional(),
 
   // Logging
   LOG_LEVEL: z.string().default("info"),
@@ -97,6 +115,8 @@ export const appConfig = registerAs("app", () => ({
 }));
 
 export const jwtConfig = registerAs("jwt", () => ({
+  privateKey: Buffer.from(process.env.JWT_PRIVATE_KEY!, "base64").toString("utf-8"),
+  publicKey: Buffer.from(process.env.JWT_PUBLIC_KEY!, "base64").toString("utf-8"),
   secret: process.env.JWT_SECRET!,
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
   accessExpiry: { WEB: 900, MOBILE: 28800 } as const,
@@ -140,4 +160,14 @@ export const aiConfig = registerAs("ai", () => ({
   deepseekApiKey: process.env.DEEPSEEK_API_KEY!,
   summaryModel: process.env.AI_SUMMARY_MODEL ?? "deepseek-v4-pro",
   baseUrl: "https://api.deepseek.com/anthropic",
+}));
+
+export const gatewayConfig = registerAs("gateway", () => ({
+  baseUrl: process.env.GATEWAY_BASE_URL,
+  apiKey: process.env.GATEWAY_API_KEY,
+}));
+
+export const aiProviderConfig = registerAs("aiProvider", () => ({
+  baseUrl: process.env.AI_PROVIDER_BASE_URL,
+  apiKey: process.env.AI_PROVIDER_API_KEY,
 }));

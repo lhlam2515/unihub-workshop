@@ -447,51 +447,94 @@ export const workshopErrors = {
 } as const;
 
 /**
- * Group ticket validation error factories
+ * Group check-in validation error factories
  */
-export const ticketErrors = {
+export const checkinErrors = {
   /**
-   * Create an error when a ticket token is unknown
+   * Create an error when a QR code is unknown
    *
-   * @param qrToken - Scanned token identifier used for audit logging
-   * @returns Ticket not found payload
+   * @param qrCode - Scanned QR code used for audit logging
+   * @returns QR not found payload
    * @throws Never. Returns an error object instead of throwing
    */
-  notFound: (qrToken: string): AppError =>
+  qrInvalid: (qrCode: string): AppError =>
     createError({
       category: "NOT_FOUND",
-      code: "TICKET_NOT_FOUND",
-      message: "QR code does not match any ticket.",
-      context: { qrToken },
+      code: "QR_INVALID",
+      message: "QR code does not match any registration.",
+      context: { qrCode },
     }),
   /**
-   * Create an error when a ticket is voided
+   * Create an error when a registration status is not eligible for check-in
    *
-   * @param ticketId - Ticket identifier used for audit logging
+   * @param registrationId - Registration identifier used for audit logging
+   * @returns Forbidden error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  registrationNotActive: (registrationId: string): AppError =>
+    createError({
+      category: "FORBIDDEN",
+      code: "REGISTRATION_NOT_ACTIVE",
+      message: "Registration status must be PAID or CONFIRMED for check-in.",
+      context: { registrationId },
+    }),
+  /**
+   * Create an error when a QR code belongs to a different workshop
+   *
+   * @param registrationId - Registration identifier used for audit logging
+   * @param workshopId - Expected workshop identifier
    * @returns Business rule error payload
    * @throws Never. Returns an error object instead of throwing
    */
-  void: (ticketId: string): AppError =>
+  wrongWorkshop: (registrationId: string, workshopId: string): AppError =>
     createError({
       category: "BUSINESS",
-      code: "TICKET_VOID",
-      message: "This ticket has been voided and is no longer valid.",
-      context: { ticketId },
+      code: "WRONG_WORKSHOP",
+      message: "QR code is valid but for a different workshop.",
+      context: { registrationId, workshopId },
     }),
   /**
-   * Create an error when a ticket is already checked in
+   * Create an error when a registration is already checked in
    *
-   * @param ticketId - Ticket identifier used for audit logging
+   * @param registrationId - Registration identifier used for audit logging
    * @param workshopId - Workshop identifier used for audit logging
    * @returns Conflict error payload
    * @throws Never. Returns an error object instead of throwing
    */
-  alreadyCheckedIn: (ticketId: string, workshopId: string): AppError =>
+  alreadyCheckedIn: (registrationId: string, workshopId: string): AppError =>
     createError({
       category: "CONFLICT",
       code: "TICKET_ALREADY_CHECKEDIN",
-      message: "This ticket has already been used for check-in.",
-      context: { ticketId, workshopId },
+      message: "This registration has already been used for check-in.",
+      context: { registrationId, workshopId },
+    }),
+  /**
+   * Create an error when a sync batch exceeds the maximum item count
+   *
+   * @param limit - Maximum allowed items per batch
+   * @returns Validation error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  batchTooLarge: (limit: number): AppError =>
+    createError({
+      category: "VALIDATION",
+      code: "BATCH_TOO_LARGE",
+      message: `Sync batch exceeds maximum of ${limit} items.`,
+      context: { limit },
+    }),
+  /**
+   * Create an error when a staff is not assigned to the workshop
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Forbidden error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  workshopNotAssigned: (workshopId: string): AppError =>
+    createError({
+      category: "FORBIDDEN",
+      code: "WORKSHOP_NOT_ASSIGNED",
+      message: "Staff is not authorized for this workshop.",
+      context: { workshopId },
     }),
 } as const;
 
@@ -520,14 +563,85 @@ export const validationError = (fieldErrors: FieldError[]): AppError =>
  */
 export const rateLimitError = (
   limit: number,
-  retryAfterSeconds: number
+  retryAfterSeconds: number,
+  tier: string
 ): AppError =>
   createError({
     category: "RATE_LIMIT",
     code: "RATE_LIMIT_EXCEEDED",
     message: "Too many requests. Please try again later.",
-    context: { limit, retryAfterSeconds },
+    context: { limit, retryAfterSeconds, tier },
   });
+
+/**
+ * Create a concurrency conflict error for optimistic locking version mismatches
+ *
+ * @param resource - Resource type that was modified (e.g. "Workshop")
+ * @param id - Unique identifier of the modified resource
+ * @param expectedVersion - Version expected by the client that caused the conflict
+ * @returns Conflict error payload
+ * @throws Never. Returns an error object instead of throwing
+ */
+export const concurrentModification = (
+  resource: string,
+  id: string,
+  expectedVersion: number
+): AppError =>
+  createError({
+    category: "CONFLICT",
+    code: "CONCURRENT_MODIFICATION",
+    message: `${resource} has been modified by another request. Please refresh and try again.`,
+    context: { resource, id, expectedVersion },
+  });
+
+/**
+ * Create an idempotency conflict error when a request with the same key is in progress
+ *
+ * @param key - Idempotency key that caused the conflict
+ * @returns Conflict error payload
+ * @throws Never. Returns an error object instead of throwing
+ */
+export const idempotencyConflict = (key: string): AppError =>
+  createError({
+    category: "CONFLICT",
+    code: "IDEMPOTENCY_CONFLICT",
+    message: "A request with this idempotency key is already in progress.",
+    context: { idempotencyKey: key },
+  });
+
+/**
+ * Group device token error factories
+ */
+export const deviceTokenErrors = {
+  /**
+   * Create an error when a device token is not found
+   *
+   * @param token - Device token value that was looked up
+   * @returns Not found error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  notFound: (token: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "DEVICE_TOKEN_NOT_FOUND",
+      message: "Device token not found or already deactivated.",
+      context: { token },
+    }),
+  /**
+   * Create an error when a caller tries to modify another user's device token
+   *
+   * @param token - Device token value that caused the violation
+   * @returns Forbidden error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  ownershipMismatch: (token: string): AppError =>
+    createError({
+      category: "FORBIDDEN",
+      code: "CHECKIN_SCOPE_DENIED",
+      message: "Device token does not belong to the current user.",
+      context: { token },
+    }),
+} as const;
 
 /**
  * Group storage error factories for S3-compatible object storage operations
@@ -693,6 +807,13 @@ export const notificationErrors = {
       message: `Unknown notification channel: ${channelType}.`,
       context: { channelType },
     }),
+  channelTimeout: (channelType: string, timeoutMs: number): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "NOTIFICATION_CHANNEL_TIMEOUT",
+      message: `Channel ${channelType} timed out after ${timeoutMs}ms.`,
+      context: { channelType, timeoutMs },
+    }),
 } as const;
 
 /**
@@ -808,7 +929,7 @@ export const passthroughOrInternal = (err: unknown): AppError =>
  * Detects PostgreSQL lock conflict errors and maps them to DB_LOCK_TIMEOUT.
  * Any other error is wrapped as INTERNAL_ERROR.
  *
- * @param resource - Resource name for the DB_LOCK_TIMEOUT context (e.g., "workshop_slots").
+ * @param resource - Resource name for the DB_LOCK_TIMEOUT context (e.g., "payments", "registrations").
  * @param timeoutMs - Timeout in milliseconds (default 3000).
  * @returns An error mapper function suitable for tryCatch.
  */

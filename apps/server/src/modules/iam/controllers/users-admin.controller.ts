@@ -11,6 +11,7 @@ import {
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { UsersService } from "../services/users.service";
@@ -19,7 +20,8 @@ import type { UpdateUserStatusDto } from "../dto/update-user-status.dto";
 
 @Controller("admin/users")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ORGANIZER")
+@Roles("BTC")
+@RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class UsersAdminController {
   constructor(private readonly usersService: UsersService) {}
 

@@ -83,13 +83,13 @@ describe("AiSummariesRepository", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // findByDocumentId
+  // findByWorkshopId
   // ---------------------------------------------------------------------------
-  describe("findByDocumentId", () => {
+  describe("findByWorkshopId", () => {
     it("returns the summary when found", async () => {
       mockChain.limit.mockResolvedValue([mockAiSummary]);
 
-      const result = await repo.findByDocumentId("doc-001");
+      const result = await repo.findByWorkshopId("w-001");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toEqual(mockAiSummary);
@@ -99,7 +99,7 @@ describe("AiSummariesRepository", () => {
     it("returns null when not found", async () => {
       mockChain.limit.mockResolvedValue([]);
 
-      const result = await repo.findByDocumentId("nonexistent");
+      const result = await repo.findByWorkshopId("nonexistent");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBeNull();
@@ -107,41 +107,6 @@ describe("AiSummariesRepository", () => {
 
     it("returns FailResult on DB error", async () => {
       mockChain.limit.mockRejectedValue(new Error("DB error"));
-
-      const result = await repo.findByDocumentId("doc-001");
-
-      expect(result.isFailure).toBe(true);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // findByWorkshopId
-  // ---------------------------------------------------------------------------
-  describe("findByWorkshopId", () => {
-    it("returns summaries for a workshop", async () => {
-      mockChain.orderBy.mockResolvedValue([mockAiSummary]);
-
-      const result = await repo.findByWorkshopId("w-001");
-
-      expect(result.isSuccess).toBe(true);
-      if (result.isSuccess) {
-        expect(result.data).toEqual([mockAiSummary]);
-      }
-    });
-
-    it("returns empty array when no summaries exist", async () => {
-      mockChain.orderBy.mockResolvedValue([]);
-
-      const result = await repo.findByWorkshopId("w-001");
-
-      expect(result.isSuccess).toBe(true);
-      if (result.isSuccess) {
-        expect(result.data).toEqual([]);
-      }
-    });
-
-    it("returns FailResult on DB error", async () => {
-      mockChain.orderBy.mockRejectedValue(new Error("DB error"));
 
       const result = await repo.findByWorkshopId("w-001");
 
@@ -153,27 +118,35 @@ describe("AiSummariesRepository", () => {
   // upsert
   // ---------------------------------------------------------------------------
   describe("upsert", () => {
-    it("inserts a new summary record with PENDING status", async () => {
+    it("inserts a new summary record when none exists", async () => {
+      mockChain.limit.mockResolvedValue([]);
+      mockChain.returning.mockResolvedValue([mockAiSummary]);
+
+      const result = await repo.upsert("doc-001", "w-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(mockDb.select).toHaveBeenCalled();
+      expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it("updates existing summary status when one exists", async () => {
+      mockChain.limit.mockResolvedValue([mockAiSummary]);
       mockChain.returning.mockResolvedValue([
-        {
-          ...mockAiSummary,
-          status: "PENDING",
-          summaryId: "sum-new",
-        },
+        { ...mockAiSummary, status: "QUEUED" },
       ]);
 
       const result = await repo.upsert("doc-001", "w-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.status).toBe("PENDING");
+        expect(result.data.status).toBe("QUEUED");
       }
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockChain.onConflictDoUpdate).toHaveBeenCalled();
+      expect(mockDb.select).toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalled();
     });
 
     it("returns FailResult on DB error", async () => {
-      mockChain.returning.mockRejectedValue(new Error("DB error"));
+      mockChain.limit.mockRejectedValue(new Error("DB error"));
 
       const result = await repo.upsert("doc-001", "w-001");
 
