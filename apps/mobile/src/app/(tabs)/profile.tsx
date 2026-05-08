@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -6,127 +5,104 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
-import { Colors } from "@/constants/theme";
-import { createDatabaseClient } from "@/database/client";
-import { checkinQueue } from "@/database/schema/checkin-queue.schema";
-import { useColorScheme } from "@/hooks/use-color-scheme";
-import { logout } from "@/lib/api/client";
-import { offlineAuth } from "@/lib/api/client/offline-auth";
+import { useAuth } from "@/features/auth/hooks/use-auth";
 
 export default function ProfileScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { session, getPendingQueueCount, logout, isLoggingOut } = useAuth();
+  const [localLoggingOut, setLocalLoggingOut] = useState(false);
 
-  const payload = offlineAuth.getTokenPayload();
+  const loggingOut = isLoggingOut || localLoggingOut;
 
   async function handleLogout() {
-    // Check for pending sync records before allowing logout
-    try {
-      const db = createDatabaseClient();
-      const pendingCount = db
-        .select()
-        .from(checkinQueue)
-        .where(eq(checkinQueue.syncStatus, "PENDING"))
-        .all().length;
+    const pendingCount = getPendingQueueCount();
 
-      if (pendingCount > 0) {
-        return new Promise<void>((resolve) => {
-          Alert.alert(
-            "Cảnh báo",
-            `Còn ${pendingCount} bản ghi chưa được đồng bộ. Vui lòng đồng bộ trước khi đăng xuất.`,
-            [
-              {
-                text: "Đồng bộ ngay",
-                onPress: () => {
-                  router.push(ROUTES.SYNC_PROGRESS);
-                  resolve();
-                },
+    if (pendingCount > 0) {
+      return new Promise<void>((resolve) => {
+        Alert.alert(
+          "Cảnh báo",
+          `Còn ${pendingCount} bản ghi chưa được đồng bộ. Vui lòng đồng bộ trước khi đăng xuất.`,
+          [
+            {
+              text: "Đồng bộ ngay",
+              onPress: () => {
+                router.push(ROUTES.SYNC_PROGRESS);
+                resolve();
               },
-              {
-                text: "Vẫn đăng xuất",
-                style: "destructive",
-                onPress: () => {
-                  setIsLoggingOut(true);
-                  logout()
-                    .then(() => router.replace(ROUTES.LOGIN))
-                    .catch(() => router.replace(ROUTES.LOGIN));
-                  resolve();
-                },
+            },
+            {
+              text: "Vẫn đăng xuất",
+              style: "destructive",
+              onPress: () => {
+                setLocalLoggingOut(true);
+                logout().finally(() => resolve());
               },
-            ]
-          );
-        });
-      }
-    } catch {
-      // Non-critical: proceed with logout
+            },
+          ]
+        );
+      });
     }
 
-    setIsLoggingOut(true);
+    setLocalLoggingOut(true);
     await logout();
-    router.replace(ROUTES.LOGIN);
   }
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: colors.tint }]}>
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView contentContainerClassName="grow p-5 gap-3.5">
+        <View className="gap-2 py-2">
+          <Text className="text-xs font-bold tracking-widest text-primary">
             TAB HỒ SƠ
           </Text>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Thông tin & cài đặt
           </Text>
         </View>
 
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
+        <View className="gap-3 rounded-3xl border border-border p-5">
+          <Text className="text-lg font-bold text-foreground">
             Người dùng hiện tại
           </Text>
-          {payload ? (
-            <View style={styles.infoGroup}>
-              <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+          {session ? (
+            <View className="gap-2.5">
+              <View className="flex-row justify-between gap-3">
+                <Text className="flex-1 text-sm text-muted-foreground">
                   User ID
                 </Text>
                 <Text
-                  style={[styles.infoValue, { color: colors.text }]}
+                  className="flex-2 text-right text-sm font-bold text-foreground"
                   numberOfLines={1}
                 >
-                  {payload.sub}
+                  {session.sub}
                 </Text>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+              <View className="flex-row justify-between gap-3">
+                <Text className="flex-1 text-sm text-muted-foreground">
                   Vai trò
                 </Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>
-                  {payload.role}
+                <Text className="flex-2 text-right text-sm font-bold text-foreground">
+                  {session.role}
                 </Text>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+              <View className="flex-row justify-between gap-3">
+                <Text className="flex-1 text-sm text-muted-foreground">
                   Workshop phân công
                 </Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>
-                  {payload.allowedWorkshopIds?.length ?? 0}
+                <Text className="flex-2 text-right text-sm font-bold text-foreground">
+                  {session.allowedWorkshopIds?.length ?? 0}
                 </Text>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+              <View className="flex-row justify-between gap-3">
+                <Text className="flex-1 text-sm text-muted-foreground">
                   Hết hạn lúc
                 </Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>
-                  {new Date(payload.exp * 1000).toLocaleTimeString("vi-VN", {
+                <Text className="flex-2 text-right text-sm font-bold text-foreground">
+                  {new Date(session.exp * 1000).toLocaleTimeString("vi-VN", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
@@ -134,37 +110,30 @@ export default function ProfileScreen() {
               </View>
             </View>
           ) : (
-            <Text style={[styles.cardBody, { color: colors.icon }]}>
+            <Text className="text-sm leading-5 text-muted-foreground">
               Không có thông tin phiên đăng nhập.
             </Text>
           )}
         </View>
 
-        <View style={styles.actions}>
+        <View className="mt-1 gap-3">
           <Pressable
             onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-            ]}
+            className="min-h-[50px] items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-85"
           >
-            <Text style={styles.primaryButtonText}>Mở tiến trình đồng bộ</Text>
+            <Text className="text-base font-bold text-white">
+              Mở tiến trình đồng bộ
+            </Text>
           </Pressable>
           <Pressable
             onPress={handleLogout}
-            disabled={isLoggingOut}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                borderColor: "#EF4444",
-                opacity: pressed || isLoggingOut ? 0.7 : 1,
-              },
-            ]}
+            disabled={loggingOut}
+            className="min-h-[50px] items-center justify-center rounded-2xl border border-red-500 py-3.5 active:opacity-70 disabled:opacity-70"
           >
-            {isLoggingOut ? (
+            {loggingOut ? (
               <ActivityIndicator color="#EF4444" size="small" />
             ) : (
-              <Text style={[styles.secondaryButtonText, { color: "#EF4444" }]}>
+              <Text className="text-base font-bold text-red-500">
                 Đăng xuất
               </Text>
             )}
@@ -174,36 +143,3 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  content: { flexGrow: 1, padding: 20, gap: 14 },
-  header: { gap: 8, paddingVertical: 8 },
-  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2 },
-  title: { fontSize: 28, fontWeight: "800", lineHeight: 34 },
-  card: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 12 },
-  cardTitle: { fontSize: 18, fontWeight: "700" },
-  cardBody: { fontSize: 14, lineHeight: 20 },
-  infoGroup: { gap: 10 },
-  infoRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  infoLabel: { fontSize: 13, flex: 1 },
-  infoValue: { fontSize: 13, fontWeight: "700", flex: 2, textAlign: "right" },
-  actions: { gap: 12, marginTop: 4 },
-  primaryButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-    paddingVertical: 14,
-    minHeight: 50,
-  },
-  primaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
-  secondaryButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-    minHeight: 50,
-  },
-  secondaryButtonText: { fontSize: 15, fontWeight: "700" },
-});
