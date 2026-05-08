@@ -176,7 +176,8 @@ CREATE TABLE IF NOT EXISTS app_session (
     -- Identity (decode từ JWT payload, không cần gọi server)
     user_id             TEXT NOT NULL,
     email               TEXT NOT NULL,
-    role                TEXT NOT NULL DEFAULT 'CHECKIN_STAFF',
+    role                TEXT NOT NULL DEFAULT 'CHECKIN_STAFF'
+                        CHECK (role IN ('CHECKIN_STAFF')),
 
     -- Scope — danh sách workshop được phân công (từ JWT payload)
     allowed_workshop_ids TEXT NOT NULL DEFAULT '[]',

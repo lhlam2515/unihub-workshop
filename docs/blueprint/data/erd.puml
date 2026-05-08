@@ -53,7 +53,7 @@ package "Identity" #EEF4FF {
         email : TEXT <<UQ>>
         full_name : TEXT
         password_hash : TEXT
-        role : TEXT CHECK(BTC, CHECKIN_STAFF)
+        role : staff_role
         is_active : BOOLEAN DEFAULT true
         created_at : TIMESTAMPTZ
         --
@@ -106,12 +106,12 @@ package "Event Core" #EEFFEE {
         seats_total : INT
         seats_available : INT
         price : NUMERIC(10,2) DEFAULT 0
-        status : TEXT CHECK(DRAFT, OPEN, CLOSED, CANCELLED)
+        status : workshop_status
         ~ created_by : UUID <<FK>>
         -- ADR-14: summary + PDF gộp trực tiếp
         pdf_url : TEXT
         summary_text : TEXT
-        summary_status : TEXT CHECK(NONE, QUEUED, PROCESSING, DONE, FAILED)
+        summary_status : summary_status
         -- ADR-03: Optimistic Lock
         version : BIGINT DEFAULT 0
         created_at : TIMESTAMPTZ
@@ -136,7 +136,7 @@ package "Transaction" #FFFBEE {
         --
         ~ workshop_id : UUID <<FK>>
         ~ student_id : TEXT <<FK>>
-        status : TEXT CHECK(PENDING, PAID, CANCELLED)
+        status : registration_status
         qr_code : TEXT <<UQ>> -- UUID v4 độc lập
         registered_at : TIMESTAMPTZ
         --
@@ -153,7 +153,7 @@ package "Transaction" #FFFBEE {
         amount : NUMERIC(10,2)
         currency : TEXT DEFAULT 'VND'
         gateway_charge_id : TEXT
-        status : TEXT CHECK(INITIATED, SUCCEEDED, FAILED, UNRESOLVED)
+        status : payment_status
         ~ idempotency_key : TEXT <<FK>> -- REFERENCES idempotency_keys(key)
         created_at : TIMESTAMPTZ
         resolved_at : TIMESTAMPTZ
@@ -178,8 +178,8 @@ package "Transaction" #FFFBEE {
     class idempotency_keys <<Transaction>> {
         + key : TEXT <<PK>>
         --
-        resource_type : TEXT CHECK(REGISTRATION, PAYMENT)
-        status : TEXT CHECK(IN_PROGRESS, COMPLETED, UNRESOLVED)
+        resource_type : idempotency_resource_type
+        status : idempotency_status
         response_body : JSONB
         status_code : INT
         created_at : TIMESTAMPTZ
@@ -204,17 +204,17 @@ package "Async" #F8EEFF {
         success_count : INT
         failed_count : INT
         error_file_path : TEXT -- errors/YYYY-MM-DD.csv
-        triggered_by : TEXT CHECK(CRON, MANUAL)
-        status : TEXT CHECK(IN_PROGRESS, SUCCESS, FAILED)
+        triggered_by : import_trigger
+        status : import_status
     }
 
     class notification_logs <<Async>> {
         + id : UUID <<PK>>
         --
         user_id : TEXT -- student_id hoặc staff.id
-        event_type : TEXT
-        channel : TEXT
-        status : TEXT CHECK(SENT, FAILED, TIMEOUT)
+        event_type : notification_type
+        channel : notification_channel
+        status : notification_delivery_status
         error_msg : TEXT
         payload : JSONB
         created_at : TIMESTAMPTZ
@@ -225,7 +225,7 @@ package "Async" #F8EEFF {
     class notification_channel_configs <<Async>> {
         + id : UUID <<PK>>
         --
-        channel_type : TEXT <<UQ>>
+        channel_type : notification_channel <<UQ>>
         is_active : BOOLEAN DEFAULT TRUE
         config_json : JSONB
         created_at : TIMESTAMPTZ
