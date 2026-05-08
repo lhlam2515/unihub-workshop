@@ -10,14 +10,7 @@ import handleError from "@/lib/handlers/error";
 import { ticketsApi } from "./tickets.service";
 
 import type { CachedRegistrationDto } from "./tickets.service";
-
-export type PreloadStatus = "idle" | "loading" | "done" | "error";
-
-export interface UsePreloadResult {
-  status: PreloadStatus;
-  errorMessage: string | null;
-  preload: (workshopId: string) => Promise<void>;
-}
+import type { PreloadStatus, UsePreloadResult } from "../lib/types";
 
 /** Fetch all pages of registrations by following cursors. */
 async function fetchAllRegistrations(

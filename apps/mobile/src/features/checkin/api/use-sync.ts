@@ -9,22 +9,7 @@ import handleError from "@/lib/handlers/error";
 
 import { checkinApi } from "./checkin.service";
 
-export type SyncRunStatus = "idle" | "syncing" | "done" | "error";
-
-export interface SyncStats {
-  pending: number;
-  synced: number;
-  conflicts: number;
-  failed: number;
-}
-
-export interface UseSyncResult {
-  stats: SyncStats;
-  runStatus: SyncRunStatus;
-  errorMessage: string | null;
-  sync: (workshopId: string, deviceId: string) => Promise<void>;
-  refresh: () => Promise<void>;
-}
+import type { SyncRunStatus, SyncStats, UseSyncResult } from "../lib/types";
 
 export function useSync(): UseSyncResult {
   const [stats, setStats] = useState<SyncStats>({

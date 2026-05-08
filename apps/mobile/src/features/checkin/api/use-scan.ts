@@ -10,28 +10,7 @@ import handleError from "@/lib/handlers/error";
 
 import { checkinApi } from "./checkin.service";
 
-export type ScanStatus = "idle" | "scanning" | "success" | "error";
-
-export interface ScanResult {
-  checkinId?: string;
-  studentName: string;
-  studentCode: string;
-  checkedInAt: Date;
-  source: "ONLINE" | "OFFLINE_QUEUED";
-}
-
-export interface UseScanResult {
-  status: ScanStatus;
-  result: ScanResult | null;
-  errorMessage: string | null;
-  scan: (
-    qrToken: string,
-    workshopId: string,
-    deviceId: string,
-    staffId: string
-  ) => Promise<void>;
-  reset: () => void;
-}
+import type { ScanResult, ScanStatus, UseScanResult } from "../lib/types";
 
 export function useScan(): UseScanResult {
   const [status, setStatus] = useState<ScanStatus>("idle");
