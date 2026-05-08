@@ -92,7 +92,7 @@ export function WorkshopDetailWidget({
   const end = formatDateTime(workshop.endsAt);
   const duration = getDuration(workshop.startsAt, workshop.endsAt);
   const isFree = workshop.price === 0;
-  const isCancelled = workshop.status === "cancelled";
+  const isCancelled = workshop.status === "CANCELLED";
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -119,18 +119,18 @@ export function WorkshopDetailWidget({
             <h1 className="text-2xl font-bold">{workshop.title}</h1>
             <Badge
               variant={
-                workshop.status === "cancelled"
+                workshop.status === "CANCELLED"
                   ? "destructive"
-                  : workshop.status === "open"
+                  : workshop.status === "OPEN"
                     ? "default"
                     : "secondary"
               }
             >
-              {workshop.status === "open"
+              {workshop.status === "OPEN"
                 ? "Đang mở"
-                : workshop.status === "closed"
+                : workshop.status === "COMPLETED"
                   ? "Đã đóng"
-                  : workshop.status === "cancelled"
+                  : workshop.status === "CANCELLED"
                     ? "Đã hủy"
                     : "Nháp"}
             </Badge>
