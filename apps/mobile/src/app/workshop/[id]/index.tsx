@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CacheStatusBadge } from "@/components/CacheStatusBadge";
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
@@ -111,28 +112,7 @@ export default function WorkshopDashboardScreen() {
             <Text style={[styles.cardTitle, { color: colors.text }]}>
               Dữ liệu local
             </Text>
-            <View style={styles.metricRow}>
-              <View style={styles.metric}>
-                <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {localCache.registrationCount}
-                </Text>
-                <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                  Đã cache
-                </Text>
-              </View>
-              <View style={styles.metric}>
-                <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {localCache.cacheStatus === "FRESH"
-                    ? "Mới"
-                    : localCache.cacheStatus === "STALE"
-                      ? "Cũ"
-                      : "Hết hạn"}
-                </Text>
-                <Text style={[styles.metricLabel, { color: colors.icon }]}>
-                  Trạng thái
-                </Text>
-              </View>
-            </View>
+            <CacheStatusBadge cacheInfo={localCache} />
           </View>
         ) : null}
 
