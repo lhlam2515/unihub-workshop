@@ -42,11 +42,11 @@ export interface Room extends RoomSummary {
 // ---------------------------------------------------------------------------
 
 export type AiSummaryStatus =
-  | "none"
-  | "queued"
-  | "processing"
-  | "done"
-  | "failed";
+  | "NONE"
+  | "QUEUED"
+  | "PROCESSING"
+  | "DONE"
+  | "FAILED";
 
 export interface AiSummary {
   status: AiSummaryStatus;
@@ -59,7 +59,7 @@ export interface AiSummary {
 // Workshop
 // ---------------------------------------------------------------------------
 
-export type WorkshopStatus = "draft" | "open" | "closed" | "cancelled";
+export type WorkshopStatus = "DRAFT" | "OPEN" | "COMPLETED" | "CANCELLED";
 
 export interface WorkshopListItem {
   id: string;

@@ -9,12 +9,12 @@ interface AISummaryPanelProps {
 
 export function AISummaryPanel({ summary }: AISummaryPanelProps) {
   // Hidden states
-  if (summary.status === "none" || summary.status === "failed") {
+  if (summary.status === "NONE" || summary.status === "FAILED") {
     return null;
   }
 
   // Loading states
-  if (summary.status === "queued" || summary.status === "processing") {
+  if (summary.status === "QUEUED" || summary.status === "PROCESSING") {
     return (
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Tóm tắt AI</h2>
@@ -22,7 +22,7 @@ export function AISummaryPanel({ summary }: AISummaryPanelProps) {
           <div className="flex items-center gap-2">
             <Loader2 className="text-muted-foreground size-4 animate-spin" />
             <span className="text-muted-foreground text-sm">
-              {summary.status === "queued"
+              {summary.status === "QUEUED"
                 ? "Đang chờ xử lý..."
                 : "Đang tạo tóm tắt..."}
             </span>
