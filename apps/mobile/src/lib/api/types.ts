@@ -18,38 +18,60 @@ export type ErrorCategory =
  * Mirror the server's stable error codes for typed error handling on the client.
  */
 export type ErrorCode =
-  | "SEAT_UNAVAILABLE"
-  | "SEAT_LOCK_EXPIRED"
+  // ── Auth ──
+  | "TOKEN_INVALID"
+  | "TOKEN_EXPIRED"
+  | "TOKEN_REVOKED"
+  | "REFRESH_TOKEN_INVALID"
+  | "INVALID_CREDENTIALS"
+  | "ACCOUNT_DISABLED"
+  | "CHECKIN_SCOPE_DENIED"
+  // ── Workshop ──
+  | "WORKSHOP_NOT_FOUND"
+  | "WORKSHOP_NOT_OPEN"
+  | "WORKSHOP_CANCELLED"
+  | "WORKSHOP_FULL"
+  | "WORKSHOP_TIME_CONFLICT"
+  | "WORKSHOP_NOT_ASSIGNED"
+  | "ROOM_CONFLICT"
+  | "SEATS_TOTAL_BELOW_REGISTERED"
+  // ── Registration ──
   | "REGISTRATION_DUPLICATE"
   | "REGISTRATION_NOT_FOUND"
   | "REGISTRATION_CANCELLED"
+  | "STUDENT_NOT_IN_CSV"
+  | "REQUEST_IN_PROGRESS"
+  | "CONFLICT_EXHAUSTED"
+  // ── Payment ──
   | "PAYMENT_DUPLICATE"
   | "PAYMENT_GATEWAY_ERROR"
   | "PAYMENT_GATEWAY_OPEN"
   | "PAYMENT_TIMEOUT"
   | "PAYMENT_NOT_FOUND"
   | "PAYMENT_ALREADY_SUCCESS"
-  | "WORKSHOP_NOT_FOUND"
-  | "WORKSHOP_NOT_PUBLISHED"
-  | "WORKSHOP_CANCELLED"
-  | "WORKSHOP_FULL"
-  | "WORKSHOP_TIME_CONFLICT"
+  // ── Seat ──
+  | "SEAT_UNAVAILABLE"
+  | "SEAT_LOCK_EXPIRED"
+  // ── Ticket ──
   | "TICKET_NOT_FOUND"
   | "TICKET_VOID"
   | "TICKET_ALREADY_CHECKEDIN"
-  | "CHECKIN_SCOPE_DENIED"
-  | "TOKEN_INVALID"
-  | "TOKEN_EXPIRED"
-  | "TOKEN_REVOKED"
-  | "REFRESH_TOKEN_INVALID"
+  | "QR_INVALID"
+  | "REGISTRATION_NOT_ACTIVE"
+  | "WRONG_WORKSHOP"
+  // ── User ──
   | "USER_NOT_FOUND"
   | "USER_SUSPENDED"
   | "STUDENT_NOT_FOUND"
-  | "INVALID_CREDENTIALS"
+  // ── System ──
   | "RATE_LIMIT_EXCEEDED"
   | "DB_LOCK_TIMEOUT"
   | "VALIDATION_FAILED"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  // ── Reconcile / batch ──
+  | "RECONCILIATION_ALREADY_RUNNING"
+  | "NOT_IN_FAILED_STATE"
+  | "BATCH_TOO_LARGE";
 
 /**
  * Field-level validation error returned in the error payload.
@@ -74,14 +96,19 @@ export interface ApiErrorShape {
 
 /**
  * Pagination metadata included in paginated list responses.
+ *
+ * Cursor-based pagination. The `nextCursor` doubles as an "I have more" flag:
+ * when it is non-null, more items exist beyond the current page.
  */
 export interface PaginationMeta {
-  page: number;
+  /** Number of items per page */
   limit: number;
-  total: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
+  /** Opaque cursor — pass as `?cursor=` for next page. `null` when `hasMore=false` */
+  nextCursor: string | null;
+  /** True if more items exist beyond this page */
+  hasMore: boolean;
+  /** Only populated for offset-aware admin endpoints. `null` for cursor-based. */
+  total: number | null;
 }
 
 /**
@@ -121,7 +148,7 @@ export type ApiResponse<T = void> =
  * Container shape for paginated list responses.
  */
 export interface PaginatedData<T> {
-  items: T[];
+  data: T[];
 }
 
 // ---------------------------------------------------------------------------

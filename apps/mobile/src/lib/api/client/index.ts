@@ -84,7 +84,7 @@ export const api = {
       });
     }
 
-    return { items: success.data.items, pagination: success.pagination };
+    return { items: success.data.data, pagination: success.pagination };
   },
 
   /** POST with an optional body and return the unwrapped payload. */
