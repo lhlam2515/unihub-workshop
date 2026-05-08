@@ -106,6 +106,13 @@ export class PaymentReconciliationService {
               `Payment ${payment.paymentId} resolved as ${resolvedStatus} via reconciliation`
             );
           } else {
+            const paymentAge =
+              Date.now() - new Date(payment.initiatedAt).getTime();
+            if (paymentAge > 24 * 3_600_000) {
+              this.logger.warn(
+                `Payment ${payment.paymentId} UNRESOLVED > 24h — requires manual review`
+              );
+            }
             unresolved.push(payment.paymentId);
           }
         } catch (err) {

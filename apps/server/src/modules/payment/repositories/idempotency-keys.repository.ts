@@ -167,6 +167,41 @@ export class IdempotencyKeysRepository {
   }
 
   /**
+   * Deletes COMPLETED idempotency keys older than the TTL that are not
+   * referenced by any UNRESOLVED payment record.
+   *
+   * Keeps keys referenced by UNRESOLVED payments to preserve the
+   * FK relationship for manual investigation.
+   *
+   * Side effects:
+   * - Deletes rows from the idempotency_keys table.
+   *
+   * @param ttlHours - Age threshold in hours (default 24).
+   * @returns OkResult with deletedCount, or FailResult with INTERNAL_ERROR.
+   */
+  async deleteExpiredNonReferenced(
+    ttlHours: number = 24
+  ): Promise<Result<{ deletedCount: number }>> {
+    return tryCatch(
+      async () => {
+        const cutoff = new Date(Date.now() - ttlHours * 3_600_000);
+        const result = await this.db
+          .delete(this.schema.idempotencyKeys)
+          .where(
+            and(
+              eq(this.schema.idempotencyKeys.status, "COMPLETED"),
+              lt(this.schema.idempotencyKeys.createdAt, cutoff),
+              sql`${this.schema.idempotencyKeys.keyHash} NOT IN (SELECT ${this.schema.payments.idempotencyKey} FROM ${this.schema.payments} WHERE ${this.schema.payments.status} = 'UNRESOLVED')`
+            )
+          )
+          .returning({ keyHash: this.schema.idempotencyKeys.keyHash });
+        return { deletedCount: result.length };
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
    * Finds stale IN_PROGRESS records whose lock window has expired.
    *
    * These records represent operations that started but never completed
