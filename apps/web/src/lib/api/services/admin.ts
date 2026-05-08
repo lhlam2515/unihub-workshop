@@ -6,6 +6,13 @@ import { ApiError } from "@/lib/api/errors";
 import type { RequestOptions } from "@/lib/api/types";
 import { Result } from "@/lib/result";
 import type { DashboardOverview } from "@/types/admin";
+import type {
+  CircuitBreakerState,
+  ImportLog,
+  NotificationChannel,
+  NotificationLog,
+  ReconcileResponse,
+} from "@/types/admin-operations";
 import type { RegistrationAdmin } from "@/types/registration";
 import type { AiSummary } from "@/types/workshop";
 import type {
@@ -308,5 +315,142 @@ export async function downloadRegistrationsCSV(
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     })()
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8: Admin Operations — Imports, Notifications, System
+// ---------------------------------------------------------------------------
+
+/** GET paginated /admin/imports — list all import runs with optional cursor/status filter. */
+export async function listImports(params?: {
+  status?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<Result<PaginatedResult<ImportLog>>> {
+  return Result.fromPromise(
+    api.getPaginated<ImportLog>(API_ROUTES.ADMIN.IMPORTS.LIST, {
+      params: params as Record<string, string>,
+    })
+  );
+}
+
+/** GET /admin/imports/{id} — single import run detail. */
+export async function getImportDetail(id: string): Promise<Result<ImportLog>> {
+  return Result.fromPromise(
+    api.get<ImportLog>(API_ROUTES.ADMIN.IMPORTS.DETAIL(id))
+  );
+}
+
+/** GET /admin/imports/{id}/errors — download error CSV as blob
+ *  Uses raw fetch to handle binary/CSV streams. */
+export async function downloadImportErrors(
+  importId: string
+): Promise<Result<void>> {
+  return Result.fromPromise(
+    (async () => {
+      const url = `${API_BASE_URL}${API_ROUTES.ADMIN.IMPORTS.ERRORS(importId)}`;
+      const res = await fetch(url, {
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${tokenStore.get()}`,
+          Accept: "text/csv",
+        },
+      });
+      if (!res.ok) {
+        throw new ApiError(res.status, {
+          code: "INTERNAL_ERROR",
+          message: "Không thể tải xuống file CSV lỗi.",
+        });
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `import-errors-${importId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    })()
+  );
+}
+
+/** POST /admin/imports/trigger — manually trigger a CSV import run. */
+export async function triggerImport(
+  filePath?: string
+): Promise<Result<ImportLog>> {
+  return Result.fromPromise(
+    api.post<ImportLog>(
+      API_ROUTES.ADMIN.IMPORTS.TRIGGER,
+      filePath ? { filePath } : undefined
+    )
+  );
+}
+
+/** GET /admin/notification-channels — list all notification channel configs. */
+export async function listNotificationChannels(): Promise<
+  Result<NotificationChannel[]>
+> {
+  return Result.fromPromise(
+    api.get<NotificationChannel[]>(API_ROUTES.ADMIN.NOTIFICATIONS.CHANNELS)
+  );
+}
+
+/** PATCH /admin/notification-channels/{id} — update a channel's active state or config. */
+export async function updateNotificationChannel(
+  id: string,
+  body: { isActive?: boolean; configJson?: Record<string, unknown> }
+): Promise<Result<NotificationChannel>> {
+  return Result.fromPromise(
+    api.patch<NotificationChannel>(
+      API_ROUTES.ADMIN.NOTIFICATIONS.CHANNEL(id),
+      body
+    )
+  );
+}
+
+/** GET paginated /admin/notifications/logs — list notification dispatch logs with filters. */
+export async function listNotificationLogs(params?: {
+  status?: string;
+  channel?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<Result<PaginatedResult<NotificationLog>>> {
+  return Result.fromPromise(
+    api.getPaginated<NotificationLog>(API_ROUTES.ADMIN.NOTIFICATIONS.LOGS, {
+      params: params as Record<string, string>,
+    })
+  );
+}
+
+/** GET /admin/system/circuit-breaker — get circuit breaker state for all gateways. */
+export async function getCircuitBreakers(): Promise<
+  Result<CircuitBreakerState[]>
+> {
+  return Result.fromPromise(
+    api.get<CircuitBreakerState[]>(API_ROUTES.ADMIN.SYSTEM.CIRCUIT_BREAKERS)
+  );
+}
+
+/** POST /admin/system/circuit-breaker/{gateway}/reset — reset a circuit breaker to CLOSED. */
+export async function resetCircuitBreaker(
+  gateway: string
+): Promise<Result<CircuitBreakerState>> {
+  return Result.fromPromise(
+    api.post<CircuitBreakerState>(
+      API_ROUTES.ADMIN.SYSTEM.RESET_CIRCUIT_BREAKER(gateway)
+    )
+  );
+}
+
+/** POST /admin/payments/reconcile — manually trigger payment reconciliation job. */
+export async function triggerReconciliation(): Promise<
+  Result<ReconcileResponse>
+> {
+  return Result.fromPromise(
+    api.post<ReconcileResponse>(API_ROUTES.ADMIN.SYSTEM.PAYMENTS_RECONCILE)
   );
 }
