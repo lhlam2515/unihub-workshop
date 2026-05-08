@@ -7,6 +7,6 @@ const config = getDefaultConfig(__dirname);
 config.resolver.sourceExts.push("sql");
 
 module.exports = withNativeWind(config, {
-  input: "./global.css",
+  input: "./src/app/global.css",
   inlineRem: 16,
 });
