@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -14,7 +13,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/EmptyState";
 import { WorkshopCard } from "@/components/WorkshopCard";
 import ROUTES from "@/constants/routes";
-import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
 import { cacheMetadata } from "@/database/schema/cache-metadata.schema";
 import type { CacheMetadata } from "@/database/types";
@@ -23,13 +21,10 @@ import {
   workshopsService,
   type WorkshopDetailDto,
 } from "@/features/workshops/api/workshops.service";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
 import handleError from "@/lib/handlers/error";
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
   const { preload } = usePreload();
 
   const [workshops, setWorkshops] = useState<WorkshopDetailDto[]>([]);
@@ -98,37 +93,29 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: colors.tint }]}>
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView contentContainerClassName="grow gap-3 p-5">
+        <View className="gap-2 py-2">
+          <Text className="text-xs font-bold tracking-widest text-primary">
             TAB SỰ KIỆN
           </Text>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Workshop được phân công
           </Text>
         </View>
 
         {isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={colors.tint} size="large" />
-            <Text style={[styles.hint, { color: colors.icon }]}>
+          <View className="items-center gap-3 py-10">
+            <ActivityIndicator size="large" />
+            <Text className="text-sm text-muted-foreground">
               Đang tải danh sách...
             </Text>
           </View>
         ) : errorMessage ? (
-          <View
-            style={[
-              styles.errorBox,
-              {
-                borderColor: "#EF4444",
-                backgroundColor: "rgba(239,68,68,0.08)",
-              },
-            ]}
-          >
-            <Text style={styles.errorText}>{errorMessage}</Text>
+          <View className="rounded-2xl border border-red-500 bg-red-500/10 p-4">
+            <Text className="text-sm leading-5 text-red-500">
+              {errorMessage}
+            </Text>
           </View>
         ) : workshops.length === 0 ? (
           <EmptyState
@@ -136,7 +123,7 @@ export default function HomeScreen() {
             description="Tài khoản của bạn chưa được phân công workshop nào. Liên hệ quản trị viên để được cấp quyền."
           />
         ) : (
-          <View style={styles.section}>
+          <View className="gap-3">
             {workshops.map((workshop) => (
               <WorkshopCard
                 key={workshop.workshopId}
@@ -148,35 +135,24 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View
-          style={[styles.quickCard, { borderColor: colors.tabIconDefault }]}
-        >
-          <Text style={{ color: colors.text, fontSize: 17, fontWeight: "700" }}>
+        <View className="gap-3.5 rounded-3xl border border-border p-5">
+          <Text className="text-lg font-bold text-foreground">
             Hành động nhanh
           </Text>
-          <View style={styles.quickActions}>
+          <View className="gap-2.5">
             <Pressable
               onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-              ]}
+              className="items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-85"
             >
-              <Text style={styles.primaryButtonText}>Đồng bộ ngay</Text>
+              <Text className="text-base font-bold text-white">
+                Đồng bộ ngay
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => router.push(ROUTES.TAB_QUEUE)}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                {
-                  borderColor: colors.tabIconDefault,
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
+              className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
             >
-              <Text
-                style={[styles.secondaryButtonText, { color: colors.text }]}
-              >
+              <Text className="text-base font-bold text-foreground">
                 Mở hàng đợi
               </Text>
             </Pressable>
@@ -186,42 +162,3 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  content: { flexGrow: 1, padding: 20, gap: 12 },
-  header: { gap: 8, paddingVertical: 8 },
-  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2 },
-  title: { fontSize: 28, fontWeight: "800", lineHeight: 34 },
-  center: { alignItems: "center", gap: 12, paddingVertical: 40 },
-  hint: { fontSize: 14 },
-  errorBox: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-  },
-  errorText: { color: "#EF4444", fontSize: 14, lineHeight: 20 },
-  emptyBox: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 24,
-    gap: 10,
-    alignItems: "center",
-  },
-  section: { gap: 12 },
-  quickCard: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 14 },
-  quickActions: { gap: 10 },
-  primaryButton: {
-    alignItems: "center",
-    borderRadius: 18,
-    paddingVertical: 14,
-  },
-  primaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
-  secondaryButton: {
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: { fontSize: 15, fontWeight: "700" },
-});

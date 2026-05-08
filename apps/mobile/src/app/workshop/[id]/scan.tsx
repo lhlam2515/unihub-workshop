@@ -6,15 +6,13 @@ import {
 } from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
 import { ScanOverlay } from "@/features/checkin/components/ScanOverlay";
 import { useScan } from "@/features/checkin/hooks/use-scan";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
 
 const SCAN_DEBOUNCE_MS = 2000;
@@ -27,8 +25,6 @@ function getWorkshopId(value: string | string[] | undefined) {
 export default function ScanScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const workshopId = getWorkshopId(params.id);
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
 
   const [permission, requestPermission] = useCameraPermissions();
   const { scan, status, result, errorMessage, reset } = useScan();
@@ -83,62 +79,48 @@ export default function ScanScreen() {
 
   // Permission not yet determined
   if (!permission) {
-    return <View style={[styles.safeArea, { backgroundColor: "#0B1020" }]} />;
+    return <View className="flex-1 bg-[#0B1020]" />;
   }
 
   // Permission denied
   if (!permission.granted) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: "#0B1020" }]}>
-        <View style={styles.content}>
-          <Text style={styles.eyebrow}>QR SCANNER</Text>
-          <Text style={styles.title}>Cần quyền truy cập camera</Text>
-          <Text style={styles.subtitle}>
+      <SafeAreaView className="flex-1 bg-[#0B1020]">
+        <View className="flex-1 justify-center gap-4 p-6">
+          <Text className="text-xs font-bold tracking-widest text-[#7DD3FC]">
+            QR SCANNER
+          </Text>
+          <Text className="text-2xl font-extrabold text-white">
+            Cần quyền truy cập camera
+          </Text>
+          <Text className="text-base leading-6 text-white/75">
             Ứng dụng cần quyền camera để quét mã QR điểm danh.
           </Text>
-          <View style={styles.actions}>
+          <View className="gap-3">
             {permission.canAskAgain ? (
               <Pressable
                 onPress={requestPermission}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  {
-                    backgroundColor: colors.tint,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
+                className="items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-85"
               >
-                <Text style={styles.primaryButtonText}>Cấp quyền camera</Text>
+                <Text className="text-base font-bold text-white">
+                  Cấp quyền camera
+                </Text>
               </Pressable>
             ) : (
               <Pressable
                 onPress={() => Linking.openSettings()}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  {
-                    backgroundColor: colors.tint,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
+                className="items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-85"
               >
-                <Text style={styles.primaryButtonText}>
+                <Text className="text-base font-bold text-white">
                   Mở cài đặt thiết bị
                 </Text>
               </Pressable>
             )}
             <Pressable
               onPress={() => router.back()}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                {
-                  borderColor: "rgba(255,255,255,0.3)",
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
+              className="items-center rounded-2xl border border-white/30 py-3.5 active:opacity-85"
             >
-              <Text style={{ color: "white", fontSize: 15, fontWeight: "700" }}>
-                Quay lại
-              </Text>
+              <Text className="text-base font-bold text-white">Quay lại</Text>
             </Pressable>
           </View>
         </View>
@@ -147,9 +129,9 @@ export default function ScanScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: "#0B1020" }]}>
+    <SafeAreaView className="flex-1 bg-[#0B1020]">
       <CameraView
-        style={StyleSheet.absoluteFill}
+        className="absolute inset-0"
         facing="back"
         onBarcodeScanned={isProcessing ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
@@ -158,7 +140,7 @@ export default function ScanScreen() {
       <ScanOverlay
         isProcessing={isProcessing}
         errorMessage={errorMessage}
-        tintColor={colors.tint}
+        tintColor="#3B82F6"
         onRetry={() => {
           reset();
           setIsProcessing(false);
@@ -169,42 +151,3 @@ export default function ScanScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  content: {
-    flex: 1,
-    padding: 24,
-    gap: 16,
-    justifyContent: "center",
-  },
-  eyebrow: {
-    color: "#7DD3FC",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  title: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "800",
-  },
-  subtitle: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  actions: { gap: 12 },
-  primaryButton: {
-    alignItems: "center",
-    borderRadius: 18,
-    paddingVertical: 14,
-  },
-  primaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
-  secondaryButton: {
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-  },
-});

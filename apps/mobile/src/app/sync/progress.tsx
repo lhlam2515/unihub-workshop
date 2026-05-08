@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -14,31 +13,25 @@ import { SyncProgressSteps } from "@/features/checkin/components/SyncProgressSte
 import { useSync } from "@/features/checkin/hooks/use-sync";
 
 import ROUTES from "@/constants/routes";
-import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function SyncProgressScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
   const params = useLocalSearchParams<{ workshopId?: string }>();
   const workshopId = params.workshopId ?? "";
   const { stats, runStatus, errorMessage, sync } = useSync();
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: colors.tint }]}>
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView contentContainerClassName="grow gap-3.5 p-5">
+        <View className="gap-2.5">
+          <Text className="text-xs font-bold tracking-widest text-primary">
             M07 · ĐỒNG BỘ
           </Text>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Tiến độ đồng bộ
           </Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>
+          <Text className="text-base leading-6 text-muted-foreground">
             Đẩy dữ liệu check-in offline lên server. Mỗi bản ghi được xử lý với
             ON CONFLICT DO NOTHING để đảm bảo idempotency.
           </Text>
@@ -50,16 +43,13 @@ export default function SyncProgressScreen() {
           errorMessage={errorMessage}
         />
 
-        <View style={styles.actions}>
+        <View className="mt-1 gap-3">
           {runStatus === "done" ? (
             <Pressable
               onPress={() => router.back()}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-              ]}
+              className="min-h-[52px] items-center justify-center rounded-2xl bg-primary px-5 py-3.5 active:opacity-85"
             >
-              <Text style={styles.primaryButtonText}>Hoàn thành</Text>
+              <Text className="text-base font-bold text-white">Hoàn thành</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -73,18 +63,12 @@ export default function SyncProgressScreen() {
                 void sync(workshopId, device?.deviceId ?? "unknown");
               }}
               disabled={runStatus === "syncing"}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                {
-                  backgroundColor: colors.tint,
-                  opacity: pressed || runStatus === "syncing" ? 0.85 : 1,
-                },
-              ]}
+              className="min-h-[52px] items-center justify-center rounded-2xl bg-primary px-5 py-3.5 active:opacity-85 disabled:opacity-85"
             >
               {runStatus === "syncing" ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text style={styles.primaryButtonText}>
+                <Text className="text-base font-bold text-white">
                   {runStatus === "error" ? "Thử lại" : "Bắt đầu đồng bộ"}
                 </Text>
               )}
@@ -92,15 +76,9 @@ export default function SyncProgressScreen() {
           )}
           <Pressable
             onPress={() => router.push(ROUTES.TAB_QUEUE)}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                borderColor: colors.tabIconDefault,
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
+            className="items-center rounded-2xl border border-border py-3.5 active:opacity-85"
           >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+            <Text className="text-base font-bold text-foreground">
               Đi tới hàng đợi
             </Text>
           </Pressable>
@@ -109,59 +87,3 @@ export default function SyncProgressScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    padding: 20,
-    gap: 14,
-  },
-  header: {
-    gap: 10,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    lineHeight: 34,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  actions: {
-    gap: 12,
-    marginTop: 4,
-  },
-  primaryButton: {
-    alignItems: "center",
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    minHeight: 52,
-    justifyContent: "center",
-  },
-  primaryButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-});
