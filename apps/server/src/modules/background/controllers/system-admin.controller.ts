@@ -115,7 +115,7 @@ export class SystemAdminController {
    *
    * @returns OkResult with job metadata (jobId, startedAt, unresolvedCount).
    */
-  @Post("/admin/payments/reconcile")
+  @Post("payments/reconcile")
   @HttpCode(HttpStatus.ACCEPTED)
   async reconcilePayments(): Promise<
     Result<{

@@ -4,30 +4,24 @@
  * Excludes sensitive fields such as `password_hash`.
  */
 export interface UserResponseDto {
-  user_id: string;
+  userId: string;
   email: string;
   role: string;
   status: string;
-  created_at: Date;
+  createdAt: Date;
 }
 
 /**
  * Builds a UserResponseDto from a raw user entity, excluding sensitive fields.
  */
 export class UserResponseBuilder {
-  static from(user: {
-    userId: string;
-    email: string;
-    role: string;
-    status: string;
-    createdAt: Date;
-  }): UserResponseDto {
+  static from(user: UserResponseDto): UserResponseDto {
     return {
-      user_id: user.userId,
+      userId: user.userId,
       email: user.email,
       role: user.role,
       status: user.status,
-      created_at: user.createdAt,
+      createdAt: user.createdAt,
     };
   }
 }

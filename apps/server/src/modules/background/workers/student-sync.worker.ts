@@ -7,6 +7,8 @@ import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/messaging.constants";
 import type { IJobHandler } from "@/infra/messaging/messaging.interfaces";
 import { RedisService } from "@/infra/redis/redis.service";
 import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
+import { UsersService } from "@/modules/iam/services/users.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 
 /**
  * StudentSyncWorker
@@ -36,7 +38,9 @@ export class StudentSyncWorker
 
   constructor(
     private readonly studentSyncService: StudentSyncService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly usersService: UsersService,
+    private readonly notificationLogProducer: NotificationLogProducer
   ) {
     super();
   }
@@ -82,9 +86,77 @@ export class StudentSyncWorker
         return;
       }
 
-      this.logger.log(`Sync job ${jobId} completed successfully`);
+      const { totalRows, processedRows, errorRows } = result.data;
+
+      this.logger.log(
+        `Sync job ${jobId} completed successfully: ${processedRows}/${totalRows} rows processed, ${errorRows} errors`
+      );
+
+      // Notify BTC users if there are errors
+      if (errorRows > 0) {
+        await this.notifyBtcUsers({
+          jobId,
+          totalRows,
+          processedRows,
+          errorRows,
+        });
+      }
     } finally {
       await this.releaseLock(jobId);
+    }
+  }
+
+  /**
+   * Sends CSV_IMPORT_COMPLETED_WITH_ERRORS notification to all BTC users.
+   *
+   * Business rules:
+   * - Finds all users with role BTC via UsersService.
+   * - Creates one notification per BTC user via batchCreateAndEnqueue.
+   * - Notification failures are logged but never throw (fire-and-forget).
+   *
+   * Side effects:
+   * - Inserts notification_log rows for each BTC user.
+   * - Enqueues notification.send jobs to the notification queue.
+   */
+  private async notifyBtcUsers(params: {
+    jobId: string;
+    totalRows: number;
+    processedRows: number;
+    errorRows: number;
+  }): Promise<void> {
+    try {
+      const usersResult = await this.usersService.listUsers("BTC", {
+        page: 1,
+        limit: 100,
+      });
+
+      if (usersResult.isFailure || usersResult.data.items.length === 0) {
+        this.logger.warn("No BTC users found to notify about sync errors");
+        return;
+      }
+
+      const btcUserIds = usersResult.data.items.map((user) => user.userId);
+
+      await this.notificationLogProducer.batchCreateAndEnqueue(
+        btcUserIds.map((userId) => ({
+          userId,
+          type: "CSV_IMPORT_COMPLETED_WITH_ERRORS" as const,
+          channel: "APP" as const,
+          payload: {
+            date: new Date().toISOString().slice(0, 10),
+            totalRows: params.totalRows,
+            successCount: params.processedRows,
+            failedCount: params.errorRows,
+            errorFileUrl: `/admin/imports/errors/${new Date().toISOString().slice(0, 10)}`,
+          },
+        }))
+      );
+
+      this.logger.log(
+        `Notified ${btcUserIds.length} BTC users about sync errors`
+      );
+    } catch (error) {
+      this.logger.error("Failed to notify BTC users about sync errors", error);
     }
   }
 

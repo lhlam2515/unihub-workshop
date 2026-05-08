@@ -56,6 +56,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "PAYMENT_CONFIRMED_LATE",
   "PAYMENT_FAILED_RECONCILED",
   "CHECKIN_REMINDER",
+  "CSV_IMPORT_COMPLETED_WITH_ERRORS",
 ]);
 
 export const notificationChannelEnum = pgEnum("notification_channel", [

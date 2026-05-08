@@ -15,7 +15,8 @@ export type NotificationType =
   | "PAYMENT_FAILED"
   | "PAYMENT_CONFIRMED_LATE"
   | "PAYMENT_FAILED_RECONCILED"
-  | "CHECKIN_REMINDER";
+  | "CHECKIN_REMINDER"
+  | "CSV_IMPORT_COMPLETED_WITH_ERRORS";
 
 export type NotificationChannel = "APP" | "EMAIL" | "TELEGRAM";
 

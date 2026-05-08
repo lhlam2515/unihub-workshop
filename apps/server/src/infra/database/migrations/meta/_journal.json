@@ -36,6 +36,14 @@
       "when": 1778191542066,
       "tag": "0004_little_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "dialect": "postgresql",
+      "when": 1744032000000,
+      "tag": "0005_add_csv_import_notification",
+      "breakpoints": true
     }
   ]
 }
