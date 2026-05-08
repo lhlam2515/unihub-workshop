@@ -1,12 +1,17 @@
-import React from "react";
+import { notFound } from "next/navigation";
 
-const AdminEditSpeakerPage = () => {
-  return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">AdminEditSpeakerPage</h1>
-      <p className="text-gray-500">Route: /admin/speakers/[speakerId]/edit</p>
-    </div>
-  );
-};
+import { getSpeaker } from "@/lib/api/services/admin";
+import { AdminSpeakerFormWidget } from "@/widgets/AdminSpeakerFormWidget";
 
-export default AdminEditSpeakerPage;
+interface PageProps {
+  params: Promise<{ speakerId: string }>;
+}
+
+export default async function AdminEditSpeakerPage({ params }: PageProps) {
+  const { speakerId } = await params;
+  const result = await getSpeaker(speakerId);
+
+  if (result.isFailure) notFound();
+
+  return <AdminSpeakerFormWidget mode="edit" initialData={result.data} />;
+}

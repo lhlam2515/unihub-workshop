@@ -1,12 +1,17 @@
-import React from "react";
+import { listRooms } from "@/lib/api/services/admin";
+import { AdminRoomListWidget } from "@/widgets/AdminRoomListWidget";
 
-const AdminRoomManagementPage = () => {
-  return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">AdminRoomManagementPage</h1>
-      <p className="text-gray-500">Route: /admin/rooms</p>
-    </div>
-  );
-};
+export default async function AdminRoomListPage() {
+  const result = await listRooms();
 
-export default AdminRoomManagementPage;
+  if (result.isFailure) {
+    return (
+      <AdminRoomListWidget
+        initialResult={null}
+        initialError={(result.error as { message?: string })?.message}
+      />
+    );
+  }
+
+  return <AdminRoomListWidget initialResult={result.data} />;
+}

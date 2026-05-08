@@ -10,8 +10,12 @@ import type { RegistrationAdmin } from "@/types/registration";
 import type { AiSummary } from "@/types/workshop";
 import type {
   AdminWorkshopFilters,
-  RoomSummary,
-  SpeakerSummary,
+  RoomAdmin,
+  RoomCreateRequest,
+  RoomUpdateRequest,
+  SpeakerAdmin,
+  SpeakerCreateRequest,
+  SpeakerUpdateRequest,
   WorkshopAdmin,
   WorkshopCancelRequest,
   WorkshopCreateRequest,
@@ -104,25 +108,80 @@ export async function getWorkshopStats(
   );
 }
 
-/** GET paginated /admin/speakers — for form dropdowns. */
-export async function listSpeakers(): Promise<
-  Result<PaginatedResult<SpeakerSummary>>
-> {
+// ---------------------------------------------------------------------------
+// Phase 7: Admin Master Data — Speakers CRUD
+// ---------------------------------------------------------------------------
+
+/** GET /admin/speakers — list all speakers. */
+export async function listSpeakers(): Promise<Result<SpeakerAdmin[]>> {
   return Result.fromPromise(
-    api.getPaginated<SpeakerSummary>(API_ROUTES.ADMIN.SPEAKERS.LIST, {
-      params: { limit: 200 },
-    })
+    api.get<SpeakerAdmin[]>(API_ROUTES.ADMIN.SPEAKERS.LIST)
   );
 }
 
-/** GET paginated /admin/rooms — for form dropdowns. */
-export async function listRooms(): Promise<
-  Result<PaginatedResult<RoomSummary>>
-> {
+/** GET /admin/speakers/{id} — single speaker detail. */
+export async function getSpeaker(id: string): Promise<Result<SpeakerAdmin>> {
   return Result.fromPromise(
-    api.getPaginated<RoomSummary>(API_ROUTES.ADMIN.ROOMS.LIST, {
-      params: { limit: 200 },
-    })
+    api.get<SpeakerAdmin>(API_ROUTES.ADMIN.SPEAKERS.DETAIL(id))
+  );
+}
+
+/** POST /admin/speakers — create a new speaker. */
+export async function createSpeaker(
+  body: SpeakerCreateRequest
+): Promise<Result<SpeakerAdmin>> {
+  return Result.fromPromise(
+    api.post<SpeakerAdmin>(API_ROUTES.ADMIN.SPEAKERS.CREATE, body)
+  );
+}
+
+/** PATCH /admin/speakers/{id} — update an existing speaker. */
+export async function updateSpeaker(
+  id: string,
+  body: SpeakerUpdateRequest
+): Promise<Result<SpeakerAdmin>> {
+  return Result.fromPromise(
+    api.patch<SpeakerAdmin>(API_ROUTES.ADMIN.SPEAKERS.UPDATE(id), body)
+  );
+}
+
+/** DELETE /admin/speakers/{id} — delete a speaker (soft delete). */
+export async function deleteSpeaker(id: string): Promise<Result<void>> {
+  return Result.fromPromise(api.delete(API_ROUTES.ADMIN.SPEAKERS.DELETE(id)));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: Admin Master Data — Rooms CRUD
+// ---------------------------------------------------------------------------
+
+/** GET /admin/rooms — list all rooms. */
+export async function listRooms(): Promise<Result<RoomAdmin[]>> {
+  return Result.fromPromise(api.get<RoomAdmin[]>(API_ROUTES.ADMIN.ROOMS.LIST));
+}
+
+/** GET /admin/rooms/{id} — single room detail. */
+export async function getRoom(id: string): Promise<Result<RoomAdmin>> {
+  return Result.fromPromise(
+    api.get<RoomAdmin>(API_ROUTES.ADMIN.ROOMS.DETAIL(id))
+  );
+}
+
+/** POST /admin/rooms — create a new room. */
+export async function createRoom(
+  body: RoomCreateRequest
+): Promise<Result<RoomAdmin>> {
+  return Result.fromPromise(
+    api.post<RoomAdmin>(API_ROUTES.ADMIN.ROOMS.CREATE, body)
+  );
+}
+
+/** PATCH /admin/rooms/{id} — update an existing room. */
+export async function updateRoom(
+  id: string,
+  body: RoomUpdateRequest
+): Promise<Result<RoomAdmin>> {
+  return Result.fromPromise(
+    api.patch<RoomAdmin>(API_ROUTES.ADMIN.ROOMS.UPDATE(id), body)
   );
 }
 
