@@ -1,14 +1,10 @@
-import { desc, eq } from "drizzle-orm";
 import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Colors } from "@/constants/theme";
-import { createDatabaseClient } from "@/database/client";
-import { checkinQueue } from "@/database/schema/checkin-queue.schema";
-import type { CheckinQueueRecord, SyncStatus } from "@/database/types";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Badge } from "@/components/ui/badge";
+import type { SyncStatus } from "@/database/types";
+import { useCheckinHistory } from "@/features/checkin/hooks/use-checkin-history";
 
 function getWorkshopId(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -23,95 +19,54 @@ function formatTime(ts: number) {
   });
 }
 
-interface BadgeProps {
-  status: SyncStatus;
-}
+const statusLabels: Record<SyncStatus, string> = {
+  PENDING: "Chưa đồng bộ",
+  SYNCING: "Đang đồng bộ",
+  SYNCED: "Đã đồng bộ",
+  CONFLICT: "Xung đột",
+  FAILED: "Thất bại",
+};
 
-function SyncBadge({ status }: BadgeProps) {
-  const config: Record<
-    SyncStatus,
-    { label: string; color: string; bg: string }
-  > = {
-    PENDING: {
-      label: "Chưa đồng bộ",
-      color: "#D97706",
-      bg: "rgba(217,119,6,0.12)",
-    },
-    SYNCING: {
-      label: "Đang đồng bộ",
-      color: "#3B82F6",
-      bg: "rgba(59,130,246,0.12)",
-    },
-    SYNCED: {
-      label: "Đã đồng bộ",
-      color: "#16A34A",
-      bg: "rgba(22,163,74,0.12)",
-    },
-    CONFLICT: {
-      label: "Xung đột",
-      color: "#DC2626",
-      bg: "rgba(220,38,38,0.12)",
-    },
-    FAILED: { label: "Thất bại", color: "#DC2626", bg: "rgba(220,38,38,0.12)" },
-  };
-  const c = config[status];
-  return (
-    <View style={[styles.badge, { backgroundColor: c.bg }]}>
-      <Text style={[styles.badgeText, { color: c.color }]}>{c.label}</Text>
-    </View>
-  );
-}
+const statusVariants: Record<
+  SyncStatus,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  PENDING: "secondary",
+  SYNCING: "default",
+  SYNCED: "default",
+  CONFLICT: "destructive",
+  FAILED: "destructive",
+};
 
 export default function CheckinHistoryScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const workshopId = getWorkshopId(params.id);
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
-
-  const [records, setRecords] = useState<CheckinQueueRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!workshopId) return;
-
-    async function fetchRecords() {
-      const db = createDatabaseClient();
-      const rows = await db
-        .select()
-        .from(checkinQueue)
-        .where(eq(checkinQueue.workshopId, workshopId))
-        .orderBy(desc(checkinQueue.checkedInAt));
-      setRecords(rows);
-      setIsLoading(false);
-    }
-
-    void fetchRecords();
-  }, [workshopId]);
+  const { records, isLoading } = useCheckinHistory(workshopId);
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-    >
-      <View style={styles.header}>
-        <Text style={[styles.eyebrow, { color: colors.tint }]}>LỊCH SỬ</Text>
-        <Text style={[styles.title, { color: colors.text }]}>
+    <SafeAreaView className="flex-1 bg-background">
+      <View className="gap-1 px-5 pb-3 pt-5">
+        <Text className="text-xs font-bold tracking-widest text-primary">
+          LỊCH SỬ
+        </Text>
+        <Text className="text-[26px] font-extrabold text-foreground">
           Điểm danh local
         </Text>
-        <Text style={[styles.subtitle, { color: colors.icon }]}>
+        <Text className="text-sm text-muted-foreground">
           {records.length} bản ghi
         </Text>
       </View>
 
       {isLoading ? (
-        <View style={styles.center}>
-          <Text style={[styles.hint, { color: colors.icon }]}>Đang tải...</Text>
+        <View className="flex-1 items-center justify-center gap-2.5 p-6">
+          <Text className="text-sm text-muted-foreground">Đang tải...</Text>
         </View>
       ) : records.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+        <View className="flex-1 items-center justify-center gap-2.5 p-6">
+          <Text className="text-lg font-bold text-foreground">
             Chưa có bản ghi nào
           </Text>
-          <Text style={[styles.hint, { color: colors.icon }]}>
+          <Text className="text-center text-sm leading-5 text-muted-foreground">
             Các lượt điểm danh sẽ xuất hiện ở đây sau khi quét QR.
           </Text>
         </View>
@@ -119,21 +74,23 @@ export default function CheckinHistoryScreen() {
         <FlatList
           data={records}
           keyExtractor={(item) => item.localId}
-          contentContainerStyle={styles.list}
+          contentContainerClassName="px-5 pb-6 gap-2.5"
           renderItem={({ item }) => (
-            <View style={[styles.row, { borderColor: colors.tabIconDefault }]}>
-              <View style={styles.rowLeft}>
-                <Text style={[styles.studentName, { color: colors.text }]}>
+            <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-border p-3.5">
+              <View className="flex-1 gap-0.5">
+                <Text className="text-base font-bold text-foreground">
                   {item.studentName}
                 </Text>
-                <Text style={[styles.studentCode, { color: colors.icon }]}>
+                <Text className="text-xs text-muted-foreground">
                   {item.studentCode}
                 </Text>
-                <Text style={[styles.time, { color: colors.icon }]}>
+                <Text className="mt-0.5 text-[11px] text-muted-foreground">
                   {formatTime(item.checkedInAt)}
                 </Text>
               </View>
-              <SyncBadge status={item.syncStatus} />
+              <Badge variant={statusVariants[item.syncStatus]}>
+                <Text>{statusLabels[item.syncStatus]}</Text>
+              </Badge>
             </View>
           )}
         />
@@ -141,36 +98,3 @@ export default function CheckinHistoryScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, gap: 4 },
-  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2 },
-  title: { fontSize: 26, fontWeight: "800" },
-  subtitle: { fontSize: 13 },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    padding: 24,
-  },
-  emptyTitle: { fontSize: 17, fontWeight: "700" },
-  hint: { fontSize: 14, lineHeight: 20, textAlign: "center" },
-  list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10 },
-  row: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
-  rowLeft: { flex: 1, gap: 2 },
-  studentName: { fontSize: 15, fontWeight: "700" },
-  studentCode: { fontSize: 12 },
-  time: { fontSize: 11, marginTop: 2 },
-  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  badgeText: { fontSize: 11, fontWeight: "700" },
-});
