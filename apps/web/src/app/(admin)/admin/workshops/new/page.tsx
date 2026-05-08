@@ -7,8 +7,8 @@ export default async function AdminCreateWorkshopPage() {
     listRooms(),
   ]);
 
-  const speakers = speakersResult.isSuccess ? speakersResult.data.items : [];
-  const rooms = roomsResult.isSuccess ? roomsResult.data.items : [];
+  const speakers = speakersResult.isSuccess ? speakersResult.data : [];
+  const rooms = roomsResult.isSuccess ? roomsResult.data : [];
 
   return (
     <div className="space-y-6">
