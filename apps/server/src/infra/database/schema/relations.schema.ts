@@ -8,7 +8,13 @@ import {
   workshopDocuments,
 } from "./async.schema";
 import { rooms, speakers, workshops } from "./event-core.schema";
-import { checkinStaffAssignments, deviceTokens, staff, students, users } from "./identity.schema";
+import {
+  checkinStaffAssignments,
+  deviceTokens,
+  staff,
+  students,
+  users,
+} from "./identity.schema";
 import {
   checkinRecords,
   payments,
@@ -22,7 +28,9 @@ import {
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   checkinScans: many(checkinRecords, { relationName: "checkin_staff" }),
-  uploadedDocuments: many(workshopDocuments, { relationName: "document_uploader" }),
+  uploadedDocuments: many(workshopDocuments, {
+    relationName: "document_uploader",
+  }),
   staffAssignments: one(checkinStaffAssignments),
 }));
 
@@ -135,10 +143,6 @@ export const checkinRecordsRelations = relations(checkinRecords, ({ one }) => ({
   registration: one(registrations, {
     fields: [checkinRecords.registrationId],
     references: [registrations.registrationId],
-  }),
-  ticket: one(tickets, {
-    fields: [checkinRecords.ticketId],
-    references: [tickets.ticketId],
   }),
   student: one(students, {
     fields: [checkinRecords.studentId],

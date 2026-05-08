@@ -447,51 +447,94 @@ export const workshopErrors = {
 } as const;
 
 /**
- * Group ticket validation error factories
+ * Group check-in validation error factories
  */
-export const ticketErrors = {
+export const checkinErrors = {
   /**
-   * Create an error when a ticket token is unknown
+   * Create an error when a QR code is unknown
    *
-   * @param qrToken - Scanned token identifier used for audit logging
-   * @returns Ticket not found payload
+   * @param qrCode - Scanned QR code used for audit logging
+   * @returns QR not found payload
    * @throws Never. Returns an error object instead of throwing
    */
-  notFound: (qrToken: string): AppError =>
+  qrInvalid: (qrCode: string): AppError =>
     createError({
       category: "NOT_FOUND",
-      code: "TICKET_NOT_FOUND",
-      message: "QR code does not match any ticket.",
-      context: { qrToken },
+      code: "QR_INVALID",
+      message: "QR code does not match any registration.",
+      context: { qrCode },
     }),
   /**
-   * Create an error when a ticket is voided
+   * Create an error when a registration status is not eligible for check-in
    *
-   * @param ticketId - Ticket identifier used for audit logging
+   * @param registrationId - Registration identifier used for audit logging
+   * @returns Forbidden error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  registrationNotActive: (registrationId: string): AppError =>
+    createError({
+      category: "FORBIDDEN",
+      code: "REGISTRATION_NOT_ACTIVE",
+      message: "Registration status must be PAID or CONFIRMED for check-in.",
+      context: { registrationId },
+    }),
+  /**
+   * Create an error when a QR code belongs to a different workshop
+   *
+   * @param registrationId - Registration identifier used for audit logging
+   * @param workshopId - Expected workshop identifier
    * @returns Business rule error payload
    * @throws Never. Returns an error object instead of throwing
    */
-  void: (ticketId: string): AppError =>
+  wrongWorkshop: (registrationId: string, workshopId: string): AppError =>
     createError({
       category: "BUSINESS",
-      code: "TICKET_VOID",
-      message: "This ticket has been voided and is no longer valid.",
-      context: { ticketId },
+      code: "WRONG_WORKSHOP",
+      message: "QR code is valid but for a different workshop.",
+      context: { registrationId, workshopId },
     }),
   /**
-   * Create an error when a ticket is already checked in
+   * Create an error when a registration is already checked in
    *
-   * @param ticketId - Ticket identifier used for audit logging
+   * @param registrationId - Registration identifier used for audit logging
    * @param workshopId - Workshop identifier used for audit logging
    * @returns Conflict error payload
    * @throws Never. Returns an error object instead of throwing
    */
-  alreadyCheckedIn: (ticketId: string, workshopId: string): AppError =>
+  alreadyCheckedIn: (registrationId: string, workshopId: string): AppError =>
     createError({
       category: "CONFLICT",
       code: "TICKET_ALREADY_CHECKEDIN",
-      message: "This ticket has already been used for check-in.",
-      context: { ticketId, workshopId },
+      message: "This registration has already been used for check-in.",
+      context: { registrationId, workshopId },
+    }),
+  /**
+   * Create an error when a sync batch exceeds the maximum item count
+   *
+   * @param limit - Maximum allowed items per batch
+   * @returns Validation error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  batchTooLarge: (limit: number): AppError =>
+    createError({
+      category: "VALIDATION",
+      code: "BATCH_TOO_LARGE",
+      message: `Sync batch exceeds maximum of ${limit} items.`,
+      context: { limit },
+    }),
+  /**
+   * Create an error when a staff is not assigned to the workshop
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Forbidden error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  workshopNotAssigned: (workshopId: string): AppError =>
+    createError({
+      category: "FORBIDDEN",
+      code: "WORKSHOP_NOT_ASSIGNED",
+      message: "Staff is not authorized for this workshop.",
+      context: { workshopId },
     }),
 } as const;
 

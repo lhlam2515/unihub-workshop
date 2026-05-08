@@ -148,10 +148,6 @@ export const checkinRecords = pgTable(
       .uuid("registration_id")
       .notNull()
       .references(() => registrations.registrationId),
-    ticketId: t
-      .uuid("ticket_id")
-      .notNull()
-      .references(() => tickets.ticketId),
     studentId: t
       .text("student_id")
       .notNull()
@@ -170,7 +166,10 @@ export const checkinRecords = pgTable(
     deviceId: t.varchar("device_id", { length: 100 }),
   }),
   (table) => [
-    unique("uq_checkin_ticket_workshop").on(table.ticketId, table.workshopId),
+    unique("uq_checkin_registration_workshop").on(
+      table.registrationId,
+      table.workshopId
+    ),
     index("idx_checkin_workshop_id").on(table.workshopId),
     index("idx_checkin_student_id").on(table.studentId),
     index("idx_checkin_source")
