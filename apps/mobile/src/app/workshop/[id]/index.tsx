@@ -94,7 +94,7 @@ export default function WorkshopDashboardScreen() {
             <View style={styles.metricRow}>
               <View style={styles.metric}>
                 <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {status?.confirmed_count ?? "—"}
+                  {status?.confirmedCount ?? "—"}
                 </Text>
                 <Text style={[styles.metricLabel, { color: colors.icon }]}>
                   Đã đăng ký
@@ -102,7 +102,7 @@ export default function WorkshopDashboardScreen() {
               </View>
               <View style={styles.metric}>
                 <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {status?.checked_in_count ?? "—"}
+                  {status?.checkedInCount ?? "—"}
                 </Text>
                 <Text style={[styles.metricLabel, { color: colors.icon }]}>
                   Đã điểm danh
@@ -110,7 +110,7 @@ export default function WorkshopDashboardScreen() {
               </View>
               <View style={styles.metric}>
                 <Text style={[styles.metricValue, { color: colors.text }]}>
-                  {status?.pending_count ?? "—"}
+                  {status?.pendingCount ?? "—"}
                 </Text>
                 <Text style={[styles.metricLabel, { color: colors.icon }]}>
                   Chờ điểm danh
@@ -132,7 +132,11 @@ export default function WorkshopDashboardScreen() {
           </Pressable>
           <Pressable
             onPress={() =>
-              router.push(`/workshop/${workshopId}/history` as Parameters<typeof router.push>[0])
+              router.push(
+                `/workshop/${workshopId}/history` as Parameters<
+                  typeof router.push
+                >[0]
+              )
             }
             style={({ pressed }) => [
               styles.secondaryButton,

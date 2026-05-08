@@ -15,7 +15,7 @@ import { Colors } from "@/constants/theme";
 import { usePreload } from "@/features/checkin/api/use-preload";
 import {
   workshopsService,
-  type WorkshopSummary,
+  type WorkshopDetailDto,
 } from "@/features/workshops/api/workshops.service";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
@@ -26,7 +26,7 @@ export default function HomeScreen() {
   const colors = Colors[colorScheme ?? "light"];
   const { preload } = usePreload();
 
-  const [workshops, setWorkshops] = useState<WorkshopSummary[]>([]);
+  const [workshops, setWorkshops] = useState<WorkshopDetailDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -43,9 +43,7 @@ export default function HomeScreen() {
       }
 
       const results = await workshopsService.getWorkshopsByIds(workshopIds);
-      const successful = results
-        .filter((r) => r.isSuccess)
-        .map((r) => r.data);
+      const successful = results.filter((r) => r.isSuccess).map((r) => r.data);
 
       const failed = results.filter((r) => r.isFailure);
       if (failed.length > 0 && successful.length === 0) {
@@ -110,7 +108,9 @@ export default function HomeScreen() {
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         ) : workshops.length === 0 ? (
-          <View style={[styles.emptyBox, { borderColor: colors.tabIconDefault }]}>
+          <View
+            style={[styles.emptyBox, { borderColor: colors.tabIconDefault }]}
+          >
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
               Chưa có workshop nào
             </Text>
@@ -123,8 +123,8 @@ export default function HomeScreen() {
           <View style={styles.section}>
             {workshops.map((workshop) => (
               <Pressable
-                key={workshop.workshop_id}
-                onPress={() => handleWorkshopPress(workshop.workshop_id)}
+                key={workshop.workshopId}
+                onPress={() => handleWorkshopPress(workshop.workshopId)}
                 style={({ pressed }) => [
                   styles.card,
                   {
@@ -137,11 +137,11 @@ export default function HomeScreen() {
                   {workshop.title}
                 </Text>
                 <Text style={[styles.cardSpeaker, { color: colors.icon }]}>
-                  {workshop.speaker_name}
+                  {workshop.speakerName}
                 </Text>
                 <View style={styles.cardFooter}>
                   <Text style={[styles.cardDate, { color: colors.icon }]}>
-                    {formatDate(workshop.starts_at)}
+                    {formatDate(workshop.startsAt)}
                   </Text>
                   <Text
                     style={[
@@ -149,7 +149,7 @@ export default function HomeScreen() {
                       { color: colors.tint, borderColor: colors.tint },
                     ]}
                   >
-                    {workshop.available_seats} chỗ
+                    {workshop.availableSeats} chỗ
                   </Text>
                 </View>
               </Pressable>
@@ -157,7 +157,9 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View style={[styles.quickCard, { borderColor: colors.tabIconDefault }]}>
+        <View
+          style={[styles.quickCard, { borderColor: colors.tabIconDefault }]}
+        >
           <Text style={[styles.cardTitle, { color: colors.text }]}>
             Hành động nhanh
           </Text>

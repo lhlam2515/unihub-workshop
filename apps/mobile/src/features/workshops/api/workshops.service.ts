@@ -2,17 +2,17 @@ import { API_ROUTES } from "@/constants/api-routes";
 import { api } from "@/lib/api/client";
 import { Result } from "@/lib/result";
 
-export interface WorkshopSummary {
-  workshop_id: string;
+export interface WorkshopDetailDto {
+  workshopId: string;
   title: string;
-  speaker_name: string;
-  starts_at: string;
-  ends_at?: string;
-  available_seats: number;
-  is_paid: boolean;
+  speakerName: string;
+  startsAt: string;
+  endsAt: string;
+  availableSeats: number;
+  isPaid: boolean;
   price?: number;
-  room_name?: string;
-  status?: string;
+  description?: string;
+  roomName: string;
 }
 
 class WorkshopsService {
@@ -20,11 +20,13 @@ class WorkshopsService {
    * Fetch a single workshop's public detail by ID.
    *
    * @param workshopId - The workshop UUID from the JWT `allowedWorkshopIds`
-   * @returns OkResult with WorkshopSummary, or FailResult with ApiError
+   * @returns OkResult with WorkshopDetailDto, or FailResult with ApiError
    */
-  async getWorkshopById(workshopId: string): Promise<Result<WorkshopSummary>> {
+  async getWorkshopById(
+    workshopId: string
+  ): Promise<Result<WorkshopDetailDto>> {
     return Result.fromPromise(
-      api.get<WorkshopSummary>(API_ROUTES.WORKSHOPS.DETAIL(workshopId))
+      api.get<WorkshopDetailDto>(API_ROUTES.WORKSHOPS.DETAIL(workshopId))
     );
   }
 
@@ -39,7 +41,7 @@ class WorkshopsService {
    */
   async getWorkshopsByIds(
     workshopIds: string[]
-  ): Promise<Result<WorkshopSummary>[]> {
+  ): Promise<Result<WorkshopDetailDto>[]> {
     return Promise.all(workshopIds.map((id) => this.getWorkshopById(id)));
   }
 }
