@@ -59,8 +59,8 @@ export class WorkshopsService {
     query: ListWorkshopsQueryDto
   ): Promise<Result<CursorPaginationResult<WorkshopSummaryDto>>> {
     const result = await this.workshopsRepo.findPublished({
-      dateFrom: query.date_from,
-      dateTo: query.date_to,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -141,21 +141,21 @@ export class WorkshopsService {
     userId: string
   ): Promise<Result<WorkshopAdminDetailDto>> {
     const conflictResult = await this.roomConflictService.checkConflict(
-      dto.room_id,
-      dto.starts_at,
-      dto.ends_at
+      dto.roomId,
+      dto.startsAt,
+      dto.endsAt
     );
     if (conflictResult.isFailure) return Result.fail(conflictResult.error);
 
     const workshopData: NewWorkshop = {
       title: dto.title,
       description: dto.description ?? null,
-      speakerId: dto.speaker_id,
-      roomId: dto.room_id,
-      startsAt: dto.starts_at,
-      endsAt: dto.ends_at,
-      seatsTotal: dto.seats_total,
-      seatsAvailable: dto.seats_total,
+      speakerId: dto.speakerId,
+      roomId: dto.roomId,
+      startsAt: dto.startsAt,
+      endsAt: dto.endsAt,
+      seatsTotal: dto.seatsTotal,
+      seatsAvailable: dto.seatsTotal,
       price: dto.price !== undefined ? String(dto.price) : "0",
       status: "DRAFT",
       createdBy: userId,
@@ -165,8 +165,8 @@ export class WorkshopsService {
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
 
     const [speakerResult, roomResult] = await Promise.all([
-      this.speakersRepo.findById(dto.speaker_id),
-      this.roomsRepo.findById(dto.room_id),
+      this.speakersRepo.findById(dto.speakerId),
+      this.roomsRepo.findById(dto.roomId),
     ]);
 
     return Result.ok(
@@ -178,7 +178,7 @@ export class WorkshopsService {
         roomResult.isSuccess && roomResult.data
           ? roomResult.data.name
           : "Unknown",
-        dto.seats_total
+        dto.seatsTotal
       )
     );
   }
@@ -197,11 +197,11 @@ export class WorkshopsService {
       return Result.fail(workshopErrors.notPublished(id, workshop.status));
     }
 
-    const roomId = dto.room_id ?? workshop.roomId ?? "";
-    const startsAt = dto.starts_at ?? workshop.startsAt;
-    const endsAt = dto.ends_at ?? workshop.endsAt;
+    const roomId = dto.roomId ?? workshop.roomId ?? "";
+    const startsAt = dto.startsAt ?? workshop.startsAt;
+    const endsAt = dto.endsAt ?? workshop.endsAt;
 
-    if (dto.room_id || dto.starts_at || dto.ends_at) {
+    if (dto.roomId || dto.startsAt || dto.endsAt) {
       const conflictResult = await this.roomConflictService.checkConflict(
         roomId,
         startsAt,
@@ -214,12 +214,12 @@ export class WorkshopsService {
     const updateData: WorkshopUpdate = {};
     if (dto.title !== undefined) updateData.title = dto.title;
     if (dto.description !== undefined) updateData.description = dto.description;
-    if (dto.speaker_id !== undefined) updateData.speakerId = dto.speaker_id;
-    if (dto.room_id !== undefined) updateData.roomId = dto.room_id;
-    if (dto.starts_at !== undefined) updateData.startsAt = dto.starts_at;
-    if (dto.ends_at !== undefined) updateData.endsAt = dto.ends_at;
-    if (dto.seats_total !== undefined) {
-      updateData.seatsTotal = dto.seats_total;
+    if (dto.speakerId !== undefined) updateData.speakerId = dto.speakerId;
+    if (dto.roomId !== undefined) updateData.roomId = dto.roomId;
+    if (dto.startsAt !== undefined) updateData.startsAt = dto.startsAt;
+    if (dto.endsAt !== undefined) updateData.endsAt = dto.endsAt;
+    if (dto.seatsTotal !== undefined) {
+      updateData.seatsTotal = dto.seatsTotal;
     }
     if (dto.price !== undefined) {
       updateData.price = String(dto.price);
@@ -307,11 +307,11 @@ export class WorkshopsService {
       return Result.fail(workshopErrors.notPublished(id, workshop.status));
     }
 
-    const roomId = dto.room_id ?? workshop.roomId ?? "";
-    const startsAt = dto.starts_at ?? workshop.startsAt;
-    const endsAt = dto.ends_at ?? workshop.endsAt;
+    const roomId = dto.roomId ?? workshop.roomId ?? "";
+    const startsAt = dto.startsAt ?? workshop.startsAt;
+    const endsAt = dto.endsAt ?? workshop.endsAt;
 
-    if (dto.room_id || dto.starts_at || dto.ends_at) {
+    if (dto.roomId || dto.startsAt || dto.endsAt) {
       const conflictResult = await this.roomConflictService.checkConflict(
         roomId,
         startsAt,
@@ -322,9 +322,9 @@ export class WorkshopsService {
     }
 
     const updateData: WorkshopUpdate = {};
-    if (dto.room_id !== undefined) updateData.roomId = dto.room_id;
-    if (dto.starts_at !== undefined) updateData.startsAt = dto.starts_at;
-    if (dto.ends_at !== undefined) updateData.endsAt = dto.ends_at;
+    if (dto.roomId !== undefined) updateData.roomId = dto.roomId;
+    if (dto.startsAt !== undefined) updateData.startsAt = dto.startsAt;
+    if (dto.endsAt !== undefined) updateData.endsAt = dto.endsAt;
 
     const updateResult = await this.workshopsRepo.update(
       id,
@@ -339,9 +339,9 @@ export class WorkshopsService {
     }
 
     const changes: { roomId?: string; startsAt?: Date; endsAt?: Date } = {};
-    if (dto.room_id !== undefined) changes.roomId = dto.room_id;
-    if (dto.starts_at !== undefined) changes.startsAt = dto.starts_at;
-    if (dto.ends_at !== undefined) changes.endsAt = dto.ends_at;
+    if (dto.roomId !== undefined) changes.roomId = dto.roomId;
+    if (dto.startsAt !== undefined) changes.startsAt = dto.startsAt;
+    if (dto.endsAt !== undefined) changes.endsAt = dto.endsAt;
     void this.notificationPublisher.publishEmergencyUpdate(workshop, changes);
 
     const roomResult = await this.roomsRepo.findById(workshop.roomId ?? "");

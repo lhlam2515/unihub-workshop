@@ -107,8 +107,8 @@ export class NotificationsService {
     dto: UpdateChannelConfigDto
   ): Promise<Result<unknown>> {
     return this.channelConfigsRepo.update(channelType, {
-      isActive: dto.is_active,
-      configJson: dto.config_json,
+      isActive: dto.isActive,
+      configJson: dto.configJson,
     });
   }
 }

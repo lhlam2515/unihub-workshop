@@ -111,9 +111,7 @@ export class PaymentsService {
     idempotencyKey: string
   ): Promise<Result<CreatePaymentResponseDto>> {
     // Stage 1: Registration lookup + IDOR
-    const regResult = await this.registrationsRepo.findById(
-      dto.registration_id
-    );
+    const regResult = await this.registrationsRepo.findById(dto.registrationId);
     if (regResult.isFailure) return Result.fail(regResult.error);
     const registration = regResult.data;
     if (
@@ -121,7 +119,7 @@ export class PaymentsService {
       registration.studentId !== studentId ||
       registration.status !== "PENDING"
     ) {
-      return Result.fail(paymentErrors.notFound(dto.registration_id));
+      return Result.fail(paymentErrors.notFound(dto.registrationId));
     }
 
     // Stages 2-5: Parallel independent I/O
@@ -256,12 +254,12 @@ export class PaymentsService {
       return this.paymentsRepo.transaction(async (tx) => {
         // Lock payment row with FOR UPDATE NOWAIT to serialize concurrent webhooks
         const payResult = await this.paymentsRepo.findByIdempotencyKeyWithLock(
-          webhookDto.idempotency_key,
+          webhookDto.idempotencyKey,
           tx
         );
         if (payResult.isFailure) throw payResult.error;
         if (!payResult.data) {
-          throw paymentErrors.notFound(webhookDto.idempotency_key);
+          throw paymentErrors.notFound(webhookDto.idempotencyKey);
         }
 
         const payment = payResult.data;
@@ -280,7 +278,7 @@ export class PaymentsService {
           const payUpdate = await this.paymentsRepo.updateStatus(
             payment.paymentId,
             "SUCCEEDED",
-            webhookDto.gateway_txn_id,
+            webhookDto.gatewayTxnId,
             tx
           );
           if (payUpdate.isFailure) throw payUpdate.error;

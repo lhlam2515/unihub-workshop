@@ -79,10 +79,10 @@ export class SpeakersService {
     dto: CreateSpeakerDto
   ): Promise<Result<SpeakerResponseDto>> {
     const data: NewSpeaker = {
-      fullName: dto.full_name,
+      fullName: dto.fullName,
       title: dto.title ?? null,
       bio: dto.bio ?? null,
-      avatarUrl: dto.avatar_url ?? null,
+      avatarUrl: dto.avatarUrl ?? null,
     };
     const result = await this.speakersRepo.create(data);
     if (result.isFailure) return Result.fail(result.error);
@@ -113,10 +113,10 @@ export class SpeakersService {
 
     // Build update payload from provided fields
     const data: Partial<NewSpeaker> = {};
-    if (dto.full_name !== undefined) data.fullName = dto.full_name;
+    if (dto.fullName !== undefined) data.fullName = dto.fullName;
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.bio !== undefined) data.bio = dto.bio;
-    if (dto.avatar_url !== undefined) data.avatarUrl = dto.avatar_url;
+    if (dto.avatarUrl !== undefined) data.avatarUrl = dto.avatarUrl;
 
     const result = await this.speakersRepo.update(id, data);
     if (result.isFailure) return Result.fail(result.error);

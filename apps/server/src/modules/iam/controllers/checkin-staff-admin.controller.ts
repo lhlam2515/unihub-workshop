@@ -37,7 +37,7 @@ export class CheckinStaffAdminController {
   ) {
     return this.checkinStaffAssignmentService.assignWorkshops(
       userId,
-      assignDto.workshop_ids
+      assignDto.workshopIds
     );
   }
 

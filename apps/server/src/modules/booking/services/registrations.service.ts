@@ -109,26 +109,26 @@ export class RegistrationsService {
   ): Promise<Result<RegistrationDto>> {
     // Stage 1: Validate workshop
     const workshopResult = await this.workshopsService.getPublishedById(
-      dto.workshop_id
+      dto.workshopId
     );
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
     const workshop = workshopResult.data;
 
     // Stage 2: Cache-Aside pre-filter (ADR-13)
-    const cachedSeats = await this.seatCounter.getCachedSeats(dto.workshop_id);
+    const cachedSeats = await this.seatCounter.getCachedSeats(dto.workshopId);
     if (cachedSeats === 0) {
-      return Result.fail(seatErrors.unavailable(dto.workshop_id));
+      return Result.fail(seatErrors.unavailable(dto.workshopId));
     }
 
     // Stage 3: Duplicate check
     const existing = await this.registrationsRepo.findByStudentAndWorkshop(
       studentId,
-      dto.workshop_id
+      dto.workshopId
     );
     if (existing.isFailure) return Result.fail(existing.error);
     if (existing.data) {
       return Result.fail(
-        registrationErrors.duplicate(studentId, dto.workshop_id)
+        registrationErrors.duplicate(studentId, dto.workshopId)
       );
     }
 
@@ -143,11 +143,11 @@ export class RegistrationsService {
     while (attempts <= MAX_RETRIES) {
       // Stage 4: Read current version for OL (ADR-03)
       const versionResult = await this.workshopsService.getSeatVersion(
-        dto.workshop_id
+        dto.workshopId
       );
       if (versionResult.isFailure) return Result.fail(versionResult.error);
       if (!versionResult.data) {
-        return Result.fail(seatErrors.unavailable(dto.workshop_id));
+        return Result.fail(seatErrors.unavailable(dto.workshopId));
       }
 
       const { version } = versionResult.data;
@@ -156,7 +156,7 @@ export class RegistrationsService {
       const txResult = await tryCatch(async () => {
         return this.registrationsRepo.transaction(async (tx) => {
           const decResult = await this.workshopsService.decrementSeat(
-            dto.workshop_id,
+            dto.workshopId,
             version,
             tx
           );
@@ -165,11 +165,11 @@ export class RegistrationsService {
           if (decResult.data.rowsAffected === 0) {
             // Re-read to distinguish version conflict vs sold out
             const recheck = await this.workshopsService.getSeatVersion(
-              dto.workshop_id
+              dto.workshopId
             );
             if (recheck.isFailure) throw recheck.error;
             if (!recheck.data || recheck.data.seatsAvailable === 0) {
-              throw seatErrors.unavailable(dto.workshop_id);
+              throw seatErrors.unavailable(dto.workshopId);
             }
             // Version conflict — will retry
             throw { __versionConflict: true };
@@ -178,7 +178,7 @@ export class RegistrationsService {
           const regResult = await this.registrationsRepo.create(
             {
               studentId,
-              workshopId: dto.workshop_id,
+              workshopId: dto.workshopId,
               qrCode: crypto.randomUUID(),
               status,
               confirmedAt: status === "CONFIRMED" ? new Date() : null,
@@ -216,24 +216,24 @@ export class RegistrationsService {
     }
 
     // Stage 7: Write-Invalidate cache (ADR-13, fire-and-forget outside tx)
-    await this.seatCounter.invalidateCache(dto.workshop_id);
+    await this.seatCounter.invalidateCache(dto.workshopId);
 
     // Stage 8: Paid — acquire seat lock
     if (isPaid) {
       const lockResult = await this.seatLock.acquire(
-        dto.workshop_id,
+        dto.workshopId,
         registration.registrationId,
         studentId,
         Number(workshop.price ?? "0")
       );
       if (lockResult.isFailure) {
         // Compensate: release seat + invalidate cache
-        await this.workshopsService.incrementSeat(dto.workshop_id);
+        await this.workshopsService.incrementSeat(dto.workshopId);
         await this.registrationsRepo.updateStatus(
           registration.registrationId,
           "CANCELLED"
         );
-        await this.seatCounter.invalidateCache(dto.workshop_id);
+        await this.seatCounter.invalidateCache(dto.workshopId);
         return Result.fail(lockResult.error);
       }
     }
@@ -257,7 +257,7 @@ export class RegistrationsService {
     if (!isPaid) {
       void this.notificationLogProducer.createAndEnqueue({
         userId: studentId,
-        workshopId: dto.workshop_id,
+        workshopId: dto.workshopId,
         type: "REGISTRATION_CONFIRMED",
         payload: { registrationId: registration.registrationId },
       });

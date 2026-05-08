@@ -69,7 +69,7 @@ export class RoomsService {
       building: dto.building ?? null,
       floor: dto.floor ?? null,
       capacity: dto.capacity,
-      floorPlanUrl: dto.floor_plan_url ?? null,
+      floorPlanUrl: dto.floorPlanUrl ?? null,
       facilities: facilitiesRecord,
     };
     const result = await this.roomsRepo.create(data);
@@ -106,8 +106,7 @@ export class RoomsService {
     if (dto.building !== undefined) data.building = dto.building;
     if (dto.floor !== undefined) data.floor = dto.floor;
     if (dto.capacity !== undefined) data.capacity = dto.capacity;
-    if (dto.floor_plan_url !== undefined)
-      data.floorPlanUrl = dto.floor_plan_url;
+    if (dto.floorPlanUrl !== undefined) data.floorPlanUrl = dto.floorPlanUrl;
     if (dto.facilities !== undefined) {
       data.facilities = Object.fromEntries(
         dto.facilities.map((f) => [f, true])
