@@ -1,9 +1,31 @@
-const NotificationsPage = () => {
-  return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">Thông báo</h1>
-    </div>
-  );
-};
+export const dynamic = "force-dynamic";
 
-export default NotificationsPage;
+import {
+  listNotificationChannels,
+  listNotificationLogs,
+} from "@/lib/api/services/admin";
+import { AdminNotificationsWidget } from "@/widgets/AdminNotificationsWidget";
+
+export default async function NotificationsPage() {
+  const [channelsResult, logsResult] = await Promise.all([
+    listNotificationChannels(),
+    listNotificationLogs(),
+  ]);
+
+  if (channelsResult.isFailure) {
+    return (
+      <AdminNotificationsWidget
+        initialChannels={null}
+        initialLogs={null}
+        initialError={(channelsResult.error as { message?: string })?.message}
+      />
+    );
+  }
+
+  return (
+    <AdminNotificationsWidget
+      initialChannels={channelsResult.data}
+      initialLogs={logsResult.isSuccess ? logsResult.data : null}
+    />
+  );
+}

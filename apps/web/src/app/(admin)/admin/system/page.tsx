@@ -1,12 +1,22 @@
-import React from "react";
+export const dynamic = "force-dynamic";
 
-const AdminSystemHealthPage = () => {
+import { getCircuitBreakers } from "@/lib/api/services/admin";
+import { AdminSystemWidget } from "@/widgets/AdminSystemWidget";
+
+export default async function AdminSystemPage() {
+  const result = await getCircuitBreakers();
+
+  if (result.isFailure) {
+    return (
+      <AdminSystemWidget
+        initialCB={null}
+        initialReconcileInfo={null}
+        initialError={(result.error as { message?: string })?.message}
+      />
+    );
+  }
+
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">AdminSystemHealthPage</h1>
-      <p className="text-gray-500">Route: /admin/system</p>
-    </div>
+    <AdminSystemWidget initialCB={result.data} initialReconcileInfo={null} />
   );
-};
-
-export default AdminSystemHealthPage;
+}
