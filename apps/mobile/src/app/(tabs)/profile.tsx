@@ -114,7 +114,7 @@ export default function ProfileScreen() {
         <View className="mt-1 gap-3">
           <Button
             onPress={() => router.push(ROUTES.SYNC_PROGRESS)}
-            className="min-h-[50px] rounded-2xl"
+            className="rounded-2xl"
           >
             <Text>Mở tiến trình đồng bộ</Text>
           </Button>
@@ -122,7 +122,7 @@ export default function ProfileScreen() {
             variant="destructive"
             onPress={handleLogout}
             disabled={loggingOut}
-            className="min-h-[50px] rounded-2xl"
+            className="rounded-2xl"
           >
             {loggingOut ? (
               <ActivityIndicator color="white" size="small" />
