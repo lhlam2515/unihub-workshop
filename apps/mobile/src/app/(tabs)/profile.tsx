@@ -1,14 +1,34 @@
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { logout } from "@/lib/api/client";
+import { offlineAuth } from "@/lib/api/client/offline-auth";
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const payload = offlineAuth.getTokenPayload();
+
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    // logout() calls POST /auth/logout then clears tokenStore regardless of result
+    await logout();
+    router.replace(ROUTES.LOGIN);
+  }
 
   return (
     <SafeAreaView
@@ -22,49 +42,58 @@ export default function ProfileScreen() {
           <Text style={[styles.title, { color: colors.text }]}>
             Thông tin & cài đặt
           </Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>
-            Khu vực quản lý thiết bị, trạng thái đồng bộ, và hành động đăng xuất
-            của nhân sự điểm danh.
-          </Text>
         </View>
 
         <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>
             Người dùng hiện tại
           </Text>
-          <Text style={[styles.cardBody, { color: colors.icon }]}>
-            Nguyen Van A · CHECKIN_STAFF · Device ID: mobile-01
-          </Text>
-        </View>
-
-        <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Trạng thái đồng bộ
-          </Text>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: colors.icon }]}>
-              Local cache
+          {payload ? (
+            <View style={styles.infoGroup}>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+                  User ID
+                </Text>
+                <Text
+                  style={[styles.infoValue, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  {payload.sub}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+                  Vai trò
+                </Text>
+                <Text style={[styles.infoValue, { color: colors.text }]}>
+                  {payload.role}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+                  Workshop phân công
+                </Text>
+                <Text style={[styles.infoValue, { color: colors.text }]}>
+                  {payload.allowed_workshop_ids?.length ?? 0}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.icon }]}>
+                  Hết hạn lúc
+                </Text>
+                <Text style={[styles.infoValue, { color: colors.text }]}>
+                  {new Date(payload.exp * 1000).toLocaleTimeString("vi-VN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={[styles.cardBody, { color: colors.icon }]}>
+              Không có thông tin phiên đăng nhập.
             </Text>
-            <Text style={[styles.infoValue, { color: colors.text }]}>
-              Ready
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: colors.icon }]}>
-              Last sync
-            </Text>
-            <Text style={[styles.infoValue, { color: colors.text }]}>
-              2 minutes ago
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: colors.icon }]}>
-              Queue size
-            </Text>
-            <Text style={[styles.infoValue, { color: colors.text }]}>
-              12 records
-            </Text>
-          </View>
+          )}
         </View>
 
         <View style={styles.actions}>
@@ -78,18 +107,23 @@ export default function ProfileScreen() {
             <Text style={styles.primaryButtonText}>Mở tiến trình đồng bộ</Text>
           </Pressable>
           <Pressable
-            onPress={() => router.replace(ROUTES.LOGIN)}
+            onPress={handleLogout}
+            disabled={isLoggingOut}
             style={({ pressed }) => [
               styles.secondaryButton,
               {
-                borderColor: colors.tabIconDefault,
-                opacity: pressed ? 0.85 : 1,
+                borderColor: "#EF4444",
+                opacity: pressed || isLoggingOut ? 0.7 : 1,
               },
             ]}
           >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-              Đăng xuất
-            </Text>
+            {isLoggingOut ? (
+              <ActivityIndicator color="#EF4444" size="small" />
+            ) : (
+              <Text style={[styles.secondaryButtonText, { color: "#EF4444" }]}>
+                Đăng xuất
+              </Text>
+            )}
           </Pressable>
         </View>
       </ScrollView>
@@ -98,81 +132,34 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    padding: 20,
-    gap: 14,
-  },
-  header: {
-    gap: 10,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    lineHeight: 34,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  card: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 18,
-    gap: 10,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  cardBody: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  infoLabel: {
-    fontSize: 13,
-  },
-  infoValue: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  actions: {
-    gap: 12,
-    marginTop: 4,
-  },
+  safeArea: { flex: 1 },
+  content: { flexGrow: 1, padding: 20, gap: 14 },
+  header: { gap: 8, paddingVertical: 8 },
+  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2 },
+  title: { fontSize: 28, fontWeight: "800", lineHeight: 34 },
+  card: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 12 },
+  cardTitle: { fontSize: 18, fontWeight: "700" },
+  cardBody: { fontSize: 14, lineHeight: 20 },
+  infoGroup: { gap: 10 },
+  infoRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  infoLabel: { fontSize: 13, flex: 1 },
+  infoValue: { fontSize: 13, fontWeight: "700", flex: 2, textAlign: "right" },
+  actions: { gap: 12, marginTop: 4 },
   primaryButton: {
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 18,
+    minHeight: 50,
   },
-  primaryButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
-  },
+  primaryButtonText: { color: "white", fontSize: 15, fontWeight: "700" },
   secondaryButton: {
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 18,
+    minHeight: 50,
   },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
+  secondaryButtonText: { fontSize: 15, fontWeight: "700" },
 });

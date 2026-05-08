@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 
 import { DatabaseModule } from "@/infra/database/database.module";
 import { SharedQueueModule } from "@/infra/messaging/queue.module";
@@ -43,7 +43,7 @@ import { TicketsService } from "./services/tickets.service";
     CatalogModule,
     SharedQueueModule,
     IamModule,
-    PaymentModule,
+    forwardRef(() => PaymentModule),
     RateLimitModule,
   ],
   controllers: [RegistrationsController],
@@ -57,6 +57,6 @@ import { TicketsService } from "./services/tickets.service";
     RegistrationsRepository,
     TicketsRepository,
   ],
-  exports: [RegistrationsService, SeatLockMechanic],
+  exports: [RegistrationsService, SeatLockMechanic, RegistrationsRepository, TicketsRepository, TicketsService],
 })
 export class BookingModule {}
