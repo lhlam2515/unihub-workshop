@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { EmptyState } from "@/components/EmptyState";
+import { WorkshopCard } from "@/components/WorkshopCard";
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
 import { createDatabaseClient } from "@/database/client";
@@ -95,17 +97,6 @@ export default function HomeScreen() {
     void preload(workshopId);
   }
 
-  function formatDate(dateStr: string) {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("vi-VN", {
-      weekday: "short",
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -140,82 +131,27 @@ export default function HomeScreen() {
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         ) : workshops.length === 0 ? (
-          <View
-            style={[styles.emptyBox, { borderColor: colors.tabIconDefault }]}
-          >
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              Chưa có workshop nào
-            </Text>
-            <Text style={[styles.emptyBody, { color: colors.icon }]}>
-              Tài khoản của bạn chưa được phân công workshop nào. Liên hệ quản
-              trị viên để được cấp quyền.
-            </Text>
-          </View>
+          <EmptyState
+            title="Chưa có workshop nào"
+            description="Tài khoản của bạn chưa được phân công workshop nào. Liên hệ quản trị viên để được cấp quyền."
+          />
         ) : (
           <View style={styles.section}>
-            {workshops.map((workshop) => {
-              const cache = cacheInfo.get(workshop.workshopId);
-              const cacheLabel = !cache
-                ? "Chưa tải"
-                : cache.isFullyLoaded
-                  ? "Đã tải"
-                  : "Một phần";
-              const cacheColor = !cache
-                ? "#F87171"
-                : cache.isFullyLoaded
-                  ? colors.tint
-                  : "#FBBF24";
-              return (
-                <Pressable
-                  key={workshop.workshopId}
-                  onPress={() => handleWorkshopPress(workshop.workshopId)}
-                  style={({ pressed }) => [
-                    styles.card,
-                    {
-                      borderColor: colors.tabIconDefault,
-                      opacity: pressed ? 0.88 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>
-                    {workshop.title}
-                  </Text>
-                  <Text style={[styles.cardSpeaker, { color: colors.icon }]}>
-                    {workshop.speakerName}
-                  </Text>
-                  <View style={styles.cardFooter}>
-                    <View style={styles.footerLeft}>
-                      <Text style={[styles.cardDate, { color: colors.icon }]}>
-                        {formatDate(workshop.startsAt)}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.badge,
-                          { color: cacheColor, borderColor: cacheColor },
-                        ]}
-                      >
-                        {cacheLabel}
-                      </Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.badge,
-                        { color: colors.tint, borderColor: colors.tint },
-                      ]}
-                    >
-                      {workshop.availableSeats} chỗ
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
+            {workshops.map((workshop) => (
+              <WorkshopCard
+                key={workshop.workshopId}
+                workshop={workshop}
+                cacheInfo={cacheInfo.get(workshop.workshopId)}
+                onPress={handleWorkshopPress}
+              />
+            ))}
           </View>
         )}
 
         <View
           style={[styles.quickCard, { borderColor: colors.tabIconDefault }]}
         >
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
+          <Text style={{ color: colors.text, fontSize: 17, fontWeight: "700" }}>
             Hành động nhanh
           </Text>
           <View style={styles.quickActions}>
@@ -272,33 +208,7 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: "center",
   },
-  emptyTitle: { fontSize: 17, fontWeight: "700" },
-  emptyBody: { fontSize: 14, lineHeight: 20, textAlign: "center" },
   section: { gap: 12 },
-  card: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 8 },
-  cardTitle: { fontSize: 17, fontWeight: "700" },
-  cardSpeaker: { fontSize: 13 },
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 4,
-  },
-  footerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cardDate: { fontSize: 12 },
-  badge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    fontSize: 12,
-    fontWeight: "700",
-  },
   quickCard: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 14 },
   quickActions: { gap: 10 },
   primaryButton: {
