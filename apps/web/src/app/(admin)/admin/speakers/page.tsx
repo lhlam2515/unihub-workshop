@@ -1,12 +1,17 @@
-import React from "react";
+import { listSpeakers } from "@/lib/api/services/admin";
+import { AdminSpeakerListWidget } from "@/widgets/AdminSpeakerListWidget";
 
-const AdminSpeakerManagementPage = () => {
-  return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">AdminSpeakerManagementPage</h1>
-      <p className="text-gray-500">Route: /admin/speakers</p>
-    </div>
-  );
-};
+export default async function AdminSpeakerListPage() {
+  const result = await listSpeakers();
 
-export default AdminSpeakerManagementPage;
+  if (result.isFailure) {
+    return (
+      <AdminSpeakerListWidget
+        initialResult={null}
+        initialError={(result.error as { message?: string })?.message}
+      />
+    );
+  }
+
+  return <AdminSpeakerListWidget initialResult={result.data} />;
+}
