@@ -38,6 +38,37 @@ export interface Room extends RoomSummary {
 }
 
 // ---------------------------------------------------------------------------
+// Admin Master Data (Phase 7)
+// ---------------------------------------------------------------------------
+
+export interface SpeakerAdmin extends Speaker {
+  upcomingWorkshopCount: number;
+}
+
+export interface SpeakerCreateRequest {
+  fullName: string;
+  title?: string;
+  bio?: string;
+  avatarUrl?: string;
+}
+
+export type SpeakerUpdateRequest = Partial<SpeakerCreateRequest>;
+
+export interface RoomAdmin extends Room {
+  upcomingWorkshopCount: number;
+}
+
+export interface RoomCreateRequest {
+  name: string;
+  building?: string;
+  floor?: number;
+  capacity: number;
+  floorPlanUrl?: string;
+}
+
+export type RoomUpdateRequest = Partial<RoomCreateRequest>;
+
+// ---------------------------------------------------------------------------
 // AI Summary
 // ---------------------------------------------------------------------------
 
