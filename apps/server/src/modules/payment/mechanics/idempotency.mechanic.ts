@@ -38,9 +38,7 @@ export interface IdempotencyCheckResult {
 
 @Injectable()
 export class IdempotencyMechanic {
-  constructor(
-    private readonly repo: IdempotencyKeysRepository
-  ) {}
+  constructor(private readonly repo: IdempotencyKeysRepository) {}
 
   /**
    * Checks the idempotency key against the PostgreSQL idempotency_keys table.

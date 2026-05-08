@@ -14,11 +14,7 @@
  */
 import { Global, Module } from "@nestjs/common";
 
-import {
-  REDIS_CACHE,
-  REDIS_QUEUE,
-  REDIS_RATE_LIMIT,
-} from "./redis.constants";
+import { REDIS_CACHE, REDIS_QUEUE, REDIS_RATE_LIMIT } from "./redis.constants";
 import { RedisService } from "./redis.service";
 
 @Global()

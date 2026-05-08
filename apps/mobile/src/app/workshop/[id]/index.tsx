@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CacheStatusBadge } from "@/components/CacheStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { CacheStatusBadge } from "@/components/CacheStatusBadge";
 import ROUTES from "@/constants/routes";
 import { createDatabaseClient } from "@/database/client";
 import { cacheMetadata } from "@/database/schema/cache-metadata.schema";

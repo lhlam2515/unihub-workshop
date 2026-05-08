@@ -2,9 +2,9 @@ import { router } from "expo-router";
 import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { TicketCard } from "@/components/TicketCard";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { TicketCard } from "@/components/TicketCard";
 import { useMyTickets } from "@/features/checkin/hooks/use-my-tickets";
 
 export default function MyTicketsScreen() {

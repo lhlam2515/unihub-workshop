@@ -13,6 +13,7 @@ import {
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Public } from "@/shared/decorators/public.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
@@ -21,7 +22,6 @@ import { AuthService } from "../services/auth.service";
 import type { LoginDto } from "../dto/login.dto";
 import type { RefreshTokenDto } from "../dto/refresh-token.dto";
 import type { Request, Response } from "express";
-import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,

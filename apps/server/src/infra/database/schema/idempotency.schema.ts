@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgEnum, pgTable, smallint, timestamp, varchar } from "drizzle-orm/pg-core";
+import {
+  index,
+  jsonb,
+  pgEnum,
+  pgTable,
+  smallint,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const idempotencyStatusEnum = pgEnum("idempotency_status", [
   "IN_PROGRESS",
@@ -18,7 +26,9 @@ export const idempotencyKeys = pgTable(
     lockedUntil: timestamp("locked_until", { withTimezone: true })
       .notNull()
       .default(sql`NOW() + INTERVAL '30 seconds'`),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   }),
   (table) => [
