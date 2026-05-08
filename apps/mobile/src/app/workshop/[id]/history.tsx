@@ -28,12 +28,31 @@ interface BadgeProps {
 }
 
 function SyncBadge({ status }: BadgeProps) {
-  const config: Record<SyncStatus, { label: string; color: string; bg: string }> = {
-    PENDING:  { label: "Chưa đồng bộ", color: "#D97706", bg: "rgba(217,119,6,0.12)" },
-    SYNCING:  { label: "Đang đồng bộ", color: "#3B82F6", bg: "rgba(59,130,246,0.12)" },
-    SYNCED:   { label: "Đã đồng bộ",   color: "#16A34A", bg: "rgba(22,163,74,0.12)" },
-    CONFLICT: { label: "Xung đột",      color: "#DC2626", bg: "rgba(220,38,38,0.12)" },
-    FAILED:   { label: "Thất bại",      color: "#DC2626", bg: "rgba(220,38,38,0.12)" },
+  const config: Record<
+    SyncStatus,
+    { label: string; color: string; bg: string }
+  > = {
+    PENDING: {
+      label: "Chưa đồng bộ",
+      color: "#D97706",
+      bg: "rgba(217,119,6,0.12)",
+    },
+    SYNCING: {
+      label: "Đang đồng bộ",
+      color: "#3B82F6",
+      bg: "rgba(59,130,246,0.12)",
+    },
+    SYNCED: {
+      label: "Đã đồng bộ",
+      color: "#16A34A",
+      bg: "rgba(22,163,74,0.12)",
+    },
+    CONFLICT: {
+      label: "Xung đột",
+      color: "#DC2626",
+      bg: "rgba(220,38,38,0.12)",
+    },
+    FAILED: { label: "Thất bại", color: "#DC2626", bg: "rgba(220,38,38,0.12)" },
   };
   const c = config[status];
   return (
@@ -74,9 +93,7 @@ export default function CheckinHistoryScreen() {
       style={[styles.safeArea, { backgroundColor: colors.background }]}
     >
       <View style={styles.header}>
-        <Text style={[styles.eyebrow, { color: colors.tint }]}>
-          LỊCH SỬ
-        </Text>
+        <Text style={[styles.eyebrow, { color: colors.tint }]}>LỊCH SỬ</Text>
         <Text style={[styles.title, { color: colors.text }]}>
           Điểm danh local
         </Text>
@@ -104,9 +121,7 @@ export default function CheckinHistoryScreen() {
           keyExtractor={(item) => item.localId}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <View
-              style={[styles.row, { borderColor: colors.tabIconDefault }]}
-            >
+            <View style={[styles.row, { borderColor: colors.tabIconDefault }]}>
               <View style={styles.rowLeft}>
                 <Text style={[styles.studentName, { color: colors.text }]}>
                   {item.studentName}
@@ -133,7 +148,13 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2 },
   title: { fontSize: 26, fontWeight: "800" },
   subtitle: { fontSize: 13 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 24 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 24,
+  },
   emptyTitle: { fontSize: 17, fontWeight: "700" },
   hint: { fontSize: 14, lineHeight: 20, textAlign: "center" },
   list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10 },

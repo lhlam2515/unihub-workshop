@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -12,6 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { createDatabaseClient } from "@/database/client";
+import { cacheMetadata } from "@/database/schema/cache-metadata.schema";
+import type { CacheMetadata } from "@/database/types";
 import {
   checkinStatusService,
   type CheckinStatus,
@@ -33,10 +37,24 @@ export default function WorkshopDashboardScreen() {
   const [status, setStatus] = useState<CheckinStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [localCache, setLocalCache] = useState<CacheMetadata | null>(null);
 
   useEffect(() => {
     if (!workshopId) return;
     void fetchStatus();
+
+    // Read local cache metadata
+    try {
+      const db = createDatabaseClient();
+      const cached = db
+        .select()
+        .from(cacheMetadata)
+        .where(eq(cacheMetadata.workshopId, workshopId))
+        .get();
+      setLocalCache(cached ?? null);
+    } catch {
+      // Non-critical
+    }
   }, [workshopId]);
 
   async function fetchStatus() {
@@ -68,6 +86,55 @@ export default function WorkshopDashboardScreen() {
             Workshop {workshopId.slice(0, 8)}
           </Text>
         </View>
+
+        {/* Stale cache banner */}
+        {localCache && localCache.cacheStatus === "STALE" ? (
+          <View
+            style={[
+              styles.staleBanner,
+              {
+                borderColor: "#FBBF24",
+                backgroundColor: "rgba(251,191,36,0.08)",
+              },
+            ]}
+          >
+            <Text style={styles.staleBannerText}>
+              Dữ liệu cache đã cũ (&gt;30 phút). Đồng bộ lại để đảm bảo dữ liệu
+              điểm danh chính xác.
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Local cache summary */}
+        {localCache ? (
+          <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              Dữ liệu local
+            </Text>
+            <View style={styles.metricRow}>
+              <View style={styles.metric}>
+                <Text style={[styles.metricValue, { color: colors.text }]}>
+                  {localCache.registrationCount}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.icon }]}>
+                  Đã cache
+                </Text>
+              </View>
+              <View style={styles.metric}>
+                <Text style={[styles.metricValue, { color: colors.text }]}>
+                  {localCache.cacheStatus === "FRESH"
+                    ? "Mới"
+                    : localCache.cacheStatus === "STALE"
+                      ? "Cũ"
+                      : "Hết hạn"}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.icon }]}>
+                  Trạng thái
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         <View style={[styles.card, { borderColor: colors.tabIconDefault }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>
@@ -186,6 +253,16 @@ const styles = StyleSheet.create({
   metric: { flex: 1, gap: 4 },
   metricValue: { fontSize: 24, fontWeight: "800" },
   metricLabel: { fontSize: 12 },
+  staleBanner: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+  },
+  staleBannerText: {
+    color: "#92400E",
+    fontSize: 13,
+    lineHeight: 20,
+  },
   actions: { gap: 12, marginTop: 4 },
   primaryButton: {
     alignItems: "center",

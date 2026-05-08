@@ -1,7 +1,9 @@
+import { eq } from "drizzle-orm";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +14,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { createDatabaseClient } from "@/database/client";
+import { checkinQueue } from "@/database/schema/checkin-queue.schema";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { logout } from "@/lib/api/client";
 import { offlineAuth } from "@/lib/api/client/offline-auth";
@@ -24,8 +28,48 @@ export default function ProfileScreen() {
   const payload = offlineAuth.getTokenPayload();
 
   async function handleLogout() {
+    // Check for pending sync records before allowing logout
+    try {
+      const db = createDatabaseClient();
+      const pendingCount = db
+        .select()
+        .from(checkinQueue)
+        .where(eq(checkinQueue.syncStatus, "PENDING"))
+        .all().length;
+
+      if (pendingCount > 0) {
+        return new Promise<void>((resolve) => {
+          Alert.alert(
+            "Cảnh báo",
+            `Còn ${pendingCount} bản ghi chưa được đồng bộ. Vui lòng đồng bộ trước khi đăng xuất.`,
+            [
+              {
+                text: "Đồng bộ ngay",
+                onPress: () => {
+                  router.push(ROUTES.SYNC_PROGRESS);
+                  resolve();
+                },
+              },
+              {
+                text: "Vẫn đăng xuất",
+                style: "destructive",
+                onPress: () => {
+                  setIsLoggingOut(true);
+                  logout()
+                    .then(() => router.replace(ROUTES.LOGIN))
+                    .catch(() => router.replace(ROUTES.LOGIN));
+                  resolve();
+                },
+              },
+            ]
+          );
+        });
+      }
+    } catch {
+      // Non-critical: proceed with logout
+    }
+
     setIsLoggingOut(true);
-    // logout() calls POST /auth/logout then clears tokenStore regardless of result
     await logout();
     router.replace(ROUTES.LOGIN);
   }

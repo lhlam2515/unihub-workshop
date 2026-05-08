@@ -1,3 +1,4 @@
+import { inArray } from "drizzle-orm";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -12,6 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ROUTES from "@/constants/routes";
 import { Colors } from "@/constants/theme";
+import { createDatabaseClient } from "@/database/client";
+import { cacheMetadata } from "@/database/schema/cache-metadata.schema";
+import type { CacheMetadata } from "@/database/types";
 import { usePreload } from "@/features/checkin/api/use-preload";
 import {
   workshopsService,
@@ -29,6 +33,9 @@ export default function HomeScreen() {
   const [workshops, setWorkshops] = useState<WorkshopDetailDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<Map<string, CacheMetadata>>(
+    new Map()
+  );
 
   useEffect(() => {
     async function loadWorkshops() {
@@ -52,6 +59,31 @@ export default function HomeScreen() {
       }
 
       setWorkshops(successful);
+
+      // Query local cache metadata for badge display
+      if (successful.length > 0) {
+        try {
+          const db = createDatabaseClient();
+          const cacheRows = db
+            .select()
+            .from(cacheMetadata)
+            .where(
+              inArray(
+                cacheMetadata.workshopId,
+                successful.map((w) => w.workshopId)
+              )
+            )
+            .all();
+          const map = new Map<string, CacheMetadata>();
+          for (const row of cacheRows) {
+            map.set(row.workshopId, row);
+          }
+          setCacheInfo(map);
+        } catch {
+          // Non-critical: badges won't show but app works
+        }
+      }
+
       setIsLoading(false);
     }
 
@@ -121,39 +153,62 @@ export default function HomeScreen() {
           </View>
         ) : (
           <View style={styles.section}>
-            {workshops.map((workshop) => (
-              <Pressable
-                key={workshop.workshopId}
-                onPress={() => handleWorkshopPress(workshop.workshopId)}
-                style={({ pressed }) => [
-                  styles.card,
-                  {
-                    borderColor: colors.tabIconDefault,
-                    opacity: pressed ? 0.88 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.cardTitle, { color: colors.text }]}>
-                  {workshop.title}
-                </Text>
-                <Text style={[styles.cardSpeaker, { color: colors.icon }]}>
-                  {workshop.speakerName}
-                </Text>
-                <View style={styles.cardFooter}>
-                  <Text style={[styles.cardDate, { color: colors.icon }]}>
-                    {formatDate(workshop.startsAt)}
+            {workshops.map((workshop) => {
+              const cache = cacheInfo.get(workshop.workshopId);
+              const cacheLabel = !cache
+                ? "Chưa tải"
+                : cache.isFullyLoaded
+                  ? "Đã tải"
+                  : "Một phần";
+              const cacheColor = !cache
+                ? "#F87171"
+                : cache.isFullyLoaded
+                  ? colors.tint
+                  : "#FBBF24";
+              return (
+                <Pressable
+                  key={workshop.workshopId}
+                  onPress={() => handleWorkshopPress(workshop.workshopId)}
+                  style={({ pressed }) => [
+                    styles.card,
+                    {
+                      borderColor: colors.tabIconDefault,
+                      opacity: pressed ? 0.88 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>
+                    {workshop.title}
                   </Text>
-                  <Text
-                    style={[
-                      styles.badge,
-                      { color: colors.tint, borderColor: colors.tint },
-                    ]}
-                  >
-                    {workshop.availableSeats} chỗ
+                  <Text style={[styles.cardSpeaker, { color: colors.icon }]}>
+                    {workshop.speakerName}
                   </Text>
-                </View>
-              </Pressable>
-            ))}
+                  <View style={styles.cardFooter}>
+                    <View style={styles.footerLeft}>
+                      <Text style={[styles.cardDate, { color: colors.icon }]}>
+                        {formatDate(workshop.startsAt)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.badge,
+                          { color: cacheColor, borderColor: cacheColor },
+                        ]}
+                      >
+                        {cacheLabel}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.badge,
+                        { color: colors.tint, borderColor: colors.tint },
+                      ]}
+                    >
+                      {workshop.availableSeats} chỗ
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         )}
 
@@ -229,6 +284,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginTop: 4,
+  },
+  footerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   cardDate: { fontSize: 12 },
   badge: {
