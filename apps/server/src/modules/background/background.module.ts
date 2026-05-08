@@ -1,7 +1,7 @@
-import { Module } from "@nestjs/common";
+import { Module, OnModuleInit } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 
-import { SharedQueueModule } from "@/infra/messaging/queue.module";
+import { WorkerHost } from "@/infra/messaging/worker.host";
 import { IamModule } from "@/modules/iam/iam.module";
 
 import { AiSummaryModule } from "../ai-summary/ai-summary.module";
@@ -33,15 +33,10 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
  * Side effects:
  * - Registers cron schedules via @nestjs/schedule.
  * - Exposes admin HTTP endpoints for manual job management.
- *
- * @requires SharedQueueModule — provides BullMQ queue registrations.
- * @requires BookingModule — provides RegistrationsService (reconciliation).
- * @requires CsvSyncModule — provides StudentSyncService (data sync).
  */
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    SharedQueueModule,
     BookingModule,
     CatalogModule,
     PaymentModule,
@@ -64,4 +59,41 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
   ],
   exports: [SystemMonitorService],
 })
-export class BackgroundModule {}
+export class BackgroundModule implements OnModuleInit {
+  constructor(
+    private readonly workerHost: WorkerHost,
+    private readonly notificationWorker: NotificationWorker,
+    private readonly aiSummaryWorker: AiSummaryWorker,
+    private readonly studentSyncWorker: StudentSyncWorker
+  ) {}
+
+  /**
+   * Registers all job handlers with the WorkerHost on module initialization.
+   *
+   * This replaces @nestjs/bullmq's `@Processor` decorator-based auto-discovery.
+   * Each worker is registered with its queue name, job name, and concurrency.
+   *
+   * Side effects:
+   * - Creates 3 BullMQ Worker instances (notification, ai-summary, student-sync).
+   * - Binds event hooks (completed, failed, stalled) on each worker.
+   */
+  onModuleInit() {
+    this.workerHost.registerHandlers(
+      "notification",
+      [{ jobName: "notification.dispatch", handler: this.notificationWorker }],
+      5
+    );
+
+    this.workerHost.registerHandlers(
+      "ai-summary",
+      [{ jobName: "ai-summary.process", handler: this.aiSummaryWorker }],
+      1
+    );
+
+    this.workerHost.registerHandlers(
+      "student-sync",
+      [{ jobName: "student-sync.execute", handler: this.studentSyncWorker }],
+      1
+    );
+  }
+}

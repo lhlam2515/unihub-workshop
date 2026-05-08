@@ -1,7 +1,6 @@
-import { getQueueToken } from "@nestjs/bullmq";
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
+import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import { Result } from "@/shared/response/result";
 
 import { NotificationsService } from "./notifications.service";
@@ -74,7 +73,7 @@ describe("NotificationsService", () => {
           provide: NotificationChannelConfigsRepository,
           useValue: mockChannelConfigsRepo,
         },
-        { provide: getQueueToken(NOTIFICATION_QUEUE), useValue: mockQueue },
+        { provide: MESSAGING_TOKEN.NOTIFICATION_QUEUE, useValue: mockQueue },
       ],
     }).compile();
 

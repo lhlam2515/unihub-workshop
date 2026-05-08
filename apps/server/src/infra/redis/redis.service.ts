@@ -41,9 +41,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   /** DB0 — cache (allkeys-lru eviction policy) */
   private client!: Redis;
   /** DB1 — queue (noeviction) */
-  private queueClient!: Redis;
+  private _queueClient!: Redis;
   /** DB2 — rate limit (volatile-ttl eviction policy) */
   private rateLimitClient!: Redis;
+
+  /**
+   * Exposes the DB1 (queue) ioredis connection for BullMQ native usage.
+   *
+   * MessagingModule.forRootAsync() injects this raw ioredis instance into
+   * BullMQ Worker and Queue constructors, bypassing @nestjs/bullmq.
+   */
+  get queueClient(): Redis {
+    return this._queueClient;
+  }
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -60,11 +70,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     const url = this.configService.getOrThrow<string>("redis.url");
     this.client = new Redis(url);
-    this.queueClient = new Redis(url);
+    this._queueClient = new Redis(url);
     this.rateLimitClient = new Redis(url);
     // Select logical databases after connection
     await this.client.select(RedisDb.Cache);
-    await this.queueClient.select(RedisDb.Queue);
+    await this._queueClient.select(RedisDb.Queue);
     await this.rateLimitClient.select(RedisDb.RateLimit);
   }
 
@@ -418,7 +428,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     await Promise.all([
       this.client.quit(),
-      this.queueClient.quit(),
+      this._queueClient.quit(),
       this.rateLimitClient.quit(),
     ]);
   }
