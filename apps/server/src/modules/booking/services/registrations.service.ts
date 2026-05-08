@@ -17,7 +17,10 @@ import {
   type RegistrationDto,
 } from "../dto/registration-response.dto";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
-import { RegistrationsRepository } from "../repositories/registrations.repository";
+import {
+  CancelResult,
+  RegistrationsRepository,
+} from "../repositories/registrations.repository";
 
 const PAYMENT_LOCK_TTL_MS = 900_000; // 15 minutes
 
@@ -322,7 +325,7 @@ export class RegistrationsService {
    */
   async cancelAllForWorkshop(
     workshopId: string
-  ): Promise<Result<{ cancelledCount: number }>> {
+  ): Promise<Result<CancelResult>> {
     return this.registrationsRepo.cancelAllForWorkshop(workshopId);
   }
 

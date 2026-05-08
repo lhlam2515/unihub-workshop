@@ -1,8 +1,6 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
-
-
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
 import type { DrizzleTransaction } from "@/infra/database/types/drizzle.types";
@@ -19,6 +17,7 @@ export interface RegistrationWithWorkshopTitle extends Registration {
 
 export interface CancelResult {
   cancelledCount: number;
+  affectedStudentIds: string[];
 }
 
 @Injectable()
@@ -320,7 +319,10 @@ export class RegistrationsRepository {
           )
           .returning();
 
-        return { cancelledCount: result.length };
+        return {
+          cancelledCount: result.length,
+          affectedStudentIds: result.map((r) => r.studentId),
+        };
       },
       (err) => systemErrors.internal(err)
     );
