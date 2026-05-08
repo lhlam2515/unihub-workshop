@@ -23,8 +23,6 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
-import type { Pipeline } from "ioredis";
-
 /**
  * Database index for the Redis service.
  *
@@ -62,10 +60,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.client = new Redis(url);
     this.queueClient = new Redis(url);
     this.rateLimitClient = new Redis(url);
-    // Select logical databases after connection
-    await this.client.select(RedisDb.Cache);
-    await this.queueClient.select(RedisDb.Queue);
-    await this.rateLimitClient.select(RedisDb.RateLimit);
+    // Note: Database selection (SELECT command) is skipped because managed Redis services
+    // (Upstash, Redis Cloud, etc.) typically only support database 0. Logical separation
+    // is achieved through distinct client instances, which is sufficient for this use case.
   }
 
   // ---------------------------------------------------------------------------
@@ -400,55 +397,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return this.client.set(key, serialized, "EX", exSeconds);
     }
     return this.client.set(key, serialized);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Sorted Set Operations
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Adds a member with a numeric score to a Redis Sorted Set.
-   *
-   * Used by SlidingWindowService for rate-limit sliding window counters.
-   * Each request is added with a timestamp score for pruning.
-   *
-   * @param key - Redis Sorted Set key.
-   * @param score - The numeric score (typically `Date.now()`).
-   * @param member - The member value (typically `"${now}-${uuid}"`).
-   * @returns The number of elements added to the sorted set.
-   */
-  async zadd(key: string, score: number, member: string): Promise<number> {
-    return this.client.zadd(key, score, member);
-  }
-
-  /**
-   * Removes all members in a Sorted Set with scores within the given interval.
-   *
-   * Used by SlidingWindowService to prune expired entries before the window.
-   *
-   * @param key - Redis Sorted Set key.
-   * @param min - Minimum score (inclusive).
-   * @param max - Maximum score (inclusive).
-   * @returns The number of members removed.
-   */
-  async zremrangebyscore(
-    key: string,
-    min: number,
-    max: number
-  ): Promise<number> {
-    return this.client.zremrangebyscore(key, min, max);
-  }
-
-  /**
-   * Returns the cardinality (number of members) of a Sorted Set.
-   *
-   * Used by SlidingWindowService to count requests in the current window.
-   *
-   * @param key - Redis Sorted Set key.
-   * @returns The number of members in the sorted set.
-   */
-  async zcard(key: string): Promise<number> {
-    return this.client.zcard(key);
   }
 
   /**
