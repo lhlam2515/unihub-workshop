@@ -12,73 +12,41 @@ import { cancelRegistration } from "@/features/registration-management/api/regis
 import { CancelConfirmDialog } from "@/features/registration-management/components/CancelConfirmDialog";
 import { RegistrationCard } from "@/features/registration-management/components/RegistrationCard";
 import { StatusFilterChips } from "@/features/registration-management/components/StatusFilterChips";
-import type { PaginatedResult } from "@/lib/api/client";
-import type { ApiError } from "@/lib/api/errors";
 import type { RegistrationListItem } from "@/types/registration";
 
 interface RegistrationListWidgetProps {
-  initialResult: PaginatedResult<RegistrationListItem> | null;
-  initialError?: string;
+  registrations: RegistrationListItem[];
+  filter: { status?: string; upcoming?: boolean };
+  onFilterChange: (filter: { status?: string; upcoming?: boolean }) => void;
+  loading: boolean;
+  error: string | null;
 }
 
 export function RegistrationListWidget({
-  initialResult,
-  initialError,
+  registrations,
+  filter,
+  onFilterChange,
+  loading,
+  error,
 }: RegistrationListWidgetProps) {
   const router = useRouter();
-  const [registrations, setRegistrations] = useState<RegistrationListItem[]>(
-    initialResult?.items ?? []
-  );
-  const [filter, setFilter] = useState<{ status?: string; upcoming?: boolean }>(
-    {}
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(initialError ?? null);
   const [cancelTarget, setCancelTarget] = useState<RegistrationListItem | null>(
     null
   );
-
-  const handleFilterChange = async (newFilter: {
-    status?: string;
-    upcoming?: boolean;
-  }) => {
-    setFilter(newFilter);
-    setLoading(true);
-    setError(null);
-
-    const { listMyRegistrations } =
-      await import("@/features/registration-management/api/registration.service");
-    const params: Record<string, string | boolean | number> = {};
-    if (newFilter.status) params.status = newFilter.status;
-    if (newFilter.upcoming) params.upcoming = true;
-
-    const result = await listMyRegistrations(params);
-    if (result.isSuccess) {
-      setRegistrations(result.data.items);
-    } else {
-      setError(
-        (result.error as ApiError)?.message ?? "Không thể tải danh sách"
-      );
-    }
-    setLoading(false);
-  };
 
   const handleCancel = async () => {
     if (!cancelTarget) return;
     const result = await cancelRegistration(cancelTarget.id);
     if (result.isSuccess) {
-      setRegistrations((prev) =>
-        prev.map((r) =>
-          r.id === cancelTarget.id ? { ...r, status: "CANCELLED" as const } : r
-        )
-      );
+      // Note: parent page will re-fetch to get fresh state
+      onFilterChange(filter);
     }
     setCancelTarget(null);
   };
 
   return (
     <div className="space-y-4">
-      <StatusFilterChips activeFilter={filter} onChange={handleFilterChange} />
+      <StatusFilterChips activeFilter={filter} onChange={onFilterChange} />
 
       {error && <ErrorDisplay error={error} variant="banner" />}
 
