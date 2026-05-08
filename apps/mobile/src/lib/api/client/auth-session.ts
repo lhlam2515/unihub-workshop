@@ -67,7 +67,7 @@ async function refreshAccessToken(): Promise<string> {
   const response = await fetch(`${API_BASE_URL}${API_ROUTES.AUTH.REFRESH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    body: JSON.stringify({ refreshToken }),
   });
 
   const envelope = (await response.json()) as ApiResponse<{

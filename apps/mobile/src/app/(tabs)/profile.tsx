@@ -74,7 +74,7 @@ export default function ProfileScreen() {
                   Workshop phân công
                 </Text>
                 <Text style={[styles.infoValue, { color: colors.text }]}>
-                  {payload.allowed_workshop_ids?.length ?? 0}
+                  {payload.allowedWorkshopIds?.length ?? 0}
                 </Text>
               </View>
               <View style={styles.infoRow}>

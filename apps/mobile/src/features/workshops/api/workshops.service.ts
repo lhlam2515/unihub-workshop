@@ -19,7 +19,7 @@ class WorkshopsService {
   /**
    * Fetch a single workshop's public detail by ID.
    *
-   * @param workshopId - The workshop UUID from the JWT `allowed_workshop_ids`
+   * @param workshopId - The workshop UUID from the JWT `allowedWorkshopIds`
    * @returns OkResult with WorkshopSummary, or FailResult with ApiError
    */
   async getWorkshopById(workshopId: string): Promise<Result<WorkshopSummary>> {

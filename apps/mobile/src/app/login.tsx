@@ -37,7 +37,11 @@ export default function LoginScreen() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    const result = await authService.loginWithCredentials({ email: email.trim(), password, platform: "MOBILE" });
+    const result = await authService.loginWithCredentials({
+      accountType: "staff",
+      email: email.trim(),
+      password,
+    });
 
     setIsLoading(false);
 
@@ -131,7 +135,10 @@ export default function LoginScreen() {
               <View
                 style={[
                   styles.errorBox,
-                  { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "#EF4444" },
+                  {
+                    backgroundColor: "rgba(239,68,68,0.08)",
+                    borderColor: "#EF4444",
+                  },
                 ]}
               >
                 <Text style={styles.errorText}>{errorMessage}</Text>
