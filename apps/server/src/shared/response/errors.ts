@@ -807,6 +807,13 @@ export const notificationErrors = {
       message: `Unknown notification channel: ${channelType}.`,
       context: { channelType },
     }),
+  channelTimeout: (channelType: string, timeoutMs: number): AppError =>
+    createError({
+      category: "EXTERNAL",
+      code: "NOTIFICATION_CHANNEL_TIMEOUT",
+      message: `Channel ${channelType} timed out after ${timeoutMs}ms.`,
+      context: { channelType, timeoutMs },
+    }),
 } as const;
 
 /**

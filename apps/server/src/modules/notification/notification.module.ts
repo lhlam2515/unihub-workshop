@@ -10,6 +10,7 @@ import { NotificationsAdminController } from "./controllers/notifications-admin.
 import { NotificationChannelConfigsRepository } from "./repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "./repositories/notification-logs.repository";
 import { NotificationDispatchService } from "./services/notification-dispatch.service";
+import { NotificationLogProducer } from "./services/notification-log-producer.service";
 import { NotificationsService } from "./services/notifications.service";
 
 @Module({
@@ -19,6 +20,7 @@ import { NotificationsService } from "./services/notifications.service";
     // Services
     NotificationsService,
     NotificationDispatchService,
+    NotificationLogProducer,
     // Repositories
     NotificationLogsRepository,
     NotificationChannelConfigsRepository,
@@ -27,6 +29,10 @@ import { NotificationsService } from "./services/notifications.service";
     TelegramChannel,
     AppChannel,
   ],
-  exports: [NotificationsService, NotificationDispatchService],
+  exports: [
+    NotificationsService,
+    NotificationDispatchService,
+    NotificationLogProducer,
+  ],
 })
 export class NotificationModule {}

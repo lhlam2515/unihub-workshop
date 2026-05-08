@@ -60,7 +60,7 @@ export class NotificationsAdminController {
    *
    * @returns All channel configs with is_active and config_json
    */
-  @Get("channels")
+  @Get("/admin/notification-channels")
   async listChannelConfigs() {
     return this.notificationsService.listChannelConfigs();
   }
@@ -68,15 +68,15 @@ export class NotificationsAdminController {
   /**
    * Update a channel configuration
    *
-   * @param channelType - Channel type to update
+   * @param channelId - Channel type to update
    * @param dto - Update payload
    * @returns Updated channel config
    */
-  @Patch("channels/:channelType")
+  @Patch("/admin/notification-channels/:channelId")
   async updateChannelConfig(
-    @Param("channelType") channelType: string,
+    @Param("channelId") channelId: string,
     @Body() dto: UpdateChannelConfigDto
   ) {
-    return this.notificationsService.updateChannelConfig(channelType, dto);
+    return this.notificationsService.updateChannelConfig(channelId, dto);
   }
 }

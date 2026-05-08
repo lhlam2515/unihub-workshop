@@ -62,6 +62,8 @@ export const ListNotificationLogsQuerySchema = z.object({
       "WORKSHOP_CANCELLED",
       "PAYMENT_SUCCESS",
       "PAYMENT_FAILED",
+      "PAYMENT_CONFIRMED_LATE",
+      "PAYMENT_FAILED_RECONCILED",
       "CHECKIN_REMINDER",
     ])
     .optional(),

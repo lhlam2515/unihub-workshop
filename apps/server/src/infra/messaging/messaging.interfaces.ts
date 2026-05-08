@@ -1,5 +1,6 @@
 import type {
   AiSummaryJobData,
+  NotificationJobData,
   PaymentEventData,
   RegistrationEventData,
   StudentSyncJobData,
@@ -20,6 +21,7 @@ export type JobName =
   | "payment.success"
   | "payment.failed"
   | "registration.confirmed"
+  | "notification.send"
   | "workshop.cancelled"
   | "workshop.emergency-update"
   // -- ai-summary queue --
@@ -39,6 +41,7 @@ export interface JobPayloadMap {
   "payment.success": PaymentEventData;
   "payment.failed": PaymentEventData;
   "registration.confirmed": RegistrationEventData;
+  "notification.send": NotificationJobData;
   "workshop.cancelled": WorkshopCancelledEventData;
   "workshop.emergency-update": WorkshopUpdatedEventData;
   // ai-summary queue
