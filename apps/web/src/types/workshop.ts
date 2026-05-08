@@ -104,3 +104,69 @@ export interface WorkshopFilters {
   cursor?: string;
   limit?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Admin types
+// ---------------------------------------------------------------------------
+
+export interface WorkshopAdmin {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  seatsTotal: number;
+  seatsAvailable: number;
+  price: number;
+  currency: string;
+  status: WorkshopStatus;
+  speaker: SpeakerSummary | null;
+  room: RoomSummary | null;
+  description: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  pdfUrl: string | null;
+}
+
+export interface WorkshopCreateRequest {
+  title: string;
+  description?: string | null;
+  speakerId?: string | null;
+  roomId?: string | null;
+  startsAt: string;
+  endsAt: string;
+  seatsTotal: number;
+  price: number;
+  status?: "DRAFT" | "OPEN";
+}
+
+export interface WorkshopPatchRequest {
+  title?: string;
+  description?: string | null;
+  speakerId?: string | null;
+  roomId?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  seatsTotal?: number;
+  price?: number;
+}
+
+export interface WorkshopCancelRequest {
+  reason: string;
+  notifyRegistered: boolean;
+}
+
+export interface WorkshopStats {
+  registrations: { total: number; byStatus: Record<string, number> };
+  checkins: { total: number; rate: number };
+  revenue: { amount: number; currency: string };
+}
+
+export interface AdminWorkshopFilters extends Omit<
+  WorkshopFilters,
+  "status" | "hasSeats" | "sort"
+> {
+  status?: WorkshopStatus;
+  q?: string;
+}
