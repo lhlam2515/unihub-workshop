@@ -1,12 +1,19 @@
-import React from "react";
+export const dynamic = "force-dynamic";
 
-const AdminDashboardPage = () => {
-  return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">AdminDashboardPage</h1>
-      <p className="text-gray-500">Route: /admin</p>
-    </div>
-  );
-};
+import { getAdminDashboardOverview } from "@/lib/api/services/admin";
+import { AdminDashboardWidget } from "@/widgets/AdminDashboardWidget";
 
-export default AdminDashboardPage;
+export default async function AdminDashboardPage() {
+  const result = await getAdminDashboardOverview();
+
+  if (result.isFailure) {
+    return (
+      <AdminDashboardWidget
+        initialResult={null}
+        initialError={(result.error as { message?: string })?.message}
+      />
+    );
+  }
+
+  return <AdminDashboardWidget initialResult={result.data} />;
+}

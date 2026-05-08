@@ -1,12 +1,29 @@
-import React from "react";
+import { AdminWorkshopFormWidget } from "@/features/admin-workshop-management/components/AdminWorkshopFormContainer";
+import { listSpeakers, listRooms } from "@/lib/api/services/admin";
 
-const AdminCreateWorkshopPage = () => {
+export default async function AdminCreateWorkshopPage() {
+  const [speakersResult, roomsResult] = await Promise.all([
+    listSpeakers(),
+    listRooms(),
+  ]);
+
+  const speakers = speakersResult.isSuccess ? speakersResult.data.items : [];
+  const rooms = roomsResult.isSuccess ? roomsResult.data.items : [];
+
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold">AdminCreateWorkshopPage</h1>
-      <p className="text-gray-500">Route: /admin/workshops/new</p>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight">Tạo workshop mới</h1>
+        <p className="text-sm text-slate-500">
+          Điền thông tin workshop mới. Có thể lưu nháp hoặc công bố ngay.
+        </p>
+      </div>
+
+      <AdminWorkshopFormWidget
+        mode="create"
+        speakers={speakers}
+        rooms={rooms}
+      />
     </div>
   );
-};
-
-export default AdminCreateWorkshopPage;
+}
