@@ -32,16 +32,12 @@ export const envSchema = z.object({
   REDIS_URL: z.string().url({ message: "REDIS_URL is required" }),
 
   // JWT
-  JWT_PRIVATE_KEY: z
-    .string()
-    .min(1, {
-      message: "JWT_PRIVATE_KEY is required (base64-encoded RSA PEM)",
-    }),
-  JWT_PUBLIC_KEY: z
-    .string()
-    .min(1, {
-      message: "JWT_PUBLIC_KEY is required (base64-encoded RSA PEM)",
-    }),
+  JWT_PRIVATE_KEY: z.string().min(1, {
+    message: "JWT_PRIVATE_KEY is required (base64-encoded RSA PEM)",
+  }),
+  JWT_PUBLIC_KEY: z.string().min(1, {
+    message: "JWT_PUBLIC_KEY is required (base64-encoded RSA PEM)",
+  }),
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
 
@@ -115,8 +111,12 @@ export const appConfig = registerAs("app", () => ({
 }));
 
 export const jwtConfig = registerAs("jwt", () => ({
-  privateKey: Buffer.from(process.env.JWT_PRIVATE_KEY!, "base64").toString("utf-8"),
-  publicKey: Buffer.from(process.env.JWT_PUBLIC_KEY!, "base64").toString("utf-8"),
+  privateKey: Buffer.from(process.env.JWT_PRIVATE_KEY!, "base64").toString(
+    "utf-8"
+  ),
+  publicKey: Buffer.from(process.env.JWT_PUBLIC_KEY!, "base64").toString(
+    "utf-8"
+  ),
   secret: process.env.JWT_SECRET!,
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
   accessExpiry: { WEB: 900, MOBILE: 28800 } as const,
