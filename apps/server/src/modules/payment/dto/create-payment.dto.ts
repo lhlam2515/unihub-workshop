@@ -9,7 +9,7 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const CreatePaymentSchema = z.object({
-  registration_id: z.string().uuid(),
+  registrationId: z.string().uuid(),
   gateway: z.enum(["VNPAY", "MOMO", "STRIPE", "MOCK"]),
 });
 

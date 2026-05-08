@@ -9,7 +9,7 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const AssignWorkshopsSchema = z.object({
-  workshop_ids: z.array(z.string().uuid()),
+  workshopIds: z.array(z.string().uuid()),
 });
 
 export class AssignWorkshopsDto extends createZodDto(AssignWorkshopsSchema) {}

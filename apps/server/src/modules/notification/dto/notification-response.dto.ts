@@ -4,16 +4,16 @@ import { z } from "zod";
 import type { NotificationLog } from "@/infra/database/types";
 
 export const NotificationLogResponseSchema = z.object({
-  notification_id: z.string().uuid(),
-  user_id: z.string().uuid(),
-  workshop_id: z.string().uuid().optional(),
+  notificationId: z.string().uuid(),
+  userId: z.string().uuid(),
+  workshopId: z.string().uuid().optional(),
   type: z.string(),
   channel: z.enum(["APP", "EMAIL", "TELEGRAM"]),
   status: z.enum(["PENDING", "SENT", "FAILED", "TIMEOUT"]),
   payload: z.record(z.string(), z.any()),
-  sent_at: z.date().optional(),
-  error_message: z.string().optional(),
-  created_at: z.date(),
+  sentAt: z.date().optional(),
+  errorMessage: z.string().optional(),
+  createdAt: z.date(),
 });
 
 export type NotificationLogResponseDto = z.infer<
@@ -32,16 +32,16 @@ export class NotificationLogResponse {
    */
   static from(log: NotificationLog): NotificationLogResponseDto {
     return {
-      notification_id: log.notificationId,
-      user_id: log.userId,
-      workshop_id: log.workshopId ?? undefined,
+      notificationId: log.notificationId,
+      userId: log.userId,
+      workshopId: log.workshopId ?? undefined,
       type: log.type,
       channel: log.channel,
       status: log.status,
       payload: log.payload as Record<string, any>,
-      sent_at: log.sentAt ?? undefined,
-      error_message: log.errorMessage ?? undefined,
-      created_at: log.createdAt,
+      sentAt: log.sentAt ?? undefined,
+      errorMessage: log.errorMessage ?? undefined,
+      createdAt: log.createdAt,
     };
   }
 }

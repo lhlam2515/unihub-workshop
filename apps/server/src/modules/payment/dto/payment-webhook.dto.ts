@@ -9,10 +9,10 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const PaymentWebhookSchema = z.object({
-  gateway_txn_id: z.string(),
+  gatewayTxnId: z.string(),
   status: z.enum(["SUCCESS", "FAILED"]),
-  idempotency_key: z.string().uuid(),
-  raw_response: z.any().optional(),
+  idempotencyKey: z.string().uuid(),
+  rawResponse: z.any().optional(),
 });
 
 export class PaymentWebhookDto extends createZodDto(PaymentWebhookSchema) {}

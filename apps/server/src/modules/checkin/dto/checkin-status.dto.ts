@@ -6,14 +6,14 @@ interface CheckinRecordInput {
 }
 
 export interface CheckinStatusDto {
-  confirmed_count: number;
-  checked_in_count: number;
-  pending_count: number;
-  recent_checkins: Array<{
-    checkin_id: string;
-    student_name: string;
-    student_code: string;
-    checked_in_at: Date;
+  confirmedCount: number;
+  checkedInCount: number;
+  pendingCount: number;
+  recentCheckins: Array<{
+    checkinId: string;
+    studentName: string;
+    studentCode: string;
+    checkedInAt: Date;
     source: string;
   }>;
 }
@@ -38,14 +38,14 @@ export class CheckinStatusBuilder {
     recentCheckins: CheckinRecordInput[]
   ): CheckinStatusDto {
     return {
-      confirmed_count: confirmedCount,
-      checked_in_count: checkedInCount,
-      pending_count: confirmedCount - checkedInCount,
-      recent_checkins: recentCheckins.map((r) => ({
-        checkin_id: r.checkinId,
-        student_name: r.student?.fullName ?? "",
-        student_code: r.student?.studentId ?? "",
-        checked_in_at: r.checkedInAt,
+      confirmedCount: confirmedCount,
+      checkedInCount: checkedInCount,
+      pendingCount: confirmedCount - checkedInCount,
+      recentCheckins: recentCheckins.map((r) => ({
+        checkinId: r.checkinId,
+        studentName: r.student?.fullName ?? "",
+        studentCode: r.student?.studentId ?? "",
+        checkedInAt: r.checkedInAt,
         source: r.source,
       })),
     };

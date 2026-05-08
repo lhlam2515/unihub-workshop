@@ -9,10 +9,10 @@ import { z } from "zod";
  * avatar_url must be a valid URL if provided.
  */
 export const UpdateSpeakerSchema = z.object({
-  full_name: z.string().min(1).optional(),
+  fullName: z.string().min(1).optional(),
   title: z.string().optional(),
   bio: z.string().optional(),
-  avatar_url: z.string().url().optional(),
+  avatarUrl: z.string().url().optional(),
 });
 
 /**

@@ -1,23 +1,23 @@
 import type { Workshop } from "@/infra/database/types/event-core.types";
 
 export interface WorkshopSummaryDto {
-  workshop_id: string;
+  workshopId: string;
   title: string;
-  speaker_name: string;
-  starts_at: Date;
-  available_seats: number;
-  is_paid: boolean;
+  speakerName: string;
+  startsAt: Date;
+  availableSeats: number;
+  isPaid: boolean;
   price?: number;
 }
 
 export interface WorkshopDetailDto extends WorkshopSummaryDto {
   description?: string;
-  room_name: string;
-  ends_at: Date;
+  roomName: string;
+  endsAt: Date;
 }
 
 export interface WorkshopAdminDetailDto extends WorkshopDetailDto {
-  created_by: string;
+  createdBy: string;
   status: string;
 }
 
@@ -29,12 +29,12 @@ export class WorkshopResponseBuilder {
   ): WorkshopSummaryDto {
     const priceNum = workshop.price ? Number(workshop.price) : 0;
     return {
-      workshop_id: workshop.workshopId,
+      workshopId: workshop.workshopId,
       title: workshop.title,
-      speaker_name: speakerName,
-      starts_at: workshop.startsAt,
-      available_seats: availableSeats,
-      is_paid: priceNum > 0,
+      speakerName: speakerName,
+      startsAt: workshop.startsAt,
+      availableSeats: availableSeats,
+      isPaid: priceNum > 0,
       price: priceNum > 0 ? priceNum : undefined,
     };
   }
@@ -49,8 +49,8 @@ export class WorkshopResponseBuilder {
     return {
       ...summary,
       description: workshop.description ?? undefined,
-      room_name: roomName,
-      ends_at: workshop.endsAt,
+      roomName: roomName,
+      endsAt: workshop.endsAt,
     };
   }
 
@@ -68,7 +68,7 @@ export class WorkshopResponseBuilder {
     );
     return {
       ...detail,
-      created_by: workshop.createdBy,
+      createdBy: workshop.createdBy,
       status: workshop.status,
     };
   }

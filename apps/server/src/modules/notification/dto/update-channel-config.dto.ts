@@ -17,8 +17,8 @@ import { z } from "zod";
  * - TELEGRAM: { is_active: true, config_json: { bot_token, chat_id? } }
  */
 export const UpdateChannelConfigSchema = z.object({
-  is_active: z.boolean(),
-  config_json: z.record(z.string(), z.any()).optional(),
+  isActive: z.boolean(),
+  configJson: z.record(z.string(), z.any()).optional(),
 });
 
 export class UpdateChannelConfigDto extends createZodDto(

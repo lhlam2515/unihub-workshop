@@ -10,9 +10,9 @@ import { z } from "zod";
 
 export const EmergencyUpdateWorkshopSchema = z
   .object({
-    room_id: z.string().uuid().optional(),
-    starts_at: z.date().optional(),
-    ends_at: z.date().optional(),
+    roomId: z.string().uuid().optional(),
+    startsAt: z.date().optional(),
+    endsAt: z.date().optional(),
   })
   .refine((data) => Object.values(data).some((v) => v !== undefined), {
     message: "At least one field is required",

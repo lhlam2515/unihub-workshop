@@ -12,7 +12,7 @@ export const CreateRoomSchema = z.object({
   building: z.string().optional(),
   floor: z.number().int().optional(),
   capacity: z.number().int().positive(),
-  floor_plan_url: z.string().url().optional(),
+  floorPlanUrl: z.string().url().optional(),
   facilities: z.array(z.string()).optional(),
 });
 

@@ -7,11 +7,11 @@
 import type { Speaker } from "@/infra/database/types/event-core.types";
 
 export interface SpeakerResponseDto {
-  speaker_id: string;
-  full_name: string;
+  speakerId: string;
+  fullName: string;
   title?: string;
   bio?: string;
-  avatar_url?: string;
+  avatarUrl?: string;
 }
 
 export class SpeakerResponseBuilder {
@@ -28,11 +28,11 @@ export class SpeakerResponseBuilder {
    */
   static from(speaker: Speaker): SpeakerResponseDto {
     return {
-      speaker_id: speaker.speakerId,
-      full_name: speaker.fullName,
+      speakerId: speaker.speakerId,
+      fullName: speaker.fullName,
       title: speaker.title ?? undefined,
       bio: speaker.bio ?? undefined,
-      avatar_url: speaker.avatarUrl ?? undefined,
+      avatarUrl: speaker.avatarUrl ?? undefined,
     };
   }
 }

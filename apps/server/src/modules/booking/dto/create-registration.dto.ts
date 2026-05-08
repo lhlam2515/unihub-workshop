@@ -2,7 +2,7 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const CreateRegistrationSchema = z.object({
-  workshop_id: z.string().uuid(),
+  workshopId: z.string().uuid(),
 });
 
 export class CreateRegistrationDto extends createZodDto(

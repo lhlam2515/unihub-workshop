@@ -9,7 +9,7 @@ import { z } from "zod";
  * @example { "source_file_name": "s3://bucket/uploads/students-2024-04-28.csv" }
  */
 export const TriggerStudentSyncSchema = z.object({
-  source_file_name: z.string().min(1).max(500),
+  sourceFileName: z.string().min(1).max(500),
 });
 
 /**

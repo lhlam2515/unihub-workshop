@@ -7,12 +7,12 @@
 import type { Room } from "@/infra/database/types/event-core.types";
 
 export interface RoomResponseDto {
-  room_id: string;
+  roomId: string;
   name: string;
   building?: string;
   floor?: number;
   capacity: number;
-  floor_plan_url?: string;
+  floorPlanUrl?: string;
   facilities?: string[];
 }
 
@@ -36,12 +36,12 @@ export class RoomResponseBuilder {
       : undefined;
 
     return {
-      room_id: room.roomId,
+      roomId: room.roomId,
       name: room.name,
       building: room.building ?? undefined,
       floor: room.floor ?? undefined,
       capacity: room.capacity,
-      floor_plan_url: room.floorPlanUrl ?? undefined,
+      floorPlanUrl: room.floorPlanUrl ?? undefined,
       facilities,
     };
   }

@@ -9,20 +9,20 @@
 import type { Payment } from "@/infra/database/types/transaction.types";
 
 export interface PaymentResponseDto {
-  payment_id: string;
-  registration_id: string;
+  paymentId: string;
+  registrationId: string;
   amount: number;
   status: string;
   gateway: string;
-  gateway_txn_id?: string;
-  initiated_at: Date;
-  completed_at?: Date;
+  gatewayTxnId?: string;
+  initiatedAt: Date;
+  completedAt?: Date;
 }
 
 export interface CreatePaymentResponseDto {
-  payment_id: string;
-  redirect_url: string;
-  payment_deadline: Date;
+  paymentId: string;
+  redirectUrl: string;
+  paymentDeadline: Date;
 }
 
 export class PaymentResponseBuilder {
@@ -37,14 +37,14 @@ export class PaymentResponseBuilder {
    */
   static from(payment: Payment): PaymentResponseDto {
     return {
-      payment_id: payment.paymentId,
-      registration_id: payment.registrationId,
+      paymentId: payment.paymentId,
+      registrationId: payment.registrationId,
       amount: Number(payment.amount),
       status: payment.status,
       gateway: payment.gateway,
-      gateway_txn_id: payment.gatewayTxnId ?? undefined,
-      initiated_at: payment.initiatedAt,
-      completed_at: payment.completedAt ?? undefined,
+      gatewayTxnId: payment.gatewayTxnId ?? undefined,
+      initiatedAt: payment.initiatedAt,
+      completedAt: payment.completedAt ?? undefined,
     };
   }
 
@@ -65,9 +65,9 @@ export class PaymentResponseBuilder {
     deadline: Date
   ): CreatePaymentResponseDto {
     return {
-      payment_id: payment.paymentId,
-      redirect_url: redirectUrl,
-      payment_deadline: deadline,
+      paymentId: payment.paymentId,
+      redirectUrl: redirectUrl,
+      paymentDeadline: deadline,
     };
   }
 }
