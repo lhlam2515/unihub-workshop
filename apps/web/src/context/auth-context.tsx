@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import ROUTES from "@/constants/routes";
+import { acquireFreshToken } from "@/lib/api/client/auth-session";
 import {
   api,
   login as apiLogin,
@@ -45,23 +46,42 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  // Derive initial loading state from token presence to avoid synchronous setState in effect
-  const [isLoading, setIsLoading] = useState(() => tokenStore.get() !== null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // ---- Mount: check existing token ----
+  // ---- Mount: try to restore session via refresh token ----
   useEffect(() => {
-    const token = tokenStore.get();
-    if (!token) return;
+    let cancelled = false;
 
-    // Validate existing token & fetch profile
-    api
-      .get<User>("/auth/me")
-      .then(setUser)
-      .catch(() => {
-        // Token invalid / expired — silent refresh will handle this
-        // If refresh also fails, onForcedLogout will fire
-      })
-      .finally(() => setIsLoading(false));
+    async function init() {
+      const token = tokenStore.get();
+      if (!token) {
+        // No in-memory token (e.g. after F5) — try silent refresh via HttpOnly cookie
+        try {
+          await acquireFreshToken();
+        } catch {
+          // No valid refresh cookie — user is not authenticated
+          return;
+        }
+      }
+
+      if (cancelled) return;
+
+      // Fetch user profile with the (existing or freshly refreshed) token
+      try {
+        const profile = await api.get<User>("/auth/me");
+        if (!cancelled) setUser(profile);
+      } catch {
+        // Profile fetch failed even with a token — user needs to log in
+      }
+    }
+
+    init().finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ---- Forced logout handler (refresh token invalid) ----
