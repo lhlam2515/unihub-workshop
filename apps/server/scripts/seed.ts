@@ -663,6 +663,114 @@ async function seedWorkshops(
   return workshopRows;
 }
 
+// ── Phase 4: Registrations ────────────────────────────────────────────────────
+
+type RegRow = typeof schema.registrations.$inferInsert & {
+  registrationId: string;
+};
+
+function fillConfig(def: WorkshopDef): {
+  fillRate: number;
+  cancelRate: number;
+  pendingRate: number;
+} {
+  if (def.status === "COMPLETED")
+    return { fillRate: 0.8, cancelRate: 0.1, pendingRate: 0.0 };
+  if (def.status === "CANCELLED")
+    return { fillRate: 0.2, cancelRate: 1.0, pendingRate: 0.0 };
+  if (def.dayOffset === 0)
+    return { fillRate: 0.55, cancelRate: 0.03, pendingRate: 0.08 };
+  if (def.dayOffset === 1)
+    return { fillRate: 0.35, cancelRate: 0.02, pendingRate: 0.15 };
+  return { fillRate: 0.18, cancelRate: 0.02, pendingRate: 0.2 };
+}
+
+async function seedRegistrations(
+  workshops: WorkshopRow[],
+  studentIds: string[]
+) {
+  const allRows: RegRow[] = [];
+
+  for (let wi = 0; wi < workshops.length; wi++) {
+    const ws = workshops[wi];
+    const { fillRate, cancelRate, pendingRate } = fillConfig(ws.def);
+    const target = Math.floor(ws.seatsTotal * fillRate);
+
+    for (let ri = 0; ri < target; ri++) {
+      // Deterministic collision-free: gcd(31, 500) = 1 → unique indices per workshop
+      const studentIdx = (wi * 97 + ri * 31) % studentIds.length;
+      const studentId = studentIds[studentIdx];
+
+      const registeredAt = new Date(
+        ws.startsAt.getTime() - randomInt(3_600_000, 5 * 86_400_000)
+      );
+
+      let status: "CONFIRMED" | "PAID" | "PENDING" | "CANCELLED";
+      if (ws.def.status === "CANCELLED") {
+        status = "CANCELLED";
+      } else if (ri < Math.floor(target * cancelRate)) {
+        status = "CANCELLED";
+      } else if (ri < Math.floor(target * (cancelRate + pendingRate))) {
+        status = ws.def.price === 0 ? "CONFIRMED" : "PENDING";
+      } else {
+        status = ws.def.price === 0 ? "CONFIRMED" : "PAID";
+      }
+
+      const confirmedAt =
+        status === "CONFIRMED" || status === "PAID"
+          ? addSeconds(registeredAt, randomInt(5, 30))
+          : null;
+      const cancelledAt =
+        status === "CANCELLED"
+          ? addSeconds(registeredAt, randomInt(60, 3600))
+          : null;
+
+      allRows.push({
+        registrationId: crypto.randomUUID(),
+        studentId,
+        workshopId: ws.workshopId,
+        status,
+        qrCode: crypto.randomUUID(),
+        registeredAt,
+        confirmedAt,
+        cancelledAt,
+        cancellationReason: cancelledAt ? "Sinh viên hủy đăng ký" : null,
+        version: 0,
+      });
+    }
+  }
+
+  // Insert in batches of 200
+  for (let b = 0; b < Math.ceil(allRows.length / 200); b++) {
+    await db
+      .insert(schema.registrations)
+      .values(allRows.slice(b * 200, (b + 1) * 200));
+  }
+
+  // Reconcile seatsAvailable and workshopSlots.confirmedCount
+  for (const ws of workshops) {
+    const confirmed = allRows.filter(
+      (r) =>
+        r.workshopId === ws.workshopId &&
+        (r.status === "CONFIRMED" || r.status === "PAID")
+    ).length;
+    const seatsAvailable = ws.seatsTotal - confirmed;
+
+    await db
+      .update(schema.workshops)
+      .set({ seatsAvailable })
+      .where(eq(schema.workshops.workshopId, ws.workshopId));
+
+    await db
+      .update(schema.workshopSlots)
+      .set({ confirmedCount: confirmed })
+      .where(eq(schema.workshopSlots.workshopId, ws.workshopId));
+  }
+
+  console.log(`✓ Registrations: ${allRows.length} records, seats reconciled`);
+  return { registrations: allRows };
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -676,7 +784,11 @@ async function main() {
     infra.speakerIds,
     infra.rooms
   );
-  void workshops;
+  const { registrations } = await seedRegistrations(
+    workshops,
+    identity.studentIds
+  );
+  void registrations;
   console.log("✅ Seed complete");
 }
 
