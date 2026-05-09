@@ -771,6 +771,89 @@ async function seedRegistrations(
   return { registrations: allRows };
 }
 
+// ── Phase 5: Payments + Tickets ───────────────────────────────────────────────
+
+async function seedPaymentsAndTickets(
+  workshops: WorkshopRow[],
+  registrations: RegRow[]
+) {
+  const priceMap = new Map(workshops.map((w) => [w.workshopId, w.def.price]));
+
+  const paymentRows: (typeof schema.payments.$inferInsert)[] = [];
+  const ticketRows: (typeof schema.tickets.$inferInsert)[] = [];
+  let unresolvedCount = 0;
+
+  for (let i = 0; i < registrations.length; i++) {
+    const reg = registrations[i];
+    const price = priceMap.get(reg.workshopId as string) ?? 0;
+    const isPaidWorkshop = price > 0;
+
+    // Payments: only for paid workshops, skip CONFIRMED (free-workshop path)
+    if (isPaidWorkshop && reg.status !== "CONFIRMED") {
+      let payStatus: "INITIATED" | "SUCCEEDED" | "FAILED" | "UNRESOLVED";
+      if (reg.status === "PAID") payStatus = "SUCCEEDED";
+      else if (reg.status === "PENDING") payStatus = "INITIATED";
+      else payStatus = "FAILED"; // CANCELLED
+
+      // Override first 2 FAILED to UNRESOLVED for reconciliation demo
+      if (payStatus === "FAILED" && unresolvedCount < 2) {
+        payStatus = "UNRESOLVED";
+        unresolvedCount++;
+      }
+
+      paymentRows.push({
+        paymentId: crypto.randomUUID(),
+        registrationId: reg.registrationId,
+        studentId: reg.studentId as string,
+        amount: String(price),
+        currency: "VND",
+        gateway: "MOCK",
+        status: payStatus,
+        idempotencyKey: crypto.randomUUID(),
+        gatewayTxnId: `MOCK_TXN_${i}`,
+        initiatedAt: reg.registeredAt as Date,
+        completedAt: reg.confirmedAt ?? null,
+        timeoutAt: null,
+        rawGatewayResponse: null,
+      });
+    }
+
+    // Tickets: all non-CANCELLED registrations
+    if (reg.status !== "CANCELLED") {
+      ticketRows.push({
+        ticketId: crypto.randomUUID(),
+        registrationId: reg.registrationId,
+        qrToken: qrToken(),
+        status: "ACTIVE",
+        issuedAt: (reg.confirmedAt ?? reg.registeredAt) as Date,
+        voidedAt: null,
+      });
+    }
+  }
+
+  // Mark the first ticket VOID for demo (constraint: VOID requires voidedAt non-null)
+  if (ticketRows.length > 0) {
+    ticketRows[0].status = "VOID";
+    ticketRows[0].voidedAt = addSeconds(ticketRows[0].issuedAt as Date, 3600);
+  }
+
+  for (let b = 0; b < Math.ceil(paymentRows.length / 200); b++) {
+    await db
+      .insert(schema.payments)
+      .values(paymentRows.slice(b * 200, (b + 1) * 200));
+  }
+  for (let b = 0; b < Math.ceil(ticketRows.length / 200); b++) {
+    await db
+      .insert(schema.tickets)
+      .values(ticketRows.slice(b * 200, (b + 1) * 200));
+  }
+
+  console.log(
+    `✓ Payments: ${paymentRows.length} (${unresolvedCount} UNRESOLVED), Tickets: ${ticketRows.length} (1 VOID)`
+  );
+  return { tickets: ticketRows };
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -788,7 +871,8 @@ async function main() {
     workshops,
     identity.studentIds
   );
-  void registrations;
+  const { tickets } = await seedPaymentsAndTickets(workshops, registrations);
+  void tickets;
   console.log("✅ Seed complete");
 }
 
