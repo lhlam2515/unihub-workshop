@@ -154,7 +154,7 @@ export class SystemMonitorService {
           openedAt: state.openedAt > 0 ? new Date(state.openedAt) : undefined,
           lastAttempt:
             state.lastAttempt > 0 ? new Date(state.lastAttempt) : undefined,
-          recoveryDeadline:
+          autoCloseAt:
             state.state === "OPEN" && state.openedAt > 0
               ? new Date(state.openedAt + 30_000)
               : undefined,

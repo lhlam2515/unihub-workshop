@@ -16,8 +16,9 @@ export interface PaymentResponseDto {
   status: string;
   gateway: string;
   gatewayChargeId?: string;
-  createdAt: Date;
-  completedAt?: Date;
+  qrCode: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
 }
 
 export interface CreatePaymentResponseDto {
@@ -30,13 +31,14 @@ export class PaymentResponseBuilder {
   /**
    * Maps a Payment entity to a client-safe PaymentResponseDto.
    *
-   * Strips internal fields (raw_gateway_response) and renames
-   * camelCase DB columns to snake_case API response format.
+   * Strips internal fields (raw_gateway_response) and maps
+   * DB fields to API response fields matching OpenAPI spec.
    *
    * @param payment - The Payment entity from the database.
+   * @param qrCode - Optional QR code from the associated registration.
    * @returns A PaymentResponseDto suitable for API responses.
    */
-  static from(payment: Payment): PaymentResponseDto {
+  static from(payment: Payment, qrCode?: string | null): PaymentResponseDto {
     return {
       id: payment.paymentId,
       registrationId: payment.registrationId,
@@ -45,8 +47,9 @@ export class PaymentResponseBuilder {
       status: payment.status,
       gateway: payment.gateway,
       gatewayChargeId: payment.gatewayTxnId ?? undefined,
-      createdAt: payment.initiatedAt,
-      completedAt: payment.completedAt ?? undefined,
+      qrCode: qrCode ?? null,
+      createdAt: payment.initiatedAt.toISOString(),
+      resolvedAt: payment.completedAt?.toISOString() ?? null,
     };
   }
 

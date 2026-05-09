@@ -240,7 +240,7 @@ describe("SystemMonitorService", () => {
       const vnpay = result.data.find((d) => d.gateway === "VNPAY")!;
       expect(vnpay.state).toBe("OPEN");
       expect(vnpay.failureCount).toBe(5);
-      expect(vnpay.recoveryDeadline).toBeDefined();
+      expect(vnpay.autoCloseAt).toBeDefined();
     });
   });
 
