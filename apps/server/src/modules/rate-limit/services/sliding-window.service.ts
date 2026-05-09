@@ -5,8 +5,25 @@ import { Injectable } from "@nestjs/common";
 import { RedisService } from "@/infra/redis/redis.service";
 import { rateLimitError } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
-import type { RateLimitTierName } from "../constants/rate-limit.constants";
+
 import { RATE_LIMIT_TIERS } from "../constants/rate-limit.constants";
+
+import type { RateLimitTierName } from "../constants/rate-limit.constants";
+
+/**
+ * Extracts the Unix-millisecond timestamp from a Sorted Set member string.
+ *
+ * Members are stored as `{timestamp}-{uuid}` in the Sorted Set. This parses
+ * the numeric prefix before the first `-` separator.
+ *
+ * @param member - Sorted Set member in `{timestamp}-{uuid}` format.
+ * @returns The parsed timestamp, or NaN if the format is unexpected.
+ */
+function extractTimestamp(member: string): number {
+  const sep = member.indexOf("-");
+  if (sep === -1) return Number.NaN;
+  return Number(member.slice(0, sep));
+}
 
 /**
  * Sliding Window Counter using Redis Sorted Sets.
@@ -54,9 +71,11 @@ export class SlidingWindowService {
 
       if (count > config.limit) {
         const oldest = await this.redisService.zrange(key, 0, 0);
+        const oldestTimestamp =
+          oldest.length > 0 ? extractTimestamp(oldest[0]) : 0;
         const resetMs =
-          oldest.length > 0
-            ? Number(oldest[0]) + config.windowMs - now
+          oldestTimestamp > 0
+            ? oldestTimestamp + config.windowMs - now
             : config.windowMs;
         const retryAfter = Math.ceil(resetMs / 1000);
         return Result.fail(rateLimitError(config.limit, retryAfter, tier));
@@ -64,9 +83,11 @@ export class SlidingWindowService {
 
       const remaining = Math.max(0, config.limit - count);
       const oldest = await this.redisService.zrange(key, 0, 0);
+      const oldestTimestamp =
+        oldest.length > 0 ? extractTimestamp(oldest[0]) : 0;
       const resetMs =
-        oldest.length > 0
-          ? Number(oldest[0]) + config.windowMs - now
+        oldestTimestamp > 0
+          ? oldestTimestamp + config.windowMs - now
           : config.windowMs;
 
       return Result.ok({ allowed: true, remaining, resetMs });

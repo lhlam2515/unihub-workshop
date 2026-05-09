@@ -30,6 +30,8 @@ import {
 import { Reflector } from "@nestjs/core";
 import { Request } from "express";
 
+import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -38,16 +40,23 @@ export class RolesGuard implements CanActivate {
    * Authorizes the request by comparing the user's role against the required roles.
    *
    * Business rules:
+   * - Routes marked `@Public()` bypass role checks entirely (no JWT → no role).
    * - If no `@Roles()` decorator is present on the handler or controller, the route
    *   is open to any authenticated user regardless of role.
    * - If `@Roles()` is present, the user's role MUST be in the declared list.
    * - Multiple roles on `@Roles()` are treated as a disjunction (any match grants access).
    *
    * @param context - NestJS execution context providing access to the HTTP request.
-   * @returns `true` if the user's role is permitted.
+   * @returns `true` if the user's role is permitted or the route is public.
    * @throws ForbiddenException if the user's role is not in the required list.
    */
   canActivate(context: ExecutionContext): boolean {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
     const requiredRoles = this.reflector.getAllAndOverride<string[]>("roles", [
       context.getHandler(),
       context.getClass(),

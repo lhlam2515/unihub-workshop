@@ -222,16 +222,31 @@ describe("RolesGuard — FR-F01-005", () => {
     guard = module.get<RolesGuard>(RolesGuard);
   });
 
+  describe("@Public() decorator skips role check", () => {
+    it("allows access when route is marked @Public(), no user attached", () => {
+      mockReflector.getAllAndOverride
+        .mockReturnValueOnce(true) // IS_PUBLIC_KEY → true
+        .mockReturnValueOnce(["STUDENT"]); // roles (unused)
+
+      const ctx = mockExecutionContext({ user: undefined });
+      expect(guard.canActivate(ctx)).toBe(true);
+    });
+  });
+
   describe("matching role passes", () => {
     it("allows access when user role matches the required role", () => {
-      mockReflector.getAllAndOverride.mockReturnValue(["ORGANIZER"]);
+      mockReflector.getAllAndOverride
+        .mockReturnValueOnce(undefined) // IS_PUBLIC_KEY → not public
+        .mockReturnValue(["ORGANIZER"]);
 
       const ctx = mockExecutionContext({ user: { role: "ORGANIZER" } });
       expect(guard.canActivate(ctx)).toBe(true);
     });
 
     it("allows access when user role is one of multiple required roles", () => {
-      mockReflector.getAllAndOverride.mockReturnValue(["STUDENT", "ORGANIZER"]);
+      mockReflector.getAllAndOverride
+        .mockReturnValueOnce(undefined) // IS_PUBLIC_KEY → not public
+        .mockReturnValue(["STUDENT", "ORGANIZER"]);
 
       const ctx = mockExecutionContext({ user: { role: "STUDENT" } });
       expect(guard.canActivate(ctx)).toBe(true);
@@ -240,14 +255,18 @@ describe("RolesGuard — FR-F01-005", () => {
 
   describe("mismatched role throws ForbiddenException", () => {
     it("throws when user role is not in the required list", () => {
-      mockReflector.getAllAndOverride.mockReturnValue(["ORGANIZER"]);
+      mockReflector.getAllAndOverride
+        .mockReturnValueOnce(undefined) // IS_PUBLIC_KEY → not public
+        .mockReturnValue(["ORGANIZER"]);
 
       const ctx = mockExecutionContext({ user: { role: "STUDENT" } });
       expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
     });
 
     it("throws when user has no role", () => {
-      mockReflector.getAllAndOverride.mockReturnValue(["ORGANIZER"]);
+      mockReflector.getAllAndOverride
+        .mockReturnValueOnce(undefined) // IS_PUBLIC_KEY → not public
+        .mockReturnValue(["ORGANIZER"]);
 
       const ctx = mockExecutionContext({ user: {} });
       expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
@@ -256,14 +275,18 @@ describe("RolesGuard — FR-F01-005", () => {
 
   describe("no @Roles decorator allows all", () => {
     it("allows access when no roles metadata is set", () => {
-      mockReflector.getAllAndOverride.mockReturnValue(undefined);
+      mockReflector.getAllAndOverride
+        .mockReturnValueOnce(undefined) // IS_PUBLIC_KEY → not public
+        .mockReturnValue(undefined); // roles → undefined
 
       const ctx = mockExecutionContext({ user: { role: "STUDENT" } });
       expect(guard.canActivate(ctx)).toBe(true);
     });
 
     it("allows access when roles array is empty", () => {
-      mockReflector.getAllAndOverride.mockReturnValue([]);
+      mockReflector.getAllAndOverride
+        .mockReturnValueOnce(undefined) // IS_PUBLIC_KEY → not public
+        .mockReturnValue([]); // roles → []
 
       const ctx = mockExecutionContext({ user: { role: "STUDENT" } });
       expect(guard.canActivate(ctx)).toBe(true);

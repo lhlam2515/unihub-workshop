@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { ZodValidationPipe } from "nestjs-zod";
 
 import {
@@ -35,6 +35,7 @@ import { CsvSyncModule } from "./modules/csv-sync/csv-sync.module";
 import { IamModule } from "./modules/iam/iam.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { PaymentModule } from "./modules/payment/payment.module";
+import { RateLimitGuard } from "./modules/rate-limit/guards/rate-limit.guard";
 import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
 
 /**
@@ -116,6 +117,10 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
     },
   ],
 })
