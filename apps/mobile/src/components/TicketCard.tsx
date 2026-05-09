@@ -1,4 +1,6 @@
-import { Text, View } from "react-native";
+import { View } from "react-native";
+
+import { Text } from "@/components/ui/text";
 
 import type { TicketDto } from "@/features/checkin/api/tickets.service";
 
@@ -13,7 +15,7 @@ interface TicketCardProps {
  */
 export function TicketCard({ ticket }: TicketCardProps) {
   return (
-    <View className="gap-2.5 rounded-3xl border border-border p-5">
+    <View className="gap-2.5 rounded-3xl border border-border bg-card p-5">
       <View className="flex-row items-start justify-between gap-3">
         <Text className="flex-1 text-lg font-bold text-foreground">
           {ticket.workshop.title}

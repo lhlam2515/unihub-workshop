@@ -21,9 +21,6 @@ export default function SyncProgressScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="grow gap-3.5 p-5">
         <View className="gap-2.5">
-          <Text className="text-xs font-bold tracking-widest text-primary">
-            M07 · ĐỒNG BỘ
-          </Text>
           <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Tiến độ đồng bộ
           </Text>

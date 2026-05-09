@@ -1,8 +1,9 @@
-import { useLocalSearchParams } from "expo-router";
-import { FlatList, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { FlatList, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Badge } from "@/components/ui/badge";
+import { Text } from "@/components/ui/text";
 import type { SyncStatus } from "@/database/types";
 import { useCheckinHistory } from "@/features/checkin/hooks/use-checkin-history";
 
@@ -46,9 +47,9 @@ export default function CheckinHistoryScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="gap-1 px-5 pb-3 pt-5">
-        <Text className="text-xs font-bold tracking-widest text-primary">
-          LỊCH SỬ
-        </Text>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text className="text-sm text-muted-foreground">← Quay lại</Text>
+        </TouchableOpacity>
         <Text className="text-[26px] font-extrabold text-foreground">
           Điểm danh local
         </Text>
@@ -76,7 +77,7 @@ export default function CheckinHistoryScreen() {
           keyExtractor={(item) => item.localId}
           contentContainerClassName="px-5 pb-6 gap-2.5"
           renderItem={({ item }) => (
-            <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-border p-3.5">
+            <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5">
               <View className="flex-1 gap-0.5">
                 <Text className="text-base font-bold text-foreground">
                   {item.studentName}

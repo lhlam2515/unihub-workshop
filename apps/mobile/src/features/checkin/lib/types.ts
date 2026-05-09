@@ -16,6 +16,8 @@ export interface ScanResult {
   studentCode: string;
   checkedInAt: Date;
   source: "ONLINE" | "OFFLINE_QUEUED";
+  duplicate?: boolean;
+  originallyCheckedInAt?: Date | null;
 }
 
 export interface UseScanResult {

@@ -14,9 +14,6 @@ export default function MyTicketsScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="grow p-5 gap-3.5">
         <View className="gap-2.5">
-          <Text className="text-xs font-bold tracking-widest text-primary">
-            VÉ CỦA TÔI
-          </Text>
           <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Danh sách vé đang hoạt động
           </Text>

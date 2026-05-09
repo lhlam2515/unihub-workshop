@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import * as ExpoCrypto from "expo-crypto";
 import { useCallback, useState } from "react";
 
 import { createDatabaseClient } from "@/database/client";
@@ -30,7 +31,7 @@ export function useScan(): UseScanResult {
 
       // Optimistic online attempt: try server first. Fall back to SQLite queue
       // if the request fails due to a network error (not a business error).
-      const clientLocalId = crypto.randomUUID();
+      const clientLocalId = ExpoCrypto.randomUUID();
       const scanResult = await checkinApi.scanOnline(
         qrToken,
         workshopId,
@@ -39,12 +40,47 @@ export function useScan(): UseScanResult {
 
       if (scanResult.isSuccess) {
         const data = scanResult.data;
+        const studentName = data.student?.name ?? "—";
+        const studentCode = data.student?.code ?? "—";
+
+        // Write a SYNCED record to the local queue for history display.
+        try {
+          const db = createDatabaseClient();
+          const now = Date.now();
+          await db
+            .insert(checkinQueue)
+            .values({
+              localId: clientLocalId,
+              qrCode: qrToken,
+              registrationId: data.registrationId,
+              workshopId,
+              studentId: data.registrationId,
+              studentName,
+              studentCode,
+              checkedInAt: new Date(data.checkedInAt).getTime(),
+              deviceId,
+              checkedInBy: staffId,
+              syncStatus: "SYNCED",
+              syncedAt: now,
+              errorDetail: null,
+              retryCount: 0,
+              createdAt: now,
+            })
+            .onConflictDoNothing();
+        } catch {
+          // Non-critical: history display only
+        }
+
         setResult({
           checkinId: data.id,
-          studentName: data.student?.name ?? "—",
-          studentCode: data.student?.code ?? "—",
+          studentName,
+          studentCode,
           checkedInAt: new Date(data.checkedInAt),
           source: "ONLINE",
+          duplicate: data.duplicate,
+          originallyCheckedInAt: data.originallyCheckedInAt
+            ? new Date(data.originallyCheckedInAt)
+            : null,
         });
         setStatus("success");
         return;
@@ -90,7 +126,7 @@ export function useScan(): UseScanResult {
 
       const now = Date.now();
       const record: NewCheckinQueueRecord = {
-        localId: crypto.randomUUID(),
+        localId: ExpoCrypto.randomUUID(),
         qrCode: registration.qrCode,
         registrationId: registration.registrationId,
         workshopId: registration.workshopId,
