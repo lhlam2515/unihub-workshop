@@ -959,7 +959,7 @@ async function seedCheckins(
 
 async function seedSupplementary(
   workshops: WorkshopRow[],
-  studentIds: string[],
+  studentUserIds: string[],
   checkin1UserId: string,
   checkin2UserId: string,
   btcUserId: string
@@ -1058,7 +1058,7 @@ async function seedSupplementary(
   ];
   const notifRows = Array.from({ length: 30 }, (_, i) => ({
     notificationId: crypto.randomUUID(),
-    userId: studentIds[i % studentIds.length],
+    userId: studentUserIds[i % studentUserIds.length],
     workshopId: workshops[i % workshops.length].workshopId,
     type: notifTypes[i % notifTypes.length],
     channel: channels[i % channels.length],
@@ -1161,7 +1161,7 @@ async function main() {
   );
   await seedSupplementary(
     workshops,
-    identity.studentIds,
+    identity.studentUserIds,
     identity.checkin1UserId,
     identity.checkin2UserId,
     identity.btcUserId
