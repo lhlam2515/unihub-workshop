@@ -6,6 +6,7 @@ import { Result } from "@/shared/response/result";
 import { UserResponseBuilder } from "../dto/user-response.dto";
 import { UsersRepository } from "../repositories/users.repository";
 
+import type { ListUsersQueryDto } from "../dto/list-users-query.dto";
 import type { UserResponseDto } from "../dto/user-response.dto";
 
 @Injectable()
@@ -28,13 +29,11 @@ export class UsersService {
    * @returns OkResult with items array and total count, or FailResult with INTERNAL_ERROR.
    */
   async listUsers(
-    role?: string,
-    pagination?: { page: number; limit: number }
+    query: ListUsersQueryDto
   ): Promise<Result<{ items: UserResponseDto[]; total: number }>> {
-    const page = pagination?.page ?? 1;
-    const limit = pagination?.limit ?? 20;
-
-    const result = await this.usersRepo.list(role, page, limit);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const result = await this.usersRepo.list(query.role, query.q, page, limit);
     if (result.isFailure) return Result.fail(result.error);
 
     return Result.ok({

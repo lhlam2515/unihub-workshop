@@ -131,6 +131,25 @@ export class TokenService {
   }
 
   /**
+   * Decodes a refresh token to extract its JTI without cryptographic verification.
+   *
+   * Used during logout to blacklist the refresh token's JTI even if the token
+   * has expired (where jwt.verify would fail). This is safe because the caller
+   * is already authenticated via a valid access token.
+   *
+   * @param token - The raw JWT refresh token string.
+   * @returns The JTI string, or null if the token is malformed.
+   */
+  extractRefreshTokenJti(token: string): string | null {
+    try {
+      const decoded = jwt.decode(token) as { jti: string } | null;
+      return decoded?.jti ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Verifies a JWT refresh token's signature and expiration using RS256.
    *
    * @param token - The raw JWT string from the refresh request.

@@ -136,9 +136,25 @@ export class AuthController {
   @Post("logout")
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(@CurrentUser() user: JwtPayload) {
-    const result = await this.authService.logout(user.sub, user.jti);
+  async logout(
+    @CurrentUser() user: JwtPayload,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ) {
+    const refreshTokenStr = request.cookies?.refreshToken as string | undefined;
+    const result = await this.authService.logout(
+      user.sub,
+      user.jti,
+      refreshTokenStr
+    );
     if (result.isFailure) return result;
+
+    response.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict" as const,
+      path: "/api/v1/auth/refresh",
+    });
     return;
   }
 

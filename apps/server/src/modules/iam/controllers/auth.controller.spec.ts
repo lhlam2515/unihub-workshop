@@ -16,6 +16,7 @@ describe("AuthController", () => {
   const mockResponse = () => {
     const res: Partial<Response> = {
       cookie: jest.fn(),
+      clearCookie: jest.fn(),
     };
     return res as Response;
   };
@@ -128,10 +129,16 @@ describe("AuthController", () => {
   });
 
   describe("POST /auth/logout", () => {
-    it("calls authService.logout with user sub and jti", async () => {
+    it("calls authService.logout with user sub, jti, and refresh token from cookie", async () => {
       authService.logout.mockResolvedValue(Result.ok());
-      await controller.logout(mockUser);
-      expect(authService.logout).toHaveBeenCalledWith("usr-1", "jti-1");
+      const req = { cookies: { refreshToken: "rt-cookie" } } as any;
+      const res = mockResponse();
+      await controller.logout(mockUser, req, res);
+      expect(authService.logout).toHaveBeenCalledWith(
+        "usr-1",
+        "jti-1",
+        "rt-cookie"
+      );
     });
   });
 

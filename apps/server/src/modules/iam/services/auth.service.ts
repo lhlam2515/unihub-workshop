@@ -163,6 +163,12 @@ export class AuthService {
 
     const { sub: userId, jti: oldJti } = verifyResult.data;
 
+    // Check if the refresh token has been blacklisted (e.g., during logout)
+    const isBlacklisted = await this.tokenService.isBlacklisted(oldJti);
+    if (isBlacklisted) {
+      return Result.fail(authErrors.refreshTokenInvalid());
+    }
+
     const userResult = await this.usersRepo.findById(userId);
     if (userResult.isFailure) return Result.fail(userResult.error);
     if (!userResult.data || userResult.data.status !== "ACTIVE") {
@@ -227,8 +233,23 @@ export class AuthService {
    * @param jti - The unique token identifier to blacklist.
    * @returns OkResult<void> on success.
    */
-  async logout(userId: string, jti: string): Promise<Result<void>> {
+  async logout(
+    userId: string,
+    jti: string,
+    refreshTokenStr?: string
+  ): Promise<Result<void>> {
+    // Blacklist access token (15 min TTL matches ACCESS_EXPIRY.WEB)
     await this.tokenService.blacklistToken(jti, 900);
+
+    // Blacklist refresh token if present in the request cookie
+    if (refreshTokenStr) {
+      const refreshJti =
+        this.tokenService.extractRefreshTokenJti(refreshTokenStr);
+      if (refreshJti) {
+        await this.tokenService.blacklistToken(refreshJti, 604_800); // 7 days
+      }
+    }
+
     return Result.ok();
   }
 

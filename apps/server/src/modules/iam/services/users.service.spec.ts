@@ -57,12 +57,17 @@ describe("UsersService", () => {
         Result.ok({ items: [rawUser], total: 1 })
       );
 
-      const result = await usersService.listUsers();
+      const result = await usersService.listUsers({} as any);
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toEqual([userDto]);
       expect(result.data.total).toBe(1);
-      expect(mockUsersRepo.list).toHaveBeenCalledWith(undefined, 1, 20);
+      expect(mockUsersRepo.list).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        1,
+        20
+      );
     });
 
     it("returns paginated users with custom pagination", async () => {
@@ -70,20 +75,28 @@ describe("UsersService", () => {
         Result.ok({ items: [rawUser], total: 1 })
       );
 
-      const result = await usersService.listUsers("STUDENT", {
+      const result = await usersService.listUsers({
+        role: "STUDENT",
         page: 2,
         limit: 10,
-      });
+      } as any);
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toHaveLength(1);
-      expect(mockUsersRepo.list).toHaveBeenCalledWith("STUDENT", 2, 10);
+      expect(mockUsersRepo.list).toHaveBeenCalledWith(
+        "STUDENT",
+        undefined,
+        2,
+        10
+      );
     });
 
     it("returns empty items when no users match", async () => {
       mockUsersRepo.list.mockResolvedValue(Result.ok({ items: [], total: 0 }));
 
-      const result = await usersService.listUsers("CHECKIN_STAFF");
+      const result = await usersService.listUsers({
+        role: "CHECKIN_STAFF",
+      } as any);
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toHaveLength(0);
@@ -99,7 +112,7 @@ describe("UsersService", () => {
         })
       );
 
-      const result = await usersService.listUsers();
+      const result = await usersService.listUsers({} as any);
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
