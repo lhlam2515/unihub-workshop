@@ -854,6 +854,107 @@ async function seedPaymentsAndTickets(
   return { tickets: ticketRows };
 }
 
+// ── Phase 6: Check-in ─────────────────────────────────────────────────────────
+
+async function seedCheckins(
+  workshops: WorkshopRow[],
+  registrations: RegRow[],
+  tickets: (typeof schema.tickets.$inferInsert)[],
+  checkin1UserId: string,
+  checkin2UserId: string
+) {
+  const completedIds = new Set(
+    workshops
+      .filter((w) => w.def.status === "COMPLETED")
+      .map((w) => w.workshopId)
+  );
+  const qrByRegId = new Map(tickets.map((t) => [t.registrationId, t.qrToken]));
+  const startsByWorkshopId = new Map(
+    workshops.map((w) => [w.workshopId, w.startsAt])
+  );
+
+  const eligible = registrations.filter(
+    (r) =>
+      completedIds.has(r.workshopId as string) &&
+      (r.status === "CONFIRMED" || r.status === "PAID")
+  );
+
+  const checkinRows: (typeof schema.checkinRecords.$inferInsert)[] = [];
+  const offlineRows: (typeof schema.offlineCheckinQueue.$inferInsert)[] = [];
+  let offlineSyncedAdded = 0;
+
+  for (let i = 0; i < eligible.length; i++) {
+    const reg = eligible[i];
+    const startsAt = startsByWorkshopId.get(reg.workshopId as string)!;
+    const checkedInAt = addSeconds(startsAt, randomInt(0, 1800));
+    const checkedInBy = i % 2 === 0 ? checkin1UserId : checkin2UserId;
+    const deviceId = i % 2 === 0 ? "DEVICE_001" : "DEVICE_002";
+
+    // 75% get online check-in (skip every 4th)
+    if (i % 4 !== 0) {
+      checkinRows.push({
+        checkinId: crypto.randomUUID(),
+        registrationId: reg.registrationId,
+        studentId: reg.studentId as string,
+        workshopId: reg.workshopId as string,
+        checkedInAt,
+        syncedAt: null,
+        checkedInBy,
+        source: "ONLINE",
+        deviceId,
+      });
+
+      // Add SYNCED offline queue entry for ~every 10th online check-in (max 3)
+      if (i % 10 === 0 && offlineSyncedAdded < 3) {
+        offlineRows.push({
+          localId: crypto.randomUUID(),
+          qrToken:
+            qrByRegId.get(reg.registrationId) ??
+            crypto.randomBytes(32).toString("hex"),
+          workshopId: reg.workshopId as string,
+          checkedInAt,
+          deviceId,
+          checkedInBy,
+          syncStatus: "SYNCED",
+          syncedAt: addSeconds(checkedInAt, randomInt(30, 300)),
+          conflictReason: null,
+        });
+        offlineSyncedAdded++;
+      }
+    }
+  }
+
+  // Add 1 PENDING offline queue entry (not yet synced)
+  if (eligible.length > 0) {
+    const last = eligible[eligible.length - 1];
+    const lastStartsAt = startsByWorkshopId.get(last.workshopId as string)!;
+    offlineRows.push({
+      localId: crypto.randomUUID(),
+      qrToken: crypto.randomBytes(32).toString("hex"),
+      workshopId: last.workshopId as string,
+      checkedInAt: addSeconds(lastStartsAt, randomInt(0, 1800)),
+      deviceId: "DEVICE_001",
+      checkedInBy: checkin1UserId,
+      syncStatus: "PENDING",
+      syncedAt: null,
+      conflictReason: null,
+    });
+  }
+
+  for (let b = 0; b < Math.ceil(checkinRows.length / 200); b++) {
+    await db
+      .insert(schema.checkinRecords)
+      .values(checkinRows.slice(b * 200, (b + 1) * 200));
+  }
+  if (offlineRows.length > 0) {
+    await db.insert(schema.offlineCheckinQueue).values(offlineRows);
+  }
+
+  console.log(
+    `✓ Check-ins: ${checkinRows.length} online, ${offlineRows.length} offline queue (1 PENDING)`
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -872,7 +973,13 @@ async function main() {
     identity.studentIds
   );
   const { tickets } = await seedPaymentsAndTickets(workshops, registrations);
-  void tickets;
+  await seedCheckins(
+    workshops,
+    registrations,
+    tickets,
+    identity.checkin1UserId,
+    identity.checkin2UserId
+  );
   console.log("✅ Seed complete");
 }
 
