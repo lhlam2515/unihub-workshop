@@ -541,7 +541,12 @@ describe("RegistrationsService", () => {
         workshop_title: "Workshop Title",
       };
       registrationsRepo.findMyRegistrations.mockResolvedValue(
-        Result.ok({ items: [mockReg], total: 1 })
+        Result.ok({
+          items: [mockReg],
+          nextCursor: null,
+          hasMore: false,
+          limit: 20,
+        })
       );
 
       const result = await service.getMyRegistrations(STUDENT_ID);
@@ -549,8 +554,8 @@ describe("RegistrationsService", () => {
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.items).toHaveLength(1);
-        expect(result.data.total).toBe(1);
-        expect(result.data.page).toBe(1);
+        expect(result.data.nextCursor).toBeNull();
+        expect(result.data.hasMore).toBe(false);
         expect(result.data.limit).toBe(20);
         expect(result.data.items[0].id).toBe(REGISTRATION_ID);
       }
@@ -558,19 +563,17 @@ describe("RegistrationsService", () => {
 
     it("should pass status filter and pagination params to repository", async () => {
       registrationsRepo.findMyRegistrations.mockResolvedValue(
-        Result.ok({ items: [], total: 0 })
+        Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
       );
 
       await service.getMyRegistrations(STUDENT_ID, {
-        status: "CONFIRMED",
-        page: 2,
+        status: ["CONFIRMED"],
         limit: 10,
       });
 
       expect(registrationsRepo.findMyRegistrations).toHaveBeenCalledWith(
         STUDENT_ID,
-        "CONFIRMED",
-        { page: 2, limit: 10 }
+        { status: ["CONFIRMED"], limit: 10 }
       );
     });
 

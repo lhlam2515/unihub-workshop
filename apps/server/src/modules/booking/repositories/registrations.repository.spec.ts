@@ -197,33 +197,31 @@ describe("RegistrationsRepository", () => {
           workshopTitle: "Workshop 1",
         },
       ];
-      // First where() call is terminal for count query → mockResolvedValueOnce
-      // Second where() call is in middle of items chain → default mockReturnThis
-      db.where.mockResolvedValueOnce([{ total: 1 }]);
-      // offset is the terminal of the items chain → must resolve
-      db.offset.mockResolvedValueOnce(rows);
+      // limit is the terminal of the chain (limit + 1 cursor trick)
+      db.limit.mockResolvedValueOnce(rows);
 
       const result = await repo.findMyRegistrations("stu-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.items).toHaveLength(1);
-        expect(result.data.total).toBe(1);
+        expect(result.data.hasMore).toBe(false);
         expect(result.data.items[0].workshop_title).toBe("Workshop 1");
       }
     });
 
     it("should filter by status when provided", async () => {
-      db.where.mockResolvedValueOnce([{ total: 0 }]);
-      db.offset.mockResolvedValueOnce([]);
+      db.limit.mockResolvedValueOnce([]);
 
-      const result = await repo.findMyRegistrations("stu-001", "CONFIRMED");
+      const result = await repo.findMyRegistrations("stu-001", {
+        status: ["CONFIRMED"],
+      });
 
       expect(result.isSuccess).toBe(true);
     });
 
     it("should return FailResult on DB error", async () => {
-      db.where.mockRejectedValue(new Error("DB error"));
+      db.limit.mockRejectedValue(new Error("DB error"));
 
       const result = await repo.findMyRegistrations("stu-001");
 

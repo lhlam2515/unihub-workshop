@@ -18,8 +18,10 @@ import { Result, tryCatch } from "@/shared/response/result";
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import {
   RegistrationResponseBuilder,
+  RegistrationAdminBuilder,
   type NextStepInfo,
   type RegistrationDto,
+  type RegistrationAdminDto,
 } from "../dto/registration-response.dto";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import {
@@ -275,19 +277,23 @@ export class RegistrationsService {
    */
   async getMyRegistrations(
     studentId: string,
-    query?: { status?: string; page?: number; limit?: number }
+    query?: {
+      status?: string[];
+      upcoming?: boolean;
+      cursor?: string;
+      limit?: number;
+    }
   ): Promise<
     Result<{
       items: RegistrationDto[];
-      total: number;
-      page: number;
+      nextCursor: string | null;
+      hasMore: boolean;
       limit: number;
     }>
   > {
     const result = await this.registrationsRepo.findMyRegistrations(
       studentId,
-      query?.status,
-      { page: query?.page, limit: query?.limit }
+      query
     );
     if (result.isFailure) return Result.fail(result.error);
 
@@ -297,8 +303,8 @@ export class RegistrationsService {
 
     return Result.ok({
       items,
-      total: result.data.total,
-      page: query?.page ?? 1,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
       limit: query?.limit ?? 20,
     });
   }
@@ -321,6 +327,44 @@ export class RegistrationsService {
     if (result.isFailure) return Result.fail(result.error);
 
     return Result.ok(RegistrationResponseBuilder.from(result.data));
+  }
+
+  /**
+   * Lists registrations for a workshop (admin view).
+   *
+   * Returns registrations with student info and check-in status.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param filters - Optional status filter and pagination.
+   * @returns OkResult with paginated RegistrationAdminDto items.
+   */
+  async getRegistrationsForWorkshop(
+    workshopId: string,
+    filters?: { status?: string[]; cursor?: string; limit?: number }
+  ): Promise<
+    Result<{
+      items: RegistrationAdminDto[];
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
+  > {
+    const result = await this.registrationsRepo.findByWorkshopId(
+      workshopId,
+      filters
+    );
+    if (result.isFailure) return Result.fail(result.error);
+
+    const items = result.data.items.map((item) =>
+      RegistrationAdminBuilder.from(item)
+    );
+
+    return Result.ok({
+      items,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
+      limit: result.data.limit,
+    });
   }
 
   /**

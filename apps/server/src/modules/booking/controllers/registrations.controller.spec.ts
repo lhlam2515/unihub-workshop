@@ -14,17 +14,22 @@ describe("RegistrationsController", () => {
 
   const mockUser: JwtPayload = {
     sub: "stu-001",
+    studentId: "stu-001",
     role: "STUDENT",
     jti: "jti-1",
     allowed_workshop_ids: [],
   };
 
   const mockRegistrationDto = {
-    registration_id: "reg-1",
-    student_id: "stu-001",
-    workshop_id: "ws-1",
+    id: "reg-1",
+    studentId: "stu-001",
+    workshopId: "ws-1",
     status: "CONFIRMED",
-    registered_at: new Date(),
+    qrCode: null,
+    registeredAt: new Date(),
+    confirmedAt: null,
+    cancelledAt: null,
+    nextStep: null,
   };
 
   beforeEach(async () => {
@@ -54,7 +59,7 @@ describe("RegistrationsController", () => {
     const IDEM_KEY = "idem-key-001";
 
     it("calls register with user.sub, dto, and idempotencyKey", async () => {
-      const dto = { workshop_id: "ws-1" };
+      const dto = { workshopId: "ws-1" };
       registrationsService.register.mockResolvedValue(
         Result.ok(mockRegistrationDto)
       );
@@ -70,23 +75,26 @@ describe("RegistrationsController", () => {
   describe("GET /students/me/registrations", () => {
     it("calls getMyRegistrations with user.sub", async () => {
       registrationsService.getMyRegistrations.mockResolvedValue(
-        Result.ok({ items: [], total: 0, page: 1, limit: 20 })
+        Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
       );
-      await controller.getMyRegistrations(mockUser);
+      await controller.getMyRegistrations(mockUser, { limit: 20 } as any);
       expect(registrationsService.getMyRegistrations).toHaveBeenCalledWith(
         "stu-001",
         expect.objectContaining({})
       );
     });
 
-    it("passes status, page, limit query params", async () => {
+    it("passes status, limit query params", async () => {
       registrationsService.getMyRegistrations.mockResolvedValue(
-        Result.ok({ items: [], total: 0, page: 2, limit: 10 })
+        Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 10 })
       );
-      await controller.getMyRegistrations(mockUser, "CONFIRMED", "2", "10");
+      await controller.getMyRegistrations(mockUser, {
+        status: ["CONFIRMED"],
+        limit: 10,
+      });
       expect(registrationsService.getMyRegistrations).toHaveBeenCalledWith(
         "stu-001",
-        expect.objectContaining({ status: "CONFIRMED", page: 2, limit: 10 })
+        expect.objectContaining({ status: ["CONFIRMED"], limit: 10 })
       );
     });
   });
