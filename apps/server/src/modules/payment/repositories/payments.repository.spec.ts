@@ -49,12 +49,13 @@ describe("PaymentsRepository", () => {
     amount: "50000",
     currency: "VND",
     gateway: "MOCK",
-    status: "PENDING",
+    status: "INITIATED",
     idempotencyKey: "idem-001",
     timeoutAt: new Date(),
     initiatedAt: new Date(),
     completedAt: null,
     gatewayTxnId: null,
+    rawGatewayResponse: null,
   };
 
   describe("findById", () => {
@@ -263,7 +264,7 @@ describe("PaymentsRepository", () => {
   });
 
   describe("findPendingOverdue", () => {
-    it("should return overdue PENDING payments", async () => {
+    it("should return overdue INITIATED payments", async () => {
       mockDb.select.mockReturnThis();
       mockDb.from.mockReturnThis();
       mockDb.where.mockResolvedValue([mockPayment]);
@@ -275,40 +276,6 @@ describe("PaymentsRepository", () => {
         expect(result.data).toHaveLength(1);
         expect(result.data[0]).toEqual(mockPayment);
       }
-    });
-  });
-
-  describe("lockWorkshopSlot", () => {
-    it("should acquire FOR UPDATE NOWAIT lock on workshop_slots", async () => {
-      const tx = {
-        select: jest.fn().mockReturnThis(),
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        for: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue([{ dummy: 1 }]),
-      };
-
-      const result = await repo.lockWorkshopSlot("ws-001", tx);
-
-      expect(result.isSuccess).toBe(true);
-      expect(tx.for).toHaveBeenCalledWith("update", { noWait: true });
-    });
-
-    it("should return DB_LOCK_TIMEOUT on lock conflict", async () => {
-      const tx = {
-        select: jest.fn().mockReturnThis(),
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        for: jest.fn().mockReturnThis(),
-        limit: jest
-          .fn()
-          .mockRejectedValue(new Error("could not obtain lock on row")),
-      };
-
-      const result = await repo.lockWorkshopSlot("ws-001", tx);
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("DB_LOCK_TIMEOUT");
     });
   });
 

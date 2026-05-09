@@ -298,10 +298,10 @@ describe("CheckinService", () => {
       const result = await service.getWorkshopCheckinStatus("w-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.confirmed_count).toBe(50);
-      expect(result.data.checked_in_count).toBe(30);
-      expect(result.data.pending_count).toBe(20);
-      expect(result.data.recent_checkins).toHaveLength(1);
+      expect(result.data.confirmedCount).toBe(50);
+      expect(result.data.checkedInCount).toBe(30);
+      expect(result.data.pendingCount).toBe(20);
+      expect(result.data.recentCheckins).toHaveLength(1);
     });
 
     it("returns FailResult when confirmed count query fails", async () => {

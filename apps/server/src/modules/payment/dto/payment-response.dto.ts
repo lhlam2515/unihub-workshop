@@ -9,13 +9,14 @@
 import type { Payment } from "@/infra/database/types/transaction.types";
 
 export interface PaymentResponseDto {
-  paymentId: string;
+  id: string;
   registrationId: string;
   amount: number;
+  currency: string;
   status: string;
   gateway: string;
-  gatewayTxnId?: string;
-  initiatedAt: Date;
+  gatewayChargeId?: string;
+  createdAt: Date;
   completedAt?: Date;
 }
 
@@ -37,13 +38,14 @@ export class PaymentResponseBuilder {
    */
   static from(payment: Payment): PaymentResponseDto {
     return {
-      paymentId: payment.paymentId,
+      id: payment.paymentId,
       registrationId: payment.registrationId,
       amount: Number(payment.amount),
+      currency: payment.currency || "VND",
       status: payment.status,
       gateway: payment.gateway,
-      gatewayTxnId: payment.gatewayTxnId ?? undefined,
-      initiatedAt: payment.initiatedAt,
+      gatewayChargeId: payment.gatewayTxnId ?? undefined,
+      createdAt: payment.initiatedAt,
       completedAt: payment.completedAt ?? undefined,
     };
   }

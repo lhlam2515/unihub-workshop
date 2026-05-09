@@ -124,7 +124,7 @@ describe("NotificationsService", () => {
       const result = await service.getLogById("notif-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.notification_id).toBe("notif-001");
+      expect(result.data.notificationId).toBe("notif-001");
     });
 
     it("returns NOTIFICATION_LOG_NOT_FOUND when log does not exist", async () => {
@@ -171,8 +171,8 @@ describe("NotificationsService", () => {
       mockChannelConfigsRepo.update.mockResolvedValue(Result.ok(updated));
 
       const result = await service.updateChannelConfig("EMAIL", {
-        is_active: false,
-        config_json: undefined,
+        isActive: false,
+        configJson: undefined,
       });
 
       expect(result.isSuccess).toBe(true);

@@ -137,9 +137,9 @@ describe("StudentsRepository", () => {
   });
 
   // -------------------------------------------------------------------------
-  // findByStudentCode
+  // findById
   // -------------------------------------------------------------------------
-  describe("findByStudentCode", () => {
+  describe("findById", () => {
     it("returns OkResult with student when found by code", async () => {
       const student = {
         studentId: "stu-2",
@@ -155,7 +155,7 @@ describe("StudentsRepository", () => {
       };
       setupDbResolve([student]);
 
-      const result = await repository.findByStudentCode("20210002");
+      const result = await repository.findById("20210002");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toEqual(student);
@@ -165,7 +165,7 @@ describe("StudentsRepository", () => {
     it("returns OkResult with null when code not found", async () => {
       setupDbResolve([]);
 
-      const result = await repository.findByStudentCode("NONEXISTENT");
+      const result = await repository.findById("NONEXISTENT");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBeNull();
@@ -175,7 +175,7 @@ describe("StudentsRepository", () => {
       const dbError = new Error("Timeout");
       setupDbReject(dbError);
 
-      const result = await repository.findByStudentCode("20210001");
+      const result = await repository.findById("20210001");
 
       expect(result.isFailure).toBe(true);
       expect(result.error).toEqual(systemErrors.internal(dbError));
@@ -183,38 +183,29 @@ describe("StudentsRepository", () => {
   });
 
   // -------------------------------------------------------------------------
-  // upsertByStudentCode
+  // upsert
   // -------------------------------------------------------------------------
-  describe("upsertByStudentCode", () => {
+  describe("upsert", () => {
     it("upserts a student and links the user when userId is provided", async () => {
       const student = {
-        studentId: "stu-3",
+        studentId: "20210003",
         userId: "usr-3",
-        studentCode: "20210003",
         fullName: "Alice Doe",
-        faculty: "Business",
-        classYear: 2023,
-        emailEdu: "alice@edu.test",
-        lastSyncedAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        email: "alice@edu.test",
       };
       setupDbResolve([student]);
 
-      const result = await repository.upsertByStudentCode({
-        studentCode: "20210003",
+      const result = await repository.upsert({
+        studentId: "20210003",
         fullName: "Alice Doe",
-        emailEdu: "alice@edu.test",
-        faculty: "Business",
-        classYear: 2023,
+        email: "alice@edu.test",
         userId: "usr-3",
       });
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data).toEqual(student);
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
-          studentCode: "20210003",
+          studentId: "20210003",
           userId: "usr-3",
         })
       );
@@ -222,36 +213,28 @@ describe("StudentsRepository", () => {
         [
           {
             target: unknown;
-            set: { userId?: string };
+            set: { userId?: string; fullName?: string };
           },
         ]
       >;
 
-      expect(upsertArgs[0].target).toBe(mockSchema.students.studentCode);
+      expect(upsertArgs[0].target).toBe(mockSchema.students.studentId);
       expect(upsertArgs[0].set.userId).toBe("usr-3");
     });
 
     it("upserts a student without linking a user when userId is omitted", async () => {
       const student = {
-        studentId: "stu-4",
+        studentId: "20210004",
         userId: null,
-        studentCode: "20210004",
         fullName: "Bob Doe",
-        faculty: "Arts",
-        classYear: 2022,
-        emailEdu: "bob@edu.test",
-        lastSyncedAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        email: "bob@edu.test",
       };
       setupDbResolve([student]);
 
-      const result = await repository.upsertByStudentCode({
-        studentCode: "20210004",
+      const result = await repository.upsert({
+        studentId: "20210004",
         fullName: "Bob Doe",
-        emailEdu: "bob@edu.test",
-        faculty: "Arts",
-        classYear: 2022,
+        email: "bob@edu.test",
       });
 
       expect(result.isSuccess).toBe(true);

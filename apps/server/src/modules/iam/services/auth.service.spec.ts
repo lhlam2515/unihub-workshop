@@ -8,6 +8,7 @@ import { AuthService } from "./auth.service";
 import { StudentProfileService } from "./student-profile.service";
 import { TokenService } from "./token.service";
 import { CheckinStaffAssignmentsRepository } from "../repositories/checkin-staff-assignments.repository";
+import { StudentsRepository } from "../repositories/students.repository";
 import { UsersRepository } from "../repositories/users.repository";
 
 describe("AuthService", () => {
@@ -16,6 +17,24 @@ describe("AuthService", () => {
   let mockTokenService: Record<string, jest.Mock>;
   let mockStudentProfileService: Record<string, jest.Mock>;
   let mockAssignmentsRepo: Record<string, jest.Mock>;
+  let mockStudentsRepo: Record<string, jest.Mock>;
+
+  const STUDENT_ID = "20210001";
+  const accessToken = "jwt-access-token";
+  const refreshToken = "jwt-refresh-token";
+
+  const mockStudent = {
+    studentId: STUDENT_ID,
+    userId: "usr-1",
+    studentCode: STUDENT_ID,
+    fullName: "John Doe",
+    faculty: "Engineering",
+    classYear: 2021,
+    emailEdu: "john@edu.test",
+    lastSyncedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 
   const activeUser = {
     userId: "usr-1",
@@ -48,7 +67,6 @@ describe("AuthService", () => {
   };
 
   beforeAll(async () => {
-    // Hash a known password
     const hash = await bcrypt.hash("correct-password", 1);
     activeUser.passwordHash = hash;
     checkinStaffUser.passwordHash = hash;
@@ -76,6 +94,11 @@ describe("AuthService", () => {
       findByUserId: jest.fn(),
     };
 
+    mockStudentsRepo = {
+      findById: jest.fn(),
+      findByUserId: jest.fn(),
+    };
+
     const module = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -86,191 +109,244 @@ describe("AuthService", () => {
           provide: CheckinStaffAssignmentsRepository,
           useValue: mockAssignmentsRepo,
         },
+        { provide: StudentsRepository, useValue: mockStudentsRepo },
       ],
     }).compile();
 
     authService = module.get<AuthService>(AuthService);
   });
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // login
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   describe("login", () => {
-    const accessToken = "jwt-access-token";
-    const refreshToken = "jwt-refresh-token";
-
     beforeEach(() => {
       mockTokenService.signAccessToken.mockResolvedValue(accessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(refreshToken);
     });
 
-    it("returns OkResult with LoginResponseDto for valid WEB credentials", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
+    describe("STUDENT login", () => {
+      it("returns OkResult with LoginResponseDto for valid student credentials", async () => {
+        mockStudentsRepo.findById.mockResolvedValue(Result.ok(mockStudent));
+        mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
 
-      const result = await authService.login(
-        "john@test.com",
-        "correct-password",
-        "WEB"
-      );
+        const result = await authService.login({
+          accountType: "STUDENT",
+          password: "correct-password",
+          studentId: STUDENT_ID,
+        });
 
-      expect(result.isSuccess).toBe(true);
-      expect(result.data.access_token).toBe(accessToken);
-      expect(result.data.refresh_token).toBe(refreshToken);
-      expect(result.data.expires_in).toBe(900);
-      expect(result.data.user.user_id).toBe(activeUser.userId);
-      expect(result.data.user.email).toBe(activeUser.email);
-      expect(result.data.user.role).toBe(activeUser.role);
-      expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
-        {
-          userId: activeUser.userId,
-          role: activeUser.role,
-          allowedWorkshopIds: undefined,
-        },
-        "WEB"
-      );
-      expect(mockTokenService.signRefreshToken).toHaveBeenCalledWith(
-        activeUser.userId
-      );
+        expect(result.isSuccess).toBe(true);
+        expect(result.data.accessToken).toBe(accessToken);
+        expect(result.data.refreshToken).toBe(refreshToken);
+        expect(result.data.expiresIn).toBe(900);
+        expect(result.data.user.id).toBe(activeUser.userId);
+        expect(result.data.user.email).toBe(activeUser.email);
+        expect(result.data.user.role).toBe(activeUser.role);
+        expect(result.data.user.fullName).toBe(mockStudent.fullName);
+        expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
+          {
+            userId: activeUser.userId,
+            role: activeUser.role,
+            allowedWorkshopIds: undefined,
+          },
+          "WEB"
+        );
+        expect(mockTokenService.signRefreshToken).toHaveBeenCalledWith(
+          activeUser.userId
+        );
+      });
+
+      it("returns INVALID_CREDENTIALS when student not found", async () => {
+        mockStudentsRepo.findById.mockResolvedValue(Result.ok(null));
+
+        const result = await authService.login({
+          accountType: "STUDENT",
+          password: "correct-password",
+          studentId: "nonexistent",
+        });
+
+        expect(result.isFailure).toBe(true);
+        expect(result.error).toEqual(authErrors.invalidCredentials());
+      });
+
+      it("returns INVALID_CREDENTIALS when student has no linked user", async () => {
+        mockStudentsRepo.findById.mockResolvedValue(
+          Result.ok({ ...mockStudent, userId: null })
+        );
+
+        const result = await authService.login({
+          accountType: "STUDENT",
+          password: "correct-password",
+          studentId: STUDENT_ID,
+        });
+
+        expect(result.isFailure).toBe(true);
+        expect(result.error).toEqual(authErrors.invalidCredentials());
+      });
+
+      it("returns INVALID_CREDENTIALS when studentId is missing", async () => {
+        const result = await authService.login({
+          accountType: "STUDENT",
+          password: "correct-password",
+        });
+
+        expect(result.isFailure).toBe(true);
+        expect(result.error).toEqual(authErrors.invalidCredentials());
+      });
     });
 
-    it("returns OkResult with LoginResponseDto for valid MOBILE credentials (includes refreshToken)", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
+    describe("STAFF login", () => {
+      it("returns OkResult for valid staff credentials", async () => {
+        mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(organizerUser));
 
-      const result = await authService.login(
-        "john@test.com",
-        "correct-password",
-        "MOBILE"
-      );
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "correct-password",
+          email: "org@test.com",
+        });
 
-      expect(result.isSuccess).toBe(true);
-      expect(result.data.access_token).toBe(accessToken);
-      expect(result.data.refresh_token).toBe(refreshToken);
-      expect(result.data.expires_in).toBe(28800);
-      expect(mockTokenService.signRefreshToken).toHaveBeenCalledWith(
-        activeUser.userId
-      );
+        expect(result.isSuccess).toBe(true);
+        expect(result.data.accessToken).toBe(accessToken);
+        expect(result.data.user.role).toBe("BTC");
+      });
+
+      it("returns INVALID_CREDENTIALS when email not found", async () => {
+        mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(null));
+
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "correct-password",
+          email: "unknown@test.com",
+        });
+
+        expect(result.isFailure).toBe(true);
+        expect(result.error).toEqual(authErrors.invalidCredentials());
+      });
+
+      it("returns INVALID_CREDENTIALS when email is missing", async () => {
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "correct-password",
+        });
+
+        expect(result.isFailure).toBe(true);
+        expect(result.error).toEqual(authErrors.invalidCredentials());
+      });
     });
 
-    it("returns FailResult with INVALID_CREDENTIALS when email not found", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(null));
+    describe("common login checks", () => {
+      it("returns INVALID_CREDENTIALS when user is not ACTIVE", async () => {
+        const suspendedUser = { ...activeUser, status: "SUSPENDED" as const };
+        mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(suspendedUser));
 
-      const result = await authService.login(
-        "unknown@test.com",
-        "any-password",
-        "WEB"
-      );
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "correct-password",
+          email: "john@test.com",
+        });
 
-      expect(result.isFailure).toBe(true);
-      expect(result.error).toEqual(authErrors.invalidCredentials());
-    });
+        expect(result.isFailure).toBe(true);
+        expect(result.error).toEqual(authErrors.invalidCredentials());
+      });
 
-    it("returns FailResult with INVALID_CREDENTIALS when user is not ACTIVE", async () => {
-      const suspendedUser = { ...activeUser, status: "SUSPENDED" as const };
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(suspendedUser));
+      it("returns INVALID_CREDENTIALS when password is wrong", async () => {
+        mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
 
-      const result = await authService.login(
-        "john@test.com",
-        "correct-password",
-        "WEB"
-      );
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "wrong-password",
+          email: "john@test.com",
+        });
 
-      expect(result.isFailure).toBe(true);
-      expect(result.error).toEqual(authErrors.invalidCredentials());
-    });
+        expect(result.isFailure).toBe(true);
+        expect(result.error).toEqual(authErrors.invalidCredentials());
+      });
 
-    it("returns FailResult with INVALID_CREDENTIALS when password is wrong", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
+      it("returns FailResult when user lookup fails", async () => {
+        mockUsersRepo.findByEmail.mockResolvedValue(
+          Result.fail({
+            category: "INTERNAL",
+            code: "INTERNAL_ERROR",
+            message: "DB error",
+          })
+        );
 
-      const result = await authService.login(
-        "john@test.com",
-        "wrong-password",
-        "WEB"
-      );
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "correct-password",
+          email: "john@test.com",
+        });
 
-      expect(result.isFailure).toBe(true);
-      expect(result.error).toEqual(authErrors.invalidCredentials());
-    });
+        expect(result.isFailure).toBe(true);
+        expect(result.error.code).toBe("INVALID_CREDENTIALS");
+      });
 
-    it("returns FailResult when user lookup fails", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(
-        Result.fail({
-          category: "INTERNAL",
-          code: "INTERNAL_ERROR",
-          message: "DB error",
-        })
-      );
+      it("loads allowedWorkshopIds for CHECKIN_STAFF on login", async () => {
+        mockUsersRepo.findByEmail.mockResolvedValue(
+          Result.ok(checkinStaffUser)
+        );
+        mockAssignmentsRepo.findByUserId.mockResolvedValue(
+          Result.ok({
+            assignmentId: "assign-1",
+            userId: checkinStaffUser.userId,
+            workshopIds: ["ws-1", "ws-2"],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+        );
 
-      const result = await authService.login(
-        "john@test.com",
-        "correct-password",
-        "WEB"
-      );
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "correct-password",
+          email: "staff@test.com",
+        });
 
-      expect(result.isFailure).toBe(true);
-      expect(result.error.code).toBe("INTERNAL_ERROR");
-    });
+        expect(result.isSuccess).toBe(true);
+        expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
+          {
+            userId: checkinStaffUser.userId,
+            role: checkinStaffUser.role,
+            allowedWorkshopIds: ["ws-1", "ws-2"],
+          },
+          "WEB"
+        );
+      });
 
-    it("loads allowedWorkshopIds for CHECKIN_STAFF on login", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(checkinStaffUser));
-      mockAssignmentsRepo.findByUserId.mockResolvedValue(
-        Result.ok({
-          assignmentId: "assign-1",
-          userId: checkinStaffUser.userId,
-          workshopIds: ["ws-1", "ws-2"],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-      );
+      it("allows CHECKIN_STAFF login even when assignment lookup fails", async () => {
+        mockUsersRepo.findByEmail.mockResolvedValue(
+          Result.ok(checkinStaffUser)
+        );
+        mockAssignmentsRepo.findByUserId.mockResolvedValue(
+          Result.fail({
+            category: "INTERNAL",
+            code: "INTERNAL_ERROR",
+            message: "DB error",
+          })
+        );
 
-      const result = await authService.login(
-        "staff@test.com",
-        "correct-password",
-        "WEB"
-      );
+        const result = await authService.login({
+          accountType: "STAFF",
+          password: "correct-password",
+          email: "staff@test.com",
+        });
 
-      expect(result.isSuccess).toBe(true);
-      expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
-        {
-          userId: checkinStaffUser.userId,
-          role: checkinStaffUser.role,
-          allowedWorkshopIds: ["ws-1", "ws-2"],
-        },
-        "WEB"
-      );
-    });
-
-    it("allows CHECKIN_STAFF login even when assignment lookup fails", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(checkinStaffUser));
-      mockAssignmentsRepo.findByUserId.mockResolvedValue(
-        Result.fail({
-          category: "INTERNAL",
-          code: "INTERNAL_ERROR",
-          message: "DB error",
-        })
-      );
-
-      const result = await authService.login(
-        "staff@test.com",
-        "correct-password",
-        "WEB"
-      );
-
-      // Should still succeed with empty allowedWorkshopIds
-      expect(result.isSuccess).toBe(true);
-      expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
-        {
-          userId: checkinStaffUser.userId,
-          role: checkinStaffUser.role,
-          allowedWorkshopIds: undefined,
-        },
-        "WEB"
-      );
+        expect(result.isSuccess).toBe(true);
+        expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
+          {
+            userId: checkinStaffUser.userId,
+            role: checkinStaffUser.role,
+            allowedWorkshopIds: undefined,
+          },
+          "WEB"
+        );
+      });
     });
   });
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // refreshToken
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   describe("refreshToken", () => {
     const newAccessToken = "new-jwt-access";
     const newRefreshToken = "new-jwt-refresh";
@@ -287,7 +363,10 @@ describe("AuthService", () => {
       );
       mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
 
-      const result = await authService.refreshToken("valid-refresh-token");
+      const result = await authService.refreshToken(
+        "valid-refresh-token",
+        "WEB"
+      );
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.accessToken).toBe(newAccessToken);
@@ -304,7 +383,7 @@ describe("AuthService", () => {
         Result.fail(authErrors.refreshTokenInvalid())
       );
 
-      const result = await authService.refreshToken("expired-token");
+      const result = await authService.refreshToken("expired-token", "WEB");
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("REFRESH_TOKEN_INVALID");
@@ -316,7 +395,7 @@ describe("AuthService", () => {
       );
       mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
 
-      const result = await authService.refreshToken("valid-token");
+      const result = await authService.refreshToken("valid-token", "WEB");
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("REFRESH_TOKEN_INVALID");
@@ -329,7 +408,7 @@ describe("AuthService", () => {
       );
       mockUsersRepo.findById.mockResolvedValue(Result.ok(suspendedUser));
 
-      const result = await authService.refreshToken("valid-token");
+      const result = await authService.refreshToken("valid-token", "WEB");
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("REFRESH_TOKEN_INVALID");
@@ -347,7 +426,7 @@ describe("AuthService", () => {
         })
       );
 
-      const result = await authService.refreshToken("valid-token");
+      const result = await authService.refreshToken("valid-token", "WEB");
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
@@ -369,7 +448,7 @@ describe("AuthService", () => {
         })
       );
 
-      const result = await authService.refreshToken("valid-staff-token");
+      const result = await authService.refreshToken("valid-staff-token", "WEB");
 
       expect(result.isSuccess).toBe(true);
       expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
@@ -381,11 +460,26 @@ describe("AuthService", () => {
         "WEB"
       );
     });
+
+    it("returns MOBILE expiry when platform is MOBILE", async () => {
+      mockTokenService.verifyRefreshToken.mockResolvedValue(
+        Result.ok(decodedPayload)
+      );
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
+
+      const result = await authService.refreshToken(
+        "valid-refresh-token",
+        "MOBILE"
+      );
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.expiresIn).toBe(28800);
+    });
   });
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // logout
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   describe("logout", () => {
     it("blacklists the token's jti and returns OkResult", async () => {
       mockTokenService.blacklistToken.mockResolvedValue(undefined);
@@ -411,9 +505,9 @@ describe("AuthService", () => {
     });
   });
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // getMe
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   describe("getMe", () => {
     it("returns base profile for BTC", async () => {
       mockUsersRepo.findById.mockResolvedValue(Result.ok(organizerUser));
@@ -421,11 +515,11 @@ describe("AuthService", () => {
       const result = await authService.getMe(organizerUser.userId);
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.user_id).toBe(organizerUser.userId);
+      expect(result.data.id).toBe(organizerUser.userId);
       expect(result.data.email).toBe(organizerUser.email);
       expect(result.data.role).toBe(organizerUser.role);
-      expect(result.data.student_code).toBeUndefined();
-      expect(result.data.allowed_workshop_ids).toBeUndefined();
+      expect(result.data.fullName).toBe("");
+      expect(result.data.allowedWorkshopIds).toBeUndefined();
     });
 
     it("returns profile with student fields for STUDENT", async () => {
@@ -448,14 +542,12 @@ describe("AuthService", () => {
       const result = await authService.getMe(activeUser.userId);
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.user_id).toBe(activeUser.userId);
+      expect(result.data.id).toBe(activeUser.userId);
       expect(result.data.role).toBe("STUDENT");
-      expect(result.data.student_code).toBe("20210001");
-      expect(result.data.full_name).toBe("John Doe");
-      expect(result.data.faculty).toBe("Engineering");
+      expect(result.data.fullName).toBe("John Doe");
     });
 
-    it("returns profile with allowed_workshop_ids for CHECKIN_STAFF", async () => {
+    it("returns profile with allowedWorkshopIds for CHECKIN_STAFF", async () => {
       mockUsersRepo.findById.mockResolvedValue(Result.ok(checkinStaffUser));
       mockAssignmentsRepo.findByUserId.mockResolvedValue(
         Result.ok({
@@ -471,7 +563,7 @@ describe("AuthService", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.role).toBe("CHECKIN_STAFF");
-      expect(result.data.allowed_workshop_ids).toEqual(["ws-1", "ws-2"]);
+      expect(result.data.allowedWorkshopIds).toEqual(["ws-1", "ws-2"]);
     });
 
     it("returns FailResult with USER_NOT_FOUND when user does not exist", async () => {
@@ -508,8 +600,7 @@ describe("AuthService", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.role).toBe("STUDENT");
-      expect(result.data.student_code).toBeUndefined();
-      expect(result.data.full_name).toBeUndefined();
+      expect(result.data.fullName).toBe("");
     });
 
     it("handles missing assignments gracefully for CHECKIN_STAFF", async () => {
@@ -520,7 +611,7 @@ describe("AuthService", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.role).toBe("CHECKIN_STAFF");
-      expect(result.data.allowed_workshop_ids).toEqual([]);
+      expect(result.data.allowedWorkshopIds).toEqual([]);
     });
   });
 });

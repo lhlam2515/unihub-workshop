@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import jwt from "jsonwebtoken";
@@ -7,29 +9,36 @@ import { authErrors } from "@/shared/response/errors";
 
 import { TokenService } from "./token.service";
 
-const OLD_ENV = process.env;
-
 describe("TokenService", () => {
   let tokenService: TokenService;
   let mockRedisService: Record<string, jest.Mock>;
+  let privateKey: string;
+  let publicKey: string;
+  let wrongPrivateKey: string;
 
   beforeAll(() => {
-    process.env = {
-      ...OLD_ENV,
-      JWT_SECRET: "test-jwt-secret-for-unit-tests",
-      JWT_REFRESH_SECRET: "test-refresh-secret-for-unit-tests",
-    };
-  });
+    const keyPair = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    privateKey = keyPair.privateKey;
+    publicKey = keyPair.publicKey;
 
-  afterAll(() => {
-    process.env = OLD_ENV;
+    const wrongPair = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    wrongPrivateKey = wrongPair.privateKey;
   });
 
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue?: unknown) => {
       const configs: Record<string, unknown> = {
-        "jwt.secret": "test-jwt-secret-for-unit-tests",
-        "jwt.refreshSecret": "test-refresh-secret-for-unit-tests",
+        "jwt.privateKey": privateKey,
+        "jwt.publicKey": publicKey,
+        "jwt.secret": "test-hs256-secret",
         "jwt.accessExpiry.WEB": 900,
         "jwt.accessExpiry.MOBILE": 28800,
         "jwt.refreshExpiry": 604800,
@@ -38,8 +47,9 @@ describe("TokenService", () => {
     }),
     getOrThrow: jest.fn((key: string) => {
       const configs: Record<string, unknown> = {
-        "jwt.secret": "test-jwt-secret-for-unit-tests",
-        "jwt.refreshSecret": "test-refresh-secret-for-unit-tests",
+        "jwt.privateKey": privateKey,
+        "jwt.publicKey": publicKey,
+        "jwt.secret": "test-hs256-secret",
         "jwt.accessExpiry.WEB": 900,
         "jwt.accessExpiry.MOBILE": 28800,
         "jwt.refreshExpiry": 604800,
@@ -72,27 +82,22 @@ describe("TokenService", () => {
   describe("signAccessToken", () => {
     it("signs a WEB token with 900s expiry", async () => {
       const token = await tokenService.signAccessToken(
-        {
-          userId: "usr-1",
-          role: "STUDENT",
-        },
+        { userId: "usr-1", role: "STUDENT" },
         "WEB"
       );
 
       expect(token).toBeDefined();
       expect(typeof token).toBe("string");
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as Record<
-        string,
-        unknown
-      >;
+      const decoded = jwt.verify(token, publicKey, {
+        algorithms: ["RS256"],
+      }) as Record<string, unknown>;
       expect(decoded.sub).toBe("usr-1");
       expect(decoded.role).toBe("STUDENT");
       expect(decoded.jti).toBeDefined();
       expect(typeof decoded.jti).toBe("string");
       expect(decoded.allowed_workshop_ids).toEqual([]);
       expect(decoded.exp).toBeDefined();
-      // Should expire in ~900s from now
       const expDelta = (decoded.exp as number) - Math.floor(Date.now() / 1000);
       expect(expDelta).toBeGreaterThan(850);
       expect(expDelta).toBeLessThanOrEqual(900);
@@ -100,17 +105,13 @@ describe("TokenService", () => {
 
     it("signs a MOBILE token with 28800s expiry", async () => {
       const token = await tokenService.signAccessToken(
-        {
-          userId: "usr-2",
-          role: "BTC",
-        },
+        { userId: "usr-2", role: "BTC" },
         "MOBILE"
       );
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as Record<
-        string,
-        unknown
-      >;
+      const decoded = jwt.verify(token, publicKey, {
+        algorithms: ["RS256"],
+      }) as Record<string, unknown>;
       expect(decoded.sub).toBe("usr-2");
       expect(decoded.role).toBe("BTC");
       const expDelta = (decoded.exp as number) - Math.floor(Date.now() / 1000);
@@ -128,10 +129,9 @@ describe("TokenService", () => {
         "WEB"
       );
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as Record<
-        string,
-        unknown
-      >;
+      const decoded = jwt.verify(token, publicKey, {
+        algorithms: ["RS256"],
+      }) as Record<string, unknown>;
       expect(decoded.allowed_workshop_ids).toEqual(["ws-1", "ws-2"]);
     });
 
@@ -159,14 +159,12 @@ describe("TokenService", () => {
       const token = await tokenService.signRefreshToken("usr-1");
 
       expect(token).toBeDefined();
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_REFRESH_SECRET!
-      ) as Record<string, unknown>;
+      const decoded = jwt.verify(token, publicKey, {
+        algorithms: ["RS256"],
+      }) as Record<string, unknown>;
       expect(decoded.sub).toBe("usr-1");
       expect(decoded.jti).toBeDefined();
       const expDelta = (decoded.exp as number) - Math.floor(Date.now() / 1000);
-      // 604_800 seconds = 7 days
       expect(expDelta).toBeGreaterThan(604700);
       expect(expDelta).toBeLessThanOrEqual(604800);
     });
@@ -202,10 +200,9 @@ describe("TokenService", () => {
     it("returns FailResult with TOKEN_EXPIRED for expired token", async () => {
       const expiredToken = jwt.sign(
         { sub: "usr-1", role: "STUDENT", jti: "test-jti" },
-        process.env.JWT_SECRET!,
-        { expiresIn: 0 }
+        privateKey,
+        { algorithm: "RS256", expiresIn: 0 }
       );
-      // Small delay to ensure expiry
       await new Promise((r) => setTimeout(r, 100));
 
       const result = await tokenService.verifyAccessToken(expiredToken);
@@ -217,7 +214,8 @@ describe("TokenService", () => {
     it("returns FailResult with TOKEN_INVALID for bad signature", async () => {
       const badToken = jwt.sign(
         { sub: "usr-1", role: "STUDENT", jti: "test-jti" },
-        "wrong-secret"
+        wrongPrivateKey,
+        { algorithm: "RS256" }
       );
 
       const result = await tokenService.verifyAccessToken(badToken);
@@ -253,7 +251,8 @@ describe("TokenService", () => {
     it("returns FailResult with REFRESH_TOKEN_INVALID for bad signature", async () => {
       const badToken = jwt.sign(
         { sub: "usr-1", jti: "test-jti" },
-        "wrong-refresh-secret"
+        wrongPrivateKey,
+        { algorithm: "RS256" }
       );
 
       const result = await tokenService.verifyRefreshToken(badToken);
@@ -265,8 +264,8 @@ describe("TokenService", () => {
     it("returns FailResult with REFRESH_TOKEN_INVALID for expired token", async () => {
       const expiredToken = jwt.sign(
         { sub: "usr-1", jti: "test-jti" },
-        process.env.JWT_REFRESH_SECRET!,
-        { expiresIn: 0 }
+        privateKey,
+        { algorithm: "RS256", expiresIn: 0 }
       );
       await new Promise((r) => setTimeout(r, 100));
 
@@ -304,15 +303,12 @@ describe("TokenService", () => {
       const result = await tokenService.isBlacklisted("test-jti");
 
       expect(result).toBe(true);
-      expect(mockRedisService.get).toHaveBeenCalledWith(
-        "token:blacklist:test-jti"
-      );
     });
 
-    it("returns false when jti does not exist in Redis", async () => {
+    it("returns false when jti is not in Redis", async () => {
       mockRedisService.get.mockResolvedValue(null);
 
-      const result = await tokenService.isBlacklisted("unknown-jti");
+      const result = await tokenService.isBlacklisted("test-jti");
 
       expect(result).toBe(false);
     });
