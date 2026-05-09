@@ -28,7 +28,7 @@ export interface UniHubJwtPayload {
   /** User role — always "CHECKIN_STAFF" on mobile */
   role: string;
   /** Workshop IDs this staff is authorized to check in */
-  allowedWorkshopIds: string[];
+  allowed_workshop_ids: string[];
   /** Token expiration (Unix timestamp in seconds) */
   exp: number;
   /** Unique token identifier (for blacklist checking) */
@@ -70,7 +70,7 @@ export const offlineAuth = {
     if (!token) return [];
 
     try {
-      return jwtDecode<UniHubJwtPayload>(token).allowedWorkshopIds ?? [];
+      return jwtDecode<UniHubJwtPayload>(token).allowed_workshop_ids ?? [];
     } catch {
       return [];
     }

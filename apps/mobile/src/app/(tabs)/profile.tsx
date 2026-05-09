@@ -57,15 +57,12 @@ export default function ProfileScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="grow p-5 gap-3.5">
         <View className="gap-2 py-2">
-          <Text className="text-xs font-bold tracking-widest text-primary">
-            TAB HỒ SƠ
-          </Text>
           <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Thông tin & cài đặt
           </Text>
         </View>
 
-        <View className="gap-3 rounded-3xl border border-border p-5">
+        <View className="gap-3 rounded-3xl border border-border bg-card p-5">
           <Text className="text-lg font-bold text-foreground">
             Người dùng hiện tại
           </Text>

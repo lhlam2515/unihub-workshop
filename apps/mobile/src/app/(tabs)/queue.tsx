@@ -32,9 +32,6 @@ export default function QueueScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="grow p-5 gap-3.5">
         <View className="gap-2.5">
-          <Text className="text-xs font-bold tracking-widest text-primary">
-            TAB HÀNG ĐỢI
-          </Text>
           <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Quản lý offline queue
           </Text>
@@ -44,7 +41,7 @@ export default function QueueScreen() {
           </Text>
         </View>
 
-        <View className="gap-2.5 rounded-3xl border border-border p-5">
+        <View className="gap-2.5 rounded-3xl border border-border bg-card p-5">
           <Text className="text-lg font-bold text-foreground">
             Trạng thái hiện tại
           </Text>
@@ -71,8 +68,8 @@ export default function QueueScreen() {
         </View>
 
         {stats.conflicts > 0 ? (
-          <View className="gap-2.5 rounded-3xl border border-red-400 p-5">
-            <Text className="text-lg font-bold text-red-400">
+          <View style={{ gap: 10, borderRadius: 24, borderWidth: 1, borderColor: "#b91c1c", backgroundColor: "rgba(127,29,29,0.2)", padding: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: "#ef4444" }}>
               {stats.conflicts} xung đột cần xem xét
             </Text>
             <Text className="text-sm leading-5 text-muted-foreground">
@@ -82,7 +79,7 @@ export default function QueueScreen() {
           </View>
         ) : null}
 
-        <View className="rounded-3xl border border-border">
+        <View className="rounded-3xl border border-border bg-card">
           {queueItems.length === 0 ? (
             <View className="items-center justify-center p-8">
               <Text className="text-sm text-muted-foreground">

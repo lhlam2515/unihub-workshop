@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface ScanOverlayProps {
   isProcessing: boolean;
@@ -15,8 +16,10 @@ export function ScanOverlay({
   onRetry,
   onBack,
 }: ScanOverlayProps) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.overlay}>
+    <View style={[styles.overlay, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
       <View style={styles.topBar}>
         <Text style={styles.eyebrow}>QR SCANNER</Text>
         <Text style={styles.title}>Quét vé</Text>
@@ -91,7 +94,7 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
-    padding: 24,
+    paddingHorizontal: 24,
   },
   topBar: { gap: 8 },
   eyebrow: {
