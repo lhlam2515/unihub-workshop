@@ -18,7 +18,7 @@ import { Request } from "express";
 export const IdempotencyKey = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): string => {
     const request = ctx.switchToHttp().getRequest<Request>();
-    const raw = request.headers["X-Idempotency-Key"];
+    const raw = request.headers["x-idempotency-key"];
     const key = Array.isArray(raw) ? raw[0] : raw;
 
     if (!key) {
