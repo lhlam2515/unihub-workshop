@@ -134,7 +134,12 @@ export function AuthForm({ variant }: AuthFormProps) {
   const showEmail = variant === "staff";
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+    <form
+      data-testid="login-form"
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-4"
+      noValidate
+    >
       {/* Server error banner */}
       {serverError && <ErrorDisplay error={serverError} variant="banner" />}
 

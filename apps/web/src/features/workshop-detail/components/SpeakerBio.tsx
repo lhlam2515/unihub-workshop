@@ -18,7 +18,7 @@ export function SpeakerBio({ speaker }: SpeakerBioProps) {
   if (!speaker) return null;
 
   return (
-    <section className="space-y-3">
+    <section data-testid="workshop-speaker" className="space-y-3">
       <h2 className="text-lg font-semibold">Diễn giả</h2>
       <div className="flex items-start gap-4">
         <Avatar size="lg">

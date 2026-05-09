@@ -23,7 +23,7 @@ export function RoomInfo({ room }: RoomInfoProps) {
     .map(([k]) => facilityLabels[k] ?? k);
 
   return (
-    <section className="space-y-3">
+    <section data-testid="workshop-room" className="space-y-3">
       <h2 className="text-lg font-semibold">Phòng học</h2>
 
       <div className="flex items-start gap-2">

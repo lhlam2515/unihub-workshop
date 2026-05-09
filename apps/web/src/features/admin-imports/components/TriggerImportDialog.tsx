@@ -52,6 +52,7 @@ export function TriggerImportDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
+          data-testid="csv-upload"
           disabled={hasRunningImport}
           title={hasRunningImport ? "Đã có import đang chạy" : undefined}
         >

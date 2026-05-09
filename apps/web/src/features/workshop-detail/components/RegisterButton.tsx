@@ -142,6 +142,7 @@ export function RegisterButton({ workshop }: RegisterButtonProps) {
       <div className="space-y-2">
         {error && <ErrorDisplay error={error} variant="banner" />}
         <Button
+          data-testid="register-button"
           className="w-full gap-2"
           disabled={isSubmitting}
           onClick={handleRegister}
