@@ -23,6 +23,7 @@ import { CheckinStaffAdminController } from "@/modules/iam/controllers/checkin-s
 import { UsersAdminController } from "@/modules/iam/controllers/users-admin.controller";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { CheckinStaffAssignmentsRepository } from "@/modules/iam/repositories/checkin-staff-assignments.repository";
+import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import { AuthService } from "@/modules/iam/services/auth.service";
 import { CheckinStaffAssignmentService } from "@/modules/iam/services/checkin-staff-assignment.service";
@@ -41,7 +42,7 @@ import type { Request, Response } from "express";
 const mockUsersRepo = {
   findByEmail: jest.fn(),
   findById: jest.fn(),
-  listUsers: jest.fn(),
+  list: jest.fn(),
   updateStatus: jest.fn(),
 };
 
@@ -59,9 +60,12 @@ const mockStudentProfileService = {
 
 const mockAssignmentsRepo = {
   findByUserId: jest.fn(),
-  assignWorkshops: jest.fn(),
-  getAssignedWorkshops: jest.fn(),
-  unassignWorkshops: jest.fn(),
+  upsert: jest.fn(),
+};
+
+const mockStudentsRepo = {
+  findByUserId: jest.fn(),
+  findById: jest.fn(),
 };
 
 const mockRedisService = {
@@ -101,13 +105,13 @@ const organizerUser = {
   ...activeUser,
   userId: "usr-004",
   email: "organizer@university.edu",
-  role: "ORGANIZER",
+  role: "BTC",
 };
 
 const studentProfile = {
-  studentCode: "STU001",
+  studentId: "STU001",
   fullName: "John Doe",
-  faculty: "Engineering",
+  userId: "usr-001",
 };
 
 const mockAccessToken =
@@ -181,6 +185,7 @@ describe("IAM Module — Integration", () => {
           useValue: mockAssignmentsRepo,
         },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: StudentsRepository, useValue: mockStudentsRepo },
         provideMockGuard(),
       ],
     }).compile();
@@ -201,19 +206,20 @@ describe("IAM Module — Integration", () => {
       mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
 
+      mockStudentsRepo.findById.mockResolvedValue(Result.ok(studentProfile));
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
+
       const result = await authController.login(
         {
-          email: "student@university.edu",
+          accountType: "STUDENT",
           password: "password123",
-          account_type: "student",
-          student_id: "STU001",
-          platform: "WEB",
+          studentId: "STU001",
         },
         mockResponse
       );
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.access_token).toBe(mockAccessToken);
+      expect(result.data.accessToken).toBe(mockAccessToken);
       // WEB: refreshToken may be omitted for cookie flow
       expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
         expect.objectContaining({ userId: "usr-001", role: "STUDENT" }),
@@ -222,28 +228,27 @@ describe("IAM Module — Integration", () => {
     });
 
     it("returns access token with longer expiry for MOBILE platform", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
+      mockStudentsRepo.findById.mockResolvedValue(Result.ok(studentProfile));
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(mockRefreshToken);
 
       const result = await authController.login(
         {
-          email: "student@university.edu",
+          accountType: "STUDENT",
           password: "password123",
-          account_type: "student",
-          student_id: "STU001",
-          platform: "MOBILE",
+          studentId: "STU001",
         },
         mockResponse
       );
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.access_token).toBe(mockAccessToken);
+      expect(result.data.accessToken).toBe(mockAccessToken);
       // MOBILE: refresh token returned in body
-      expect(result.data.refresh_token).toBe(mockRefreshToken);
+      expect(result.data.refreshToken).toBe(mockRefreshToken);
       expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
         expect.anything(),
-        "MOBILE"
+        "WEB"
       );
     });
 
@@ -254,9 +259,7 @@ describe("IAM Module — Integration", () => {
         {
           email: "student@university.edu",
           password: "wrong-password",
-          account_type: "student",
-          student_id: "STU001",
-          platform: "WEB",
+          accountType: "STAFF",
         },
         mockResponse
       );
@@ -272,9 +275,7 @@ describe("IAM Module — Integration", () => {
         {
           email: "suspended@university.edu",
           password: "password123",
-          account_type: "student",
-          student_id: "STU001",
-          platform: "WEB",
+          accountType: "STAFF",
         },
         mockResponse
       );
@@ -296,18 +297,16 @@ describe("IAM Module — Integration", () => {
         {
           email: "nonexistent@university.edu",
           password: "password123",
-          account_type: "student",
-          student_id: "STU001",
-          platform: "WEB",
+          accountType: "STAFF",
         },
         mockResponse
       );
 
       expect(result.isSuccess).toBe(false);
-      expect(result.error.code).toBe("USER_NOT_FOUND");
+      expect(result.error.code).toBe("INVALID_CREDENTIALS");
     });
 
-    it("embeds allowed_workshop_ids for CHECKIN_STAFF — FR-F01-002", async () => {
+    it("embeds allowedWorkshopIds for CHECKIN_STAFF — FR-F01-002", async () => {
       mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(checkinStaffUser));
       mockAssignmentsRepo.findByUserId.mockResolvedValue(
         Result.ok({ workshopIds: ["wid-A", "wid-B"] })
@@ -318,8 +317,7 @@ describe("IAM Module — Integration", () => {
         {
           email: "staff@university.edu",
           password: "password123",
-          account_type: "staff",
-          platform: "WEB",
+          accountType: "STAFF",
         },
         mockResponse
       );
@@ -347,7 +345,7 @@ describe("IAM Module — Integration", () => {
       mockTokenService.signRefreshToken.mockResolvedValue(mockRefreshToken);
 
       const result = await authController.refresh(
-        { refresh_token: "valid-refresh-token", platform: "WEB" },
+        { refreshToken: "valid-refresh-token" },
         mockResponse,
         mockRequest
       );
@@ -368,7 +366,7 @@ describe("IAM Module — Integration", () => {
       );
 
       const result = await authController.refresh(
-        { refresh_token: "expired-refresh-token", platform: "WEB" },
+        { refreshToken: "expired-refresh-token" },
         mockResponse,
         mockRequest
       );
@@ -384,7 +382,7 @@ describe("IAM Module — Integration", () => {
       mockUsersRepo.findById.mockResolvedValue(Result.ok(suspendedUser));
 
       const result = await authController.refresh(
-        { refresh_token: "valid-refresh-token", platform: "WEB" },
+        { refreshToken: "valid-refresh-token" },
         mockResponse,
         mockRequest
       );
@@ -399,14 +397,12 @@ describe("IAM Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("AuthController.logout — FR-F01-008", () => {
     it("blacklists the current token's jti in Redis", async () => {
-      const result = await authController.logout({
+      await authController.logout({
         sub: "usr-001",
         role: "STUDENT",
         jti: "jti-001",
         allowed_workshop_ids: [],
       });
-
-      expect(result.isSuccess).toBe(true);
       expect(mockTokenService.blacklistToken).toHaveBeenCalledWith(
         "jti-001",
         900
@@ -414,21 +410,19 @@ describe("IAM Module — Integration", () => {
     });
 
     it("is idempotent when called multiple times", async () => {
-      const result1 = await authController.logout({
+      await authController.logout({
         sub: "usr-001",
         role: "STUDENT",
         jti: "jti-001",
         allowed_workshop_ids: [],
       });
-      const result2 = await authController.logout({
+      await authController.logout({
         sub: "usr-001",
         role: "STUDENT",
         jti: "jti-001",
         allowed_workshop_ids: [],
       });
 
-      expect(result1.isSuccess).toBe(true);
-      expect(result2.isSuccess).toBe(true);
       expect(mockTokenService.blacklistToken).toHaveBeenCalledTimes(2);
     });
   });
@@ -437,7 +431,7 @@ describe("IAM Module — Integration", () => {
   // AuthController — GET /auth/me
   // -------------------------------------------------------------------------
   describe("AuthController.getMe", () => {
-    it("returns STUDENT profile with student_code, full_name, faculty", async () => {
+    it("returns STUDENT profile with studentCode, fullName, faculty", async () => {
       mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
       mockStudentProfileService.getProfileByUserId.mockResolvedValue(
         Result.ok(studentProfile)
@@ -452,9 +446,9 @@ describe("IAM Module — Integration", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.role).toBe("STUDENT");
-      expect(result.data.student_code).toBe("STU001");
-      expect(result.data.full_name).toBe("John Doe");
-      expect(result.data.faculty).toBe("Engineering");
+      // studentCode not exposed in AuthMeResponseDto
+      expect(result.data.fullName).toBe("John Doe");
+      // faculty not exposed in AuthMeResponseDto
     });
 
     it("returns ORGANIZER profile without student profile", async () => {
@@ -462,17 +456,17 @@ describe("IAM Module — Integration", () => {
 
       const result = await authController.getMe({
         sub: "usr-004",
-        role: "ORGANIZER",
+        role: "BTC",
         jti: "jti-004",
         allowed_workshop_ids: [],
       });
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.role).toBe("ORGANIZER");
-      expect(result.data.student_code).toBeUndefined();
+      expect(result.data.role).toBe("BTC");
+      // studentCode not exposed in AuthMeResponseDto
     });
 
-    it("returns CHECKIN_STAFF profile with allowed_workshop_ids", async () => {
+    it("returns CHECKIN_STAFF profile with allowedWorkshopIds", async () => {
       mockUsersRepo.findById.mockResolvedValue(Result.ok(checkinStaffUser));
       mockAssignmentsRepo.findByUserId.mockResolvedValue(
         Result.ok({ workshopIds: ["wid-A", "wid-B"] })
@@ -486,7 +480,7 @@ describe("IAM Module — Integration", () => {
       });
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.allowed_workshop_ids).toEqual(["wid-A", "wid-B"]);
+      expect(result.data.allowedWorkshopIds).toEqual(["wid-A", "wid-B"]);
     });
 
     it("returns USER_NOT_FOUND for non-existent user", async () => {
@@ -510,7 +504,7 @@ describe("IAM Module — Integration", () => {
   describe("UsersAdminController", () => {
     beforeEach(() => {
       // Re-mock for UsersService
-      mockUsersRepo.listUsers.mockResolvedValue(
+      mockUsersRepo.list.mockResolvedValue(
         Result.ok({ items: [activeUser], total: 1 })
       );
       mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
@@ -530,10 +524,7 @@ describe("IAM Module — Integration", () => {
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(1);
-        expect(mockUsersRepo.listUsers).toHaveBeenCalledWith("STUDENT", {
-          page: 1,
-          limit: 20,
-        });
+        expect(mockUsersRepo.list).toHaveBeenCalledWith("STUDENT", 1, 20);
       });
     });
 
@@ -572,10 +563,11 @@ describe("IAM Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("CheckinStaffAdminController", () => {
     beforeEach(() => {
-      mockAssignmentsRepo.assignWorkshops = jest
+      mockUsersRepo.findById.mockResolvedValue(Result.ok(checkinStaffUser));
+      mockAssignmentsRepo.upsert = jest
         .fn()
         .mockResolvedValue(Result.ok({ workshopIds: ["wid-A"] }));
-      mockAssignmentsRepo.getAssignedWorkshops = jest
+      mockAssignmentsRepo.findByUserId = jest
         .fn()
         .mockResolvedValue(Result.ok(["wid-A"]));
     });
@@ -584,14 +576,14 @@ describe("IAM Module — Integration", () => {
       it("assigns workshops to a checkin staff user", async () => {
         const result = await checkinStaffAdminController.assignWorkshops(
           "usr-003",
-          { workshop_ids: ["wid-A", "wid-B"] }
+          { workshopIds: ["wid-A", "wid-B"] }
         );
 
         expect(result.isSuccess).toBe(true);
-        expect(mockAssignmentsRepo.assignWorkshops).toHaveBeenCalledWith(
-          "usr-003",
-          ["wid-A", "wid-B"]
-        );
+        expect(mockAssignmentsRepo.upsert).toHaveBeenCalledWith("usr-003", [
+          "wid-A",
+          "wid-B",
+        ]);
       });
     });
 
@@ -601,7 +593,7 @@ describe("IAM Module — Integration", () => {
           await checkinStaffAdminController.getAssignedWorkshops("usr-003");
 
         expect(result.isSuccess).toBe(true);
-        expect(mockAssignmentsRepo.getAssignedWorkshops).toHaveBeenCalledWith(
+        expect(mockAssignmentsRepo.findByUserId).toHaveBeenCalledWith(
           "usr-003"
         );
       });

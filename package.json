@@ -3,10 +3,9 @@
   "private": true,
   "scripts": {
     "dev": "turbo run dev",
-    "dev:apps": "turbo run dev --filter=mobile --filter=server --filter=web",
-    "dev:mobile": "turbo run dev --filter=mobile",
+    "dev:mobile": "turbo run dev --filter=!web",
     "dev:server": "turbo run dev --filter=server",
-    "dev:web": "turbo run dev --filter=web",
+    "dev:web": "turbo run dev --filter=!mobile",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
@@ -16,7 +15,9 @@
     "prepare": "husky",
     "postinstall": "pnpm --filter=@repo/agent-config run sync",
     "agent-config:sync": "pnpm --filter=@repo/agent-config run sync",
-    "agent-config:check": "pnpm --filter=@repo/agent-config run check"
+    "agent-config:check": "pnpm --filter=@repo/agent-config run check",
+    "db:seed": "pnpm --filter=server db:seed",
+    "test:e2e": "pnpm --filter=web test:e2e"
   },
   "devDependencies": {
     "husky": "^9.1.7",

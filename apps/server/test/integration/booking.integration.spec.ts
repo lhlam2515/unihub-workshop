@@ -20,19 +20,19 @@
  * - A-H01: Rate limiter timing
  */
 import { getQueueToken } from "@nestjs/bullmq";
+import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 
 import { NOTIFICATION_QUEUE } from "@/infra/messaging/queue.constants";
+import { RedisService } from "@/infra/redis/redis.service";
 import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
 import { RegistrationsController } from "@/modules/booking/controllers/registrations.controller";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
-import { TicketsRepository } from "@/modules/booking/repositories/tickets.repository";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
 import { RoomsRepository } from "@/modules/catalog/repositories/rooms.repository";
 import { SpeakersRepository } from "@/modules/catalog/repositories/speakers.repository";
-import { WorkshopSlotsRepository } from "@/modules/catalog/repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { RoomConflictService } from "@/modules/catalog/services/room-conflict.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
@@ -40,6 +40,8 @@ import { WorkshopNotificationPublisher } from "@/modules/catalog/services/worksh
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { TokenService } from "@/modules/iam/services/token.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { PaymentsController } from "@/modules/payment/controllers/payments.controller";
 import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { CircuitBreakerMechanic } from "@/modules/payment/mechanics/circuit-breaker.mechanic";
@@ -60,17 +62,7 @@ const mockRegistrationsRepo = {
   findByStudentAndWorkshop: jest.fn(),
   findMyRegistrations: jest.fn(),
   updateStatus: jest.fn(),
-};
-
-const mockTicketsRepo = {
-  create: jest.fn(),
-  findById: jest.fn(),
-  findByQRToken: jest.fn(),
-  findByStudentIdAndStatus: jest.fn(),
-  findByRegistrationId: jest.fn(),
-  updateStatus: jest.fn(),
-  updateStatusByRegistrationId: jest.fn(),
-  findByWorkshopIdAndStatus: jest.fn(),
+  transaction: jest.fn((cb: any) => cb({})),
 };
 
 const mockPaymentsRepo = {
@@ -92,9 +84,11 @@ const mockSeatLock = {
 const mockSeatCounter = {
   getAvailable: jest.fn(),
   decrement: jest.fn(),
+  getCachedSeats: jest.fn(),
   increment: jest.fn(),
   initialize: jest.fn(),
   delete: jest.fn(),
+  invalidateCache: jest.fn(),
 };
 
 const mockIdempotencyMechanic = {
@@ -120,7 +114,10 @@ const mockWorkshopsRepo = {
   update: jest.fn(),
   updateStatus: jest.fn(),
   listAdmin: jest.fn(),
-  completePastPublished: jest.fn(),
+  completePastOpen: jest.fn(),
+  getSeatVersion: jest.fn(),
+  decrementSeat: jest.fn(),
+  incrementSeat: jest.fn(),
 };
 
 const mockRoomConflictService = {
@@ -139,11 +136,6 @@ const mockRoomsRepo = {
   listRooms: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
-};
-
-const mockWorkshopSlotsRepo = {
-  create: jest.fn(),
-  findByWorkshopId: jest.fn(),
 };
 
 const mockWorkshopDocumentsRepo = {
@@ -167,6 +159,11 @@ const mockQueue = {
   add: jest.fn(),
 };
 
+const mockNotificationLogProducer = {
+  createAndEnqueue: jest.fn(),
+  batchCreateAndEnqueue: jest.fn(),
+};
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -183,7 +180,7 @@ const publishedWorkshop = {
     capacity: 100,
     isPaid: false,
     price: null,
-    status: "PUBLISHED",
+    status: "OPEN",
     createdBy: "org-001",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -214,15 +211,19 @@ const registration = {
   studentId: "stu-001",
   workshopId: "wid-001",
   status: "CONFIRMED",
+  qrCode: "qr-reg-001",
+  registeredAt: new Date(),
   confirmedAt: new Date(),
   cancelledAt: null,
+  version: 0,
   createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
 const pendingPaymentRegistration = {
   ...registration,
   registrationId: "reg-002",
-  status: "PENDING_PAYMENT",
+  status: "PENDING",
 };
 
 const ticket = {
@@ -268,18 +269,31 @@ describe("Booking Module — Integration", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
+    // Default mocks for registration flow
+    mockIdempotencyMechanic.check.mockResolvedValue(
+      Result.ok({ proceed: true })
+    );
+    mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
+      Result.ok(null)
+    );
+    mockWorkshopsRepo.getSeatVersion.mockResolvedValue(
+      Result.ok({ version: 1, seatsAvailable: 99 })
+    );
+    mockWorkshopsRepo.decrementSeat.mockResolvedValue(
+      Result.ok({ rowsAffected: 1, newVersion: 2 })
+    );
+    mockSeatCounter.getCachedSeats.mockResolvedValue(99);
+    mockRegistrationsRepo.transaction.mockImplementation(async (cb: any) =>
+      cb({})
+    );
+
     const module = await Test.createTestingModule({
       controllers: [RegistrationsController, PaymentsController],
       providers: [
         RegistrationsService,
         PaymentsService,
-        PaymentGatewayService,
         WorkshopsService,
-        RoomConflictService,
-        SeatCounterService,
-        WorkshopNotificationPublisher,
         { provide: RegistrationsRepository, useValue: mockRegistrationsRepo },
-        { provide: TicketsRepository, useValue: mockTicketsRepo },
         { provide: PaymentsRepository, useValue: mockPaymentsRepo },
         { provide: SeatLockMechanic, useValue: mockSeatLock },
         { provide: SeatCounterService, useValue: mockSeatCounter },
@@ -290,7 +304,6 @@ describe("Booking Module — Integration", () => {
         { provide: RoomConflictService, useValue: mockRoomConflictService },
         { provide: SpeakersRepository, useValue: mockSpeakersRepo },
         { provide: RoomsRepository, useValue: mockRoomsRepo },
-        { provide: WorkshopSlotsRepository, useValue: mockWorkshopSlotsRepo },
         {
           provide: WorkshopDocumentsRepository,
           useValue: mockWorkshopDocumentsRepo,
@@ -301,6 +314,19 @@ describe("Booking Module — Integration", () => {
           useValue: mockNotificationPublisher,
         },
         { provide: getQueueToken(NOTIFICATION_QUEUE), useValue: mockQueue },
+        { provide: TokenService, useValue: { verifyAccessToken: jest.fn() } },
+        {
+          provide: RedisService,
+          useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn() },
+        },
+        {
+          provide: NotificationLogProducer,
+          useValue: mockNotificationLogProducer,
+        },
         provideMockGuard(),
         provideMockRolesGuard(),
         provideMockHmacGuard(),
@@ -322,33 +348,40 @@ describe("Booking Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
+        mockWorkshopsRepo.getSeatVersion.mockResolvedValue(
+          Result.ok({ version: 0, seatsAvailable: 99 })
+        );
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(null)
         );
         mockRegistrationsRepo.create.mockResolvedValue(Result.ok(registration));
-        mockTicketsRepo.create.mockResolvedValue(Result.ok(ticket));
-
         const result = await registrationsController.createRegistration(
-          { workshop_id: "wid-001" },
+          { workshopId: "wid-001" },
           "idem-reg-001",
           studentUser
         );
 
         expect(result.isSuccess).toBe(true);
-        expect(mockSeatCounter.decrement).toHaveBeenCalledWith("wid-001");
+        expect(mockWorkshopsRepo.decrementSeat).toHaveBeenCalledWith(
+          "wid-001",
+          expect.any(Number),
+          expect.any(Object)
+        );
         expect(mockRegistrationsRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
             studentId: "stu-001",
             workshopId: "wid-001",
             status: "CONFIRMED",
-          })
+          }),
+          expect.any(Object)
         );
       });
 
       it("creates a PENDING_PAYMENT registration for a paid workshop — FR-F04-004", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(Result.ok(paidWorkshop));
-        mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
+        mockWorkshopsRepo.getSeatVersion.mockResolvedValue(
+          Result.ok({ version: 0, seatsAvailable: 99 })
+        );
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(null)
         );
@@ -358,7 +391,7 @@ describe("Booking Module — Integration", () => {
         mockSeatLock.acquire.mockResolvedValue(Result.ok());
 
         const result = await registrationsController.createRegistration(
-          { workshop_id: "wid-001" },
+          { workshopId: "wid-001" },
           "idem-reg-001",
           studentUser
         );
@@ -366,8 +399,9 @@ describe("Booking Module — Integration", () => {
         expect(result.isSuccess).toBe(true);
         expect(mockRegistrationsRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
-            status: "PENDING_PAYMENT",
-          })
+            status: "PENDING",
+          }),
+          expect.any(Object)
         );
         // For paid workshops, seat lock should be acquired
         expect(mockSeatLock.acquire).toHaveBeenCalledWith(
@@ -382,35 +416,33 @@ describe("Booking Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(registration)
         );
-        // Should increment seat back on duplicate
-        mockSeatCounter.increment.mockResolvedValue(Result.ok());
-
+        // Duplicate returned before any seat decrement — no rollback needed
         const result = await registrationsController.createRegistration(
-          { workshop_id: "wid-001" },
+          { workshopId: "wid-001" },
           "idem-reg-001",
           studentUser
         );
 
         expect(result.isSuccess).toBe(false);
         expect(result.error.code).toBe("REGISTRATION_DUPLICATE");
-        // Seat should be rolled back
-        expect(mockSeatCounter.increment).toHaveBeenCalledWith("wid-001");
       });
 
       it("returns SEAT_UNAVAILABLE when workshop is sold out — FR-F04-002", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockSeatCounter.decrement.mockResolvedValue(
+        mockWorkshopsRepo.getSeatVersion.mockResolvedValue(
+          Result.ok({ version: 0 })
+        );
+        mockWorkshopsRepo.decrementSeat.mockResolvedValue(
           Result.fail(seatErrors.unavailable("wid-001"))
         );
 
         const result = await registrationsController.createRegistration(
-          { workshop_id: "wid-001" },
+          { workshopId: "wid-001" },
           "idem-reg-001",
           studentUser
         );
@@ -423,21 +455,24 @@ describe("Booking Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockSeatCounter.decrement.mockResolvedValue(Result.ok(99));
+        mockWorkshopsRepo.getSeatVersion.mockResolvedValue(
+          Result.ok({ version: 0, seatsAvailable: 99 })
+        );
         mockRegistrationsRepo.findByStudentAndWorkshop.mockResolvedValue(
           Result.ok(null)
         );
         mockRegistrationsRepo.create.mockResolvedValue(Result.ok(registration));
 
         await registrationsController.createRegistration(
-          { workshop_id: "wid-001" },
+          { workshopId: "wid-001" },
           "idem-reg-001",
           studentUser
         );
 
         // Verify the registration is created with jwt.sub, not from body
         expect(mockRegistrationsRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({ studentId: "stu-001" })
+          expect.objectContaining({ studentId: "stu-001" }),
+          expect.any(Object)
         );
       });
     });
@@ -488,9 +523,6 @@ describe("Booking Module — Integration", () => {
         mockRegistrationsRepo.updateStatus.mockResolvedValue(
           Result.ok({ ...registration, status: "CANCELLED" })
         );
-        mockTicketsRepo.updateStatusByRegistrationId.mockResolvedValue(
-          Result.ok()
-        );
         mockSeatCounter.increment.mockResolvedValue(Result.ok());
 
         const result = await registrationsController.cancelRegistration(
@@ -503,10 +535,7 @@ describe("Booking Module — Integration", () => {
           "reg-001",
           "CANCELLED"
         );
-        expect(
-          mockTicketsRepo.updateStatusByRegistrationId
-        ).toHaveBeenCalledWith("reg-001", "VOID");
-        expect(mockSeatCounter.increment).toHaveBeenCalled();
+        expect(mockSeatCounter.invalidateCache).toHaveBeenCalled();
       });
 
       it("enforces IDOR — returns REGISTRATION_NOT_FOUND for another student's registration", async () => {
@@ -558,7 +587,7 @@ describe("Booking Module — Integration", () => {
 
     const completedPayment = {
       ...payment,
-      status: "SUCCESS",
+      status: "SUCCEEDED",
       gatewayTxnId: "txn-001",
       completedAt: new Date(),
     };
@@ -594,7 +623,7 @@ describe("Booking Module — Integration", () => {
         });
 
         await paymentsController.createPayment(
-          { registration_id: "reg-002", gateway: "VNPAY" },
+          { registrationId: "reg-002", gateway: "VNPAY" },
           "idem-001",
           studentUser
         );
@@ -617,7 +646,7 @@ describe("Booking Module — Integration", () => {
         );
 
         const result = await paymentsController.createPayment(
-          { registration_id: "reg-002", gateway: "VNPAY" },
+          { registrationId: "reg-002", gateway: "VNPAY" },
           "idem-001",
           studentUser
         );
@@ -637,7 +666,7 @@ describe("Booking Module — Integration", () => {
         );
 
         const result = await paymentsController.createPayment(
-          { registration_id: "reg-002", gateway: "VNPAY" },
+          { registrationId: "reg-002", gateway: "VNPAY" },
           "idem-001",
           studentUser
         );
@@ -652,7 +681,7 @@ describe("Booking Module — Integration", () => {
         );
 
         const result = await paymentsController.createPayment(
-          { registration_id: "reg-invalid", gateway: "VNPAY" },
+          { registrationId: "reg-invalid", gateway: "VNPAY" },
           "idem-001",
           studentUser
         );
@@ -668,7 +697,7 @@ describe("Booking Module — Integration", () => {
         });
 
         await paymentsController.createPayment(
-          { registration_id: "reg-002", gateway: "VNPAY" },
+          { registrationId: "reg-002", gateway: "VNPAY" },
           "idem-001",
           studentUser
         );
@@ -696,9 +725,6 @@ describe("Booking Module — Integration", () => {
               workshopId: "wid-001",
             })
           );
-          mockTicketsRepo.create = jest
-            .fn()
-            .mockResolvedValue(Result.ok(ticket));
           return cb(tx);
         });
         mockSeatLock.release = jest.fn().mockResolvedValue(undefined);
@@ -707,8 +733,8 @@ describe("Booking Module — Integration", () => {
 
         const result = await paymentsController.handleWebhook("VNPAY", {
           status: "SUCCESS",
-          gateway_txn_id: "txn-001",
-          idempotency_key: "idem-001",
+          gatewayTxnId: "txn-001",
+          idempotencyKey: "idem-001",
         });
 
         expect(result.isSuccess).toBe(true);
@@ -733,8 +759,8 @@ describe("Booking Module — Integration", () => {
 
         const result = await paymentsController.handleWebhook("VNPAY", {
           status: "FAILED",
-          gateway_txn_id: "txn-001",
-          idempotency_key: "idem-001",
+          gatewayTxnId: "txn-001",
+          idempotencyKey: "idem-001",
         });
 
         expect(result.isSuccess).toBe(true);
@@ -751,8 +777,8 @@ describe("Booking Module — Integration", () => {
 
         const result = await paymentsController.handleWebhook("VNPAY", {
           status: "SUCCESS",
-          gateway_txn_id: "txn-001",
-          idempotency_key: "idem-001",
+          gatewayTxnId: "txn-001",
+          idempotencyKey: "idem-001",
         });
 
         expect(result.isSuccess).toBe(false);

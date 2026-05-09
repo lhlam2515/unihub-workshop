@@ -16,23 +16,32 @@ import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
+import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import {
   NOTIFICATION_QUEUE,
   STUDENT_SYNC_QUEUE,
 } from "@/infra/messaging/queue.constants";
 import { RedisService } from "@/infra/redis/redis.service";
+import { StorageService } from "@/infra/storage/storage.service";
 import { SystemAdminController } from "@/modules/background/controllers/system-admin.controller";
 import { SystemMonitorService } from "@/modules/background/services/system-monitor.service";
+import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { StudentSyncAdminController } from "@/modules/csv-sync/controllers/student-sync-admin.controller";
 import { StudentSyncErrorsRepository } from "@/modules/csv-sync/repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "@/modules/csv-sync/repositories/student-sync-jobs.repository";
 import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
+import { UsersRepository } from "@/modules/iam/repositories/users.repository";
+import { TokenService } from "@/modules/iam/services/token.service";
 import { NotificationsAdminController } from "@/modules/notification/controllers/notifications-admin.controller";
 import { NotificationChannelConfigsRepository } from "@/modules/notification/repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "@/modules/notification/repositories/notification-logs.repository";
 import { NotificationsService } from "@/modules/notification/services/notifications.service";
+import { CircuitBreakerMechanic } from "@/modules/payment/mechanics/circuit-breaker.mechanic";
+import { PaymentReconciliationService } from "@/modules/payment/services/payment-reconciliation.service";
+import { PaymentsService } from "@/modules/payment/services/payments.service";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------
@@ -84,6 +93,43 @@ const mockSchema = {
 
 const mockQueue = {
   add: jest.fn(),
+  enqueue: jest.fn(),
+};
+
+const mockTokenService = {
+  verifyAccessToken: jest.fn(),
+};
+
+const mockStudentsRepo = {
+  findByStudentCode: jest.fn(),
+  create: jest.fn(),
+};
+
+const mockUsersRepo = {
+  findById: jest.fn(),
+};
+
+const mockStorageService = {
+  getFileStream: jest.fn(),
+};
+
+const mockPaymentsService = {
+  countPending: jest.fn(),
+  countOverdue: jest.fn(),
+};
+
+const mockWorkshopsService = {
+  getPublishedWorkshopsBasic: jest.fn(),
+  getPublishedById: jest.fn(),
+};
+
+const mockCircuitBreakerMechanic = {
+  getGatewayState: jest.fn(),
+  reset: jest.fn(),
+};
+
+const mockPaymentReconciliationService = {
+  reconcile: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -170,9 +216,24 @@ describe("Background Module — Integration", () => {
         { provide: StudentSyncErrorsRepository, useValue: mockSyncErrorsRepo },
         { provide: DATABASE_CONNECTION, useValue: mockDb },
         { provide: DATABASE_SCHEMA, useValue: mockSchema },
+        { provide: TokenService, useValue: { verifyAccessToken: jest.fn() } },
         { provide: RedisService, useValue: mockRedisService },
         { provide: getQueueToken(NOTIFICATION_QUEUE), useValue: mockQueue },
         { provide: getQueueToken(STUDENT_SYNC_QUEUE), useValue: mockQueue },
+        { provide: StudentsRepository, useValue: mockStudentsRepo },
+        { provide: UsersRepository, useValue: mockUsersRepo },
+        { provide: StorageService, useValue: mockStorageService },
+        { provide: PaymentsService, useValue: mockPaymentsService },
+        { provide: WorkshopsService, useValue: mockWorkshopsService },
+        {
+          provide: CircuitBreakerMechanic,
+          useValue: mockCircuitBreakerMechanic,
+        },
+        {
+          provide: PaymentReconciliationService,
+          useValue: mockPaymentReconciliationService,
+        },
+        { provide: MESSAGING_TOKEN.STUDENT_SYNC_QUEUE, useValue: mockQueue },
         provideMockGuard(),
         provideMockRolesGuard(),
       ],
@@ -272,7 +333,7 @@ describe("Background Module — Integration", () => {
 
         const result = await notificationsAdminController.updateChannelConfig(
           "EMAIL",
-          { is_active: false }
+          { isActive: false }
         );
 
         expect(result.isSuccess).toBe(true);
@@ -291,10 +352,10 @@ describe("Background Module — Integration", () => {
     describe("triggerSync", () => {
       it("triggers a sync job and enqueues it", async () => {
         mockSyncJobsRepo.create.mockResolvedValue(Result.ok(syncJob));
-        mockQueue.add.mockResolvedValue(undefined);
+        mockQueue.enqueue.mockResolvedValue(undefined);
 
         const result = await studentSyncAdminController.triggerSync({
-          source_file_name: "students_2026.csv",
+          sourceFileName: "students_2026.csv",
         });
 
         expect(result.isSuccess).toBe(true);
@@ -304,7 +365,7 @@ describe("Background Module — Integration", () => {
           sourceFileName: "students_2026.csv",
         });
         // Should enqueue the job for background processing
-        expect(mockQueue.add).toHaveBeenCalled();
+        expect(mockQueue.enqueue).toHaveBeenCalled();
       });
     });
 
@@ -377,20 +438,18 @@ describe("Background Module — Integration", () => {
   describe("SystemAdminController — FR-F10-001", () => {
     describe("getPaymentTimeoutJobStatus", () => {
       it("returns payment timeout job status with counts", async () => {
-        // mockDb.select chain
-        const mockWhere = jest.fn().mockResolvedValue([{ count: 10 }]);
-        mockDb.select.mockReturnValue({
-          from: () => ({ where: mockWhere }),
-        });
+        mockPaymentsService.countPending.mockResolvedValue(Result.ok(10));
+        mockPaymentsService.countOverdue.mockResolvedValue(Result.ok(5));
+        mockRedisService.get.mockResolvedValue(null);
 
         const result = await systemAdminController.getPaymentTimeoutJobStatus();
 
         expect(result.isSuccess).toBe(true);
         expect(result.data).toEqual(
           expect.objectContaining({
-            pending_count: expect.any(Number),
-            timeout_count: expect.any(Number),
-            job_status: expect.any(String),
+            pendingCount: expect.any(Number),
+            timeoutCount: expect.any(Number),
+            jobStatus: expect.any(String),
           })
         );
       });
@@ -398,18 +457,18 @@ describe("Background Module — Integration", () => {
 
     describe("getReconciliationJobStatus", () => {
       it("returns reconciliation status", async () => {
-        const mockWhere = jest.fn().mockResolvedValue([]);
-        mockDb.select.mockReturnValue({
-          from: () => ({ where: mockWhere }),
-        });
+        mockWorkshopsService.getPublishedWorkshopsBasic.mockResolvedValue(
+          Result.ok([])
+        );
+        mockRedisService.get.mockResolvedValue(null);
 
         const result = await systemAdminController.getReconciliationJobStatus();
 
         expect(result.isSuccess).toBe(true);
         expect(result.data).toEqual(
           expect.objectContaining({
-            total_workshops: expect.any(Number),
-            discrepancies_found: expect.any(Number),
+            totalWorkshops: expect.any(Number),
+            discrepanciesFound: expect.any(Number),
           })
         );
       });
@@ -417,9 +476,15 @@ describe("Background Module — Integration", () => {
 
     describe("getCircuitBreakerStatus", () => {
       it("returns circuit breaker states for all gateways", async () => {
-        mockRedisService.hGetAll.mockResolvedValue({
-          state: "CLOSED",
-          failure_count: "0",
+        mockCircuitBreakerMechanic.getGatewayState.mockReturnValue({
+          state: "CLOSED" as const,
+          failureCount: 0,
+          totalCount: 0,
+          windowStart: Date.now(),
+          openedAt: 0,
+          lastAttempt: 0,
+          lastFailureAt: 0,
+          halfOpenSuccessCount: 0,
         });
 
         const result = await systemAdminController.getCircuitBreakerStatus();
@@ -430,21 +495,33 @@ describe("Background Module — Integration", () => {
       });
 
       it("reports OPEN state gateways with recovery deadline", async () => {
-        const openedAt = new Date(Date.now() - 10000).toISOString();
-        mockRedisService.hGetAll.mockImplementation((key: string) => {
-          if (key.includes("VNPAY")) {
-            return Promise.resolve({
-              state: "OPEN",
-              failure_count: "5",
-              opened_at: openedAt,
-              last_attempt: openedAt,
-            });
+        const openedAt = Date.now() - 10000;
+        mockCircuitBreakerMechanic.getGatewayState.mockImplementation(
+          (gateway: string) => {
+            if (gateway === "VNPAY") {
+              return {
+                state: "OPEN" as const,
+                failureCount: 5,
+                totalCount: 5,
+                windowStart: Date.now() - 60000,
+                openedAt,
+                lastAttempt: openedAt,
+                lastFailureAt: openedAt,
+                halfOpenSuccessCount: 0,
+              };
+            }
+            return {
+              state: "CLOSED" as const,
+              failureCount: 0,
+              totalCount: 0,
+              windowStart: Date.now(),
+              openedAt: 0,
+              lastAttempt: 0,
+              lastFailureAt: 0,
+              halfOpenSuccessCount: 0,
+            };
           }
-          return Promise.resolve({
-            state: "CLOSED",
-            failure_count: "0",
-          });
-        });
+        );
 
         const result = await systemAdminController.getCircuitBreakerStatus();
 
@@ -453,20 +530,30 @@ describe("Background Module — Integration", () => {
           (s: any) => s.gateway === "VNPAY"
         )!;
         expect(vnpayStatus.state).toBe("OPEN");
-        expect(vnpayStatus.failure_count).toBe(5);
-        expect(vnpayStatus.recovery_deadline).toBeDefined();
+        expect(vnpayStatus.failureCount).toBe(5);
+        expect(vnpayStatus.recoveryDeadline).toBeDefined();
       });
     });
 
     describe("resetCircuitBreaker", () => {
       it("resets a gateway circuit breaker to CLOSED", async () => {
-        mockRedisService.hSet.mockResolvedValue(1);
+        mockCircuitBreakerMechanic.reset.mockImplementation(() => {});
+        mockCircuitBreakerMechanic.getGatewayState.mockReturnValue({
+          state: "CLOSED" as const,
+          failureCount: 0,
+          totalCount: 0,
+          windowStart: Date.now(),
+          openedAt: 0,
+          lastAttempt: Date.now(),
+          lastFailureAt: 0,
+          halfOpenSuccessCount: 0,
+        });
 
         const result = await systemAdminController.resetCircuitBreaker("VNPAY");
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.state).toBe("CLOSED");
-        expect(result.data.failure_count).toBe(0);
+        expect(result.data.failureCount).toBe(0);
       });
 
       it("handles unknown gateway gracefully", async () => {

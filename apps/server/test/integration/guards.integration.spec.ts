@@ -12,16 +12,18 @@
 import crypto from "node:crypto";
 
 import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
-import jwt from "jsonwebtoken";
 
 import { RedisService } from "@/infra/redis/redis.service";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { WorkshopScopeGuard } from "@/modules/iam/guards/workshop-scope.guard";
+import { TokenService } from "@/modules/iam/services/token.service";
 import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
+import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,12 +63,9 @@ describe("JwtAuthGuard — FR-F01-004", () => {
   let guard: JwtAuthGuard;
   let mockReflector: Record<string, jest.Mock>;
   let mockRedisService: Record<string, jest.Mock>;
+  let mockTokenService: Record<string, jest.Mock>;
 
-  const validToken = jwt.sign(
-    { sub: "usr-001", role: "STUDENT", jti: "jti-001" },
-    "test-secret",
-    { expiresIn: "15m" }
-  );
+  const expectedPayload = { sub: "usr-001", role: "STUDENT", jti: "jti-001" };
 
   beforeAll(() => {
     process.env = { ...OLD_ENV, JWT_SECRET: "test-secret" };
@@ -83,11 +82,15 @@ describe("JwtAuthGuard — FR-F01-004", () => {
     mockRedisService = {
       get: jest.fn(),
     };
+    mockTokenService = {
+      verifyAccessToken: jest.fn(),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
         JwtAuthGuard,
         { provide: Reflector, useValue: mockReflector },
+        { provide: TokenService, useValue: mockTokenService },
         { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
@@ -105,7 +108,7 @@ describe("JwtAuthGuard — FR-F01-004", () => {
       expect(result).toBe(true);
       expect(mockReflector.getAllAndOverride).toHaveBeenCalledWith(
         IS_PUBLIC_KEY,
-        [ctx.getHandler(), ctx.getClass()]
+        [expect.any(Function), expect.any(Function)]
       );
     });
   });
@@ -113,14 +116,20 @@ describe("JwtAuthGuard — FR-F01-004", () => {
   describe("valid token passes", () => {
     it("returns true for a valid non-blacklisted token", async () => {
       mockReflector.getAllAndOverride.mockReturnValue(false);
+      mockTokenService.verifyAccessToken.mockResolvedValue(
+        Result.ok(expectedPayload)
+      );
       mockRedisService.get.mockResolvedValue(null);
 
       const ctx = mockExecutionContext({
-        headers: { authorization: `Bearer ${validToken}` },
+        headers: { authorization: "Bearer valid-token" },
       });
       const result = await guard.canActivate(ctx);
 
       expect(result).toBe(true);
+      expect(mockTokenService.verifyAccessToken).toHaveBeenCalledWith(
+        "valid-token"
+      );
     });
   });
 
@@ -149,6 +158,13 @@ describe("JwtAuthGuard — FR-F01-004", () => {
   describe("invalid token throws UnauthorizedException", () => {
     it("throws when token is expired or malformed", async () => {
       mockReflector.getAllAndOverride.mockReturnValue(false);
+      mockTokenService.verifyAccessToken.mockResolvedValue(
+        Result.fail({
+          code: "TOKEN_INVALID",
+          category: "AUTH",
+          message: "Invalid token",
+        })
+      );
 
       const ctx = mockExecutionContext({
         headers: { authorization: "Bearer invalid-token" },
@@ -156,19 +172,28 @@ describe("JwtAuthGuard — FR-F01-004", () => {
       await expect(guard.canActivate(ctx)).rejects.toThrow(
         UnauthorizedException
       );
+      expect(mockTokenService.verifyAccessToken).toHaveBeenCalledWith(
+        "invalid-token"
+      );
     });
   });
 
   describe("blacklisted token throws UnauthorizedException", () => {
     it("throws when the token jti exists in Redis blacklist", async () => {
       mockReflector.getAllAndOverride.mockReturnValue(false);
+      mockTokenService.verifyAccessToken.mockResolvedValue(
+        Result.ok(expectedPayload)
+      );
       mockRedisService.get.mockResolvedValue("revoked");
 
       const ctx = mockExecutionContext({
-        headers: { authorization: `Bearer ${validToken}` },
+        headers: { authorization: "Bearer valid-token" },
       });
       await expect(guard.canActivate(ctx)).rejects.toThrow(
         UnauthorizedException
+      );
+      expect(mockTokenService.verifyAccessToken).toHaveBeenCalledWith(
+        "valid-token"
       );
       expect(mockRedisService.get).toHaveBeenCalledWith(
         "token:blacklist:jti-001"
@@ -318,23 +343,23 @@ describe("WorkshopScopeGuard — FR-F01-006", () => {
 describe("HmacSignatureGuard", () => {
   let guard: HmacSignatureGuard;
 
-  beforeAll(() => {
-    process.env = {
-      ...OLD_ENV,
-      PAYMENT_GATEWAY_SECRETS: JSON.stringify({
+  const mockConfigService = {
+    get: jest.fn().mockReturnValue(
+      JSON.stringify({
         vnpay: "vnpay-secret",
         momo: "momo-secret",
-      }),
-    };
-  });
-
-  afterAll(() => {
-    process.env = OLD_ENV;
-  });
+      })
+    ),
+  };
 
   beforeEach(async () => {
+    mockConfigService.get.mockClear();
+
     const module = await Test.createTestingModule({
-      providers: [HmacSignatureGuard],
+      providers: [
+        HmacSignatureGuard,
+        { provide: ConfigService, useValue: mockConfigService },
+      ],
     }).compile();
 
     guard = module.get<HmacSignatureGuard>(HmacSignatureGuard);

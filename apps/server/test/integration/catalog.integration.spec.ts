@@ -19,17 +19,20 @@ import { getQueueToken } from "@nestjs/bullmq";
 import { Test } from "@nestjs/testing";
 
 import { AI_SUMMARY_QUEUE } from "@/infra/messaging/queue.constants";
-import { DocumentsAdminController } from "@/modules/ai-summary/controllers/documents-admin.controller";
+import { RedisService } from "@/infra/redis/redis.service";
+import { StorageService } from "@/infra/storage/storage.service";
+import { AiSummaryAdminController } from "@/modules/ai-summary/controllers/ai-summary-admin.controller";
+import { PdfSummaryPipeline } from "@/modules/ai-summary/pipeline/pdf-summary.pipeline";
 import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
-import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
-import { DocumentsService } from "@/modules/ai-summary/services/workshop-documents.service";
+import { AiSummaryService } from "@/modules/ai-summary/services/ai-summary.service";
 import { RoomsAdminController } from "@/modules/catalog/controllers/rooms-admin.controller";
+import { RoomsPublicController } from "@/modules/catalog/controllers/rooms-public.controller";
 import { SpeakersAdminController } from "@/modules/catalog/controllers/speakers-admin.controller";
+import { SpeakersPublicController } from "@/modules/catalog/controllers/speakers-public.controller";
 import { WorkshopsAdminController } from "@/modules/catalog/controllers/workshops-admin.controller";
 import { WorkshopsPublicController } from "@/modules/catalog/controllers/workshops-public.controller";
 import { RoomsRepository } from "@/modules/catalog/repositories/rooms.repository";
 import { SpeakersRepository } from "@/modules/catalog/repositories/speakers.repository";
-import { WorkshopSlotsRepository } from "@/modules/catalog/repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { RoomConflictService } from "@/modules/catalog/services/room-conflict.service";
 import { RoomsService } from "@/modules/catalog/services/rooms.service";
@@ -39,6 +42,8 @@ import { WorkshopNotificationPublisher } from "@/modules/catalog/services/worksh
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { TokenService } from "@/modules/iam/services/token.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -53,7 +58,7 @@ const mockWorkshopsRepo = {
   update: jest.fn(),
   updateStatus: jest.fn(),
   listAdmin: jest.fn(),
-  completePastPublished: jest.fn(),
+  completePastOpen: jest.fn(),
 };
 
 const mockRoomConflictService = {
@@ -62,44 +67,59 @@ const mockRoomConflictService = {
 
 const mockSeatCounterService = {
   getAvailable: jest.fn(),
+  getCachedSeats: jest.fn(),
   initialize: jest.fn(),
   delete: jest.fn(),
 };
 
 const mockSpeakersRepo = {
   findById: jest.fn(),
-  listSpeakers: jest.fn(),
+  findAll: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
 };
 
 const mockRoomsRepo = {
   findById: jest.fn(),
-  listRooms: jest.fn(),
+  findAll: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
-};
-
-const mockWorkshopSlotsRepo = {
-  create: jest.fn(),
-  findByWorkshopId: jest.fn(),
-};
-
-const mockWorkshopDocumentsRepo = {
-  create: jest.fn(),
-  findByWorkshopId: jest.fn(),
-  findById: jest.fn(),
-  delete: jest.fn(),
 };
 
 const mockAiSummariesRepo = {
   findByWorkshopId: jest.fn(),
   retryAiSummary: jest.fn(),
+  updateStatus: jest.fn(),
+  upsert: jest.fn(),
 };
 
 const mockNotificationPublisher = {
   publishEmergencyUpdate: jest.fn(),
   publishCancelled: jest.fn(),
+};
+
+const mockPipeline = {
+  execute: jest.fn(),
+};
+
+const mockStorageService = {
+  uploadFile: jest.fn(),
+};
+
+const mockRedisService = {
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+  setex: jest.fn(),
+};
+
+const mockTokenService = {
+  verifyAccessToken: jest.fn(),
+};
+
+const mockNotificationLogProducer = {
+  createAndEnqueue: jest.fn(),
+  batchCreateAndEnqueue: jest.fn(),
 };
 
 const mockQueue = {
@@ -119,9 +139,8 @@ const draftWorkshop = {
     roomId: "rm-001",
     startsAt: new Date("2026-06-01T08:00:00Z"),
     endsAt: new Date("2026-06-01T10:00:00Z"),
-    capacity: 100,
-    isPaid: false,
-    price: null,
+    seatsTotal: 100,
+    price: 0,
     status: "DRAFT",
     createdBy: "org-001",
     createdAt: new Date(),
@@ -133,20 +152,12 @@ const draftWorkshop = {
 
 const publishedWorkshop = {
   ...draftWorkshop,
-  workshops: { ...draftWorkshop.workshops, status: "PUBLISHED" },
+  workshops: { ...draftWorkshop.workshops, status: "OPEN" },
 };
 
 const cancelledWorkshop = {
   ...draftWorkshop,
   workshops: { ...draftWorkshop.workshops, status: "CANCELLED" },
-};
-
-const workshopSlot = {
-  slotId: "slot-001",
-  workshopId: "wid-001",
-  totalCapacity: 100,
-  confirmedCount: 0,
-  lockedCount: 0,
 };
 
 const speaker = {
@@ -162,7 +173,8 @@ const room = {
   name: "Hall A",
   building: "Main",
   floor: 1,
-  capacity: 100,
+  seatsTotal: 100,
+  price: 0,
   floorPlanUrl: null,
   facilities: ["projector"],
 };
@@ -209,7 +221,9 @@ describe("Catalog Module — Integration", () => {
   let adminController: WorkshopsAdminController;
   let roomsAdminController: RoomsAdminController;
   let speakersAdminController: SpeakersAdminController;
-  let documentsAdminController: DocumentsAdminController;
+  let aiSummaryAdminController: AiSummaryAdminController;
+  let roomsPublicController: RoomsPublicController;
+  let speakersPublicController: SpeakersPublicController;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -219,8 +233,10 @@ describe("Catalog Module — Integration", () => {
         WorkshopsPublicController,
         WorkshopsAdminController,
         RoomsAdminController,
+        RoomsPublicController,
         SpeakersAdminController,
-        DocumentsAdminController,
+        SpeakersPublicController,
+        AiSummaryAdminController,
       ],
       providers: [
         WorkshopsService,
@@ -228,19 +244,22 @@ describe("Catalog Module — Integration", () => {
         SeatCounterService,
         RoomsService,
         SpeakersService,
-        DocumentsService,
+        AiSummaryService,
         WorkshopNotificationPublisher,
         { provide: WorkshopsRepository, useValue: mockWorkshopsRepo },
         { provide: RoomConflictService, useValue: mockRoomConflictService },
         { provide: SeatCounterService, useValue: mockSeatCounterService },
         { provide: SpeakersRepository, useValue: mockSpeakersRepo },
         { provide: RoomsRepository, useValue: mockRoomsRepo },
-        { provide: WorkshopSlotsRepository, useValue: mockWorkshopSlotsRepo },
-        {
-          provide: WorkshopDocumentsRepository,
-          useValue: mockWorkshopDocumentsRepo,
-        },
         { provide: AiSummariesRepository, useValue: mockAiSummariesRepo },
+        { provide: PdfSummaryPipeline, useValue: mockPipeline },
+        { provide: StorageService, useValue: mockStorageService },
+        { provide: TokenService, useValue: mockTokenService },
+        { provide: RedisService, useValue: mockRedisService },
+        {
+          provide: NotificationLogProducer,
+          useValue: mockNotificationLogProducer,
+        },
         {
           provide: WorkshopNotificationPublisher,
           useValue: mockNotificationPublisher,
@@ -262,8 +281,14 @@ describe("Catalog Module — Integration", () => {
     speakersAdminController = module.get<SpeakersAdminController>(
       SpeakersAdminController
     );
-    documentsAdminController = module.get<DocumentsAdminController>(
-      DocumentsAdminController
+    roomsPublicController = module.get<RoomsPublicController>(
+      RoomsPublicController
+    );
+    speakersPublicController = module.get<SpeakersPublicController>(
+      SpeakersPublicController
+    );
+    aiSummaryAdminController = module.get<AiSummaryAdminController>(
+      AiSummaryAdminController
     );
   });
 
@@ -274,56 +299,59 @@ describe("Catalog Module — Integration", () => {
     describe("listPublished — FR-F02-006", () => {
       it("returns only published workshops with available_seats", async () => {
         mockWorkshopsRepo.findPublished.mockResolvedValue(
-          Result.ok({ items: [publishedWorkshop], total: 1 })
+          Result.ok({
+            items: [publishedWorkshop],
+            nextCursor: null,
+            hasMore: false,
+            limit: 20,
+          })
         );
         mockSeatCounterService.getAvailable.mockResolvedValue(95);
 
         const result = await publicController.listPublished({
-          page: 1,
+          cursor: undefined,
           limit: 20,
         });
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(1);
-        expect(result.data.total).toBe(1);
+        expect(result.data.hasMore).toBe(false);
         expect(mockWorkshopsRepo.findPublished).toHaveBeenCalled();
       });
 
-      it("supports filtering by faculty and date range", async () => {
+      it("supports filtering by date range", async () => {
         mockWorkshopsRepo.findPublished.mockResolvedValue(
-          Result.ok({ items: [], total: 0 })
+          Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
         );
 
         await publicController.listPublished({
-          faculty: "Engineering",
-          date_from: new Date("2026-06-01"),
-          date_to: new Date("2026-06-30"),
-          page: 1,
+          dateFrom: new Date("2026-06-01"),
+          dateTo: new Date("2026-06-30"),
+          cursor: undefined,
           limit: 20,
         });
 
         expect(mockWorkshopsRepo.findPublished).toHaveBeenCalledWith(
           expect.objectContaining({
-            faculty: "Engineering",
-            date_from: "2026-06-01",
-            date_to: "2026-06-30",
+            dateFrom: expect.any(Date),
+            dateTo: expect.any(Date),
           })
         );
       });
 
       it("returns empty list when no published workshops exist", async () => {
         mockWorkshopsRepo.findPublished.mockResolvedValue(
-          Result.ok({ items: [], total: 0 })
+          Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
         );
 
         const result = await publicController.listPublished({
-          page: 1,
+          cursor: undefined,
           limit: 20,
         });
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(0);
-        expect(result.data.total).toBe(0);
+        expect(result.data.hasMore).toBe(false);
       });
     });
 
@@ -332,7 +360,7 @@ describe("Catalog Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
-        mockSeatCounterService.getAvailable.mockResolvedValue(95);
+        mockSeatCounterService.getCachedSeats.mockResolvedValue(95);
         mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
           Result.ok({
             summaryId: "sum-001",
@@ -345,7 +373,7 @@ describe("Catalog Module — Integration", () => {
 
         expect(result.isSuccess).toBe(true);
         expect(mockWorkshopsRepo.findById).toHaveBeenCalledWith("wid-001");
-        expect(mockSeatCounterService.getAvailable).toHaveBeenCalledWith(
+        expect(mockSeatCounterService.getCachedSeats).toHaveBeenCalledWith(
           "wid-001"
         );
       });
@@ -390,7 +418,6 @@ describe("Catalog Module — Integration", () => {
         mockWorkshopsRepo.create.mockResolvedValue(
           Result.ok(draftWorkshop.workshops)
         );
-        mockWorkshopSlotsRepo.create.mockResolvedValue(Result.ok(workshopSlot));
         mockSpeakersRepo.findById.mockResolvedValue(Result.ok(speaker));
         mockRoomsRepo.findById.mockResolvedValue(Result.ok(room));
 
@@ -398,12 +425,12 @@ describe("Catalog Module — Integration", () => {
           {
             title: "Introduction to AI",
             description: "A beginner-friendly workshop",
-            speaker_id: "spk-001",
-            room_id: "rm-001",
-            starts_at: new Date("2026-06-01T08:00:00Z"),
-            ends_at: new Date("2026-06-01T10:00:00Z"),
-            capacity: 100,
-            is_paid: false,
+            speakerId: "spk-001",
+            roomId: "rm-001",
+            startsAt: new Date("2026-06-01T08:00:00Z"),
+            endsAt: new Date("2026-06-01T10:00:00Z"),
+            seatsTotal: 100,
+            price: 0,
           },
           creatorUser as any
         );
@@ -432,12 +459,12 @@ describe("Catalog Module — Integration", () => {
         const result = await adminController.createWorkshop(
           {
             title: "Introduction to AI",
-            speaker_id: "spk-001",
-            room_id: "rm-001",
-            starts_at: new Date("2026-06-01T08:00:00Z"),
-            ends_at: new Date("2026-06-01T10:00:00Z"),
-            capacity: 100,
-            is_paid: false,
+            speakerId: "spk-001",
+            roomId: "rm-001",
+            startsAt: new Date("2026-06-01T08:00:00Z"),
+            endsAt: new Date("2026-06-01T10:00:00Z"),
+            seatsTotal: 100,
+            price: 0,
           },
           creatorUser as any
         );
@@ -448,13 +475,10 @@ describe("Catalog Module — Integration", () => {
     });
 
     describe("publishWorkshop — FR-F02-003", () => {
-      it("transitions DRAFT to PUBLISHED and initializes Redis counter", async () => {
+      it("transitions DRAFT to OPEN and initializes Redis counter", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(Result.ok(draftWorkshop));
         mockWorkshopsRepo.updateStatus.mockResolvedValue(
-          Result.ok({ ...draftWorkshop.workshops, status: "PUBLISHED" })
-        );
-        mockWorkshopSlotsRepo.findByWorkshopId.mockResolvedValue(
-          Result.ok(workshopSlot)
+          Result.ok({ ...draftWorkshop.workshops, status: "OPEN" })
         );
         mockRoomsRepo.findById.mockResolvedValue(Result.ok(room));
 
@@ -463,7 +487,7 @@ describe("Catalog Module — Integration", () => {
         expect(result.isSuccess).toBe(true);
         expect(mockWorkshopsRepo.updateStatus).toHaveBeenCalledWith(
           "wid-001",
-          "PUBLISHED"
+          "OPEN"
         );
         expect(mockSeatCounterService.initialize).toHaveBeenCalledWith(
           "wid-001",
@@ -471,7 +495,7 @@ describe("Catalog Module — Integration", () => {
         );
       });
 
-      it("rejects publishing an already PUBLISHED workshop", async () => {
+      it("rejects publishing an already OPEN workshop", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
@@ -479,7 +503,7 @@ describe("Catalog Module — Integration", () => {
         const result = await adminController.publishWorkshop("wid-001");
 
         expect(result.isSuccess).toBe(false);
-        expect(result.error.code).toBe("WORKSHOP_NOT_PUBLISHED");
+        expect(result.error.code).toBe("WORKSHOP_ALREADY_PUBLISHED");
       });
 
       it("rejects publishing a CANCELLED workshop", async () => {
@@ -495,7 +519,7 @@ describe("Catalog Module — Integration", () => {
     });
 
     describe("cancelWorkshop — FR-F02-004", () => {
-      it("cancels a PUBLISHED workshop and deletes Redis counter", async () => {
+      it("cancels an OPEN workshop and deletes Redis counter", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
@@ -504,9 +528,6 @@ describe("Catalog Module — Integration", () => {
             ...publishedWorkshop.workshops,
             status: "CANCELLED",
           })
-        );
-        mockWorkshopSlotsRepo.findByWorkshopId.mockResolvedValue(
-          Result.ok(workshopSlot)
         );
         mockRoomsRepo.findById.mockResolvedValue(Result.ok(room));
 
@@ -534,7 +555,7 @@ describe("Catalog Module — Integration", () => {
     });
 
     describe("emergencyUpdate — FR-F02-005", () => {
-      it("updates scheduling fields of a PUBLISHED workshop", async () => {
+      it("updates scheduling fields of an OPEN workshop", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
@@ -542,21 +563,22 @@ describe("Catalog Module — Integration", () => {
         mockWorkshopsRepo.update.mockResolvedValue(
           Result.ok({ ...publishedWorkshop.workshops, roomId: "rm-002" })
         );
-        mockWorkshopSlotsRepo.findByWorkshopId.mockResolvedValue(
-          Result.ok(workshopSlot)
-        );
         mockRoomsRepo.findById.mockResolvedValue(
           Result.ok({ ...room, roomId: "rm-002", name: "Hall B" })
         );
 
         const result = await adminController.emergencyUpdate("wid-001", {
-          room_id: "rm-002",
+          roomId: "rm-002",
         });
 
         expect(result.isSuccess).toBe(true);
-        expect(mockWorkshopsRepo.update).toHaveBeenCalledWith("wid-001", {
-          roomId: "rm-002",
-        });
+        expect(mockWorkshopsRepo.update).toHaveBeenCalledWith(
+          "wid-001",
+          {
+            roomId: "rm-002",
+          },
+          0
+        );
         // Should fire notification event
         expect(
           mockNotificationPublisher.publishEmergencyUpdate
@@ -567,7 +589,7 @@ describe("Catalog Module — Integration", () => {
         mockWorkshopsRepo.findById.mockResolvedValue(Result.ok(draftWorkshop));
 
         const result = await adminController.emergencyUpdate("wid-001", {
-          room_id: "rm-002",
+          roomId: "rm-002",
         });
 
         expect(result.isSuccess).toBe(false);
@@ -589,7 +611,7 @@ describe("Catalog Module — Integration", () => {
         );
 
         const result = await adminController.emergencyUpdate("wid-001", {
-          room_id: "rm-002",
+          roomId: "rm-002",
         });
 
         expect(result.isSuccess).toBe(false);
@@ -603,7 +625,7 @@ describe("Catalog Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("RoomsAdminController", () => {
     beforeEach(() => {
-      mockRoomsRepo.listRooms.mockResolvedValue(Result.ok([room]));
+      mockRoomsRepo.findAll.mockResolvedValue(Result.ok([room]));
       mockRoomsRepo.create.mockResolvedValue(Result.ok(room));
       mockRoomsRepo.update.mockResolvedValue(Result.ok(room));
     });
@@ -613,7 +635,7 @@ describe("Catalog Module — Integration", () => {
         const result = await roomsAdminController.listRooms();
 
         expect(result.isSuccess).toBe(true);
-        expect(mockRoomsRepo.listRooms).toHaveBeenCalled();
+        expect(mockRoomsRepo.findAll).toHaveBeenCalled();
       });
     });
 
@@ -648,7 +670,7 @@ describe("Catalog Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("SpeakersAdminController", () => {
     beforeEach(() => {
-      mockSpeakersRepo.listSpeakers.mockResolvedValue(Result.ok([speaker]));
+      mockSpeakersRepo.findAll.mockResolvedValue(Result.ok([speaker]));
       mockSpeakersRepo.create.mockResolvedValue(Result.ok(speaker));
       mockSpeakersRepo.update.mockResolvedValue(Result.ok(speaker));
     });
@@ -658,14 +680,14 @@ describe("Catalog Module — Integration", () => {
         const result = await speakersAdminController.listSpeakers();
 
         expect(result.isSuccess).toBe(true);
-        expect(mockSpeakersRepo.listSpeakers).toHaveBeenCalled();
+        expect(mockSpeakersRepo.findAll).toHaveBeenCalled();
       });
     });
 
     describe("createSpeaker", () => {
       it("creates a new speaker", async () => {
         const result = await speakersAdminController.createSpeaker({
-          full_name: "Dr. Smith",
+          fullName: "Dr. Smith",
         });
 
         expect(result.isSuccess).toBe(true);
@@ -676,7 +698,7 @@ describe("Catalog Module — Integration", () => {
     describe("updateSpeaker", () => {
       it("updates an existing speaker", async () => {
         const result = await speakersAdminController.updateSpeaker("spk-001", {
-          full_name: "Dr. Smith Updated",
+          fullName: "Dr. Smith Updated",
         });
 
         expect(result.isSuccess).toBe(true);
@@ -688,120 +710,121 @@ describe("Catalog Module — Integration", () => {
   });
 
   // -------------------------------------------------------------------------
-  // DocumentsAdminController — FR-F03-001, FR-F03-002
+  // AiSummaryAdminController — FR-F03-001, FR-F03-002
   // -------------------------------------------------------------------------
-  describe("DocumentsAdminController", () => {
-    const adminUser = {
-      sub: "org-001",
-      role: "ORGANIZER" as const,
-      jti: "jti-org",
-      allowed_workshop_ids: [] as string[],
-    };
-    const documentRecord = {
-      documentId: "doc-001",
-      workshopId: "wid-001",
-      fileName: "document.pdf",
-      fileUrl: "https://storage.example.com/document.pdf",
-      mimeType: "application/pdf",
-      fileSize: 1024,
-      uploadStatus: "UPLOADED",
-    };
+  describe("AiSummaryAdminController", () => {
+    const mockFile = (): Express.Multer.File => ({
+      fieldname: "file",
+      originalname: "document.pdf",
+      encoding: "7bit",
+      mimetype: "application/pdf",
+      buffer: Buffer.from("mock-pdf-content"),
+      size: 1024,
+      stream: null as any,
+      destination: "",
+      filename: "",
+      path: "",
+    });
 
     beforeEach(() => {
-      mockWorkshopDocumentsRepo.create = jest
-        .fn()
-        .mockResolvedValue(Result.ok(documentRecord));
-      mockWorkshopDocumentsRepo.findByWorkshopId = jest
-        .fn()
-        .mockResolvedValue(Result.ok([documentRecord]));
-      mockWorkshopDocumentsRepo.findById = jest
-        .fn()
-        .mockResolvedValue(Result.ok(documentRecord));
-      mockWorkshopDocumentsRepo.delete = jest
-        .fn()
-        .mockResolvedValue(Result.ok({ deleted: true }));
-      mockAiSummariesRepo.findByWorkshopId = jest
-        .fn()
-        .mockResolvedValue(Result.ok(null));
-      mockAiSummariesRepo.retryAiSummary = jest
-        .fn()
-        .mockResolvedValue(
-          Result.ok({ summaryId: "sum-001", status: "PENDING" })
-        );
+      mockWorkshopsRepo.findById = jest.fn();
+      mockPipeline.execute = jest.fn();
+      mockStorageService.uploadFile = jest.fn();
     });
 
     describe("uploadDocument — FR-F03-001", () => {
-      it("uploads a PDF document and queues AI summary", async () => {
+      it("uploads a PDF and queues AI summary", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
           Result.ok(publishedWorkshop)
         );
+        mockStorageService.uploadFile.mockResolvedValue(Result.ok());
 
-        await documentsAdminController.uploadDocument(
+        const result = await aiSummaryAdminController.uploadDocument(
           "wid-001",
-          mockFile(),
-          adminUser
+          mockFile()
         );
 
-        // DocumentsService.uploadDocument calls workshopsRepo.findById
-        // to verify workshop exists, then creates document record
+        expect(result.isSuccess).toBe(true);
         expect(mockWorkshopsRepo.findById).toHaveBeenCalledWith("wid-001");
+        expect(mockStorageService.uploadFile).toHaveBeenCalled();
       });
-    });
 
-    describe("listDocuments", () => {
-      it("lists documents for a workshop", async () => {
-        const result = await documentsAdminController.listDocuments("wid-001");
-
-        expect(result.isSuccess).toBe(true);
-        expect(mockWorkshopDocumentsRepo.findByWorkshopId).toHaveBeenCalledWith(
-          "wid-001"
-        );
-      });
-    });
-
-    describe("deleteDocument", () => {
-      it("deletes a document", async () => {
-        const result = await documentsAdminController.deleteDocument(
-          "wid-001",
-          "doc-001"
+      it("returns WORKSHOP_NOT_FOUND for non-existent workshop", async () => {
+        mockWorkshopsRepo.findById.mockResolvedValue(
+          Result.fail(workshopErrors.notFound("wid-nonexistent"))
         );
 
-        expect(result.isSuccess).toBe(true);
-        expect(mockWorkshopDocumentsRepo.delete).toHaveBeenCalledWith(
-          "wid-001",
-          "doc-001"
+        const result = await aiSummaryAdminController.uploadDocument(
+          "wid-nonexistent",
+          mockFile()
         );
+
+        expect(result.isSuccess).toBe(false);
+        expect(result.error.code).toBe("WORKSHOP_NOT_FOUND");
       });
     });
 
     describe("getAiSummary", () => {
-      it("returns AI summary for a workshop", async () => {
+      it("returns AI summary when found", async () => {
         const summaryResult = {
           summaryId: "sum-001",
           summaryText: "AI generated summary",
           status: "DONE",
         };
-        mockAiSummariesRepo.findByWorkshopId = jest
-          .fn()
-          .mockResolvedValue(Result.ok(summaryResult));
+        mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+          Result.ok(summaryResult)
+        );
 
-        const result = await documentsAdminController.getAiSummary("wid-001");
+        const result = await aiSummaryAdminController.getAiSummary("wid-001");
+
+        expect(result.isSuccess).toBe(true);
+      });
+
+      it("returns NONE status when no summary exists", async () => {
+        mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
+
+        const result = await aiSummaryAdminController.getAiSummary("wid-001");
+
+        expect(result.isSuccess).toBe(true);
+        if (result.isSuccess) {
+          expect(result.data.status).toBe("NONE");
+        }
+      });
+    });
+
+    describe("retryAiSummary — FR-F03-002", () => {
+      it("retries failed AI summary generation", async () => {
+        mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+          Result.ok({
+            summaryId: "sum-001",
+            status: "FAILED",
+            summaryText: null,
+          })
+        );
+        mockAiSummariesRepo.updateStatus = jest
+          .fn()
+          .mockResolvedValue(Result.ok());
+
+        const result = await aiSummaryAdminController.retryAiSummary("wid-001");
 
         expect(result.isSuccess).toBe(true);
         expect(mockAiSummariesRepo.findByWorkshopId).toHaveBeenCalledWith(
           "wid-001"
         );
       });
-    });
 
-    describe("retryAiSummary — FR-F03-002", () => {
-      it("retries failed AI summary generation", async () => {
-        const result = await documentsAdminController.retryAiSummary("doc-001");
+      it("skips retry when summary is already DONE", async () => {
+        mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+          Result.ok({
+            summaryId: "sum-001",
+            status: "DONE",
+            summaryText: "text",
+          })
+        );
+
+        const result = await aiSummaryAdminController.retryAiSummary("wid-001");
 
         expect(result.isSuccess).toBe(true);
-        expect(mockAiSummariesRepo.retryAiSummary).toHaveBeenCalledWith(
-          "doc-001"
-        );
       });
     });
   });

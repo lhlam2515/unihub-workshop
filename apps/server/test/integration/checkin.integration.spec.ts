@@ -13,6 +13,7 @@
  */
 import { Test } from "@nestjs/testing";
 
+import { RedisService } from "@/infra/redis/redis.service";
 import {
   CheckinController,
   CheckinPreloadController,
@@ -23,6 +24,7 @@ import { CheckinService } from "@/modules/checkin/services/checkin.service";
 import { OfflineSyncService } from "@/modules/checkin/services/offline-sync.service";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
+import { TokenService } from "@/modules/iam/services/token.service";
 import { Result } from "@/shared/response/result";
 
 // ---------------------------------------------------------------------------
@@ -128,6 +130,11 @@ describe("Checkin Module — Integration", () => {
         OfflineSyncService,
         { provide: RegistrationsRepository, useValue: mockRegistrationsRepo },
         { provide: CheckinRecordsRepository, useValue: mockCheckinRecordsRepo },
+        { provide: TokenService, useValue: { verifyAccessToken: jest.fn() } },
+        {
+          provide: RedisService,
+          useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
+        },
         provideMockGuard(),
         provideMockRolesGuard(),
       ],
@@ -364,7 +371,7 @@ describe("Checkin Module — Integration", () => {
         "wid-001",
         undefined,
         undefined,
-        {} as any
+        { header: jest.fn() } as any
       );
 
       expect(result.isSuccess).toBe(true);

@@ -1,5 +1,6 @@
 import { listWorkshops } from "@/features/workshop-browsing/api/catalog.service";
 import type { ApiError } from "@/lib/api/errors";
+import logger from "@/lib/logger";
 import type { WorkshopFilters } from "@/types/workshop";
 import { WorkshopListWidget } from "@/widgets/WorkshopListWidget";
 
@@ -34,6 +35,13 @@ export default async function WorkshopsPage({ searchParams }: PageProps) {
 
   if (result.isFailure) {
     const err = result.error as ApiError;
+
+    // 404 from the listing endpoint means no matching workshops — show empty state
+    if (err.status === 404) {
+      return <WorkshopListWidget initialResult={null} filters={filters} />;
+    }
+
+    logger.error(`Failed to fetch workshops ${err.status}: ${err.message}`);
     return (
       <WorkshopListWidget
         initialResult={null}
