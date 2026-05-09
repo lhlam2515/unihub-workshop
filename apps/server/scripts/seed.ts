@@ -955,6 +955,185 @@ async function seedCheckins(
   );
 }
 
+// ── Phase 7: Supplementary ────────────────────────────────────────────────────
+
+async function seedSupplementary(
+  workshops: WorkshopRow[],
+  studentIds: string[],
+  checkin1UserId: string,
+  checkin2UserId: string,
+  btcUserId: string
+) {
+  const allWorkshopIds = workshops.map((w) => w.workshopId);
+
+  // checkinStaffAssignments: UNIQUE(userId) — one row per checkin staff user
+  await db.insert(schema.checkinStaffAssignments).values([
+    {
+      assignmentId: crypto.randomUUID(),
+      userId: checkin1UserId,
+      workshopIds: allWorkshopIds,
+    },
+    {
+      assignmentId: crypto.randomUUID(),
+      userId: checkin2UserId,
+      workshopIds: allWorkshopIds,
+    },
+  ]);
+
+  // notificationChannelConfigs: UNIQUE(channelType)
+  await db.insert(schema.notificationChannelConfigs).values([
+    {
+      channelConfigId: crypto.randomUUID(),
+      channelType: "APP",
+      isActive: true,
+      configJson: { provider: "internal" },
+    },
+    {
+      channelConfigId: crypto.randomUUID(),
+      channelType: "EMAIL",
+      isActive: true,
+      configJson: { host: "smtp.mock.edu.vn", port: 587 },
+    },
+    {
+      channelConfigId: crypto.randomUUID(),
+      channelType: "TELEGRAM",
+      isActive: false,
+      configJson: { botToken: "MOCK_BOT_TOKEN" },
+    },
+  ]);
+
+  // studentSyncJob (1 SUCCESS run)
+  const syncJobId = crypto.randomUUID();
+  const syncTriggeredAt = new Date(Date.now() - 86_400_000); // yesterday
+  await db.insert(schema.studentSyncJobs).values({
+    jobId: syncJobId,
+    triggeredAt: syncTriggeredAt,
+    sourceFileName: "students_export_2026_05_09.csv",
+    status: "SUCCESS",
+    totalRows: 502,
+    processedRows: 500,
+    errorRows: 2,
+    completedAt: addSeconds(syncTriggeredAt, 45),
+    errorLogUrl: null,
+  });
+
+  // studentSyncErrors (2 bad rows from the job above)
+  await db.insert(schema.studentSyncErrors).values([
+    {
+      errorId: crypto.randomUUID(),
+      jobId: syncJobId,
+      rowNumber: 47,
+      rawData: "23127047,invalid-email,Nguyễn Văn Test",
+      errorReason: "INVALID_FORMAT",
+      errorDetail: "Email không đúng định dạng: invalid-email",
+    },
+    {
+      errorId: crypto.randomUUID(),
+      jobId: syncJobId,
+      rowNumber: 213,
+      rawData: ",,",
+      errorReason: "MISSING_FIELD",
+      errorDetail: "Thiếu studentId và email",
+    },
+  ]);
+
+  // notificationLogs (~30 records)
+  const notifTypes: (typeof schema.notificationLogs.$inferInsert)["type"][] = [
+    "REGISTRATION_CONFIRMED",
+    "WORKSHOP_CANCELLED",
+    "PAYMENT_SUCCESS",
+    "PAYMENT_FAILED",
+    "CHECKIN_REMINDER",
+  ];
+  const channels: (typeof schema.notificationLogs.$inferInsert)["channel"][] = [
+    "EMAIL",
+    "APP",
+  ];
+  const statuses: (typeof schema.notificationLogs.$inferInsert)["status"][] = [
+    "SENT",
+    "SENT",
+    "SENT",
+    "FAILED",
+    "PENDING",
+  ];
+  const notifRows = Array.from({ length: 30 }, (_, i) => ({
+    notificationId: crypto.randomUUID(),
+    userId: studentIds[i % studentIds.length],
+    workshopId: workshops[i % workshops.length].workshopId,
+    type: notifTypes[i % notifTypes.length],
+    channel: channels[i % channels.length],
+    status: statuses[i % statuses.length],
+    payload: { message: `Demo notification #${i + 1}` },
+    sentAt:
+      statuses[i % statuses.length] === "SENT"
+        ? addSeconds(new Date(), -randomInt(3600, 86400))
+        : null,
+    errorMessage:
+      statuses[i % statuses.length] === "FAILED"
+        ? "SMTP connection timeout"
+        : null,
+  }));
+  await db.insert(schema.notificationLogs).values(notifRows);
+
+  // workshopDocuments + aiSummaries (2 COMPLETED workshops)
+  const completedWs = workshops.filter((w) => w.def.status === "COMPLETED");
+  const doc1Id = crypto.randomUUID();
+  const doc2Id = crypto.randomUUID();
+
+  await db.insert(schema.workshopDocuments).values([
+    {
+      documentId: doc1Id,
+      workshopId: completedWs[0].workshopId,
+      fileUrl: "https://storage.mock/docs/workshop-ktvkt.pdf",
+      originalName: "workshop_intro_ktvkt.pdf",
+      fileSizeBytes: 524288,
+      uploadStatus: "PROCESSED",
+      uploadedBy: btcUserId,
+    },
+    {
+      documentId: doc2Id,
+      workshopId: completedWs[1].workshopId,
+      fileUrl: "https://storage.mock/docs/workshop-uiux.pdf",
+      originalName: "speaker_slides_uiux.pdf",
+      fileSizeBytes: 1_048_576,
+      uploadStatus: "PROCESSED",
+      uploadedBy: btcUserId,
+    },
+  ]);
+
+  await db.insert(schema.aiSummaries).values([
+    {
+      summaryId: crypto.randomUUID(),
+      documentId: doc1Id,
+      workshopId: completedWs[0].workshopId,
+      rawText: "Nội dung gốc từ PDF về kỹ năng phỏng vấn...",
+      summaryText:
+        "Workshop cung cấp kiến thức nền tảng về phỏng vấn kỹ thuật, " +
+        "bao gồm cấu trúc dữ liệu, giải thuật, system design, và kỹ năng hành vi. " +
+        "Diễn giả chia sẻ kinh nghiệm thực từ các vòng phỏng vấn tại công ty lớn.",
+      modelUsed: "gpt-4o-mini",
+      status: "DONE",
+      generatedAt: addSeconds(new Date(), -86_400),
+      errorMessage: null,
+    },
+    {
+      summaryId: crypto.randomUUID(),
+      documentId: doc2Id,
+      workshopId: completedWs[1].workshopId,
+      rawText: null,
+      summaryText: null,
+      modelUsed: null,
+      status: "PROCESSING",
+      generatedAt: null,
+      errorMessage: null,
+    },
+  ]);
+
+  console.log(
+    "✓ Supplementary: assignments, channel configs, sync job, 30 notifications, 2 AI summaries"
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -979,6 +1158,13 @@ async function main() {
     tickets,
     identity.checkin1UserId,
     identity.checkin2UserId
+  );
+  await seedSupplementary(
+    workshops,
+    identity.studentIds,
+    identity.checkin1UserId,
+    identity.checkin2UserId,
+    identity.btcUserId
   );
   console.log("✅ Seed complete");
 }
