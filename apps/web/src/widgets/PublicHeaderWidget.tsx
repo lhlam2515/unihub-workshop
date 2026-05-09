@@ -12,18 +12,15 @@ import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import ROUTES from "@/constants/routes";
-import type { User } from "@/types/auth";
+import { useAuth } from "@/context/auth-context";
 
 interface PublicHeaderWidgetProps {
-  user: User | null;
   onLoginClick?: () => void;
 }
 
-export function PublicHeaderWidget({
-  user,
-  onLoginClick,
-}: PublicHeaderWidgetProps) {
+export function PublicHeaderWidget({ onLoginClick }: PublicHeaderWidgetProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const isActive = pathname.startsWith(ROUTES.WORKSHOPS);
 
   return (

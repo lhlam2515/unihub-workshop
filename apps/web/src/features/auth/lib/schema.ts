@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const StudentLoginSchema = z.object({
-  accountType: z.literal("student"),
+  accountType: z.literal("STUDENT"),
   studentId: z
     .string()
     .min(1, "Vui lòng nhập MSSV")
@@ -10,7 +10,7 @@ export const StudentLoginSchema = z.object({
 });
 
 export const StaffLoginSchema = z.object({
-  accountType: z.literal("staff"),
+  accountType: z.literal("STAFF"),
   email: z.string().min(1, "Vui lòng nhập email").email("Email không hợp lệ"),
   password: z.string().min(1, "Vui lòng nhập mật khẩu"),
 });
