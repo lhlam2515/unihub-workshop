@@ -96,7 +96,11 @@ export class WorkshopsRepository {
   }
 
   async findPublished(
-    filters: { dateFrom?: Date; dateTo?: Date } & CursorPaginationInput
+    filters: {
+      dateFrom?: Date;
+      dateTo?: Date;
+      q?: string;
+    } & CursorPaginationInput
   ): Promise<Result<CursorPaginationResult<any>>> {
     return tryCatch(
       async () => {
@@ -108,6 +112,12 @@ export class WorkshopsRepository {
         }
         if (filters.dateTo) {
           conditions.push(lte(this.schema.workshops.startsAt, filters.dateTo));
+        }
+
+        if (filters.q) {
+          conditions.push(
+            sql`${this.schema.workshops.title} ILIKE ${"%" + filters.q + "%"}`
+          );
         }
 
         // Cursor-based pagination: decode cursor and filter by startsAt
@@ -147,13 +157,20 @@ export class WorkshopsRepository {
   }
 
   async listAdmin(
-    filters: { status?: WorkshopStatus } & CursorPaginationInput
+    filters: { status?: WorkshopStatus; q?: string } & CursorPaginationInput
   ): Promise<Result<CursorPaginationResult<any>>> {
     return tryCatch(
       async () => {
         const conditions: ReturnType<typeof eq>[] = [];
         if (filters.status) {
           conditions.push(eq(this.schema.workshops.status, filters.status));
+        }
+
+        // ILIKE search on title
+        if (filters.q) {
+          conditions.push(
+            sql`${this.schema.workshops.title} ILIKE ${"%" + filters.q + "%"}`
+          );
         }
 
         // Cursor-based pagination: decode cursor and filter by createdAt

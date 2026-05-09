@@ -35,6 +35,7 @@ import { Roles } from "@/shared/decorators/roles.decorator";
 import { parseIfMatch } from "@/shared/utils/etag.utils";
 import type { JwtPayload } from "@/types/jwt-payload";
 
+import { CancelWorkshopDto } from "../dto/cancel-workshop.dto";
 import { CreateWorkshopDto } from "../dto/create-workshop.dto";
 import { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
 import { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
@@ -133,8 +134,12 @@ export class WorkshopsAdminController {
    * @returns The published workshop admin detail DTO.
    */
   @Post(":id/publish")
-  async publishWorkshop(@Param("id") id: string) {
-    return this.workshopsService.publishWorkshop(id);
+  async publishWorkshop(
+    @Param("id") id: string,
+    @Headers("if-match") ifMatch?: string
+  ) {
+    const expectedVersion = parseIfMatch(ifMatch) ?? undefined;
+    return this.workshopsService.publishWorkshop(id, expectedVersion);
   }
 
   /**
@@ -171,8 +176,13 @@ export class WorkshopsAdminController {
    * @returns The cancelled workshop admin detail DTO.
    */
   @Post(":id/cancel")
-  async cancelWorkshop(@Param("id") id: string) {
-    return this.workshopsService.cancelWorkshop(id);
+  async cancelWorkshop(
+    @Param("id") id: string,
+    @Body() dto: CancelWorkshopDto,
+    @Headers("if-match") ifMatch?: string
+  ) {
+    const expectedVersion = parseIfMatch(ifMatch) ?? undefined;
+    return this.workshopsService.cancelWorkshop(id, dto, expectedVersion);
   }
 
   /**

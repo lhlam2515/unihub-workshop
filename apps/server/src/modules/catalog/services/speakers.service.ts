@@ -15,6 +15,7 @@ import { SpeakerResponseBuilder } from "../dto/speaker-response.dto";
 import { SpeakersRepository } from "../repositories/speakers.repository";
 
 import type { CreateSpeakerDto } from "../dto/create-speaker.dto";
+import type { ListSpeakersQueryDto } from "../dto/list-speakers-query.dto";
 import type { SpeakerResponseDto } from "../dto/speaker-response.dto";
 import type { UpdateSpeakerDto } from "../dto/update-speaker.dto";
 
@@ -57,8 +58,10 @@ export class SpeakersService {
     return this.speakersRepo.delete(id);
   }
 
-  async listSpeakers(): Promise<Result<SpeakerResponseDto[]>> {
-    const result = await this.speakersRepo.findAll();
+  async listSpeakers(
+    query?: ListSpeakersQueryDto
+  ): Promise<Result<SpeakerResponseDto[]>> {
+    const result = await this.speakersRepo.findAll(query?.q);
     if (result.isFailure) return Result.fail(result.error);
     return Result.ok(result.data.map((s) => SpeakerResponseBuilder.from(s)));
   }

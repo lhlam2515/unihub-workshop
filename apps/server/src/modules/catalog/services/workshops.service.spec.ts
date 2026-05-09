@@ -525,7 +525,10 @@ describe("WorkshopsService", () => {
       seatCounterService.delete.mockResolvedValue();
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.cancelWorkshop("w-001");
+      const result = await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -542,7 +545,10 @@ describe("WorkshopsService", () => {
     it("fails when workshop is already CANCELLED", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockCancelledRow));
 
-      const result = await service.cancelWorkshop("w-001");
+      const result = await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_CANCELLED");
@@ -555,7 +561,10 @@ describe("WorkshopsService", () => {
       );
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.cancelWorkshop("w-001");
+      await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
 
       expect(seatCounterService.delete).not.toHaveBeenCalled();
       expect(notificationPublisher.publishCancelled).toHaveBeenCalled();
@@ -569,7 +578,10 @@ describe("WorkshopsService", () => {
       seatCounterService.delete.mockResolvedValue();
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.cancelWorkshop("w-001");
+      await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
 
       expect(notificationLogProducer.createAndEnqueue).toHaveBeenCalledWith({
         userId: "u-001",
@@ -584,7 +596,12 @@ describe("WorkshopsService", () => {
   // listPublished
   // ---------------------------------------------------------------------------
   describe("listPublished", () => {
-    const query = { cursor: undefined, limit: 20 };
+    const query: any = {
+      cursor: undefined,
+      limit: 20,
+      hasSeats: false,
+      sort: "startsAt",
+    };
 
     it("returns open workshops with seat counts (FR-F02-006)", async () => {
       workshopsRepo.findPublished.mockResolvedValue(
@@ -611,11 +628,10 @@ describe("WorkshopsService", () => {
     });
 
     it("applies date filters from query", async () => {
-      const filteredQuery = {
+      const filteredQuery: any = {
         cursor: undefined,
         limit: 10,
-        dateFrom: new Date("2026-06-01"),
-        dateTo: new Date("2026-06-30"),
+        day: "2026-06-01",
       };
       workshopsRepo.findPublished.mockResolvedValue(
         Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 10 })
@@ -624,7 +640,15 @@ describe("WorkshopsService", () => {
       const result = await service.listPublished(filteredQuery);
 
       expect(result.isSuccess).toBe(true);
-      expect(workshopsRepo.findPublished).toHaveBeenCalledWith(filteredQuery);
+      expect(workshopsRepo.findPublished).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dateFrom: expect.any(Date),
+          dateTo: expect.any(Date),
+          q: undefined,
+          cursor: undefined,
+          limit: 10,
+        })
+      );
     });
   });
 
@@ -720,7 +744,12 @@ describe("WorkshopsService", () => {
   // listAdmin
   // ---------------------------------------------------------------------------
   describe("listAdmin", () => {
-    const query = { cursor: undefined, limit: 20 };
+    const query: any = {
+      cursor: undefined,
+      limit: 20,
+      hasSeats: false,
+      sort: "startsAt",
+    };
 
     it("returns paginated admin workshop list", async () => {
       workshopsRepo.listAdmin.mockResolvedValue(
@@ -744,7 +773,11 @@ describe("WorkshopsService", () => {
     });
 
     it("filters by status when provided", async () => {
-      const filteredQuery = { status: "DRAFT", cursor: undefined, limit: 20 };
+      const filteredQuery: any = {
+        status: "DRAFT",
+        cursor: undefined,
+        limit: 20,
+      };
       workshopsRepo.listAdmin.mockResolvedValue(
         Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
       );

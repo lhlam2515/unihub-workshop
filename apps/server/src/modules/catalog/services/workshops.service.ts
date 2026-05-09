@@ -26,6 +26,7 @@ import { RoomsRepository } from "../repositories/rooms.repository";
 import { SpeakersRepository } from "../repositories/speakers.repository";
 import { WorkshopsRepository } from "../repositories/workshops.repository";
 
+import type { CancelWorkshopDto } from "../dto/cancel-workshop.dto";
 import type { CreateWorkshopDto } from "../dto/create-workshop.dto";
 import type { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
 import type { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
@@ -61,9 +62,20 @@ export class WorkshopsService {
   async listPublished(
     query: ListWorkshopsQueryDto
   ): Promise<Result<CursorPaginationResult<WorkshopSummaryDto>>> {
+    // Convert 'day' (YYYY-MM-DD) to dateFrom/dateTo for repository
+    let dateFrom: Date | undefined;
+    let dateTo: Date | undefined;
+    if (query.day) {
+      const dayStart = new Date(query.day + "T00:00:00+07:00");
+      const dayEnd = new Date(query.day + "T23:59:59.999+07:00");
+      dateFrom = dayStart;
+      dateTo = dayEnd;
+    }
+
     const result = await this.workshopsRepo.findPublished({
-      dateFrom: query.dateFrom,
-      dateTo: query.dateTo,
+      dateFrom,
+      dateTo,
+      q: query.q,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -290,11 +302,20 @@ export class WorkshopsService {
   // Publishing & Emergency Updates
   // ---------------------------------------------------------------------------
 
-  async publishWorkshop(id: string): Promise<Result<WorkshopAdminDetailDto>> {
+  async publishWorkshop(
+    id: string,
+    expectedVersion?: number
+  ): Promise<Result<WorkshopAdminDetailDto>> {
     const workshopResult = await this.workshopsRepo.findById(id);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
     const workshopRow = workshopResult.data!;
     const workshop = workshopRow.workshops;
+
+    if (expectedVersion !== undefined && workshop.version !== expectedVersion) {
+      return Result.fail(
+        concurrentModification("workshop", id, expectedVersion)
+      );
+    }
 
     if (workshop.status !== "DRAFT") {
       return Result.fail(
@@ -404,11 +425,21 @@ export class WorkshopsService {
   // Cancellation
   // ---------------------------------------------------------------------------
 
-  async cancelWorkshop(id: string): Promise<Result<WorkshopAdminDetailDto>> {
+  async cancelWorkshop(
+    id: string,
+    dto: CancelWorkshopDto,
+    expectedVersion?: number
+  ): Promise<Result<WorkshopAdminDetailDto>> {
     const workshopResult = await this.workshopsRepo.findById(id);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
     const workshopRow = workshopResult.data!;
     const workshop = workshopRow.workshops;
+
+    if (expectedVersion !== undefined && workshop.version !== expectedVersion) {
+      return Result.fail(
+        concurrentModification("workshop", id, expectedVersion)
+      );
+    }
 
     if (workshop.status === "CANCELLED") {
       return Result.fail(workshopErrors.cancelled(id));
@@ -425,12 +456,12 @@ export class WorkshopsService {
 
     void this.notificationPublisher.publishCancelled(workshop);
 
-    // Create notification log for workshop owner
+    // Create notification log for workshop owner with cancellation reason
     void this.notificationLogProducer.createAndEnqueue({
       userId: workshop.createdBy,
       workshopId: id,
       type: "WORKSHOP_CANCELLED",
-      payload: { title: workshop.title },
+      payload: { title: workshop.title, reason: dto.reason },
     });
 
     const roomResult = await this.roomsRepo.findById(workshop.roomId ?? "");
@@ -499,9 +530,8 @@ export class WorkshopsService {
     query: ListWorkshopsQueryDto
   ): Promise<Result<CursorPaginationResult<WorkshopAdminDetailDto>>> {
     const result = await this.workshopsRepo.listAdmin({
-      status: query.status as
-        | import("@/infra/database/types/enums.types").WorkshopStatus
-        | undefined,
+      status: query.status,
+      q: query.q,
       cursor: query.cursor,
       limit: query.limit,
     });
