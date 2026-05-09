@@ -25,10 +25,10 @@ import type { Request, Response } from "express";
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: true,
+  secure: process.env.NODE_ENV === "production",
   sameSite: "strict" as const,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  path: "/api/auth/refresh",
+  path: "/api/v1/auth/refresh",
 };
 
 @Controller("auth")
