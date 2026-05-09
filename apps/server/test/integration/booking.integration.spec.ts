@@ -28,6 +28,7 @@ import { RedisService } from "@/infra/redis/redis.service";
 import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { WorkshopDocumentsRepository } from "@/modules/ai-summary/repositories/workshop-documents.repository";
 import { RegistrationsController } from "@/modules/booking/controllers/registrations.controller";
+import { ListRegistrationsQueryDto } from "@/modules/booking/dto/list-registrations-query.dto";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
@@ -483,15 +484,16 @@ describe("Booking Module — Integration", () => {
           Result.ok({ items: [registration], total: 1 })
         );
 
-        const result =
-          await registrationsController.getMyRegistrations(studentUser);
+        const result = await registrationsController.getMyRegistrations(
+          studentUser,
+          {} as ListRegistrationsQueryDto
+        );
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(1);
         expect(mockRegistrationsRepo.findMyRegistrations).toHaveBeenCalledWith(
           "stu-001",
-          undefined,
-          { page: undefined, limit: undefined }
+          expect.any(ListRegistrationsQueryDto)
         );
       });
 
@@ -500,17 +502,14 @@ describe("Booking Module — Integration", () => {
           Result.ok({ items: [], total: 0 })
         );
 
-        await registrationsController.getMyRegistrations(
-          studentUser,
-          "CONFIRMED",
-          "1",
-          "20"
-        );
+        await registrationsController.getMyRegistrations(studentUser, {
+          status: ["CONFIRMED"],
+          limit: 20,
+        } as ListRegistrationsQueryDto);
 
         expect(mockRegistrationsRepo.findMyRegistrations).toHaveBeenCalledWith(
           "stu-001",
-          "CONFIRMED",
-          { page: 1, limit: 20 }
+          expect.objectContaining({ status: ["CONFIRMED"], limit: 20 })
         );
       });
     });

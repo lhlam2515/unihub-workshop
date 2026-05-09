@@ -35,7 +35,10 @@ import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
 import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import { TokenService } from "@/modules/iam/services/token.service";
-import { NotificationsAdminController } from "@/modules/notification/controllers/notifications-admin.controller";
+import {
+  NotificationChannelsController,
+  NotificationsAdminController,
+} from "@/modules/notification/controllers/notifications-admin.controller";
 import { NotificationChannelConfigsRepository } from "@/modules/notification/repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "@/modules/notification/repositories/notification-logs.repository";
 import { NotificationsService } from "@/modules/notification/services/notifications.service";
@@ -189,6 +192,7 @@ function provideMockRolesGuard() {
 describe("Background Module — Integration", () => {
   let notificationsAdminController: NotificationsAdminController;
   let studentSyncAdminController: StudentSyncAdminController;
+  let notificationChannelsController: NotificationChannelsController;
   let systemAdminController: SystemAdminController;
 
   beforeEach(async () => {
@@ -197,6 +201,7 @@ describe("Background Module — Integration", () => {
     const module = await Test.createTestingModule({
       controllers: [
         NotificationsAdminController,
+        NotificationChannelsController,
         StudentSyncAdminController,
         SystemAdminController,
       ],
@@ -242,6 +247,9 @@ describe("Background Module — Integration", () => {
     notificationsAdminController = module.get<NotificationsAdminController>(
       NotificationsAdminController
     );
+    notificationChannelsController = module.get<NotificationChannelsController>(
+      NotificationChannelsController
+    );
     studentSyncAdminController = module.get<StudentSyncAdminController>(
       StudentSyncAdminController
     );
@@ -257,43 +265,40 @@ describe("Background Module — Integration", () => {
     describe("listLogs", () => {
       it("returns paginated notification logs with filters", async () => {
         mockNotificationLogsRepo.findMany.mockResolvedValue(
-          Result.ok({ items: [notificationLog], total: 1 })
+          Result.ok({
+            items: [notificationLog],
+            nextCursor: null,
+            hasMore: false,
+            limit: 20,
+          })
         );
 
         const result = await notificationsAdminController.listLogs({
           status: "SENT",
           channel: "EMAIL",
-          type: "REGISTRATION_CONFIRMED",
-          page: 1,
           limit: 20,
         });
 
         expect(result.isSuccess).toBe(true);
-        expect(mockNotificationLogsRepo.findMany).toHaveBeenCalledWith(
-          {
-            status: "SENT",
-            channel: "EMAIL",
-            type: "REGISTRATION_CONFIRMED",
-            userId: undefined,
-            workshopId: undefined,
-          },
-          { page: 1, limit: 20 }
-        );
+        expect(mockNotificationLogsRepo.findMany).toHaveBeenCalledWith({
+          status: "SENT",
+          channel: "EMAIL",
+          limit: 20,
+        });
       });
 
       it("returns empty list when no logs match filters", async () => {
         mockNotificationLogsRepo.findMany.mockResolvedValue(
-          Result.ok({ items: [], total: 0 })
+          Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
         );
 
         const result = await notificationsAdminController.listLogs({
-          page: 1,
           limit: 20,
         });
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(0);
-        expect(result.data.total).toBe(0);
+        expect(result.data.hasMore).toBe(false);
       });
     });
 
@@ -318,7 +323,8 @@ describe("Background Module — Integration", () => {
           Result.ok([channelConfig])
         );
 
-        const result = await notificationsAdminController.listChannelConfigs();
+        const result =
+          await notificationChannelsController.listChannelConfigs();
 
         expect(result.isSuccess).toBe(true);
         expect(mockChannelConfigsRepo.findAll).toHaveBeenCalled();
@@ -331,7 +337,7 @@ describe("Background Module — Integration", () => {
           Result.ok({ ...channelConfig, isActive: false })
         );
 
-        const result = await notificationsAdminController.updateChannelConfig(
+        const result = await notificationChannelsController.updateChannelConfig(
           "EMAIL",
           { isActive: false }
         );
@@ -372,18 +378,21 @@ describe("Background Module — Integration", () => {
     describe("listJobs", () => {
       it("returns paginated sync jobs", async () => {
         mockSyncJobsRepo.findMany.mockResolvedValue(
-          Result.ok({ items: [syncJob], total: 1 })
+          Result.ok({
+            items: [syncJob],
+            nextCursor: null,
+            hasMore: false,
+            limit: 20,
+          })
         );
 
         const result = await studentSyncAdminController.listJobs({
-          page: 1,
           limit: 20,
         });
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(1);
         expect(mockSyncJobsRepo.findMany).toHaveBeenCalledWith({
-          page: 1,
           limit: 20,
         });
       });
@@ -531,7 +540,7 @@ describe("Background Module — Integration", () => {
         )!;
         expect(vnpayStatus.state).toBe("OPEN");
         expect(vnpayStatus.failureCount).toBe(5);
-        expect(vnpayStatus.recoveryDeadline).toBeDefined();
+        expect(vnpayStatus.autoCloseAt).toBeDefined();
       });
     });
 

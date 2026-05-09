@@ -311,6 +311,8 @@ describe("Catalog Module — Integration", () => {
         const result = await publicController.listPublished({
           cursor: undefined,
           limit: 20,
+          hasSeats: false,
+          sort: "startsAt",
         });
 
         expect(result.isSuccess).toBe(true);
@@ -325,10 +327,11 @@ describe("Catalog Module — Integration", () => {
         );
 
         await publicController.listPublished({
-          dateFrom: new Date("2026-06-01"),
-          dateTo: new Date("2026-06-30"),
+          day: "2026-06-01",
           cursor: undefined,
           limit: 20,
+          hasSeats: false,
+          sort: "startsAt",
         });
 
         expect(mockWorkshopsRepo.findPublished).toHaveBeenCalledWith(
@@ -347,6 +350,8 @@ describe("Catalog Module — Integration", () => {
         const result = await publicController.listPublished({
           cursor: undefined,
           limit: 20,
+          hasSeats: false,
+          sort: "startsAt",
         });
 
         expect(result.isSuccess).toBe(true);
@@ -531,7 +536,10 @@ describe("Catalog Module — Integration", () => {
         );
         mockRoomsRepo.findById.mockResolvedValue(Result.ok(room));
 
-        const result = await adminController.cancelWorkshop("wid-001");
+        const result = await adminController.cancelWorkshop("wid-001", {
+          reason: "Test cancellation reason for testing",
+          notifyRegistered: true,
+        });
 
         expect(result.isSuccess).toBe(true);
         expect(mockWorkshopsRepo.updateStatus).toHaveBeenCalledWith(
@@ -547,7 +555,10 @@ describe("Catalog Module — Integration", () => {
           Result.ok(cancelledWorkshop)
         );
 
-        const result = await adminController.cancelWorkshop("wid-001");
+        const result = await adminController.cancelWorkshop("wid-001", {
+          reason: "Test cancellation reason for testing",
+          notifyRegistered: true,
+        });
 
         expect(result.isSuccess).toBe(false);
         expect(result.error.code).toBe("WORKSHOP_CANCELLED");
@@ -632,7 +643,7 @@ describe("Catalog Module — Integration", () => {
 
     describe("listRooms", () => {
       it("returns all rooms", async () => {
-        const result = await roomsAdminController.listRooms();
+        const result = await roomsAdminController.listRooms({} as any);
 
         expect(result.isSuccess).toBe(true);
         expect(mockRoomsRepo.findAll).toHaveBeenCalled();
@@ -677,7 +688,7 @@ describe("Catalog Module — Integration", () => {
 
     describe("listSpeakers", () => {
       it("returns all speakers", async () => {
-        const result = await speakersAdminController.listSpeakers();
+        const result = await speakersAdminController.listSpeakers({} as any);
 
         expect(result.isSuccess).toBe(true);
         expect(mockSpeakersRepo.findAll).toHaveBeenCalled();

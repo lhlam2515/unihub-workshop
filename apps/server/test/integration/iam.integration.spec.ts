@@ -52,6 +52,8 @@ const mockTokenService = {
   verifyRefreshToken: jest.fn(),
   blacklistToken: jest.fn(),
   revokeAllUserTokens: jest.fn(),
+  isBlacklisted: jest.fn(),
+  extractRefreshTokenJti: jest.fn(),
 };
 
 const mockStudentProfileService = {
@@ -162,7 +164,10 @@ describe("IAM Module — Integration", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    mockResponse = { cookie: jest.fn() } as unknown as Response;
+    mockResponse = {
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    } as unknown as Response;
     mockRequest = { cookies: {} } as unknown as Request;
 
     const module = await Test.createTestingModule({
@@ -341,6 +346,9 @@ describe("IAM Module — Integration", () => {
         Result.ok({ sub: "usr-001", jti: "old-jti" })
       );
       mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
+      mockStudentsRepo.findByUserId.mockResolvedValue(
+        Result.ok(studentProfile)
+      );
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(mockRefreshToken);
 
@@ -397,12 +405,16 @@ describe("IAM Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("AuthController.logout — FR-F01-008", () => {
     it("blacklists the current token's jti in Redis", async () => {
-      await authController.logout({
-        sub: "usr-001",
-        role: "STUDENT",
-        jti: "jti-001",
-        allowed_workshop_ids: [],
-      });
+      await authController.logout(
+        {
+          sub: "usr-001",
+          role: "STUDENT",
+          jti: "jti-001",
+          allowed_workshop_ids: [],
+        },
+        mockRequest,
+        mockResponse
+      );
       expect(mockTokenService.blacklistToken).toHaveBeenCalledWith(
         "jti-001",
         900
@@ -410,18 +422,26 @@ describe("IAM Module — Integration", () => {
     });
 
     it("is idempotent when called multiple times", async () => {
-      await authController.logout({
-        sub: "usr-001",
-        role: "STUDENT",
-        jti: "jti-001",
-        allowed_workshop_ids: [],
-      });
-      await authController.logout({
-        sub: "usr-001",
-        role: "STUDENT",
-        jti: "jti-001",
-        allowed_workshop_ids: [],
-      });
+      await authController.logout(
+        {
+          sub: "usr-001",
+          role: "STUDENT",
+          jti: "jti-001",
+          allowed_workshop_ids: [],
+        },
+        mockRequest,
+        mockResponse
+      );
+      await authController.logout(
+        {
+          sub: "usr-001",
+          role: "STUDENT",
+          jti: "jti-001",
+          allowed_workshop_ids: [],
+        },
+        mockRequest,
+        mockResponse
+      );
 
       expect(mockTokenService.blacklistToken).toHaveBeenCalledTimes(2);
     });
@@ -516,15 +536,20 @@ describe("IAM Module — Integration", () => {
 
     describe("listUsers", () => {
       it("returns paginated user list", async () => {
-        const result = await usersAdminController.listUsers(
-          "STUDENT",
-          "1",
-          "20"
-        );
+        const result = await usersAdminController.listUsers({
+          role: "STUDENT",
+          page: 1,
+          limit: 20,
+        } as any);
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(1);
-        expect(mockUsersRepo.list).toHaveBeenCalledWith("STUDENT", 1, 20);
+        expect(mockUsersRepo.list).toHaveBeenCalledWith(
+          "STUDENT",
+          undefined,
+          1,
+          20
+        );
       });
     });
 
