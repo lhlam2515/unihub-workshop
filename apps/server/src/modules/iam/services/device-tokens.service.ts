@@ -21,7 +21,7 @@ export class DeviceTokensService {
    * Side effects:
    * - Updates device_tokens table (deactivate old, insert new).
    *
-   * @param studentId - The student's UUID.
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param token - The device token string from the push provider.
    * @param platform - The platform identifier ("IOS" | "ANDROID").
    * @returns OkResult with the created device token, or FailResult.

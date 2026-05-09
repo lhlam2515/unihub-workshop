@@ -61,7 +61,7 @@ export class RegistrationsService {
    * - Inserts a row into the registrations table.
    * - For paid: creates seat:lock:{workshopId}:{registrationId} in Redis (TTL 900s).
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param dto - Registration request containing the target workshop_id.
    * @param idempotencyKey - Optional idempotency key for safe retry.
    * @returns OkResult with RegistrationDto, or FailResult with codes:
@@ -269,7 +269,7 @@ export class RegistrationsService {
   /**
    * Lists a student's own registrations.
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param query - Optional filters: status, page, limit.
    * @returns OkResult with paginated RegistrationDto list.
    */
@@ -306,7 +306,7 @@ export class RegistrationsService {
   /**
    * Retrieves a single registration's detail with IDOR enforcement.
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param registrationId - The UUID of the registration to retrieve.
    * @returns OkResult with RegistrationDto, or FailResult (REGISTRATION_NOT_FOUND).
    */
@@ -335,7 +335,7 @@ export class RegistrationsService {
    * - Increments seat:available:{workshopId} in Redis.
    * - Deletes seat:lock:{workshopId}:{registrationId} in Redis (if paid).
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param registrationId - The UUID of the registration to cancel.
    * @returns OkResult with the updated RegistrationDto, or FailResult.
    */

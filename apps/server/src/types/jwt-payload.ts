@@ -25,4 +25,12 @@ export interface JwtPayload {
   jti: string;
   /** Workshop IDs this check-in staff member is authorized to access. Empty array for non-staff roles. */
   allowed_workshop_ids: string[];
+  /**
+   * Student code (MSSV) from the legacy system — only present for STUDENT role.
+   * This is the TEXT primary key of the `students` table, NOT the system UUID.
+   * Used for IDOR-enforced student lookups in registrations, payments, and device tokens.
+   *
+   * Example: "21127001"
+   */
+  studentId?: string;
 }

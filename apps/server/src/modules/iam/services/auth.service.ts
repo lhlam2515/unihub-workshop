@@ -108,7 +108,12 @@ export class AuthService {
     }
 
     const accessToken = await this.tokenService.signAccessToken(
-      { userId: user.userId, role: user.role, allowedWorkshopIds },
+      {
+        userId: user.userId,
+        role: user.role,
+        allowedWorkshopIds,
+        studentId: studentProfile?.studentId,
+      },
       "WEB"
     );
 
@@ -170,6 +175,8 @@ export class AuthService {
     await this.tokenService.blacklistToken(oldJti, 604_800);
 
     let allowedWorkshopIds: string[] | undefined;
+    let newStudentId: string | undefined;
+
     if (user.role === "CHECKIN_STAFF") {
       const assignmentResult = await this.assignmentsRepo.findByUserId(
         user.userId
@@ -179,11 +186,19 @@ export class AuthService {
       }
     }
 
+    if (user.role === "STUDENT") {
+      const profileResult = await this.studentsRepo.findByUserId(user.userId);
+      if (profileResult.isSuccess && profileResult.data) {
+        newStudentId = profileResult.data.studentId;
+      }
+    }
+
     const newAccessToken = await this.tokenService.signAccessToken(
       {
         userId: user.userId,
         role: user.role,
         allowedWorkshopIds,
+        studentId: newStudentId,
       },
       platform
     );

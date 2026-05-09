@@ -15,8 +15,9 @@ import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
-import type { CreateDeviceTokenDto } from "../dto/create-device-token.dto";
 import { DeviceTokensService } from "../services/device-tokens.service";
+
+import type { CreateDeviceTokenDto } from "../dto/create-device-token.dto";
 
 @Controller("device-tokens")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -44,7 +45,7 @@ export class DeviceTokensController {
     @CurrentUser() user: JwtPayload
   ) {
     const result = await this.deviceTokensService.registerToken(
-      user.sub,
+      user.studentId!,
       createDto.token,
       createDto.platform
     );
@@ -70,7 +71,7 @@ export class DeviceTokensController {
   async remove(@Param("token") token: string, @CurrentUser() user: JwtPayload) {
     const result = await this.deviceTokensService.deactivateToken(
       token,
-      user.sub
+      user.studentId!
     );
 
     if (result.isFailure) return result;

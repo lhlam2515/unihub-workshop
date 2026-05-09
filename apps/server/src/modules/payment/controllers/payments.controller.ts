@@ -34,13 +34,13 @@ import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guar
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
 import { Public } from "@/shared/decorators/public.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreatePaymentDto } from "../dto/create-payment.dto";
 import { PaymentWebhookDto } from "../dto/payment-webhook.dto";
 import { PaymentsService } from "../services/payments.service";
-import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -76,7 +76,7 @@ export class PaymentsController {
     @IdempotencyKey() idempotencyKey: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.paymentsService.initiate(user.sub, dto, idempotencyKey);
+    return this.paymentsService.initiate(user.studentId!, dto, idempotencyKey);
   }
 
   /**
@@ -119,7 +119,7 @@ export class PaymentsController {
     @CurrentUser() user: JwtPayload,
     @Query() query: { page?: number; limit?: number }
   ) {
-    return this.paymentsService.getMyPayments(user.sub, query);
+    return this.paymentsService.getMyPayments(user.studentId!, query);
   }
 
   /**
@@ -138,6 +138,6 @@ export class PaymentsController {
     @Param("paymentId") paymentId: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.paymentsService.getPaymentDetail(user.sub, paymentId);
+    return this.paymentsService.getPaymentDetail(user.studentId!, paymentId);
   }
 }

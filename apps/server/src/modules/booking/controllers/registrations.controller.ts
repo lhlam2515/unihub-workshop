@@ -49,7 +49,11 @@ export class RegistrationsController {
     @IdempotencyKey() idempotencyKey: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.register(user.sub, dto, idempotencyKey);
+    return this.registrationsService.register(
+      user.studentId!,
+      dto,
+      idempotencyKey
+    );
   }
 
   /**
@@ -71,7 +75,7 @@ export class RegistrationsController {
     @Query("page") page?: string,
     @Query("limit") limit?: string
   ) {
-    return this.registrationsService.getMyRegistrations(user.sub, {
+    return this.registrationsService.getMyRegistrations(user.studentId!, {
       status,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
@@ -93,7 +97,7 @@ export class RegistrationsController {
     @Param("id") id: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.getRegistrationDetail(user.sub, id);
+    return this.registrationsService.getRegistrationDetail(user.studentId!, id);
   }
 
   /**
@@ -114,6 +118,6 @@ export class RegistrationsController {
     @Param("id") id: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.cancelRegistration(user.sub, id);
+    return this.registrationsService.cancelRegistration(user.studentId!, id);
   }
 }

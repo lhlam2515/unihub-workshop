@@ -75,7 +75,7 @@ export class RegistrationsRepository {
    * Excludes registrations with CANCELLED status via raw SQL comparison to
    * allow re-registration after cancellation without hitting a unique constraint.
    *
-   * @param studentId - The UUID of the student.
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param workshopId - The UUID of the workshop.
    * @returns OkResult with the Registration entity, or null if no active registration exists.
    * - May return FailResult with INTERNAL_ERROR on database failure.

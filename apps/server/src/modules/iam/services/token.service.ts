@@ -38,21 +38,25 @@ export class TokenService {
       userId: string;
       role: UserRole;
       allowedWorkshopIds?: string[];
+      studentId?: string;
     },
     platform: "WEB" | "MOBILE"
   ): Promise<string> {
     const jti = randomUUID();
+    const jwtPayload: Record<string, unknown> = {
+      sub: payload.userId,
+      role: payload.role,
+      jti,
+      allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
+    };
+    if (payload.studentId) {
+      jwtPayload.studentId = payload.studentId;
+    }
     return Promise.resolve(
-      jwt.sign(
-        {
-          sub: payload.userId,
-          role: payload.role,
-          jti,
-          allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
-        },
-        this.config.getOrThrow<string>("jwt.privateKey"),
-        { algorithm: "RS256", expiresIn: ACCESS_EXPIRY[platform] }
-      )
+      jwt.sign(jwtPayload, this.config.getOrThrow<string>("jwt.privateKey"), {
+        algorithm: "RS256",
+        expiresIn: ACCESS_EXPIRY[platform],
+      })
     );
   }
 

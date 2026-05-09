@@ -93,7 +93,7 @@ export class PaymentsService {
    * - Creates idempotency_keys row with IN_PROGRESS (or updates to COMPLETED/UNRESOLVED).
    * - Reads/writes circuit breaker state in Redis.
    *
-   * @param studentId - The UUID of the authenticated student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param dto - CreatePaymentDto with registration_id and gateway.
    * @param idempotencyKey - The X-Idempotency-Key header value.
    * @returns OkResult with CreatePaymentResponseDto (includes redirect_url and deadline),
