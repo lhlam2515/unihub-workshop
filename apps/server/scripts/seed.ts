@@ -270,6 +270,91 @@ async function seedIdentity(passwordHash: string) {
   };
 }
 
+// ── Phase 2: Event Infrastructure ─────────────────────────────────────────────
+
+async function seedInfrastructure() {
+  const speakerRows = [
+    {
+      speakerId: crypto.randomUUID(),
+      fullName: "TS. Nguyễn Minh Khoa",
+      title: "Trưởng khoa CNTT",
+      bio: "Chuyên gia hệ thống phân tán và điện toán đám mây tại Đại học Bách Khoa.",
+      avatarUrl: null,
+    },
+    {
+      speakerId: crypto.randomUUID(),
+      fullName: "Ths. Trần Thị Lan Anh",
+      title: "Senior Product Manager",
+      bio: "Hơn 8 năm kinh nghiệm phát triển sản phẩm tại Tiki và các startup fintech.",
+      avatarUrl: null,
+    },
+    {
+      speakerId: crypto.randomUUID(),
+      fullName: "Lê Văn Đức",
+      title: "Engineering Manager",
+      bio: "Dẫn dắt đội kỹ thuật 50+ kỹ sư tại VNG, chuyên về kiến trúc microservices.",
+      avatarUrl: null,
+    },
+    {
+      speakerId: crypto.randomUUID(),
+      fullName: "Phạm Thu Hương",
+      title: "UX Lead",
+      bio: "Thiết kế trải nghiệm người dùng cho hàng triệu người tại FPT Software.",
+      avatarUrl: null,
+    },
+    {
+      speakerId: crypto.randomUUID(),
+      fullName: "Ngô Quốc Bảo",
+      title: "CTO & Co-founder",
+      bio: "Đồng sáng lập StartupVN, cựu kỹ sư Google Singapore.",
+      avatarUrl: null,
+    },
+  ];
+  await db.insert(schema.speakers).values(speakerRows);
+
+  const roomRows = [
+    {
+      roomId: crypto.randomUUID(),
+      name: "Hội trường A",
+      building: "A",
+      floor: 1,
+      capacity: 200,
+      facilities: { microphone: true, projector: true, airConditioning: true },
+    },
+    {
+      roomId: crypto.randomUUID(),
+      name: "Phòng B201",
+      building: "B",
+      floor: 2,
+      capacity: 80,
+      facilities: { projector: true, whiteboard: true, airConditioning: true },
+    },
+    {
+      roomId: crypto.randomUUID(),
+      name: "Phòng C305",
+      building: "C",
+      floor: 3,
+      capacity: 60,
+      facilities: { projector: true, whiteboard: true },
+    },
+    {
+      roomId: crypto.randomUUID(),
+      name: "Lab D401",
+      building: "D",
+      floor: 4,
+      capacity: 40,
+      facilities: { computers: true, projector: true, whiteboard: true },
+    },
+  ];
+  await db.insert(schema.rooms).values(roomRows);
+
+  console.log(`✓ Infrastructure: 5 speakers, 4 rooms`);
+  return {
+    speakerIds: speakerRows.map((s) => s.speakerId),
+    rooms: roomRows.map((r) => ({ roomId: r.roomId, capacity: r.capacity })),
+  };
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -277,7 +362,9 @@ async function main() {
   const passwordHash = await hashPassword("123456789");
   await clearAll();
   const identity = await seedIdentity(passwordHash);
+  const infra = await seedInfrastructure();
   void identity;
+  void infra;
   console.log("✅ Seed complete");
 }
 
