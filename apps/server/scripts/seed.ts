@@ -355,6 +355,314 @@ async function seedInfrastructure() {
   };
 }
 
+// ── Phase 3: Workshops ────────────────────────────────────────────────────────
+
+type WorkshopDef = {
+  dayOffset: number;
+  hour: number;
+  roomIdx: number;
+  speakerIdx: number;
+  status: "COMPLETED" | "OPEN" | "DRAFT" | "CANCELLED";
+  price: number;
+  title: string;
+};
+
+const WORKSHOP_DEFS: WorkshopDef[] = [
+  // Day 1 (today - 2): 4 COMPLETED
+  {
+    dayOffset: -2,
+    hour: 8,
+    roomIdx: 0,
+    speakerIdx: 2,
+    status: "COMPLETED",
+    price: 0,
+    title: "Kỹ năng phỏng vấn kỹ thuật",
+  },
+  {
+    dayOffset: -2,
+    hour: 10,
+    roomIdx: 1,
+    speakerIdx: 3,
+    status: "COMPLETED",
+    price: 80000,
+    title: "Thiết kế UI/UX từ con số 0",
+  },
+  {
+    dayOffset: -2,
+    hour: 13,
+    roomIdx: 2,
+    speakerIdx: 0,
+    status: "COMPLETED",
+    price: 0,
+    title: "Hệ thống phân tán: Nhập môn thực hành",
+  },
+  {
+    dayOffset: -2,
+    hour: 15,
+    roomIdx: 3,
+    speakerIdx: 1,
+    status: "COMPLETED",
+    price: 100000,
+    title: "Product Management: Từ ý tưởng đến sản phẩm",
+  },
+  // Day 2 (today - 1): 4 COMPLETED
+  {
+    dayOffset: -1,
+    hour: 8,
+    roomIdx: 0,
+    speakerIdx: 2,
+    status: "COMPLETED",
+    price: 0,
+    title: "Xây dựng CV ấn tượng cho kỹ sư phần mềm",
+  },
+  {
+    dayOffset: -1,
+    hour: 10,
+    roomIdx: 1,
+    speakerIdx: 4,
+    status: "COMPLETED",
+    price: 50000,
+    title: "Startup trong 48 giờ: Từ ý tưởng đến MVP",
+  },
+  {
+    dayOffset: -1,
+    hour: 13,
+    roomIdx: 2,
+    speakerIdx: 0,
+    status: "COMPLETED",
+    price: 80000,
+    title: "Thiết kế hệ thống cho ứng dụng triệu người dùng",
+  },
+  {
+    dayOffset: -1,
+    hour: 15,
+    roomIdx: 3,
+    speakerIdx: 3,
+    status: "COMPLETED",
+    price: 0,
+    title: "UX Research: Lắng nghe người dùng",
+  },
+  // Day 3 (today): 4 OPEN + 1 CANCELLED
+  {
+    dayOffset: 0,
+    hour: 8,
+    roomIdx: 0,
+    speakerIdx: 2,
+    status: "OPEN",
+    price: 0,
+    title: "Clean Code và SOLID Principles",
+  },
+  {
+    dayOffset: 0,
+    hour: 10,
+    roomIdx: 1,
+    speakerIdx: 1,
+    status: "OPEN",
+    price: 80000,
+    title: "Agile & Scrum trong thực tế doanh nghiệp",
+  },
+  {
+    dayOffset: 0,
+    hour: 13,
+    roomIdx: 2,
+    speakerIdx: 4,
+    status: "CANCELLED",
+    price: 0,
+    title: "[Đã hủy] Blockchain và Web3 cơ bản",
+  },
+  {
+    dayOffset: 0,
+    hour: 15,
+    roomIdx: 3,
+    speakerIdx: 0,
+    status: "OPEN",
+    price: 100000,
+    title: "Bảo mật ứng dụng Web: OWASP Top 10",
+  },
+  {
+    dayOffset: 0,
+    hour: 17,
+    roomIdx: 0,
+    speakerIdx: 2,
+    status: "OPEN",
+    price: 0,
+    title: "Nghề kỹ sư phần mềm: Góc nhìn thực tế",
+  },
+  // Day 4 (today + 1): 5 OPEN + 1 DRAFT
+  {
+    dayOffset: 1,
+    hour: 8,
+    roomIdx: 0,
+    speakerIdx: 0,
+    status: "OPEN",
+    price: 0,
+    title: "DevOps CI/CD Pipeline thực hành",
+  },
+  {
+    dayOffset: 1,
+    hour: 10,
+    roomIdx: 1,
+    speakerIdx: 0,
+    status: "OPEN",
+    price: 150000,
+    title: "Machine Learning cho người mới bắt đầu",
+  },
+  {
+    dayOffset: 1,
+    hour: 13,
+    roomIdx: 2,
+    speakerIdx: 2,
+    status: "OPEN",
+    price: 0,
+    title: "React Native: Xây dựng ứng dụng di động",
+  },
+  {
+    dayOffset: 1,
+    hour: 15,
+    roomIdx: 3,
+    speakerIdx: 1,
+    status: "OPEN",
+    price: 80000,
+    title: "Data Analytics với Python và Pandas",
+  },
+  {
+    dayOffset: 1,
+    hour: 17,
+    roomIdx: 0,
+    speakerIdx: 3,
+    status: "OPEN",
+    price: 50000,
+    title: "Soft Skills cho kỹ sư: Giao tiếp hiệu quả",
+  },
+  {
+    dayOffset: 1,
+    hour: 10,
+    roomIdx: 3,
+    speakerIdx: 4,
+    status: "DRAFT",
+    price: 0,
+    title: "[Draft] Workshop dự phòng ngày 4",
+  },
+  // Day 5 (today + 2): 5 OPEN + 1 DRAFT
+  {
+    dayOffset: 2,
+    hour: 8,
+    roomIdx: 0,
+    speakerIdx: 0,
+    status: "OPEN",
+    price: 0,
+    title: "Kiến trúc Microservices: Bài học thực tế",
+  },
+  {
+    dayOffset: 2,
+    hour: 10,
+    roomIdx: 1,
+    speakerIdx: 3,
+    status: "OPEN",
+    price: 100000,
+    title: "Product Design Sprint: 5 ngày ra sản phẩm",
+  },
+  {
+    dayOffset: 2,
+    hour: 13,
+    roomIdx: 2,
+    speakerIdx: 2,
+    status: "OPEN",
+    price: 0,
+    title: "Open Source: Đóng góp và xây dựng cộng đồng",
+  },
+  {
+    dayOffset: 2,
+    hour: 15,
+    roomIdx: 3,
+    speakerIdx: 1,
+    status: "OPEN",
+    price: 80000,
+    title: "Đàm phán lương và offer cho kỹ sư",
+  },
+  {
+    dayOffset: 2,
+    hour: 17,
+    roomIdx: 0,
+    speakerIdx: 4,
+    status: "OPEN",
+    price: 150000,
+    title: "AI Tools cho lập trình viên: GitHub Copilot và hơn thế",
+  },
+  {
+    dayOffset: 2,
+    hour: 10,
+    roomIdx: 3,
+    speakerIdx: 1,
+    status: "DRAFT",
+    price: 50000,
+    title: "[Draft] Workshop dự phòng ngày 5",
+  },
+];
+
+type WorkshopRow = {
+  workshopId: string;
+  def: WorkshopDef;
+  seatsTotal: number;
+  startsAt: Date;
+  endsAt: Date;
+};
+
+async function seedWorkshops(
+  btcStaffId: string,
+  speakerIds: string[],
+  rooms: { roomId: string; capacity: number }[]
+): Promise<WorkshopRow[]> {
+  const workshopRows: WorkshopRow[] = [];
+  const insertValues: (typeof schema.workshops.$inferInsert)[] = [];
+  const slotValues: (typeof schema.workshopSlots.$inferInsert)[] = [];
+
+  for (const def of WORKSHOP_DEFS) {
+    const room = rooms[def.roomIdx];
+    const startsAt = dateAtSlot(def.dayOffset, def.hour);
+    const endsAt = dateAtSlot(def.dayOffset, def.hour + 1, 30); // 90-minute sessions
+    const workshopId = crypto.randomUUID();
+
+    workshopRows.push({
+      workshopId,
+      def,
+      seatsTotal: room.capacity,
+      startsAt,
+      endsAt,
+    });
+
+    insertValues.push({
+      workshopId,
+      title: def.title,
+      description: `Nội dung chi tiết: ${def.title}. Workshop cung cấp kiến thức thực tế và kỹ năng ứng dụng ngay vào công việc.`,
+      speakerId: speakerIds[def.speakerIdx],
+      roomId: room.roomId,
+      startsAt,
+      endsAt,
+      seatsTotal: room.capacity,
+      seatsAvailable: room.capacity,
+      price: String(def.price),
+      status: def.status,
+      createdBy: btcStaffId,
+      version: 0,
+    });
+
+    slotValues.push({
+      slotId: crypto.randomUUID(),
+      workshopId,
+      totalCapacity: room.capacity,
+      lockedCount: 0,
+      confirmedCount: 0,
+      version: 0,
+    });
+  }
+
+  await db.insert(schema.workshops).values(insertValues);
+  await db.insert(schema.workshopSlots).values(slotValues);
+  console.log(`✓ Workshops: ${workshopRows.length} workshops + slots`);
+  return workshopRows;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -363,8 +671,12 @@ async function main() {
   await clearAll();
   const identity = await seedIdentity(passwordHash);
   const infra = await seedInfrastructure();
-  void identity;
-  void infra;
+  const workshops = await seedWorkshops(
+    identity.btcStaffId,
+    infra.speakerIds,
+    infra.rooms
+  );
+  void workshops;
   console.log("✅ Seed complete");
 }
 
