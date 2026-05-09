@@ -36,7 +36,8 @@ import type {
   WorkshopAdminDetailDto,
 } from "../dto/workshop-response.dto";
 
-type WorkshopWithSpeakerRoom = Workshop & {
+type WorkshopWithSpeakerRoom = {
+  workshops: Workshop;
   speakers: Speaker | null;
   rooms: Room | null;
 };
@@ -69,18 +70,18 @@ export class WorkshopsService {
     if (result.isFailure) return Result.fail(result.error);
 
     const mapped = await Promise.all(
-      result.data.items.map(async (workshop: WorkshopWithSpeakerRoom) => {
+      result.data.items.map(async (row: WorkshopWithSpeakerRoom) => {
         const availableSeats = await this.seatCounterService.getCachedSeats(
-          workshop.workshopId
+          row.workshops.workshopId
         );
-        const speaker = workshop.speakers
-          ? SpeakerResponseBuilder.fromSummary(workshop.speakers)
+        const speaker = row.speakers
+          ? SpeakerResponseBuilder.fromSummary(row.speakers)
           : null;
-        const room = workshop.rooms
-          ? RoomResponseBuilder.fromSummary(workshop.rooms)
+        const room = row.rooms
+          ? RoomResponseBuilder.fromSummary(row.rooms)
           : null;
         return WorkshopResponseBuilder.fromSummary(
-          workshop,
+          row.workshops,
           speaker,
           room,
           availableSeats
@@ -506,19 +507,17 @@ export class WorkshopsService {
     });
     if (result.isFailure) return Result.fail(result.error);
 
-    const mapped = result.data.items.map((workshop) => {
-      const speaker = workshop.speakers
-        ? SpeakerResponseBuilder.from(workshop.speakers)
+    const mapped = result.data.items.map((row: WorkshopWithSpeakerRoom) => {
+      const speaker = row.speakers
+        ? SpeakerResponseBuilder.from(row.speakers)
         : null;
-      const room = workshop.rooms
-        ? RoomResponseBuilder.from(workshop.rooms)
-        : null;
+      const room = row.rooms ? RoomResponseBuilder.from(row.rooms) : null;
 
       return WorkshopResponseBuilder.fromAdminDetail(
-        workshop,
+        row.workshops,
         speaker,
         room,
-        workshop.workshops?.seatsTotal ?? workshop.seatsTotal
+        row.workshops.seatsTotal
       );
     });
 
