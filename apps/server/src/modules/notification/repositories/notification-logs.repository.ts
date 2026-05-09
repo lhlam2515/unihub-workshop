@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
 
 import {
   DATABASE_CONNECTION,
@@ -28,38 +28,44 @@ export class NotificationLogsRepository {
   ) {}
 
   /**
-   * Query notification logs with dynamic filters and pagination
+   * Query notification logs with dynamic filters and cursor pagination
    *
-   * Filters: status, channel, type, userId, workshopId
-   * Uses partial index idx_notif_status for PENDING queries.
+   * Filters: status, channel, from, to
+   * Uses cursor-based pagination on createdAt descending.
    *
    * @param filters - Optional filter criteria
    * @param filters.status - Filter by delivery status
    * @param filters.channel - Filter by channel type
-   * @param filters.type - Filter by notification type
-   * @param filters.userId - Filter by recipient user
-   * @param filters.workshopId - Filter by related workshop
-   * @param pagination - Page and limit controls
-   * @param pagination.page - Current page (1-indexed)
-   * @param pagination.limit - Items per page
-   * @returns OkResult with items array and total count, or FailResult (INTERNAL_ERROR)
+   * @param filters.from - Lower bound for createdAt date range (ISO string)
+   * @param filters.to - Upper bound for createdAt date range (ISO string)
+   * @param filters.cursor - Base64-encoded cursor from a previous page's last item createdAt
+   * @param filters.limit - Max items to return (default 20, capped at 100)
+   * @returns OkResult with items array, nextCursor, and hasMore flag, or FailResult (INTERNAL_ERROR)
    */
-  async findMany(
-    filters: {
-      status?: string;
-      channel?: string;
-      type?: string;
-      userId?: string;
-      workshopId?: string;
-    },
-    pagination: { page: number; limit: number }
-  ): Promise<Result<{ items: NotificationLog[]; total: number }>> {
+  async findMany(filters: {
+    status?: string;
+    channel?: string;
+    from?: string;
+    to?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<
+    Result<{
+      items: NotificationLog[];
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
+  > {
     return tryCatch(
       async (): Promise<{
         items: NotificationLog[];
-        total: number;
+        nextCursor: string | null;
+        hasMore: boolean;
+        limit: number;
       }> => {
         const conditions: ReturnType<typeof eq>[] = [];
+        const limit = filters.limit ?? 20;
 
         if (filters.status)
           conditions.push(
@@ -69,39 +75,53 @@ export class NotificationLogsRepository {
           conditions.push(
             eq(this.schema.notificationLogs.channel, filters.channel as any)
           );
-        if (filters.type)
+
+        // Date range filters on createdAt
+        if (filters.from) {
           conditions.push(
-            eq(this.schema.notificationLogs.type, filters.type as any)
+            gte(this.schema.notificationLogs.createdAt, new Date(filters.from))
           );
-        if (filters.userId)
+        }
+        if (filters.to) {
           conditions.push(
-            eq(this.schema.notificationLogs.userId, filters.userId)
+            lte(this.schema.notificationLogs.createdAt, new Date(filters.to))
           );
-        if (filters.workshopId)
+        }
+
+        // Cursor-based pagination on createdAt
+        if (filters.cursor) {
+          const cursorDate = new Date(
+            Buffer.from(filters.cursor, "base64").toString("ascii")
+          );
           conditions.push(
-            eq(this.schema.notificationLogs.workshopId, filters.workshopId)
+            lt(this.schema.notificationLogs.createdAt, cursorDate)
           );
+        }
 
         const where = conditions.length > 0 ? and(...conditions) : undefined;
-        const offset = (pagination.page - 1) * pagination.limit;
 
-        const [items, countResult] = await Promise.all([
-          this.db
-            .select()
-            .from(this.schema.notificationLogs)
-            .where(where)
-            .orderBy(desc(this.schema.notificationLogs.createdAt))
-            .limit(pagination.limit)
-            .offset(offset),
-          this.db
-            .select({ count: sql<number>`count(*)` })
-            .from(this.schema.notificationLogs)
-            .where(where),
-        ]);
+        const items = await this.db
+          .select()
+          .from(this.schema.notificationLogs)
+          .where(where)
+          .orderBy(desc(this.schema.notificationLogs.createdAt))
+          .limit(limit + 1);
+
+        const hasMore = items.length > limit;
+        if (hasMore) items.pop();
+
+        const nextCursor =
+          items.length > 0
+            ? Buffer.from(
+                items[items.length - 1].createdAt.toISOString()
+              ).toString("base64")
+            : null;
 
         return {
           items: items as NotificationLog[],
-          total: Number(countResult[0]?.count ?? 0),
+          nextCursor,
+          hasMore,
+          limit,
         };
       },
       (err) => systemErrors.internal(err)
