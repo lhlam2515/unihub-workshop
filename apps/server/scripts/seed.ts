@@ -77,13 +77,207 @@ async function clearAll() {
   console.log("✓ Cleared all tables");
 }
 
+// ── Phase 1: Identity ─────────────────────────────────────────────────────────
+
+const LAST_NAMES = [
+  "Nguyễn",
+  "Trần",
+  "Lê",
+  "Phạm",
+  "Hoàng",
+  "Huỳnh",
+  "Phan",
+  "Vũ",
+  "Đặng",
+  "Bùi",
+];
+const FIRST_NAMES = [
+  "An",
+  "Bình",
+  "Chi",
+  "Dũng",
+  "Em",
+  "Phương",
+  "Giang",
+  "Hoa",
+  "Ích",
+  "Khoa",
+  "Lan",
+  "Minh",
+  "Nam",
+  "Oanh",
+  "Phú",
+  "Quân",
+  "Rạng",
+  "Sơn",
+  "Thảo",
+  "Uyên",
+  "Văn",
+  "Xuân",
+  "Yến",
+  "Ánh",
+  "Đức",
+  "Hải",
+  "Khánh",
+  "Long",
+  "Mai",
+  "Ngân",
+  "Phúc",
+  "Quỳnh",
+  "Sang",
+  "Thắng",
+  "Bảo",
+  "Vinh",
+  "Yên",
+  "Ân",
+  "Cường",
+  "Diễm",
+  "Giao",
+  "Hiền",
+  "Khải",
+  "Lâm",
+  "Mỹ",
+  "Nhi",
+  "Tùng",
+  "Hào",
+  "Kiên",
+  "Lộc",
+];
+
+async function seedIdentity(passwordHash: string) {
+  // ── Staff ─────────────────────────────────────────────────────────────────
+  const btcStaffId = crypto.randomUUID();
+  const checkin1StaffId = crypto.randomUUID();
+  const checkin2StaffId = crypto.randomUUID();
+
+  await db.insert(schema.staff).values([
+    {
+      staffId: btcStaffId,
+      email: "btc.admin@unihub.edu.vn",
+      fullName: "Admin BTC",
+      passwordHash,
+      role: "BTC",
+      isActive: true,
+    },
+    {
+      staffId: checkin1StaffId,
+      email: "checkin1@unihub.edu.vn",
+      fullName: "Nhân sự Check-in 1",
+      passwordHash,
+      role: "CHECKIN_STAFF",
+      isActive: true,
+    },
+    {
+      staffId: checkin2StaffId,
+      email: "checkin2@unihub.edu.vn",
+      fullName: "Nhân sự Check-in 2",
+      passwordHash,
+      role: "CHECKIN_STAFF",
+      isActive: true,
+    },
+  ]);
+
+  // ── Users for staff (backward-compat auth) ────────────────────────────────
+  const btcUserId = crypto.randomUUID();
+  const checkin1UserId = crypto.randomUUID();
+  const checkin2UserId = crypto.randomUUID();
+
+  await db.insert(schema.users).values([
+    {
+      userId: btcUserId,
+      email: "btc.admin@unihub.edu.vn",
+      passwordHash,
+      role: "BTC",
+      status: "ACTIVE",
+    },
+    {
+      userId: checkin1UserId,
+      email: "checkin1@unihub.edu.vn",
+      passwordHash,
+      role: "CHECKIN_STAFF",
+      status: "ACTIVE",
+    },
+    {
+      userId: checkin2UserId,
+      email: "checkin2@unihub.edu.vn",
+      passwordHash,
+      role: "CHECKIN_STAFF",
+      status: "ACTIVE",
+    },
+  ]);
+
+  // ── 500 Students ──────────────────────────────────────────────────────────
+  const studentIds: string[] = [];
+  const studentUserIds: string[] = [];
+  const userRows: (typeof schema.users.$inferInsert)[] = [];
+  const studentRows: (typeof schema.students.$inferInsert)[] = [];
+
+  for (let i = 0; i < 500; i++) {
+    const mssv = `23127${String(i + 1).padStart(3, "0")}`;
+    const userId = crypto.randomUUID();
+    const lastName = LAST_NAMES[i % LAST_NAMES.length];
+    const firstName = FIRST_NAMES[i % FIRST_NAMES.length];
+    const email = `sv${mssv}@student.edu.vn`;
+
+    studentIds.push(mssv);
+    studentUserIds.push(userId);
+    userRows.push({
+      userId,
+      email,
+      passwordHash,
+      role: "STUDENT",
+      status: "ACTIVE",
+    });
+    studentRows.push({
+      studentId: mssv,
+      email,
+      fullName: `${lastName} ${firstName}`,
+      passwordHash,
+      userId,
+    });
+  }
+
+  // Bulk insert in batches of 100 to stay under query size limits
+  for (let b = 0; b < 5; b++) {
+    await db
+      .insert(schema.users)
+      .values(userRows.slice(b * 100, (b + 1) * 100));
+  }
+  for (let b = 0; b < 5; b++) {
+    await db
+      .insert(schema.students)
+      .values(studentRows.slice(b * 100, (b + 1) * 100));
+  }
+
+  // ── Device tokens (first 20 students) ────────────────────────────────────
+  const deviceTokenRows = studentIds.slice(0, 20).map((studentId, i) => ({
+    deviceTokenId: crypto.randomUUID(),
+    studentId,
+    token: `device_token_sv_${studentId}`,
+    platform: (i % 2 === 0 ? "ANDROID" : "IOS") as "ANDROID" | "IOS",
+    isActive: true,
+  }));
+  await db.insert(schema.deviceTokens).values(deviceTokenRows);
+
+  console.log(`✓ Identity: 3 staff, 500 students, 20 device tokens`);
+  return {
+    btcStaffId,
+    btcUserId,
+    checkin1UserId,
+    checkin2UserId,
+    studentIds,
+    studentUserIds,
+  };
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
   console.log("🌱 Seeding UniHub Workshop database...");
   const passwordHash = await hashPassword("123456789");
   await clearAll();
-  // Phases will be added below
+  const identity = await seedIdentity(passwordHash);
+  void identity;
   console.log("✅ Seed complete");
 }
 
