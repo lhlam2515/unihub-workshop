@@ -32,6 +32,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const frontendUrl = configService.get<string>("cors.frontendUrl");
 
+  app.setGlobalPrefix("api/v1");
   app.use(helmet());
   app.enableCors(getCorsConfig(frontendUrl));
   app.use(cookieParser());
@@ -48,11 +49,11 @@ async function bootstrap() {
     )
   );
 
-  const port = configService.get<number>("app.port") ?? 3000;
+  const port = configService.get<number>("app.port") ?? 8000;
   await app.listen(port);
 
   winstonLogger.log(
-    `Server is listening on http://localhost:${port}`,
+    `Server is listening on http://localhost:${port}/api/v1`,
     "Bootstrap"
   );
 }
