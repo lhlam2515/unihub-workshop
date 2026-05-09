@@ -6,11 +6,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import ROUTES from "@/constants/routes";
+import { createDatabaseClient } from "@/database/client";
+import { appSession } from "@/database/schema/app-session.schema";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 
 export default function ProfileScreen() {
   const { session, getPendingQueueCount, logout, isLoggingOut } = useAuth();
   const [localLoggingOut, setLocalLoggingOut] = useState(false);
+
+  const db = createDatabaseClient();
+  const storedSession = db.select().from(appSession).get();
+  const email = storedSession?.email ?? null;
 
   const loggingOut = isLoggingOut || localLoggingOut;
 
@@ -67,20 +73,17 @@ export default function ProfileScreen() {
             <View className="gap-2.5">
               <View className="flex-row justify-between gap-3">
                 <Text className="flex-1 text-sm text-muted-foreground">
-                  User ID
+                  Email
                 </Text>
-                <Text
-                  className="flex-2 text-right text-sm font-bold text-foreground"
-                  numberOfLines={1}
-                >
-                  {session.sub}
+                <Text className="shrink text-right text-sm font-bold text-foreground">
+                  {email ?? "—"}
                 </Text>
               </View>
               <View className="flex-row justify-between gap-3">
                 <Text className="flex-1 text-sm text-muted-foreground">
                   Vai trò
                 </Text>
-                <Text className="flex-2 text-right text-sm font-bold text-foreground">
+                <Text className="shrink text-right text-sm font-bold text-foreground">
                   {session.role}
                 </Text>
               </View>
@@ -88,18 +91,21 @@ export default function ProfileScreen() {
                 <Text className="flex-1 text-sm text-muted-foreground">
                   Workshop phân công
                 </Text>
-                <Text className="flex-2 text-right text-sm font-bold text-foreground">
+                <Text className="shrink text-right text-sm font-bold text-foreground">
                   {session.allowedWorkshopIds?.length ?? 0}
                 </Text>
               </View>
               <View className="flex-row justify-between gap-3">
                 <Text className="flex-1 text-sm text-muted-foreground">
-                  Hết hạn lúc
+                  Hết hạn phiên làm việc lúc
                 </Text>
-                <Text className="flex-2 text-right text-sm font-bold text-foreground">
-                  {new Date(session.exp * 1000).toLocaleTimeString("vi-VN", {
+                <Text className="shrink text-right text-sm font-bold text-foreground">
+                  {new Date(session.exp * 1000).toLocaleString("vi-VN", {
+                    weekday: "short",
                     hour: "2-digit",
                     minute: "2-digit",
+                    day: "2-digit",
+                    month: "2-digit",
                   })}
                 </Text>
               </View>
