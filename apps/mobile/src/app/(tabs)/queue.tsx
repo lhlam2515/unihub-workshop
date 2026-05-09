@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -8,11 +9,24 @@ import { Text } from "@/components/ui/text";
 import ROUTES from "@/constants/routes";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
+import { QueueItemRow } from "@/features/checkin/components/QueueItemRow";
 import { useSync } from "@/features/checkin/hooks/use-sync";
-import { offlineAuth } from "@/lib/api/client/offline-auth";
 
 export default function QueueScreen() {
-  const { stats, sync, runStatus } = useSync();
+  const { stats, queueItems, sync, runStatus } = useSync();
+  const [deviceId, setDeviceId] = useState<string>("unknown");
+
+  useEffect(() => {
+    const db = createDatabaseClient();
+    const device = db
+      .select()
+      .from(deviceConfig)
+      .where(eq(deviceConfig.id, 1))
+      .get();
+    if (device) {
+      setDeviceId(device.deviceId);
+    }
+  }, []);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -39,19 +53,19 @@ export default function QueueScreen() {
               <Text className="text-2xl font-extrabold text-foreground">
                 {stats.pending}
               </Text>
-              <Text className="text-xs text-muted-foreground">Pending</Text>
+              <Text className="text-xs text-muted-foreground">Chờ sync</Text>
             </View>
             <View className="flex-1 gap-0.5">
               <Text className="text-2xl font-extrabold text-foreground">
-                {stats.failed}
+                {stats.conflicts}
               </Text>
-              <Text className="text-xs text-muted-foreground">Failed</Text>
+              <Text className="text-xs text-muted-foreground">Xung đột</Text>
             </View>
             <View className="flex-1 gap-0.5">
               <Text className="text-2xl font-extrabold text-foreground">
                 {stats.synced}
               </Text>
-              <Text className="text-xs text-muted-foreground">Synced</Text>
+              <Text className="text-xs text-muted-foreground">Đã sync</Text>
             </View>
           </View>
         </View>
@@ -68,17 +82,40 @@ export default function QueueScreen() {
           </View>
         ) : null}
 
+        <View className="rounded-3xl border border-border">
+          {queueItems.length === 0 ? (
+            <View className="items-center justify-center p-8">
+              <Text className="text-sm text-muted-foreground">
+                Không có bản ghi nào trong hàng đợi
+              </Text>
+            </View>
+          ) : (
+            <View className="px-5">
+              {queueItems.map((item, index) => (
+                <View
+                  key={item.localId}
+                  className={
+                    index < queueItems.length - 1
+                      ? "border-b border-border"
+                      : undefined
+                  }
+                >
+                  <QueueItemRow
+                    studentName={item.studentName}
+                    studentCode={item.studentCode}
+                    qrCode={item.qrCode}
+                    syncStatus={item.syncStatus}
+                    checkedInAt={item.checkedInAt}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
         <View className="mt-1 gap-3">
           <Button
-            onPress={() => {
-              const db = createDatabaseClient();
-              const device = db
-                .select()
-                .from(deviceConfig)
-                .where(eq(deviceConfig.id, 1))
-                .get();
-              void sync("", device?.deviceId ?? "unknown");
-            }}
+            onPress={() => void sync("", deviceId)}
             disabled={runStatus === "syncing" || stats.pending === 0}
             className="rounded-2xl px-5"
           >
@@ -96,17 +133,6 @@ export default function QueueScreen() {
             className="rounded-2xl"
           >
             <Text>Xem chi tiết tiến độ</Text>
-          </Button>
-          <Button
-            variant="outline"
-            onPress={() => {
-              const workshops = offlineAuth.getAllowedWorkshops();
-              const firstId = workshops[0] ?? "";
-              router.push(ROUTES.WORKSHOP(firstId));
-            }}
-            className="rounded-2xl"
-          >
-            <Text>Quay lại workshop</Text>
           </Button>
         </View>
       </ScrollView>

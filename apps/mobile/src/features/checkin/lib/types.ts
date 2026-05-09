@@ -42,6 +42,7 @@ export interface SyncStats {
 
 export interface UseSyncResult {
   stats: SyncStats;
+  queueItems: import("@/database/types").CheckinQueueRecord[];
   runStatus: SyncRunStatus;
   errorMessage: string | null;
   sync: (workshopId: string, deviceId: string) => Promise<void>;

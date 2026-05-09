@@ -18,12 +18,15 @@ export function useSync(): UseSyncResult {
     conflicts: 0,
     failed: 0,
   });
+  const [queueItems, setQueueItems] = useState<CheckinQueueRecord[]>([]);
   const [runStatus, setRunStatus] = useState<SyncRunStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadStats = useCallback(async () => {
     const db = createDatabaseClient();
     const all = await db.select().from(checkinQueue);
+    const sorted = [...all].sort((a, b) => b.checkedInAt - a.checkedInAt);
+    setQueueItems(sorted);
     setStats({
       pending: all.filter((r) => r.syncStatus === "PENDING").length,
       synced: all.filter((r) => r.syncStatus === "SYNCED").length,
@@ -43,15 +46,16 @@ export function useSync(): UseSyncResult {
 
       const db = createDatabaseClient();
 
-      // Fetch PENDING items for this workshop
+      // Fetch PENDING items — filter by workshopId when provided, else sync all
       const pending: CheckinQueueRecord[] = await db
         .select()
         .from(checkinQueue)
         .where(eq(checkinQueue.syncStatus, "PENDING"));
 
-      const workshopPending = pending.filter(
-        (r) => r.workshopId === workshopId
-      );
+      const workshopPending =
+        workshopId === ""
+          ? pending
+          : pending.filter((r) => r.workshopId === workshopId);
 
       if (workshopPending.length === 0) {
         setRunStatus("done");
@@ -79,10 +83,10 @@ export function useSync(): UseSyncResult {
       const syncResult = await checkinApi.syncOffline(deviceId, items);
 
       if (syncResult.isFailure) {
-        // Revert SYNCING → FAILED for retry on next attempt
+        // Revert SYNCING → PENDING so next sync attempt retries them
         await db
           .update(checkinQueue)
-          .set({ syncStatus: "FAILED", retryCount: 1 })
+          .set({ syncStatus: "PENDING" })
           .where(inArray(checkinQueue.localId, pendingIds));
 
         // Record failure in sync_log
@@ -147,5 +151,5 @@ export function useSync(): UseSyncResult {
     [loadStats]
   );
 
-  return { stats, runStatus, errorMessage, sync, refresh: loadStats };
+  return { stats, queueItems, runStatus, errorMessage, sync, refresh: loadStats };
 }
