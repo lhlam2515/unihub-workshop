@@ -19,7 +19,7 @@ export async function listWorkshops(
   return Result.fromPromise(
     api.getPaginated<WorkshopListItem>("/workshops", {
       params: {
-        status: "open",
+        status: "OPEN",
         ...filters,
       } as Record<string, string | number | boolean | undefined>,
     })

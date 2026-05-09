@@ -131,7 +131,7 @@ export interface WorkshopFilters {
   day?: string;
   hasSeats?: boolean;
   sort?: string;
-  search?: string;
+  q?: string;
   cursor?: string;
   limit?: number;
 }

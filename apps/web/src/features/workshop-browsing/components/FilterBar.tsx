@@ -29,7 +29,7 @@ const SORT_OPTIONS = [
 ] as const;
 
 export function FilterBar({ filters, onChange }: FilterBarProps) {
-  const [searchValue, setSearchValue] = useState(filters.search ?? "");
+  const [searchValue, setSearchValue] = useState(filters.q ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateFilter = useCallback(
@@ -46,7 +46,7 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        updateFilter({ search: value || undefined });
+        updateFilter({ q: value || undefined });
       }, 300);
     },
     [updateFilter]
@@ -58,7 +58,7 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
   }, [onChange]);
 
   const hasActiveFilters =
-    filters.day || filters.hasSeats || filters.sort || filters.search;
+    filters.day || filters.hasSeats || filters.sort || filters.q;
 
   return (
     <div className="flex flex-col gap-3">

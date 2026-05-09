@@ -21,8 +21,8 @@ function parseFilters(
   const sort = sp.sort;
   if (typeof sort === "string" && sort) filters.sort = sort;
 
-  const search = sp.search;
-  if (typeof search === "string" && search) filters.search = search;
+  const q = sp.q;
+  if (typeof q === "string" && q) filters.q = q;
 
   return filters;
 }

@@ -29,7 +29,7 @@ function filtersToSearchParams(f: WorkshopFilters): string {
   if (f.day) p.set("day", f.day);
   if (f.hasSeats) p.set("hasSeats", "true");
   if (f.sort) p.set("sort", f.sort);
-  if (f.search) p.set("search", f.search);
+  if (f.q) p.set("q", f.q);
   return p.toString();
 }
 
@@ -148,12 +148,12 @@ export function WorkshopListWidget({
           icon={CalendarFold}
           title="Không tìm thấy workshop"
           description={
-            filters.search || filters.day || filters.hasSeats
+            filters.q || filters.day || filters.hasSeats
               ? "Thử thay đổi bộ lọc để tìm kết quả phù hợp hơn."
               : "Hiện tại chưa có workshop nào. Vui lòng quay lại sau."
           }
           action={
-            filters.search || filters.day || filters.hasSeats ? (
+            filters.q || filters.day || filters.hasSeats ? (
               <button
                 type="button"
                 onClick={() => handleFilterChange({})}
