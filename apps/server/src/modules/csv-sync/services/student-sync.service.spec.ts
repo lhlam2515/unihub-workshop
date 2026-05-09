@@ -828,14 +828,21 @@ describe("StudentSyncService", () => {
   describe("listJobs", () => {
     it("returns paginated job list", async () => {
       mockStudentSyncJobsRepo.findMany.mockResolvedValue(
-        Result.ok({ items: [mockJobRecord], total: 1 })
+        Result.ok({
+          items: [mockJobRecord],
+          nextCursor: null,
+          hasMore: false,
+          limit: 20,
+        })
       );
 
-      const result = await service.listJobs({ page: 1, limit: 20 });
+      const result = await service.listJobs({ limit: 20 });
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toHaveLength(1);
-      expect(result.data.total).toBe(1);
+      expect(result.data.nextCursor).toBeNull();
+      expect(result.data.hasMore).toBe(false);
+      expect(result.data.limit).toBe(20);
     });
   });
 });

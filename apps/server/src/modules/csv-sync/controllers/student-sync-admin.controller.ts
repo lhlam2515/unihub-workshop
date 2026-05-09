@@ -28,15 +28,15 @@ import { StudentSyncService } from "../services/student-sync.service";
  *
  * Admin REST API for managing student data CSV sync jobs.
  *
- * Endpoints:
- * - POST   /admin/student-sync        — Trigger a new sync job
- * - GET    /admin/student-sync        — List all sync jobs (paginated)
- * - GET    /admin/student-sync/:jobId — Get status of a specific job
- * - GET    /admin/student-sync/:jobId/errors — Get errors for a job (paginated)
+ * Endpoints (matching OpenAPI spec `/admin/imports`):
+ * - POST   /admin/imports/trigger                — Trigger a new sync job
+ * - GET    /admin/imports                         — List all sync jobs (paginated)
+ * - GET    /admin/imports/{importId}              — Get status of a specific job
+ * - GET    /admin/imports/{importId}/errors       — Get errors for a job (paginated)
  *
  * All endpoints require BTC role.
  */
-@Controller("/admin/student-sync")
+@Controller("/admin/imports")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
 @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
@@ -53,25 +53,26 @@ export class StudentSyncAdminController {
    * @returns OkResult with job metadata (jobId, status, triggeredAt)
    *         or FailResult (INTERNAL_ERROR)
    */
-  @Post()
+  @Post("trigger")
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerSync(@Body() dto: TriggerStudentSyncDto): Promise<Result<any>> {
     return this.studentSyncService.triggerSync(dto.sourceFileName);
   }
 
   /**
-   * List all sync jobs with pagination
+   * List all sync jobs with cursor-based pagination
    *
    * Results ordered by triggered_at DESC (most recent first).
    *
-   * @param query - Pagination parameters (page, limit)
-   * @returns OkResult with items array and total count
+   * @param query - Filter and cursor parameters (status, cursor, limit)
+   * @returns OkResult with items array, nextCursor, hasMore flag, and limit
    *         or FailResult (INTERNAL_ERROR)
    */
   @Get()
   async listJobs(@Query() query: ListSyncJobsQueryDto): Promise<Result<any>> {
     return this.studentSyncService.listJobs({
-      page: query.page,
+      status: query.status,
+      cursor: query.cursor,
       limit: query.limit,
     });
   }
