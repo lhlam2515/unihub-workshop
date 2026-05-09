@@ -490,7 +490,7 @@ src/
 
 > **Note 1:** `/admin/workshops/{id}/stats` tính trong cluster `catalog` vì Controller class nằm trong `catalog` — `booking`/`payment`/`checkin` chỉ expose query method.
 >
-> **Note 2:** `payment` tăng từ 3 → 6 endpoint sau khi bổ sung CB monitoring + reconcile trigger (Gap 5 từ gap analysis). ADR-15 được add vào `booking` và `payment` vì hai module này sở hữu các endpoint có `Idempotency-Key` header.
+> **Note 2:** `payment` tăng từ 3 → 6 endpoint sau khi bổ sung CB monitoring + reconcile trigger (Gap 5 từ gap analysis). ADR-15 được add vào `booking` và `payment` vì hai module này sở hữu các endpoint có `X-Idempotency-Key` header.
 
 ---
 
@@ -498,7 +498,7 @@ src/
 
 ✅ 10 module được liệt kê đúng tên (`booking`, `catalog`, `payment`, `notification`, `checkin`, `ai-summary`, `csv-sync`, `iam`, `rate-limit`, `background`).
 ✅ Architectural style của từng module được phản ánh trong API design (vd: `payment` có Circuit Breaker check trước gateway call; `ai-summary` upload trả 202 Accepted vì pipeline async).
-✅ ADR map 1-1: ADR-03 ↔ booking, ADR-07/08 ↔ payment, ADR-09 ↔ notification, ADR-11 ↔ checkin, ADR-13 ↔ catalog, ADR-14 ↔ ai-summary, ADR-12 ↔ csv-sync, ADR-04/05 ↔ iam, ADR-06 ↔ rate-limit, **ADR-15 ↔ booking + payment** (Idempotency-Key header transport).
+✅ ADR map 1-1: ADR-03 ↔ booking, ADR-07/08 ↔ payment, ADR-09 ↔ notification, ADR-11 ↔ checkin, ADR-13 ↔ catalog, ADR-14 ↔ ai-summary, ADR-12 ↔ csv-sync, ADR-04/05 ↔ iam, ADR-06 ↔ rate-limit, **ADR-15 ↔ booking + payment** (X-Idempotency-Key header transport).
 ✅ Layered architecture (Presentation → Business → Data Access) được giữ trong cấu trúc thư mục mỗi module (`controllers/` → `services/` → `repositories/`).
 ✅ Dependency graph không có cycle.
 ✅ `rate-limit` và `background` không expose endpoint — đúng vai trò cross-cutting/operational.

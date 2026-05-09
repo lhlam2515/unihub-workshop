@@ -58,7 +58,7 @@ export class IdempotencyMechanic {
    * Side effects:
    * - Inserts a row into idempotency_keys when the key is new.
    *
-   * @param key - The raw idempotency key from the Idempotency-Key header.
+   * @param key - The raw idempotency key from the X-Idempotency-Key header.
    * @param resourceType - 'REGISTRATION' or 'PAYMENT'.
    * @returns OkResult with proceed flag and optional cached response,
    * or FailResult with IDEMPOTENCY_CONFLICT or INTERNAL_ERROR.

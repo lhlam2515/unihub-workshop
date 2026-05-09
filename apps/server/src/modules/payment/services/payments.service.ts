@@ -95,7 +95,7 @@ export class PaymentsService {
    *
    * @param studentId - The UUID of the authenticated student (from JWT).
    * @param dto - CreatePaymentDto with registration_id and gateway.
-   * @param idempotencyKey - The Idempotency-Key header value.
+   * @param idempotencyKey - The X-Idempotency-Key header value.
    * @returns OkResult with CreatePaymentResponseDto (includes redirect_url and deadline),
    * or FailResult with codes:
    * - IDEMPOTENCY_CONFLICT: Another request with this key is in progress.

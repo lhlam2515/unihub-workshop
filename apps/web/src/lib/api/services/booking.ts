@@ -53,7 +53,7 @@ export async function cancelRegistration(
 /**
  * Register for a workshop (free or paid).
  *
- * Requires a client-generated Idempotency-Key header for retry safety.
+ * Requires a client-generated X-Idempotency-Key header for retry safety.
  * T2 + T3 rate-limited on the server.
  */
 export async function createRegistration(
@@ -62,7 +62,7 @@ export async function createRegistration(
 ): Promise<Result<Registration>> {
   return Result.fromPromise(
     api.post<Registration>("/registrations", body, {
-      headers: { "Idempotency-Key": idempotencyKey },
+      headers: { "X-Idempotency-Key": idempotencyKey },
     })
   );
 }

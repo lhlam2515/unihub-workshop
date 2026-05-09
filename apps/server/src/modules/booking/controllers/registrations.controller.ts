@@ -33,7 +33,7 @@ export class RegistrationsController {
    * POST /registrations
    *
    * @param dto - Zod-validated body containing the target workshop_id (UUID).
-   * @param idempotencyKey - Idempotency-Key header value for safe retry.
+   * @param idempotencyKey - X-Idempotency-Key header value for safe retry.
    * @param user - JWT payload providing student identity.
    * @returns HTTP 201 with RegistrationDto on success, or error response.
    */

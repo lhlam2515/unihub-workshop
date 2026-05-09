@@ -119,12 +119,12 @@ Response 429:
 }
 ```
 
-### 0.4. Idempotency Key (ADR-08, ADR-15) — header `Idempotency-Key`
+### 0.4. Idempotency Key (ADR-08, ADR-15) — header `X-Idempotency-Key`
 
 | Endpoint | Header bắt buộc | Ghi chú |
 |---|---|---|
-| `POST /registrations` | `Idempotency-Key: <UUID v4>` | Dedup lần đăng ký |
-| `POST /payments` | `Idempotency-Key: <UUID v4>` | Dedup + forward đến gateway |
+| `POST /registrations` | `X-Idempotency-Key: <UUID v4>` | Dedup lần đăng ký |
+| `POST /payments` | `X-Idempotency-Key: <UUID v4>` | Dedup + forward đến gateway |
 | `POST /checkins/sync` | ❌ (per-item `local_id` trong body) | Batch idempotency qua DB UNIQUE |
 | Còn lại | ❌ | |
 
@@ -133,7 +133,7 @@ Response 429:
 **Behavior trên server (3-state lifecycle, `registration-paid.md` §Bước 2):**
 
 ```
-Client gửi POST với header Idempotency-Key: K
+Client gửi POST với header X-Idempotency-Key: K
         │
         ▼
 SELECT * FROM idempotency_keys WHERE key = K
@@ -484,7 +484,7 @@ Public detail endpoint cho room và speaker. Cache 5 phút (data ít đổi).
 **Headers bắt buộc:**
 
 ```
-Idempotency-Key: <UUID v4 sinh từ client, trước request đầu tiên>
+X-Idempotency-Key: <UUID v4 sinh từ client, trước request đầu tiên>
 ```
 
 **Request body:**
@@ -602,7 +602,7 @@ Nếu là paid → đẩy job hoàn tiền vào BullMQs.
 **Headers bắt buộc:**
 
 ```
-Idempotency-Key: <UUID v4 sinh từ client, trước request đầu tiên>
+X-Idempotency-Key: <UUID v4 sinh từ client, trước request đầu tiên>
 ```
 
 **Request body:**
@@ -615,7 +615,7 @@ Idempotency-Key: <UUID v4 sinh từ client, trước request đầu tiên>
 }
 ```
 
-Server forward giá trị `Idempotency-Key` header làm `Idempotency-Key` header khi gọi ra gateway (ADR-08 INV-04). Server embed lại key trong 504 response body như hint retry.
+Server forward giá trị `X-Idempotency-Key` header làm `X-Idempotency-Key` header khi gọi ra gateway (ADR-08 INV-04). Server embed lại key trong 504 response body như hint retry.
 
 **Rate limit:** T2 (user: 30/60s) + T3 (user×workshop: 5/60s).
 
@@ -633,7 +633,7 @@ Bước ②: Circuit Breaker check (PHẢI SAU Idempotency)
 
 Bước ③: Claim/refresh idempotency key → 'IN_PROGRESS'
 Bước ④: INSERT payment (status='INITIATED')
-         POST gateway với header Idempotency-Key: {payment_key}, timeout 5s
+         POST gateway với header X-Idempotency-Key: {payment_key}, timeout 5s
 Bước ⑤: Finalize (atomic):
   gateway 200  → payment='SUCCEEDED', key='COMPLETED', registration='PAID' → 200
   gateway 4xx  → payment='FAILED',    key='COMPLETED'                      → 402
@@ -657,7 +657,7 @@ Bước ⑤: Finalize (atomic):
 }
 ```
 
-Client **phải dùng lại `Idempotency-Key` header này**, không sinh key mới.
+Client **phải dùng lại `X-Idempotency-Key` header này**, không sinh key mới.
 
 **Errors:** `503 PAYMENT_GATEWAY_OPEN` (CB OPEN), `402 payment.declined`, `409 payment_in_progress`.
 
@@ -792,7 +792,7 @@ Check-in **online** (mạng ổn định) — single-record.
 
 **Auth:** Bearer (`checkin_staff`).
 
-**Không dùng Idempotency-Key header** — mỗi item có `local_id` riêng làm per-item key. Idempotency tự nhiên qua `ON CONFLICT DO NOTHING`.
+**Không dùng X-Idempotency-Key header** — mỗi item có `local_id` riêng làm per-item key. Idempotency tự nhiên qua `ON CONFLICT DO NOTHING`.
 
 **Request (body trực tiếp là mảng items, per `checkin-offline.md` §2.2):**
 
@@ -1284,10 +1284,10 @@ Trigger reconciliation job ngay lập tức thay vì chờ cron 5 phút.
 
 | Endpoint | Vị trí key | Header / Field | Cơ chế server | Lưu ý |
 |---|---|---|---|---|
-| `POST /registrations` | **Header** | `Idempotency-Key` | 3-state (`in_progress`/`completed`) | OL retry ẩn trong server |
-| `POST /payments` | **Header** | `Idempotency-Key` | 3-state (kể cả `unresolved`) | Forward đến gateway — ADR-08 INV-04 |
+| `POST /registrations` | **Header** | `X-Idempotency-Key` | 3-state (`in_progress`/`completed`) | OL retry ẩn trong server |
+| `POST /payments` | **Header** | `X-Idempotency-Key` | 3-state (kể cả `unresolved`) | Forward đến gateway — ADR-08 INV-04 |
 | `POST /checkins` (online) | DB UNIQUE | — | `ON CONFLICT (registration_id) DO NOTHING` | Không cần application-level key |
 | `POST /checkins/sync` | Body, per-item | `local_id` | DB UNIQUE per item | Batch idempotent tự nhiên |
 | `POST /payments/webhook/*` | Lookup | `gateway_charge_id` | DB lookup | Gateway gửi lại nhiều lần — OK |
 
-**Quy tắc chung:** Header `Idempotency-Key` (ADR-15) — key là transport concern, không phải business field. Client không sinh key mới khi retry. Tất cả `PUT/PATCH/DELETE` có idempotency tự nhiên qua HTTP semantics.
+**Quy tắc chung:** Header `X-Idempotency-Key` (ADR-15) — key là transport concern, không phải business field. Client không sinh key mới khi retry. Tất cả `PUT/PATCH/DELETE` có idempotency tự nhiên qua HTTP semantics.

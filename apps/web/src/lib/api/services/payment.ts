@@ -5,7 +5,7 @@ import type { Payment, PaymentCreateRequest } from "@/types/registration";
 /**
  * Initiate a payment for a pending registration.
  *
- * Requires a client-generated Idempotency-Key header.
+ * Requires a client-generated X-Idempotency-Key header.
  * The server checks Circuit Breaker before claiming the key.
  */
 export async function createPayment(
@@ -14,7 +14,7 @@ export async function createPayment(
 ): Promise<Result<Payment>> {
   return Result.fromPromise(
     api.post<Payment>("/payments", body, {
-      headers: { "Idempotency-Key": idempotencyKey },
+      headers: { "X-Idempotency-Key": idempotencyKey },
     })
   );
 }

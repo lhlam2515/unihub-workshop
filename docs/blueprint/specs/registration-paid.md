@@ -34,7 +34,7 @@ Request:
   POST /registrations
   Headers:
     Authorization: Bearer <access_token>
-    Idempotency-Key: <UUID v4 do client sinh trước>
+    X-Idempotency-Key: <UUID v4 do client sinh trước>
   Body: {}
 ```
 
@@ -203,12 +203,12 @@ Request:
   POST /payments
   Headers:
     Authorization: Bearer <access_token>
-    Idempotency-Key: <UUID v4 do client sinh trước, lưu ở localStorage>
+    X-Idempotency-Key: <UUID v4 do client sinh trước, lưu ở localStorage>
   Body: {
     "registration_id": "<UUID>"
   }
 
-QUAN TRỌNG: `Idempotency-Key` được sinh một lần trước khi gửi request đầu tiên.
+QUAN TRỌNG: `X-Idempotency-Key` được sinh một lần trước khi gửi request đầu tiên.
             Client KHÔNG được sinh key mới khi retry — phải dùng lại cùng header value.
 ```
 
@@ -282,7 +282,7 @@ VALUES
   (gen_random_uuid(), :registration_id, :amount, 'VND', :payment_key, 'INITIATED');
 
 POST https://gateway/charge
-Headers: Idempotency-Key: {payment_key}   ← FORWARD key đến gateway
+Headers: X-Idempotency-Key: {payment_key}   ← FORWARD key đến gateway
 Timeout: 5 giây
 
 CASE kết quả:
@@ -356,10 +356,10 @@ Nếu pmt_status = 'FAILED':
 ### Chi tiết E-08 — Gateway Timeout (kịch bản phức tạp nhất)
 
 ```
-T=0s:   Client gửi POST /payments với Idempotency-Key: K
+T=0s:   Client gửi POST /payments với X-Idempotency-Key: K
 T=0.1s: Server claim K='IN_PROGRESS'
 T=0.1s: Server INSERT payments (status='INITIATED')
-T=0.1s: Server gọi gateway với header Idempotency-Key: K
+T=0.1s: Server gọi gateway với header X-Idempotency-Key: K
 T=5s:   Timeout (không nhận response)
 T=5s:   Server: CB ghi 1 failure
 T=5s:   Server: UPDATE payments SET status='UNRESOLVED'
@@ -370,7 +370,7 @@ Client retry T=35s với cùng key K:
   Bước ①: status='UNRESOLVED' → KHÔNG trả cache, tiếp tục
   Bước ②: CB check (có thể đã HALF-OPEN sau 30s)
   Bước ③: UPDATE key về 'IN_PROGRESS' (case B)
-  Bước ④: Gọi gateway với header Idempotency-Key: K
+  Bước ④: Gọi gateway với header X-Idempotency-Key: K
            Gateway nhận K đã xử lý → trả kết quả đã cache (200 hoặc 402)
   Bước ⑤: Finalize key='COMPLETED', payment='SUCCEEDED'/'FAILED'
 ```
@@ -393,7 +393,7 @@ Nếu INSERT bị UNIQUE constraint → ROLLBACK toàn bộ transaction (kể c�
 
 **INV-04 — No Double Charge:**
 Cùng `payment_key` không bao giờ dẫn đến hai charge thành công tại gateway.
-Enforcement: Forward `payment_key` làm gateway `Idempotency-Key` header.
+Enforcement: Forward `payment_key` làm gateway `X-Idempotency-Key` header.
 
 **INV-05 — Unresolved ≠ Completed:**
 Key `unresolved` KHÔNG được cache như response xác định.
@@ -420,11 +420,11 @@ Given registration status='PENDING', gateway mock trả 200.
 Then: 200 + receipt_id. DB: payments.status='SUCCEEDED', registrations.status='PAID'.
 
 **AC-03 — Idempotency registration (header):**
-Given cùng `Idempotency-Key` header (đã 'COMPLETED').
+Given cùng `X-Idempotency-Key` header (đã 'COMPLETED').
 Then: response giống lần 1. DB: KHÔNG có row mới.
 
 **AC-04 — Idempotency payment — retry sau timeout (header):**
-Lần 1: timeout → 504 + retry_same_key=true. Lần 2: cùng `Idempotency-Key` header → gateway confirm → 200.
+Lần 1: timeout → 504 + retry_same_key=true. Lần 2: cùng `X-Idempotency-Key` header → gateway confirm → 200.
 DB: chỉ 1 payment record. Gateway: chỉ nhận 1 charge.
 
 **AC-05 — Concurrent requests no oversell:**
