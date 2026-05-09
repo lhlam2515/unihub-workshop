@@ -238,15 +238,16 @@ async function seedIdentity(passwordHash: string) {
   }
 
   // Bulk insert in batches of 100 to stay under query size limits
-  for (let b = 0; b < 5; b++) {
+  const STUDENT_BATCH = 100;
+  for (let b = 0; b < Math.ceil(userRows.length / STUDENT_BATCH); b++) {
     await db
       .insert(schema.users)
-      .values(userRows.slice(b * 100, (b + 1) * 100));
+      .values(userRows.slice(b * STUDENT_BATCH, (b + 1) * STUDENT_BATCH));
   }
-  for (let b = 0; b < 5; b++) {
+  for (let b = 0; b < Math.ceil(studentRows.length / STUDENT_BATCH); b++) {
     await db
       .insert(schema.students)
-      .values(studentRows.slice(b * 100, (b + 1) * 100));
+      .values(studentRows.slice(b * STUDENT_BATCH, (b + 1) * STUDENT_BATCH));
   }
 
   // ── Device tokens (first 20 students) ────────────────────────────────────
@@ -695,9 +696,14 @@ async function seedRegistrations(
     const ws = workshops[wi];
     const { fillRate, cancelRate, pendingRate } = fillConfig(ws.def);
     const target = Math.floor(ws.seatsTotal * fillRate);
+    if (target > studentIds.length) {
+      throw new Error(
+        `Workshop ${ws.workshopId} target ${target} exceeds student pool ${studentIds.length} — collision-free formula cannot guarantee uniqueness`
+      );
+    }
 
     for (let ri = 0; ri < target; ri++) {
-      // Deterministic collision-free: gcd(31, 500) = 1 → unique indices per workshop
+      // Deterministic, collision-free per workshop: gcd(31, 500) = 1 ensures ri*31 visits all 500 residues before repeating
       const studentIdx = (wi * 97 + ri * 31) % studentIds.length;
       const studentId = studentIds[studentIdx];
 
