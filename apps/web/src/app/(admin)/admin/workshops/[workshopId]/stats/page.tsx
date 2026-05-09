@@ -1,38 +1,49 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useParams, notFound } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { getAdminWorkshop, getWorkshopStats } from "@/lib/api/services/admin";
+import type { WorkshopAdmin, WorkshopStats } from "@/types/workshop";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
 import { AdminWorkshopStatsWidget } from "@/widgets/AdminWorkshopStatsWidget";
 
-interface PageProps {
-  params: Promise<{ workshopId: string }>;
-}
+export default function AdminWorkshopStatsPage() {
+  const params = useParams<{ workshopId: string }>();
+  const [workshop, setWorkshop] = useState<WorkshopAdmin | null>(null);
+  const [stats, setStats] = useState<WorkshopStats | null>(null);
+  const [statsError, setStatsError] = useState<string | undefined>(undefined);
+  const [notFoundState, setNotFoundState] = useState(false);
 
-export default async function AdminWorkshopStatsPage({ params }: PageProps) {
-  const { workshopId } = await params;
+  useEffect(() => {
+    Promise.all([
+      getAdminWorkshop(params.workshopId),
+      getWorkshopStats(params.workshopId),
+    ]).then(([workshopResult, statsResult]) => {
+      if (workshopResult.isFailure) {
+        setNotFoundState(true);
+        return;
+      }
+      setWorkshop(workshopResult.data);
 
-  const [workshopResult, statsResult] = await Promise.all([
-    getAdminWorkshop(workshopId),
-    getWorkshopStats(workshopId),
-  ]);
+      if (statsResult.isSuccess) {
+        setStats(statsResult.data);
+      } else {
+        setStatsError((statsResult.error as { message?: string })?.message);
+      }
+    });
+  }, [params.workshopId]);
 
-  if (workshopResult.isFailure) {
-    notFound();
-  }
-
-  const workshop = workshopResult.data;
+  if (notFoundState) notFound();
+  if (!workshop) return null;
 
   return (
     <div className="space-y-6">
       <AdminWorkshopEditWidget workshop={workshop} activeTab="stats" />
       <AdminWorkshopStatsWidget
         workshop={workshop}
-        initialStats={statsResult.isSuccess ? statsResult.data : null}
-        initialError={
-          statsResult.isFailure
-            ? (statsResult.error as { message?: string })?.message
-            : undefined
-        }
+        initialStats={stats}
+        initialError={statsError}
       />
     </div>
   );

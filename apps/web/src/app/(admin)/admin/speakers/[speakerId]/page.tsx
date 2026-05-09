@@ -1,17 +1,28 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useParams, notFound } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { getSpeaker } from "@/lib/api/services/admin";
+import type { SpeakerAdmin } from "@/types/workshop";
 import { AdminSpeakerFormWidget } from "@/widgets/AdminSpeakerFormWidget";
 
-interface PageProps {
-  params: Promise<{ speakerId: string }>;
-}
+export default function AdminEditSpeakerPage() {
+  const params = useParams<{ speakerId: string }>();
+  const [data, setData] = useState<SpeakerAdmin | undefined>(undefined);
+  const [notFoundState, setNotFoundState] = useState(false);
 
-export default async function AdminEditSpeakerPage({ params }: PageProps) {
-  const { speakerId } = await params;
-  const result = await getSpeaker(speakerId);
+  useEffect(() => {
+    getSpeaker(params.speakerId).then((result) => {
+      if (result.isFailure) {
+        setNotFoundState(true);
+      } else {
+        setData(result.data);
+      }
+    });
+  }, [params.speakerId]);
 
-  if (result.isFailure) notFound();
+  if (notFoundState) notFound();
 
-  return <AdminSpeakerFormWidget mode="edit" initialData={result.data} />;
+  return <AdminSpeakerFormWidget mode="edit" initialData={data} />;
 }

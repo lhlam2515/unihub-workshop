@@ -1,24 +1,26 @@
-export const dynamic = "force-dynamic";
+"use client";
+
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { getImportDetail } from "@/lib/api/services/admin";
+import type { ImportLog } from "@/types/admin-operations";
 import { AdminImportDetailWidget } from "@/widgets/AdminImportDetailWidget";
 
-interface PageProps {
-  params: Promise<{ importId: string }>;
-}
+export default function ImportDetailPage() {
+  const params = useParams<{ importId: string }>();
+  const [data, setData] = useState<ImportLog | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
 
-export default async function ImportDetailPage({ params }: PageProps) {
-  const { importId } = await params;
-  const result = await getImportDetail(importId);
+  useEffect(() => {
+    getImportDetail(params.importId).then((result) => {
+      if (result.isFailure) {
+        setError((result.error as { message?: string })?.message);
+      } else {
+        setData(result.data);
+      }
+    });
+  }, [params.importId]);
 
-  if (result.isFailure) {
-    return (
-      <AdminImportDetailWidget
-        initialResult={null}
-        initialError={(result.error as { message?: string })?.message}
-      />
-    );
-  }
-
-  return <AdminImportDetailWidget initialResult={result.data} />;
+  return <AdminImportDetailWidget initialResult={data} initialError={error} />;
 }

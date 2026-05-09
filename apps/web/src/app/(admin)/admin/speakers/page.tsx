@@ -1,17 +1,24 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 import { listSpeakers } from "@/lib/api/services/admin";
+import type { SpeakerAdmin } from "@/types/workshop";
 import { AdminSpeakerListWidget } from "@/widgets/AdminSpeakerListWidget";
 
-export default async function AdminSpeakerListPage() {
-  const result = await listSpeakers();
+export default function AdminSpeakerListPage() {
+  const [data, setData] = useState<SpeakerAdmin[] | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
 
-  if (result.isFailure) {
-    return (
-      <AdminSpeakerListWidget
-        initialResult={null}
-        initialError={(result.error as { message?: string })?.message}
-      />
-    );
-  }
+  useEffect(() => {
+    listSpeakers().then((result) => {
+      if (result.isFailure) {
+        setError((result.error as { message?: string })?.message);
+      } else {
+        setData(result.data);
+      }
+    });
+  }, []);
 
-  return <AdminSpeakerListWidget initialResult={result.data} />;
+  return <AdminSpeakerListWidget initialResult={data} initialError={error} />;
 }

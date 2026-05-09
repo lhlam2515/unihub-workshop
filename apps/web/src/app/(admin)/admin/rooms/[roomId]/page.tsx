@@ -1,32 +1,47 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useParams, notFound } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import type { WorkshopScheduleEntry } from "@/features/admin-room-management/components/RoomScheduleCalendar";
 import { getRoom, listAdminWorkshops } from "@/lib/api/services/admin";
+import type { RoomAdmin } from "@/types/workshop";
 import { AdminRoomEditWidget } from "@/widgets/AdminRoomEditWidget";
 
-interface PageProps {
-  params: Promise<{ roomId: string }>;
-}
+export default function AdminRoomEditPage() {
+  const params = useParams<{ roomId: string }>();
+  const [room, setRoom] = useState<RoomAdmin | null>(null);
+  const [schedule, setSchedule] = useState<WorkshopScheduleEntry[]>([]);
+  const [notFoundState, setNotFoundState] = useState(false);
 
-export default async function AdminRoomEditPage({ params }: PageProps) {
-  const { roomId } = await params;
+  useEffect(() => {
+    Promise.all([
+      getRoom(params.roomId),
+      listAdminWorkshops({ q: params.roomId }),
+    ]).then(([roomResult, workshopsResult]) => {
+      if (roomResult.isFailure) {
+        setNotFoundState(true);
+        return;
+      }
+      setRoom(roomResult.data);
 
-  const [roomResult, workshopsResult] = await Promise.all([
-    getRoom(roomId),
-    listAdminWorkshops({ q: roomId }), // TODO: use dedicated roomId filter when available
-  ]);
+      if (workshopsResult.isSuccess) {
+        const items: WorkshopScheduleEntry[] = workshopsResult.data.items.map(
+          (w) => ({
+            id: w.id,
+            title: w.title,
+            startsAt: w.startsAt,
+            endsAt: w.endsAt,
+            status: w.status,
+          })
+        );
+        setSchedule(items);
+      }
+    });
+  }, [params.roomId]);
 
-  if (roomResult.isFailure) notFound();
+  if (notFoundState) notFound();
+  if (!room) return null;
 
-  const schedule: WorkshopScheduleEntry[] = workshopsResult.isSuccess
-    ? workshopsResult.data.items.map((w) => ({
-        id: w.id,
-        title: w.title,
-        startsAt: w.startsAt,
-        endsAt: w.endsAt,
-        status: w.status,
-      }))
-    : [];
-
-  return <AdminRoomEditWidget room={roomResult.data} schedule={schedule} />;
+  return <AdminRoomEditWidget room={room} schedule={schedule} />;
 }

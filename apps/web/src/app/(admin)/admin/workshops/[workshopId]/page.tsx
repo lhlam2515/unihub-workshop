@@ -1,40 +1,53 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useParams, notFound } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import {
   getAdminWorkshop,
   listSpeakers,
   listRooms,
 } from "@/lib/api/services/admin";
+import type {
+  WorkshopAdmin,
+  SpeakerSummary,
+  RoomSummary,
+} from "@/types/workshop";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
-interface PageProps {
-  params: Promise<{ workshopId: string }>;
-}
+export default function AdminWorkshopEditPage() {
+  const params = useParams<{ workshopId: string }>();
+  const [workshop, setWorkshop] = useState<WorkshopAdmin | null>(null);
+  const [speakers, setSpeakers] = useState<SpeakerSummary[]>([]);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [notFoundState, setNotFoundState] = useState(false);
 
-export default async function AdminWorkshopEditPage({ params }: PageProps) {
-  const { workshopId } = await params;
+  useEffect(() => {
+    Promise.all([
+      getAdminWorkshop(params.workshopId),
+      listSpeakers(),
+      listRooms(),
+    ]).then(([workshopResult, speakersResult, roomsResult]) => {
+      if (workshopResult.isFailure) {
+        setNotFoundState(true);
+        return;
+      }
+      setWorkshop(workshopResult.data);
+      if (speakersResult.isSuccess) setSpeakers(speakersResult.data);
+      if (roomsResult.isSuccess) setRooms(roomsResult.data);
+    });
+  }, [params.workshopId]);
 
-  const [workshopResult, speakersResult, roomsResult] = await Promise.all([
-    getAdminWorkshop(workshopId),
-    listSpeakers(),
-    listRooms(),
-  ]);
-
-  if (workshopResult.isFailure) {
-    notFound();
-  }
-
-  const speakers = speakersResult.isSuccess ? speakersResult.data : [];
-  const rooms = roomsResult.isSuccess ? roomsResult.data : [];
+  if (notFoundState) notFound();
+  if (!workshop) return null;
 
   return (
     <div className="space-y-6">
-      <AdminWorkshopEditWidget workshop={workshopResult.data} />
-
+      <AdminWorkshopEditWidget workshop={workshop} />
       <AdminWorkshopFormWidget
         mode="edit"
-        initialData={workshopResult.data}
+        initialData={workshop}
         speakers={speakers}
         rooms={rooms}
       />

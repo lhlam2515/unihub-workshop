@@ -1,14 +1,23 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 import { listSpeakers, listRooms } from "@/lib/api/services/admin";
+import type { SpeakerSummary, RoomSummary } from "@/types/workshop";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
-export default async function AdminCreateWorkshopPage() {
-  const [speakersResult, roomsResult] = await Promise.all([
-    listSpeakers(),
-    listRooms(),
-  ]);
+export default function AdminCreateWorkshopPage() {
+  const [speakers, setSpeakers] = useState<SpeakerSummary[]>([]);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
 
-  const speakers = speakersResult.isSuccess ? speakersResult.data : [];
-  const rooms = roomsResult.isSuccess ? roomsResult.data : [];
+  useEffect(() => {
+    Promise.all([listSpeakers(), listRooms()]).then(
+      ([speakersResult, roomsResult]) => {
+        if (speakersResult.isSuccess) setSpeakers(speakersResult.data);
+        if (roomsResult.isSuccess) setRooms(roomsResult.data);
+      }
+    );
+  }, []);
 
   return (
     <div className="space-y-6">
