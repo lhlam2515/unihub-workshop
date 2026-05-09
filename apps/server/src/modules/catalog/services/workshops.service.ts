@@ -19,6 +19,8 @@ import { Result } from "@/shared/response/result";
 import { RoomConflictService } from "./room-conflict.service";
 import { SeatCounterService } from "./seat-counter.service";
 import { WorkshopNotificationPublisher } from "./workshop-notification-publisher.service";
+import { RoomResponseBuilder } from "../dto/room-response.dto";
+import { SpeakerResponseBuilder } from "../dto/speaker-response.dto";
 import { WorkshopResponseBuilder } from "../dto/workshop-response.dto";
 import { RoomsRepository } from "../repositories/rooms.repository";
 import { SpeakersRepository } from "../repositories/speakers.repository";
@@ -71,9 +73,16 @@ export class WorkshopsService {
         const availableSeats = await this.seatCounterService.getCachedSeats(
           workshop.workshopId
         );
+        const speaker = workshop.speakers
+          ? SpeakerResponseBuilder.fromSummary(workshop.speakers)
+          : null;
+        const room = workshop.rooms
+          ? RoomResponseBuilder.fromSummary(workshop.rooms)
+          : null;
         return WorkshopResponseBuilder.fromSummary(
           workshop,
-          workshop.speakers?.fullName ?? "Unknown",
+          speaker,
+          room,
           availableSeats
         );
       })
@@ -83,6 +92,7 @@ export class WorkshopsService {
       items: mapped,
       nextCursor: result.data.nextCursor,
       hasMore: result.data.hasMore,
+      limit: query.limit,
     });
   }
 
@@ -122,11 +132,18 @@ export class WorkshopsService {
 
     const availableSeats = await this.seatCounterService.getCachedSeats(id);
 
+    const speaker = workshopRow.speakers
+      ? SpeakerResponseBuilder.from(workshopRow.speakers)
+      : null;
+    const room = workshopRow.rooms
+      ? RoomResponseBuilder.from(workshopRow.rooms)
+      : null;
+
     return Result.ok(
       WorkshopResponseBuilder.fromDetail(
         workshop,
-        workshopRow.speakers?.fullName ?? "Unknown",
-        workshopRow.rooms?.name ?? "Unknown",
+        speaker,
+        room,
         availableSeats
       )
     );
@@ -140,18 +157,20 @@ export class WorkshopsService {
     dto: CreateWorkshopDto,
     userId: string
   ): Promise<Result<WorkshopAdminDetailDto>> {
-    const conflictResult = await this.roomConflictService.checkConflict(
-      dto.roomId,
-      dto.startsAt,
-      dto.endsAt
-    );
-    if (conflictResult.isFailure) return Result.fail(conflictResult.error);
+    if (dto.roomId) {
+      const conflictResult = await this.roomConflictService.checkConflict(
+        dto.roomId,
+        dto.startsAt,
+        dto.endsAt
+      );
+      if (conflictResult.isFailure) return Result.fail(conflictResult.error);
+    }
 
     const workshopData: NewWorkshop = {
       title: dto.title,
       description: dto.description ?? null,
-      speakerId: dto.speakerId,
-      roomId: dto.roomId,
+      speakerId: dto.speakerId ?? null,
+      roomId: dto.roomId ?? null,
       startsAt: dto.startsAt,
       endsAt: dto.endsAt,
       seatsTotal: dto.seatsTotal,
@@ -165,19 +184,24 @@ export class WorkshopsService {
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
 
     const [speakerResult, roomResult] = await Promise.all([
-      this.speakersRepo.findById(dto.speakerId),
-      this.roomsRepo.findById(dto.roomId),
+      this.speakersRepo.findById(dto.speakerId ?? ""),
+      this.roomsRepo.findById(dto.roomId ?? ""),
     ]);
+
+    const speaker =
+      speakerResult.isSuccess && speakerResult.data
+        ? SpeakerResponseBuilder.from(speakerResult.data)
+        : null;
+    const room =
+      roomResult.isSuccess && roomResult.data
+        ? RoomResponseBuilder.from(roomResult.data)
+        : null;
 
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         workshopResult.data,
-        speakerResult.isSuccess && speakerResult.data
-          ? speakerResult.data.fullName
-          : "Unknown",
-        roomResult.isSuccess && roomResult.data
-          ? roomResult.data.name
-          : "Unknown",
+        speaker,
+        room,
         dto.seatsTotal
       )
     );
@@ -242,15 +266,20 @@ export class WorkshopsService {
       this.roomsRepo.findById(workshop.roomId ?? ""),
     ]);
 
+    const speaker =
+      speakerResult.isSuccess && speakerResult.data
+        ? SpeakerResponseBuilder.from(speakerResult.data)
+        : null;
+    const room =
+      roomResult.isSuccess && roomResult.data
+        ? RoomResponseBuilder.from(roomResult.data)
+        : null;
+
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         updateResult.data,
-        speakerResult.isSuccess && speakerResult.data
-          ? speakerResult.data.fullName
-          : "Unknown",
-        roomResult.isSuccess && roomResult.data
-          ? roomResult.data.name
-          : "Unknown",
+        speaker,
+        room,
         updateResult.data.seatsTotal
       )
     );
@@ -281,13 +310,19 @@ export class WorkshopsService {
 
     const roomResult = await this.roomsRepo.findById(workshop.roomId ?? "");
 
+    const speaker = workshopRow.speakers
+      ? SpeakerResponseBuilder.from(workshopRow.speakers)
+      : null;
+    const room =
+      roomResult.isSuccess && roomResult.data
+        ? RoomResponseBuilder.from(roomResult.data)
+        : null;
+
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         updateResult.data,
-        workshopRow.speakers?.fullName ?? "Unknown",
-        roomResult.isSuccess && roomResult.data
-          ? roomResult.data.name
-          : "Unknown",
+        speaker,
+        room,
         workshop.seatsTotal
       )
     );
@@ -346,13 +381,19 @@ export class WorkshopsService {
 
     const roomResult = await this.roomsRepo.findById(workshop.roomId ?? "");
 
+    const speaker = workshopRow.speakers
+      ? SpeakerResponseBuilder.from(workshopRow.speakers)
+      : null;
+    const room =
+      roomResult.isSuccess && roomResult.data
+        ? RoomResponseBuilder.from(roomResult.data)
+        : null;
+
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         updateResult.data,
-        workshopRow.speakers?.fullName ?? "Unknown",
-        roomResult.isSuccess && roomResult.data
-          ? roomResult.data.name
-          : "Unknown",
+        speaker,
+        room,
         workshop.seatsTotal
       )
     );
@@ -393,13 +434,19 @@ export class WorkshopsService {
 
     const roomResult = await this.roomsRepo.findById(workshop.roomId ?? "");
 
+    const speaker = workshopRow.speakers
+      ? SpeakerResponseBuilder.from(workshopRow.speakers)
+      : null;
+    const room =
+      roomResult.isSuccess && roomResult.data
+        ? RoomResponseBuilder.from(roomResult.data)
+        : null;
+
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         updateResult.data,
-        workshopRow.speakers?.fullName ?? "Unknown",
-        roomResult.isSuccess && roomResult.data
-          ? roomResult.data.name
-          : "Unknown",
+        speaker,
+        room,
         workshop.seatsTotal
       )
     );
@@ -430,11 +477,18 @@ export class WorkshopsService {
     const workshopRow = workshopResult.data!;
     const workshop = workshopRow.workshops;
 
+    const speaker = workshopRow.speakers
+      ? SpeakerResponseBuilder.from(workshopRow.speakers)
+      : null;
+    const room = workshopRow.rooms
+      ? RoomResponseBuilder.from(workshopRow.rooms)
+      : null;
+
     return Result.ok(
       WorkshopResponseBuilder.fromAdminDetail(
         workshop,
-        workshopRow.speakers?.fullName ?? "Unknown",
-        workshopRow.rooms?.name ?? "Unknown",
+        speaker,
+        room,
         workshop.seatsTotal
       )
     );
@@ -452,19 +506,27 @@ export class WorkshopsService {
     });
     if (result.isFailure) return Result.fail(result.error);
 
-    const mapped = result.data.items.map((workshop: any) =>
-      WorkshopResponseBuilder.fromAdminDetail(
+    const mapped = result.data.items.map((workshop) => {
+      const speaker = workshop.speakers
+        ? SpeakerResponseBuilder.from(workshop.speakers)
+        : null;
+      const room = workshop.rooms
+        ? RoomResponseBuilder.from(workshop.rooms)
+        : null;
+
+      return WorkshopResponseBuilder.fromAdminDetail(
         workshop,
-        workshop.speakers?.fullName ?? "Unknown",
-        workshop.rooms?.name ?? "Unknown",
+        speaker,
+        room,
         workshop.workshops?.seatsTotal ?? workshop.seatsTotal
-      )
-    );
+      );
+    });
 
     return Result.ok({
       items: mapped,
       nextCursor: result.data.nextCursor,
       hasMore: result.data.hasMore,
+      limit: query.limit,
     });
   }
 

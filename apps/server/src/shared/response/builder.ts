@@ -82,41 +82,43 @@ export const successResponse = <T>(
  * Wrap a paginated collection in a success response envelope
  *
  * Business rules:
- * - `totalPages` is derived from total and limit
- * - `hasNextPage` and `hasPrevPage` reflect the derived page range
+ * - `hasMore` and `nextCursor` come from the cursor-based pagination result
+ * - `total` is only populated for offset-aware admin endpoints
  *
  * @param items - Page items to serialize for the client
  * @param paginationInput - Paging inputs used to calculate pagination metadata
- * @param paginationInput.page - Current page index
- * @param paginationInput.limit - Page size used to calculate totals
- * @param paginationInput.total - Total number of items across all pages
+ * @param paginationInput.limit - Page size
+ * @param paginationInput.nextCursor - Opaque cursor for the next page
+ * @param paginationInput.hasMore - Whether more pages exist
+ * @param paginationInput.total - Optional total count for offset-aware endpoints
  * @param meta - Optional metadata overrides
- * @param meta.requestId - Correlation ID for request tracing
  * @param processingStartMs - Request start timestamp used to compute latency
  * @returns Success response with items and pagination metadata
  * @throws Never. Returns a response envelope instead of throwing
  */
 export const paginatedResponse = <T>(
   items: T[],
-  paginationInput: { page: number; limit: number; total: number },
+  paginationInput: {
+    limit: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+    total?: number;
+  },
   meta?: Partial<RequestMeta>,
   processingStartMs?: number
 ): ApiResponse<PaginatedData<T>> => {
-  const { page, limit, total } = paginationInput;
-  const totalPages = Math.ceil(total / limit);
+  const { limit, nextCursor, hasMore, total } = paginationInput;
 
   const pagination: PaginationMeta = {
-    page,
     limit,
-    total,
-    totalPages,
-    hasNextPage: page < totalPages,
-    hasPrevPage: page > 1,
+    nextCursor,
+    hasMore,
+    total: total ?? null,
   };
 
   return {
     success: true,
-    data: { items },
+    data: { data: items },
     pagination,
     meta: buildMeta(meta?.requestId, processingStartMs),
   };
@@ -216,8 +218,13 @@ export const resultToHttpResponse = <T>(
  * @throws Never. Returns a response envelope instead of throwing
  */
 export const paginatedResultToHttpResponse = <T>(
-  result: Result<{ items: T[]; total: number }>,
-  pagination: { page: number; limit: number },
+  result: Result<{ items: T[] }>,
+  pagination: {
+    limit: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+    total?: number;
+  },
   requestId?: string
 ): [number, ApiResponse<unknown>] => {
   if (result.isFailure) {
@@ -227,9 +234,6 @@ export const paginatedResultToHttpResponse = <T>(
     ];
   }
 
-  const { items, total } = result.data;
-  return [
-    200,
-    paginatedResponse(items, { ...pagination, total }, { requestId }),
-  ];
+  const { items } = result.data;
+  return [200, paginatedResponse(items, pagination, { requestId })];
 };

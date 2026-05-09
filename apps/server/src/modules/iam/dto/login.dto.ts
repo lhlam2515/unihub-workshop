@@ -14,14 +14,14 @@ import { z } from "zod";
 
 export const LoginSchema = z
   .object({
-    accountType: z.enum(["student", "staff"]),
-    password: z.string().min(1),
+    accountType: z.enum(["STUDENT", "STAFF"]),
+    password: z.string().min(8),
     studentId: z.string().optional(),
     email: z.string().email().optional(),
   })
   .refine(
     (data) => {
-      if (data.accountType === "student") return !!data.studentId;
+      if (data.accountType === "STUDENT") return !!data.studentId;
       return !!data.email;
     },
     {

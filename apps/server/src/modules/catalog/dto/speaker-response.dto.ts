@@ -1,38 +1,43 @@
 /**
- * Speaker Response DTO
+ * Speaker Response DTOs
  *
- * Shape: full speaker entity
+ * Matches OpenAPI SpeakerSummary and Speaker schemas.
+ * - SpeakerSummary: nested in WorkshopListItem
+ * - Speaker: full detail (extends SpeakerSummary + bio)
  */
 
 import type { Speaker } from "@/infra/database/types/event-core.types";
 
-export interface SpeakerResponseDto {
-  speakerId: string;
+/** Nested in WorkshopListItem — id + fullName + optional title/avatar */
+export interface SpeakerSummaryDto {
+  id: string;
   fullName: string;
-  title?: string;
-  bio?: string;
-  avatarUrl?: string;
+  title: string | null;
+  avatarUrl: string | null;
+}
+
+/** Full speaker detail — extends SpeakerSummary with bio */
+export interface SpeakerResponseDto extends SpeakerSummaryDto {
+  bio: string | null;
 }
 
 export class SpeakerResponseBuilder {
-  /**
-   * Builds a speaker response DTO from a database entity.
-   *
-   * Field mapping (camelCase DB -> snake_case API):
-   * - speakerId -> speaker_id
-   * - fullName -> full_name
-   * - title/bio/avatarUrl: stored as nullable DB columns; null -> undefined for clean JSON
-   *
-   * @param speaker - Raw speaker entity from the database.
-   * @returns SpeakerResponseDto with API-safe fields.
-   */
+  static fromSummary(speaker: Speaker): SpeakerSummaryDto {
+    return {
+      id: speaker.speakerId,
+      fullName: speaker.fullName,
+      title: speaker.title,
+      avatarUrl: speaker.avatarUrl,
+    };
+  }
+
   static from(speaker: Speaker): SpeakerResponseDto {
     return {
-      speakerId: speaker.speakerId,
+      id: speaker.speakerId,
       fullName: speaker.fullName,
-      title: speaker.title ?? undefined,
-      bio: speaker.bio ?? undefined,
-      avatarUrl: speaker.avatarUrl ?? undefined,
+      title: speaker.title,
+      bio: speaker.bio,
+      avatarUrl: speaker.avatarUrl,
     };
   }
 }

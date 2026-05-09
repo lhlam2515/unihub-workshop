@@ -1,75 +1,138 @@
+/**
+ * Workshop Response DTOs
+ *
+ * Matches OpenAPI WorkshopListItem, WorkshopDetail, WorkshopAdmin schemas.
+ * - WorkshopSummaryDto: nested in list responses → WorkshopListItem
+ * - WorkshopDetailDto: public detail view → WorkshopDetail
+ * - WorkshopAdminDetailDto: admin CRUD view → WorkshopAdmin
+ */
+
+import type { WorkshopStatus } from "@/infra/database/types/enums.types";
 import type { Workshop } from "@/infra/database/types/event-core.types";
 
+import type { RoomResponseDto, RoomSummaryDto } from "./room-response.dto";
+import type {
+  SpeakerResponseDto,
+  SpeakerSummaryDto,
+} from "./speaker-response.dto";
+
+/** Nested AI summary in WorkshopDetail */
+export interface AiSummaryDto {
+  status: "NONE" | "QUEUED" | "PROCESSING" | "DONE" | "FAILED";
+  text: string | null;
+  updatedAt: string | null;
+  errorDetail: string | null;
+}
+
+/** @see WorkshopListItem in OpenAPI spec */
 export interface WorkshopSummaryDto {
-  workshopId: string;
+  id: string;
   title: string;
-  speakerName: string;
-  startsAt: Date;
-  availableSeats: number;
-  isPaid: boolean;
-  price?: number;
+  startsAt: string;
+  endsAt: string;
+  seatsTotal: number;
+  seatsAvailable: number;
+  price: number;
+  currency: string;
+  status: WorkshopStatus;
+  speaker: SpeakerSummaryDto | null;
+  room: RoomSummaryDto | null;
+  isRegistered: boolean | null;
 }
 
+/** @see WorkshopDetail in OpenAPI spec */
 export interface WorkshopDetailDto extends WorkshopSummaryDto {
-  description?: string;
-  roomName: string;
-  endsAt: Date;
+  description: string | null;
+  speaker: SpeakerResponseDto | null;
+  room: RoomResponseDto | null;
+  summary: AiSummaryDto | null;
+  myRegistrationId: string | null;
 }
 
+/** @see WorkshopAdmin in OpenAPI spec */
 export interface WorkshopAdminDetailDto extends WorkshopDetailDto {
-  createdBy: string;
-  status: string;
+  version: number;
+  pdfUrl: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export class WorkshopResponseBuilder {
   static fromSummary(
     workshop: Workshop,
-    speakerName: string,
-    availableSeats: number
+    speaker: SpeakerSummaryDto | null,
+    room: RoomSummaryDto | null,
+    availableSeats: number,
+    isRegistered: boolean | null = null
   ): WorkshopSummaryDto {
-    const priceNum = workshop.price ? Number(workshop.price) : 0;
     return {
-      workshopId: workshop.workshopId,
+      id: workshop.workshopId,
       title: workshop.title,
-      speakerName: speakerName,
-      startsAt: workshop.startsAt,
-      availableSeats: availableSeats,
-      isPaid: priceNum > 0,
-      price: priceNum > 0 ? priceNum : undefined,
+      startsAt: workshop.startsAt.toISOString(),
+      endsAt: workshop.endsAt.toISOString(),
+      seatsTotal: workshop.seatsTotal,
+      seatsAvailable: availableSeats,
+      price: workshop.price ? Number(workshop.price) : 0,
+      currency: "VND",
+      status: workshop.status,
+      speaker,
+      room,
+      isRegistered,
     };
   }
 
   static fromDetail(
     workshop: Workshop,
-    speakerName: string,
-    roomName: string,
-    availableSeats: number
+    speaker: SpeakerResponseDto | null,
+    room: RoomResponseDto | null,
+    availableSeats: number,
+    summary: AiSummaryDto | null = null,
+    myRegistrationId: string | null = null,
+    isRegistered: boolean | null = null
   ): WorkshopDetailDto {
-    const summary = this.fromSummary(workshop, speakerName, availableSeats);
+    const base = this.fromSummary(
+      workshop,
+      speaker,
+      room,
+      availableSeats,
+      isRegistered
+    );
     return {
-      ...summary,
-      description: workshop.description ?? undefined,
-      roomName: roomName,
-      endsAt: workshop.endsAt,
+      ...base,
+      description: workshop.description ?? null,
+      speaker,
+      room,
+      summary,
+      myRegistrationId,
     };
   }
 
   static fromAdminDetail(
     workshop: Workshop,
-    speakerName: string,
-    roomName: string,
-    availableSeats: number
+    speaker: SpeakerResponseDto | null,
+    room: RoomResponseDto | null,
+    availableSeats: number,
+    summary: AiSummaryDto | null = null,
+    myRegistrationId: string | null = null,
+    isRegistered: boolean | null = null
   ): WorkshopAdminDetailDto {
     const detail = this.fromDetail(
       workshop,
-      speakerName,
-      roomName,
-      availableSeats
+      speaker,
+      room,
+      availableSeats,
+      summary,
+      myRegistrationId,
+      isRegistered
     );
     return {
       ...detail,
-      createdBy: workshop.createdBy,
-      status: workshop.status,
+      version: workshop.version ?? 0,
+      pdfUrl: null,
+      createdBy: workshop.createdBy ?? null,
+      createdAt: workshop.createdAt?.toISOString() ?? new Date().toISOString(),
+      updatedAt: workshop.updatedAt?.toISOString() ?? new Date().toISOString(),
     };
   }
 }

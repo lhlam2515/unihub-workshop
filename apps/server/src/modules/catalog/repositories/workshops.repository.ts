@@ -140,7 +140,7 @@ export class WorkshopsRepository {
             ? encodeCursor(items[items.length - 1].workshops.startsAt)
             : null;
 
-        return { items, nextCursor, hasMore };
+        return { items, nextCursor, hasMore, limit: filters.limit };
       },
       (err) => systemErrors.internal(err)
     );
@@ -187,7 +187,7 @@ export class WorkshopsRepository {
             ? encodeCursor(items[items.length - 1].workshops.createdAt)
             : null;
 
-        return { items, nextCursor, hasMore };
+        return { items, nextCursor, hasMore, limit: filters.limit };
       },
       (err) => systemErrors.internal(err)
     );

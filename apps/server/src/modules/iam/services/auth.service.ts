@@ -44,7 +44,7 @@ export class AuthService {
    * @returns OkResult with LoginResponseDto, or FailResult with INVALID_CREDENTIALS.
    */
   async login(params: {
-    accountType: "student" | "staff";
+    accountType: "STUDENT" | "STAFF";
     password: string;
     studentId?: string;
     email?: string;
@@ -54,7 +54,7 @@ export class AuthService {
     let user: User;
     let studentProfile: { studentId: string; fullName: string } | undefined;
 
-    if (accountType === "student") {
+    if (accountType === "STUDENT") {
       if (!studentId) return Result.fail(authErrors.invalidCredentials());
 
       const studentResult = await this.studentsRepo.findById(studentId);
