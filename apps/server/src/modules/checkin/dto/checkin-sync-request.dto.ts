@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const CheckinSyncItemSchema = z.object({
   localId: z.string().uuid(),
-  qrCode: z.string().uuid(),
+  qrCode: z.string().min(1),
   workshopId: z.string().uuid(),
   checkedInAt: z.number().int(),
 });
