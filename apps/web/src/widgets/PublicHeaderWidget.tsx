@@ -11,6 +11,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ROUTES from "@/constants/routes";
 import { useAuth } from "@/context/auth-context";
 
@@ -20,7 +28,7 @@ interface PublicHeaderWidgetProps {
 
 export function PublicHeaderWidget({ onLoginClick }: PublicHeaderWidgetProps) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const isActive = pathname.startsWith(ROUTES.WORKSHOPS);
 
   return (
@@ -43,9 +51,27 @@ export function PublicHeaderWidget({ onLoginClick }: PublicHeaderWidgetProps) {
           </Link>
 
           {user ? (
-            <span className="text-muted-foreground text-sm">
-              {user.fullName}
-            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
+                  {user.fullName}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-48">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">{user.fullName}</span>
+                    <span className="text-muted-foreground text-xs font-normal">
+                      {user.email}
+                    </span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => logout()}>
+                  Đăng xuất
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <Button asChild size="sm" onClick={onLoginClick}>
               <Link href={ROUTES.LOGIN}>Đăng nhập</Link>
