@@ -9,12 +9,7 @@
     "lint": "eslint",
     "lint:fix": "eslint --fix .",
     "check-types": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug",
-    "test:e2e:report": "playwright show-report",
-    "test:e2e:codegen": "playwright codegen"
+    "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -42,7 +37,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
     "@repo/eslint-config": "workspace:*",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
