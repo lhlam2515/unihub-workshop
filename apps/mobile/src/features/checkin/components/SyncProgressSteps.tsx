@@ -53,7 +53,7 @@ export function SyncProgressSteps({
 
   return (
     <>
-      <View className="gap-3 rounded-3xl border border-border p-5">
+      <View className="gap-3 rounded-3xl border border-border bg-card p-5">
         <Text className="text-lg font-bold text-foreground">
           Thống kê hàng đợi
         </Text>
@@ -82,7 +82,7 @@ export function SyncProgressSteps({
         ) : null}
       </View>
 
-      <View className="gap-3 rounded-3xl border border-border p-5">
+      <View className="gap-3 rounded-3xl border border-border bg-card p-5">
         <Text className="text-lg font-bold text-foreground">
           Các bước đồng bộ
         </Text>

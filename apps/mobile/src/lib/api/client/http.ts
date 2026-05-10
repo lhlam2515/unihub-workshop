@@ -64,6 +64,10 @@ async function sendFetch(url: string, init: RequestInit): Promise<Response> {
 export async function parseResponse<T>(
   response: Response
 ): Promise<ApiResponse<T>> {
+  if (response.status === 204) {
+    return { success: true, data: undefined as T };
+  }
+
   let envelope: ApiResponse<T>;
 
   try {

@@ -77,7 +77,8 @@ export function useAuth(): UseAuthResult {
             accessTokenExp: payload.exp,
             updatedAt: Date.now(),
           },
-        });
+        })
+        .run();
     } catch {
       // Non-critical: session still works, just no local persistence
     }

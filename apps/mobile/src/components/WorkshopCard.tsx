@@ -1,7 +1,8 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Text } from "@/components/ui/text";
 import type { CacheMetadata } from "@/database/types";
 import type { WorkshopDetailDto } from "@/features/workshops/api/workshops.service";
 
@@ -58,7 +59,7 @@ export function WorkshopCard({
               <Text>{cacheLabel}</Text>
             </Badge>
           </View>
-          <Badge variant="outline">
+          <Badge variant="secondary">
             <Text>{workshop.availableSeats} chỗ</Text>
           </Badge>
         </CardContent>

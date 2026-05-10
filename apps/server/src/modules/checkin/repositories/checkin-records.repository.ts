@@ -163,7 +163,7 @@ export class CheckinRecordsRepository {
           .where(
             and(
               eq(this.schema.registrations.workshopId, workshopId),
-              eq(this.schema.registrations.status, "CONFIRMED")
+              sql`${this.schema.registrations.status} IN ('CONFIRMED', 'PAID')`
             )
           );
         return count;

@@ -17,11 +17,15 @@ export default function ResultScreen() {
     source?: string | string[];
     name?: string | string[];
     code?: string | string[];
+    duplicate?: string | string[];
+    originalAt?: string | string[];
   }>();
   const workshopId = getParam(params.id, "ws-demo");
   const source = getParam(params.source, "ONLINE");
   const studentName = decodeURIComponent(getParam(params.name, "—"));
   const studentCode = getParam(params.code, "—");
+  const isDuplicate = getParam(params.duplicate, "0") === "1";
+  const originalAt = getParam(params.originalAt, "");
 
   const isOffline = source === "OFFLINE_QUEUED";
   const now = new Date().toLocaleTimeString("vi-VN", {
@@ -33,24 +37,41 @@ export default function ResultScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="grow p-5 gap-3.5">
         <View className="gap-2.5">
-          <Text className="text-xs font-bold tracking-widest text-primary">
-            M05 · KẾT QUẢ
-          </Text>
           <Text className="text-2xl font-extrabold leading-8 text-foreground">
-            Kết quả quét cho {workshopId}
+            Kết quả điểm danh
           </Text>
         </View>
 
-        <View className="gap-2.5 rounded-3xl border border-primary p-5">
-          <Text className="text-xl font-extrabold text-primary">
-            Check-in thành công
-          </Text>
-          <Text className="text-sm leading-5 text-muted-foreground">
-            {studentName} · {studentCode}
-          </Text>
-        </View>
+        {isDuplicate ? (
+          <View className="gap-2.5 rounded-3xl border border-yellow-500 bg-yellow-500/10 p-5">
+            <Text className="text-xl font-extrabold text-yellow-500">
+              Đã điểm danh trước đó
+            </Text>
+            <Text className="text-sm leading-5 text-muted-foreground">
+              {studentName} · {studentCode}
+            </Text>
+            {originalAt ? (
+              <Text className="text-xs text-muted-foreground">
+                Lần đầu:{" "}
+                {new Date(originalAt).toLocaleTimeString("vi-VN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <View className="gap-2.5 rounded-3xl border border-primary p-5">
+            <Text className="text-xl font-extrabold text-primary">
+              Check-in thành công
+            </Text>
+            <Text className="text-sm leading-5 text-muted-foreground">
+              {studentName} · {studentCode}
+            </Text>
+          </View>
+        )}
 
-        <View className="gap-2.5 rounded-3xl border border-border p-5">
+        <View className="gap-2.5 rounded-3xl border border-border bg-card p-5">
           <Text className="text-lg font-bold text-foreground">
             Chi tiết nhanh
           </Text>
@@ -73,12 +94,19 @@ export default function ResultScreen() {
         </View>
 
         <View className="mt-1 gap-3">
-          <Button onPress={() => router.back()} className="rounded-2xl">
+          <Button
+            onPress={() =>
+              router.replace(
+                `/workshop/${workshopId}/scan` as Parameters<typeof router.replace>[0]
+              )
+            }
+            className="rounded-2xl"
+          >
             <Text>Quét tiếp</Text>
           </Button>
           <Button
             variant="outline"
-            onPress={() => router.push(ROUTES.WORKSHOP(workshopId))}
+            onPress={() => router.back()}
             className="rounded-2xl"
           >
             <Text>Về dashboard</Text>

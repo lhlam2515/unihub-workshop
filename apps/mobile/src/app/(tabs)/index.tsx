@@ -92,9 +92,6 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="grow gap-3 p-5">
         <View className="gap-2 py-2">
-          <Text className="text-xs font-bold tracking-widest text-primary">
-            TAB SỰ KIỆN
-          </Text>
           <Text className="text-2xl font-extrabold leading-8 text-foreground">
             Workshop được phân công
           </Text>
@@ -131,7 +128,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View className="gap-3.5 rounded-3xl border border-border p-5">
+        <View className="gap-3.5 rounded-3xl border border-border bg-card p-5">
           <Text className="text-lg font-bold text-foreground">
             Hành động nhanh
           </Text>

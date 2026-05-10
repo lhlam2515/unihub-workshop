@@ -1,4 +1,6 @@
-import { Text, View } from "react-native";
+import { View } from "react-native";
+
+import { Text } from "@/components/ui/text";
 
 export interface EmptyStateProps {
   title: string;
@@ -7,7 +9,7 @@ export interface EmptyStateProps {
 
 export function EmptyState({ title, description }: EmptyStateProps) {
   return (
-    <View className="items-center gap-3 rounded-3xl border border-border p-6">
+    <View className="items-center gap-3 rounded-3xl border border-border bg-card p-6">
       <Text className="text-lg font-bold text-foreground">{title}</Text>
       {description ? (
         <Text className="text-center text-sm leading-5 text-muted-foreground">

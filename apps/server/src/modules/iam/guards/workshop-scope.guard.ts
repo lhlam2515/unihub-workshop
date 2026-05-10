@@ -46,11 +46,11 @@ export class WorkshopScopeGuard implements CanActivate {
     const user = request.user;
 
     const allowedWorkshops: string[] = user?.allowed_workshop_ids ?? [];
+    const body = request.body as Record<string, unknown> | null;
     const workshopId: string | undefined =
       (request.params.id as string) ||
-      ((request.body as Record<string, unknown> | null)?.workshop_id as
-        | string
-        | undefined);
+      (body?.workshopId as string | undefined) ||
+      (body?.workshop_id as string | undefined);
 
     if (!workshopId) {
       throw new ForbiddenException("Workshop identifier is required");

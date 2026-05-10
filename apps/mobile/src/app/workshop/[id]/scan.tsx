@@ -6,8 +6,7 @@ import {
 } from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Linking, Pressable, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
@@ -37,7 +36,11 @@ export default function ScanScreen() {
       const params =
         `?source=${result.source}` +
         `&name=${encodeURIComponent(result.studentName)}` +
-        `&code=${encodeURIComponent(result.studentCode)}`;
+        `&code=${encodeURIComponent(result.studentCode)}` +
+        `&duplicate=${result.duplicate ? "1" : "0"}` +
+        (result.originallyCheckedInAt
+          ? `&originalAt=${encodeURIComponent(result.originallyCheckedInAt.toISOString())}`
+          : "");
       const resultPath = `/workshop/${workshopId}/result${params}`;
       router.replace(resultPath as Parameters<typeof router.replace>[0]);
       reset();
@@ -129,9 +132,9 @@ export default function ScanScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0B1020]">
+    <View style={StyleSheet.absoluteFillObject}>
       <CameraView
-        className="absolute inset-0"
+        style={StyleSheet.absoluteFillObject}
         facing="back"
         onBarcodeScanned={isProcessing ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
@@ -148,6 +151,6 @@ export default function ScanScreen() {
         }}
         onBack={() => router.back()}
       />
-    </SafeAreaView>
+    </View>
   );
 }

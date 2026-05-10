@@ -16,6 +16,8 @@ export interface ScanResult {
   studentCode: string;
   checkedInAt: Date;
   source: "ONLINE" | "OFFLINE_QUEUED";
+  duplicate?: boolean;
+  originallyCheckedInAt?: Date | null;
 }
 
 export interface UseScanResult {
@@ -42,6 +44,7 @@ export interface SyncStats {
 
 export interface UseSyncResult {
   stats: SyncStats;
+  queueItems: import("@/database/types").CheckinQueueRecord[];
   runStatus: SyncRunStatus;
   errorMessage: string | null;
   sync: (workshopId: string, deviceId: string) => Promise<void>;

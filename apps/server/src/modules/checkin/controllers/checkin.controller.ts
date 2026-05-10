@@ -82,7 +82,6 @@ export class CheckinController {
    */
   @Post("sync")
   @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
-  @UseGuards(WorkshopScopeGuard)
   @HttpCode(HttpStatus.OK)
   async syncOfflineData(
     @Body() body: CheckinSyncRequestDto,

@@ -15,6 +15,11 @@ import {
   checkinStatusService,
   type CheckinStatus,
 } from "@/features/workshops/api/checkin-status.service";
+import {
+  workshopsService,
+  type WorkshopDetailDto,
+} from "@/features/workshops/api/workshops.service";
+import { usePreload } from "@/features/checkin/hooks/use-preload";
 import handleError from "@/lib/handlers/error";
 
 function getWorkshopId(value: string | string[] | undefined) {
@@ -27,15 +32,18 @@ export default function WorkshopDashboardScreen() {
   const workshopId = getWorkshopId(params.id);
 
   const [status, setStatus] = useState<CheckinStatus | null>(null);
+  const [workshop, setWorkshop] = useState<WorkshopDetailDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localCache, setLocalCache] = useState<CacheMetadata | null>(null);
 
-  useEffect(() => {
-    if (!workshopId) return;
-    void fetchStatus();
+  const {
+    status: preloadStatus,
+    errorMessage: preloadError,
+    preload,
+  } = usePreload();
 
-    // Read local cache metadata
+  function loadCacheMetadata() {
     try {
       const db = createDatabaseClient();
       const cached = db
@@ -47,7 +55,19 @@ export default function WorkshopDashboardScreen() {
     } catch {
       // Non-critical
     }
+  }
+
+  useEffect(() => {
+    if (!workshopId) return;
+    void fetchStatus();
+    void fetchWorkshop();
+    loadCacheMetadata();
   }, [workshopId]);
+
+  async function fetchWorkshop() {
+    const result = await workshopsService.getWorkshopById(workshopId);
+    if (result.isSuccess) setWorkshop(result.data);
+  }
 
   async function fetchStatus() {
     setIsLoading(true);
@@ -65,15 +85,28 @@ export default function WorkshopDashboardScreen() {
     setStatus(result.data);
   }
 
+  async function handlePreload() {
+    await preload(workshopId);
+    // Reload cache metadata so CacheStatusBadge and scanner gate reflect the updated state.
+    // Safe to call unconditionally — SQLite state is unchanged on preload failure.
+    loadCacheMetadata();
+  }
+
+  const scannerDisabled = localCache?.isFullyLoaded !== true;
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="grow gap-3.5 p-5">
         <View className="gap-2">
-          <Text className="text-xs font-bold tracking-widest text-primary">
-            DASHBOARD
-          </Text>
+          <Button
+            variant="ghost"
+            onPress={() => router.back()}
+            className="h-auto self-start p-0"
+          >
+            <Text className="text-sm text-muted-foreground">← Quay lại</Text>
+          </Button>
           <Text className="text-2xl font-extrabold leading-8 text-foreground">
-            Workshop {workshopId.slice(0, 8)}
+            {workshop?.title ?? "Đang tải..."}
           </Text>
         </View>
 
@@ -89,7 +122,7 @@ export default function WorkshopDashboardScreen() {
 
         {/* Local cache summary */}
         {localCache ? (
-          <View className="gap-3 rounded-3xl border border-border p-5">
+          <View className="gap-3 rounded-3xl border border-border bg-card p-5">
             <Text className="text-lg font-bold text-foreground">
               Dữ liệu local
             </Text>
@@ -97,7 +130,7 @@ export default function WorkshopDashboardScreen() {
           </View>
         ) : null}
 
-        <View className="gap-3 rounded-3xl border border-border p-5">
+        <View className="gap-3 rounded-3xl border border-border bg-card p-5">
           <Text className="text-lg font-bold text-foreground">
             Tổng quan ca trực
           </Text>
@@ -152,10 +185,32 @@ export default function WorkshopDashboardScreen() {
 
         <View className="mt-1 gap-3">
           <Button
-            onPress={() => router.push(ROUTES.WORKSHOP_SCAN(workshopId))}
+            onPress={handlePreload}
+            disabled={preloadStatus === "loading"}
+            variant="outline"
             className="rounded-2xl"
           >
-            <Text>Mở máy quét QR</Text>
+            {preloadStatus === "loading" ? (
+              <View className="flex-row items-center gap-2">
+                <ActivityIndicator size="small" />
+                <Text>Đang tải vé...</Text>
+              </View>
+            ) : (
+              <Text>Tải danh sách vé</Text>
+            )}
+          </Button>
+          {preloadError ? (
+            <Text className="text-sm text-red-500">{preloadError}</Text>
+          ) : null}
+
+          <Button
+            onPress={() => router.push(ROUTES.WORKSHOP_SCAN(workshopId))}
+            disabled={scannerDisabled}
+            className="rounded-2xl"
+          >
+            <Text>
+              {scannerDisabled ? "Cần tải vé trước" : "Mở máy quét QR"}
+            </Text>
           </Button>
           <Button
             variant="outline"
@@ -169,13 +224,6 @@ export default function WorkshopDashboardScreen() {
             className="rounded-2xl"
           >
             <Text>Xem lịch sử điểm danh</Text>
-          </Button>
-          <Button
-            variant="outline"
-            onPress={() => router.push(ROUTES.TAB_QUEUE)}
-            className="rounded-2xl"
-          >
-            <Text>Quay về hàng đợi</Text>
           </Button>
         </View>
       </ScrollView>

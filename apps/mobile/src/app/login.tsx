@@ -36,9 +36,6 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View className="gap-2.5">
-            <Text className="text-xs font-bold uppercase tracking-widest text-primary">
-              CHECKIN_STAFF
-            </Text>
             <Text className="text-3xl font-extrabold text-foreground">
               Đăng nhập
             </Text>
