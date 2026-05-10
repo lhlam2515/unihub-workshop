@@ -10,10 +10,12 @@
  * that passes all registered adapters explicitly.
  *
  * Business rules:
- * - Throws if no adapter is registered for the requested gateway name.
- * - The caller is responsible for catching and mapping the error.
+ * - Returns FailResult if no adapter is registered for the requested gateway name.
  */
 import { Injectable } from "@nestjs/common";
+
+import { paymentErrors } from "@/shared/response/errors";
+import { Result } from "@/shared/response/result";
 
 import type { IGatewayAdapter } from "./gateway-adapter.interface";
 
@@ -31,14 +33,14 @@ export class PaymentGatewayFactory {
    * Returns the adapter registered for the given gateway name.
    *
    * @param gateway - Uppercase gateway identifier (e.g., "MOCK", "VNPAY").
-   * @returns The matching IGatewayAdapter instance.
-   * @throws Error if no adapter is registered for the gateway.
+   * @returns OkResult with the matching IGatewayAdapter,
+   *          or FailResult (PAYMENT_GATEWAY_ERROR) if no adapter is registered.
    */
-  getAdapter(gateway: string): IGatewayAdapter {
+  getAdapter(gateway: string): Result<IGatewayAdapter> {
     const adapter = this.adapterMap.get(gateway);
     if (!adapter) {
-      throw new Error(`No adapter registered for gateway: ${gateway}`);
+      return Result.fail(paymentErrors.gatewayError(gateway));
     }
-    return adapter;
+    return Result.ok(adapter);
   }
 }

@@ -81,8 +81,17 @@ export class PaymentReconciliationService {
       const unresolved: string[] = [];
 
       for (const payment of paymentsResult.data) {
+        const adapterResult = this.gatewayFactory.getAdapter(payment.gateway);
+        if (adapterResult.isFailure) {
+          this.logger.warn(
+            `No adapter for gateway "${payment.gateway}" — skipping payment ${payment.paymentId}`
+          );
+          unresolved.push(payment.paymentId);
+          continue;
+        }
+        const adapter = adapterResult.data;
+
         try {
-          const adapter = this.gatewayFactory.getAdapter(payment.gateway);
           const statusResult = await adapter.checkPaymentStatus(
             payment.gatewayTxnId ?? ""
           );

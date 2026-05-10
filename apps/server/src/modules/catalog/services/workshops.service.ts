@@ -350,6 +350,25 @@ export class WorkshopsService {
     );
   }
 
+  /**
+   * Applies emergency changes to a published workshop (room, time slot).
+   *
+   * Business rules:
+   * - Workshop must be in OPEN status.
+   * - If room or time changes, checks for room conflicts via RoomConflictService.
+   * - Uses optimistic locking via expectedVersion.
+   *
+   * Side effects:
+   * - Updates workshop record in the database (room, startsAt, endsAt).
+   *
+   * @param id - The UUID of the workshop to update.
+   * @param dto - Partial fields to override (roomId, startsAt, endsAt).
+   * @param expectedVersion - Version expected by the caller (from If-Match header).
+   * @returns OkResult with WorkshopAdminDetailDto, or FailResult with codes:
+   * - WORKSHOP_NOT_FOUND: Workshop ID does not exist.
+   * - WORKSHOP_NOT_PUBLISHED: Workshop is not in OPEN status.
+   * - CONCURRENT_MODIFICATION: Version mismatch (optimistic lock).
+   */
   async emergencyUpdate(
     id: string,
     dto: EmergencyUpdateWorkshopDto,

@@ -11,7 +11,6 @@ describe("SeatLockMechanic", () => {
   const WORKSHOP_ID = "w-001";
   const REGISTRATION_ID = "reg-001";
   const STUDENT_ID = "stu-001";
-  const AMOUNT = 50000;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -41,8 +40,7 @@ describe("SeatLockMechanic", () => {
       const result = await mechanic.acquire(
         WORKSHOP_ID,
         REGISTRATION_ID,
-        STUDENT_ID,
-        AMOUNT
+        STUDENT_ID
       );
 
       expect(result.isSuccess).toBe(true);
@@ -60,8 +58,7 @@ describe("SeatLockMechanic", () => {
       const result = await mechanic.acquire(
         WORKSHOP_ID,
         REGISTRATION_ID,
-        STUDENT_ID,
-        AMOUNT
+        STUDENT_ID
       );
 
       expect(result.isFailure).toBe(true);

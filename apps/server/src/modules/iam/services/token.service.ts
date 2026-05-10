@@ -158,6 +158,9 @@ export class TokenService {
   verifyRefreshToken(
     token: string
   ): Promise<Result<{ sub: string; jti: string }>> {
+    if (!token) {
+      return Promise.resolve(Result.fail(authErrors.refreshTokenInvalid()));
+    }
     return tryCatch(
       () =>
         Promise.resolve(

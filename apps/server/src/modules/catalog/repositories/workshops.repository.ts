@@ -23,6 +23,13 @@ import { Result, tryCatch } from "@/shared/response/result";
 
 export type PublishedBasic = { workshopId: string; seatsTotal: number };
 
+/** Shape of a workshop row joined with its speaker and room. */
+export type WorkshopWithSpeakerRoom = {
+  workshops: Workshop;
+  speakers: Speaker | null;
+  rooms: Room | null;
+};
+
 @Injectable()
 export class WorkshopsRepository {
   constructor(
@@ -101,7 +108,7 @@ export class WorkshopsRepository {
       dateTo?: Date;
       q?: string;
     } & CursorPaginationInput
-  ): Promise<Result<CursorPaginationResult<any>>> {
+  ): Promise<Result<CursorPaginationResult<WorkshopWithSpeakerRoom>>> {
     return tryCatch(
       async () => {
         const conditions = [eq(this.schema.workshops.status, "OPEN")];
@@ -158,7 +165,7 @@ export class WorkshopsRepository {
 
   async listAdmin(
     filters: { status?: WorkshopStatus; q?: string } & CursorPaginationInput
-  ): Promise<Result<CursorPaginationResult<any>>> {
+  ): Promise<Result<CursorPaginationResult<WorkshopWithSpeakerRoom>>> {
     return tryCatch(
       async () => {
         const conditions: ReturnType<typeof eq>[] = [];
