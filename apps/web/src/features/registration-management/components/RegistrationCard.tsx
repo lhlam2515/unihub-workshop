@@ -31,7 +31,10 @@ export function RegistrationCard({
   onClick,
 }: RegistrationCardProps) {
   const { workshop, status, qrCode } = registration;
-  const config = statusConfig[status] ?? statusConfig.cancelled;
+  const config = statusConfig[status] ?? {
+    label: "Không xác định",
+    variant: "outline" as const,
+  };
 
   const canCancel = status !== "CANCELLED";
   const needsPayment = status === "PENDING";
