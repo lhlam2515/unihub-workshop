@@ -23,11 +23,7 @@ import {
 import ROUTES from "@/constants/routes";
 import { useAuth } from "@/context/auth-context";
 
-interface PublicHeaderWidgetProps {
-  onLoginClick?: () => void;
-}
-
-export function PublicHeaderWidget({ onLoginClick }: PublicHeaderWidgetProps) {
+export function PublicHeaderWidget() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const isActive = pathname.startsWith(ROUTES.WORKSHOPS);
@@ -87,7 +83,7 @@ export function PublicHeaderWidget({ onLoginClick }: PublicHeaderWidgetProps) {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button asChild size="sm" onClick={onLoginClick}>
+            <Button asChild size="sm">
               <Link href={ROUTES.LOGIN}>Đăng nhập</Link>
             </Button>
           )}

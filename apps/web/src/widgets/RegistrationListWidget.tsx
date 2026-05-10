@@ -1,6 +1,7 @@
 "use client";
 
 import { Inbox } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -58,12 +59,12 @@ export function RegistrationListWidget({
           title="Chưa có đăng ký nào"
           description="Khám phá các workshop và đăng ký tham gia"
           action={
-            <a
+            <Link
               href={ROUTES.WORKSHOPS}
               className="bg-primary text-primary-foreground inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium"
             >
               Khám phá workshop
-            </a>
+            </Link>
           }
         />
       ) : (

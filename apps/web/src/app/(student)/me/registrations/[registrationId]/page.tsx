@@ -3,8 +3,8 @@
 import { use, useEffect, useState } from "react";
 
 import { getRegistration } from "@/features/registration-detail/api/registration-detail.service";
-import { getWorkshopDetail } from "@/lib/api/services/catalog";
 import type { ApiError } from "@/lib/api/errors";
+import { getWorkshopDetail } from "@/lib/api/services/catalog";
 import type { Registration } from "@/types/registration";
 import type { WorkshopDetail } from "@/types/workshop";
 import { RegistrationDetailWidget } from "@/widgets/RegistrationDetailWidget";
@@ -47,7 +47,6 @@ const StudentRegistrationDetailPage = ({
       <RegistrationDetailWidget
         registration={registration}
         workshop={workshop}
-        payment={null}
         loading={loading}
         error={error}
         registrationId={registrationId}
