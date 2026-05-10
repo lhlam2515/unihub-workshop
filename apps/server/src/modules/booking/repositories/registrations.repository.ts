@@ -12,7 +12,22 @@ import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
 export interface RegistrationWithWorkshopTitle extends Registration {
-  workshop_title: string;
+  workshopTitle: string;
+  workshopStartsAt: Date | null;
+  workshopEndsAt: Date | null;
+  workshopSeatsTotal: number | null;
+  workshopSeatsAvailable: number | null;
+  workshopPrice: number | null;
+  workshopStatus: string | null;
+  speakerId: string | null;
+  speakerFullName: string | null;
+  speakerTitle: string | null;
+  speakerAvatarUrl: string | null;
+  roomId: string | null;
+  roomName: string | null;
+  roomBuilding: string | null;
+  roomFloor: number | null;
+  roomFloorPlanUrl: string | null;
 }
 
 export interface CancelResult {
@@ -286,7 +301,23 @@ export class RegistrationsRepository {
         const rows = await this.db
           .select({
             registration: this.schema.registrations,
+            workshopId: this.schema.workshops.workshopId,
             workshopTitle: this.schema.workshops.title,
+            workshopStartsAt: this.schema.workshops.startsAt,
+            workshopEndsAt: this.schema.workshops.endsAt,
+            workshopSeatsTotal: this.schema.workshops.seatsTotal,
+            workshopSeatsAvailable: this.schema.workshops.seatsAvailable,
+            workshopPrice: this.schema.workshops.price,
+            workshopStatus: this.schema.workshops.status,
+            speakerId: this.schema.speakers.speakerId,
+            speakerFullName: this.schema.speakers.fullName,
+            speakerTitle: this.schema.speakers.title,
+            speakerAvatarUrl: this.schema.speakers.avatarUrl,
+            roomId: this.schema.rooms.roomId,
+            roomName: this.schema.rooms.name,
+            roomBuilding: this.schema.rooms.building,
+            roomFloor: this.schema.rooms.floor,
+            roomFloorPlanUrl: this.schema.rooms.floorPlanUrl,
           })
           .from(this.schema.registrations)
           .leftJoin(
@@ -295,6 +326,14 @@ export class RegistrationsRepository {
               this.schema.registrations.workshopId,
               this.schema.workshops.workshopId
             )
+          )
+          .leftJoin(
+            this.schema.speakers,
+            eq(this.schema.workshops.speakerId, this.schema.speakers.speakerId)
+          )
+          .leftJoin(
+            this.schema.rooms,
+            eq(this.schema.workshops.roomId, this.schema.rooms.roomId)
           )
           .where(and(...conditions))
           .orderBy(desc(this.schema.registrations.registeredAt))
@@ -305,7 +344,22 @@ export class RegistrationsRepository {
 
         const items: RegistrationWithWorkshopTitle[] = rows.map((row) => ({
           ...row.registration,
-          workshop_title: row.workshopTitle ?? "",
+          workshopTitle: row.workshopTitle ?? "",
+          workshopStartsAt: row.workshopStartsAt,
+          workshopEndsAt: row.workshopEndsAt,
+          workshopSeatsTotal: row.workshopSeatsTotal ?? null,
+          workshopSeatsAvailable: row.workshopSeatsAvailable ?? null,
+          workshopPrice: row.workshopPrice ? Number(row.workshopPrice) : null,
+          workshopStatus: row.workshopStatus ?? null,
+          speakerId: row.speakerId ?? null,
+          speakerFullName: row.speakerFullName ?? null,
+          speakerTitle: row.speakerTitle ?? null,
+          speakerAvatarUrl: row.speakerAvatarUrl ?? null,
+          roomId: row.roomId ?? null,
+          roomName: row.roomName ?? null,
+          roomBuilding: row.roomBuilding ?? null,
+          roomFloor: row.roomFloor ?? null,
+          roomFloorPlanUrl: row.roomFloorPlanUrl ?? null,
         }));
 
         const nextCursor =

@@ -206,7 +206,7 @@ describe("RegistrationsRepository", () => {
       if (result.isSuccess) {
         expect(result.data.items).toHaveLength(1);
         expect(result.data.hasMore).toBe(false);
-        expect(result.data.items[0].workshop_title).toBe("Workshop 1");
+        expect(result.data.items[0].workshopTitle).toBe("Workshop 1");
       }
     });
 

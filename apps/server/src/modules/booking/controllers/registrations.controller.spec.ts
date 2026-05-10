@@ -30,6 +30,20 @@ describe("RegistrationsController", () => {
     confirmedAt: null,
     cancelledAt: null,
     nextStep: null,
+    workshop: {
+      id: "ws-1",
+      title: "Workshop 1",
+      startsAt: new Date(),
+      endsAt: new Date(),
+      seatsTotal: 50,
+      seatsAvailable: 30,
+      price: 0,
+      currency: "VND",
+      status: "OPEN",
+      speaker: null,
+      room: null,
+      isRegistered: true,
+    },
   };
 
   beforeEach(async () => {

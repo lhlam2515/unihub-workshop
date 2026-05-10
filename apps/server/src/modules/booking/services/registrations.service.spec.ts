@@ -538,7 +538,22 @@ describe("RegistrationsService", () => {
     it("should return paginated registrations with mapped DTOs", async () => {
       const mockReg = {
         ...mockRegistration,
-        workshop_title: "Workshop Title",
+        workshopTitle: "Workshop Title",
+        workshopStartsAt: new Date(),
+        workshopEndsAt: new Date(),
+        workshopSeatsTotal: 50,
+        workshopSeatsAvailable: 30,
+        workshopPrice: 0,
+        workshopStatus: "OPEN",
+        speakerId: null,
+        speakerFullName: null,
+        speakerTitle: null,
+        speakerAvatarUrl: null,
+        roomId: null,
+        roomName: null,
+        roomBuilding: null,
+        roomFloor: null,
+        roomFloorPlanUrl: null,
       };
       registrationsRepo.findMyRegistrations.mockResolvedValue(
         Result.ok({

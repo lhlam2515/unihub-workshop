@@ -227,8 +227,7 @@ export class RegistrationsService {
       const lockResult = await this.seatLock.acquire(
         dto.workshopId,
         registration.registrationId,
-        studentId,
-        Number(workshop.price ?? "0")
+        studentId
       );
       if (lockResult.isFailure) {
         // Compensate: release seat + invalidate cache
@@ -314,7 +313,37 @@ export class RegistrationsService {
     if (result.isFailure) return Result.fail(result.error);
 
     const items = result.data.items.map((item) =>
-      RegistrationResponseBuilder.from(item)
+      RegistrationResponseBuilder.from(item, {
+        workshop: {
+          id: item.workshopId,
+          title: item.workshopTitle,
+          startsAt: item.workshopStartsAt ?? new Date(),
+          endsAt: item.workshopEndsAt ?? new Date(),
+          seatsTotal: item.workshopSeatsTotal ?? 0,
+          seatsAvailable: item.workshopSeatsAvailable ?? 0,
+          price: item.workshopPrice ?? 0,
+          currency: "VND",
+          status: item.workshopStatus ?? "",
+          speaker: item.speakerId
+            ? {
+                id: item.speakerId,
+                fullName: item.speakerFullName ?? "",
+                title: item.speakerTitle,
+                avatarUrl: item.speakerAvatarUrl,
+              }
+            : null,
+          room: item.roomId
+            ? {
+                id: item.roomId,
+                name: item.roomName ?? "",
+                building: item.roomBuilding,
+                floor: item.roomFloor,
+                floorPlanUrl: item.roomFloorPlanUrl,
+              }
+            : null,
+          isRegistered: true,
+        },
+      })
     );
 
     return Result.ok({
