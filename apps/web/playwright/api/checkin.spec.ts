@@ -1,7 +1,9 @@
-import { expect } from "@playwright/test";
 import crypto from "node:crypto";
-import { test } from "../fixtures/auth";
+
+import { expect } from "@playwright/test";
+
 import { API_BASE } from "../../playwright.config";
+import { test } from "../fixtures/auth";
 
 test.describe("Flow 10-11: Check-in", () => {
   test("check-in endpoint rejects invalid QR code", async ({ adminApi }) => {

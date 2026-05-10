@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+
 import { API_BASE } from "../../playwright.config";
 
 test.describe("Auth API", () => {

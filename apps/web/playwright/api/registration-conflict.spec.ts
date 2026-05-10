@@ -1,7 +1,9 @@
-import { expect } from "@playwright/test";
 import crypto from "node:crypto";
-import { test } from "../fixtures/auth";
+
+import { expect } from "@playwright/test";
+
 import { API_BASE } from "../../playwright.config";
+import { test } from "../fixtures/auth";
 
 test.describe("Flow 2: Optimistic locking & edge cases", () => {
   test("registration for paid workshop accepts request", async ({

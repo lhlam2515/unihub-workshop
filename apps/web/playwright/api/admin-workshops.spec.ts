@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
-import { test } from "../fixtures/auth";
+
 import { API_BASE } from "../../playwright.config";
+import { test } from "../fixtures/auth";
 
 test.describe("Flow 5+6: Admin workshop management", () => {
   test("admin can list rooms", async ({ adminApi }) => {
