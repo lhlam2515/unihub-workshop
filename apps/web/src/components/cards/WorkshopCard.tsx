@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock, MapPin, Ticket, User } from "lucide-react";
+import { memo } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +48,7 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-export function WorkshopCard({
+export const WorkshopCard = memo(function WorkshopCard({
   workshop,
   onClick,
   className,
@@ -176,4 +177,4 @@ export function WorkshopCard({
       </CardContent>
     </Card>
   );
-}
+});

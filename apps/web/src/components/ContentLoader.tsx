@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -7,7 +9,7 @@ interface ContentLoaderProps {
   className?: string;
 }
 
-export function ContentLoader({
+export const ContentLoader = memo(function ContentLoader({
   count = 3,
   layout = "list",
   className,
@@ -45,4 +47,4 @@ export function ContentLoader({
       ))}
     </div>
   );
-}
+});

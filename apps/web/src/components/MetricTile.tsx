@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { memo } from "react";
 
 import { Card } from "@/components/ui/card";
 
@@ -12,7 +13,7 @@ interface MetricTileProps {
   skeleton?: boolean;
 }
 
-export function MetricTile({
+export const MetricTile = memo(function MetricTile({
   label,
   value,
   icon: Icon,
@@ -58,4 +59,4 @@ export function MetricTile({
       </div>
     </Card>
   );
-}
+});
