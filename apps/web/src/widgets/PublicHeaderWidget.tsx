@@ -7,6 +7,7 @@
 
 "use client";
 
+import { ClipboardList } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -66,7 +67,20 @@ export function PublicHeaderWidget({ onLoginClick }: PublicHeaderWidgetProps) {
                     </span>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
+                {user?.role === "student" && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href={ROUTES.ME_REGISTRATIONS}
+                        className="cursor-pointer"
+                      >
+                        <ClipboardList className="mr-2 h-4 w-4" />
+                        Đăng ký của tôi
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem onClick={() => logout()}>
                   Đăng xuất
                 </DropdownMenuItem>
