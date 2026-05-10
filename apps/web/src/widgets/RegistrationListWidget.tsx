@@ -83,7 +83,7 @@ export function RegistrationListWidget({
 
       <CancelConfirmDialog
         open={!!cancelTarget}
-        registration={cancelTarget!}
+        registration={cancelTarget}
         onConfirm={handleCancel}
         onClose={() => setCancelTarget(null)}
       />

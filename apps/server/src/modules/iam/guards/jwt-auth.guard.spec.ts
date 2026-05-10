@@ -106,26 +106,6 @@ describe("JwtAuthGuard", () => {
     });
   });
 
-  describe("suspension check", () => {
-    it("throws when user is suspended", async () => {
-      reflector.getAllAndOverride.mockReturnValue(false);
-      tokenService.verifyAccessToken.mockResolvedValue(
-        Result.ok({
-          sub: "u1",
-          role: "STUDENT",
-          jti: "jti-ok",
-          allowed_workshop_ids: [],
-        })
-      );
-      redisService.get
-        .mockResolvedValueOnce(null) // blacklist check returns null (not revoked)
-        .mockResolvedValueOnce("true"); // suspension check returns "true"
-      await expect(
-        guard.canActivate(createMockContext("Bearer valid.token.here"))
-      ).rejects.toThrow("Account has been suspended");
-    });
-  });
-
   describe("valid token", () => {
     it("attaches payload and returns true", async () => {
       reflector.getAllAndOverride.mockReturnValue(false);

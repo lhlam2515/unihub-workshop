@@ -75,6 +75,7 @@ export type ErrorCode =
   | "WRONG_WORKSHOP"
   | "BATCH_TOO_LARGE"
   | "WORKSHOP_NOT_ASSIGNED"
+  | "INVALID_TIMESTAMP"
   | "INTERNAL_ERROR";
 
 /**

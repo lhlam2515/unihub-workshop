@@ -578,7 +578,7 @@ export class WorkshopsService {
     const availableSeats = await this.seatCounterService.getCachedSeats(id);
 
     return Result.ok({
-      confirmed_count: 0,
+      confirmed_count: await this.getConfirmedCount(id),
       available_seats: availableSeats,
       total_capacity: workshop.seatsTotal,
     });
@@ -617,5 +617,23 @@ export class WorkshopsService {
     workshopId: string
   ): Promise<Result<{ version: number; seatsAvailable: number } | null>> {
     return this.workshopsRepo.getSeatVersion(workshopId);
+  }
+
+  /**
+   * Counts confirmed registrations for a workshop, falling back to 0 on failure.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns The confirmed registration count, or 0 if the query fails.
+   */
+  private async getConfirmedCount(workshopId: string): Promise<number> {
+    const result =
+      await this.workshopsRepo.countConfirmedRegistrations(workshopId);
+    if (result.isFailure) {
+      console.warn(
+        `[WorkshopsService] Failed to count confirmed registrations for workshop ${workshopId}: ${result.error.message}`
+      );
+      return 0;
+    }
+    return result.data;
   }
 }

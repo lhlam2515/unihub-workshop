@@ -109,6 +109,7 @@ describe("WorkshopsService", () => {
             decrementSeat: jest.fn(),
             incrementSeat: jest.fn(),
             getSeatVersion: jest.fn(),
+            countConfirmedRegistrations: jest.fn(),
           },
         },
         {
@@ -837,15 +838,18 @@ describe("WorkshopsService", () => {
   // getStats
   // ---------------------------------------------------------------------------
   describe("getStats", () => {
-    it("returns stats with default confirmed_count", async () => {
+    it("returns stats with actual confirmed_count from repository", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      workshopsRepo.countConfirmedRegistrations.mockResolvedValue(
+        Result.ok(12)
+      );
       seatCounterService.getCachedSeats.mockResolvedValue(18);
 
       const result = await service.getStats("w-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.confirmed_count).toBe(0);
+        expect(result.data.confirmed_count).toBe(12);
         expect(result.data.available_seats).toBe(18);
         expect(result.data.total_capacity).toBe(30);
       }
@@ -853,6 +857,7 @@ describe("WorkshopsService", () => {
 
     it("returns 0 available seats when cache returns 0", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
+      workshopsRepo.countConfirmedRegistrations.mockResolvedValue(Result.ok(0));
       seatCounterService.getCachedSeats.mockResolvedValue(0);
 
       const result = await service.getStats("w-001");

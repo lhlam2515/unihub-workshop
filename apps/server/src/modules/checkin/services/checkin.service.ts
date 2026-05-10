@@ -56,7 +56,7 @@ export class CheckinService {
 
     if (registration.workshop.status === "CANCELLED") {
       return Result.fail(
-        checkinErrors.registrationNotActive(registration.registrationId)
+        checkinErrors.workshopCancelled(registration.workshopId)
       );
     }
 
@@ -72,7 +72,12 @@ export class CheckinService {
       );
     }
 
+    // Validate client-provided timestamp
     const now = new Date();
+    if (isNaN(checkedInAt.getTime()) || checkedInAt > now) {
+      return Result.fail(checkinErrors.invalidTimestamp("checkedInAt"));
+    }
+
     const checkinResult = await this.checkinRecordsRepo.create({
       registrationId: registration.registrationId,
       studentId: registration.studentId,

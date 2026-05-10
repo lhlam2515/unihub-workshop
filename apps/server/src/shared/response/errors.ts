@@ -168,6 +168,20 @@ export const authErrors = {
       message: `Staff is not authorized to check in for workshop ${workshopId}.`,
       context: { workshopId },
     }),
+  /**
+   * Create an error when a user record is not found
+   *
+   * @param userId - User identifier used for audit and diagnostics
+   * @returns Not found error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  userNotFound: (userId?: string): AppError =>
+    createError({
+      category: "NOT_FOUND",
+      code: "USER_NOT_FOUND",
+      message: "User not found.",
+      ...(userId ? { context: { userId } } : {}),
+    }),
 } as const;
 
 /**
@@ -535,6 +549,34 @@ export const checkinErrors = {
       code: "WORKSHOP_NOT_ASSIGNED",
       message: "Staff is not authorized for this workshop.",
       context: { workshopId },
+    }),
+  /**
+   * Create an error when a workshop is cancelled
+   *
+   * @param workshopId - Workshop identifier used for audit logging
+   * @returns Conflict error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  workshopCancelled: (workshopId: string): AppError =>
+    createError({
+      category: "CONFLICT",
+      code: "WORKSHOP_CANCELLED",
+      message: "Workshop has been cancelled.",
+      context: { workshopId },
+    }),
+  /**
+   * Create an error when a client-provided timestamp is invalid
+   *
+   * @param field - Field name with the invalid timestamp
+   * @returns Validation error payload
+   * @throws Never. Returns an error object instead of throwing
+   */
+  invalidTimestamp: (field: string): AppError =>
+    createError({
+      category: "VALIDATION",
+      code: "INVALID_TIMESTAMP",
+      message: `Invalid timestamp provided for ${field}.`,
+      context: { field },
     }),
 } as const;
 

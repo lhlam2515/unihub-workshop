@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 
 import type { Registration } from "@/infra/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
@@ -41,6 +41,8 @@ export class RegistrationsService {
     private readonly workshopsService: WorkshopsService,
     private readonly notificationLogProducer: NotificationLogProducer
   ) {}
+
+  private readonly logger = new Logger(RegistrationsService.name);
 
   /**
    * Registers a student for a workshop through a multi-stage pipeline.
@@ -139,7 +141,7 @@ export class RegistrationsService {
     const MAX_RETRIES = 1; // 2 attempts total per ADR-03
 
     // Stage 4-6: OL seat decrement + INSERT in transaction
-    let registration: Registration;
+    let registration: Registration | undefined;
     let attempts = 0;
 
     while (attempts <= MAX_RETRIES) {
@@ -213,7 +215,7 @@ export class RegistrationsService {
     }
 
     // If we exhausted retries, return high contention
-    if (!registration!) {
+    if (!registration) {
       return Result.fail(systemErrors.dbLockTimeout("registration", 2));
     }
 
@@ -230,11 +232,25 @@ export class RegistrationsService {
       );
       if (lockResult.isFailure) {
         // Compensate: release seat + invalidate cache
-        await this.workshopsService.incrementSeat(dto.workshopId);
-        await this.registrationsRepo.updateStatus(
+        const incrResult = await this.workshopsService.incrementSeat(
+          dto.workshopId
+        );
+        if (incrResult.isFailure) {
+          this.logger.error(
+            `Seat compensation failed for workshop ${dto.workshopId}: ${incrResult.error.message}`
+          );
+        }
+
+        const statusResult = await this.registrationsRepo.updateStatus(
           registration.registrationId,
           "CANCELLED"
         );
+        if (statusResult.isFailure) {
+          this.logger.error(
+            `Status rollback failed: ${statusResult.error.message}`
+          );
+        }
+
         await this.seatCounter.invalidateCache(dto.workshopId);
         return Result.fail(lockResult.error);
       }

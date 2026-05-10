@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, gte, lte, lt, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lte, lt, sql, inArray } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -408,6 +408,33 @@ export class WorkshopsRepository {
         return result ?? null;
       },
       (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Counts confirmed registrations (CONFIRMED or PAID status) for a workshop.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countConfirmedRegistrations(
+    workshopId: string
+  ): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const result = await this.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(this.schema.registrations)
+          .where(
+            and(
+              eq(this.schema.registrations.workshopId, workshopId),
+              inArray(this.schema.registrations.status, ["CONFIRMED", "PAID"])
+            )
+          );
+        return result[0]?.count ?? 0;
+      },
+      (err) =>
+        systemErrors.internal(err instanceof Error ? err.message : String(err))
     );
   }
 }

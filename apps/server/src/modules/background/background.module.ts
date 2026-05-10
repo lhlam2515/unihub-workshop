@@ -11,7 +11,6 @@ import { CsvSyncModule } from "../csv-sync/csv-sync.module";
 import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
 import { SystemAdminController } from "./controllers/system-admin.controller";
-import { CircuitBreakerRecoveryCron } from "./cron/circuit-breaker-recovery.cron";
 import { IdempotencyCleanupCron } from "./cron/idempotency-cleanup.cron";
 import { PaymentReconciliationCron } from "./cron/payment-reconciliation.cron";
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
@@ -28,7 +27,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
  * Orchestrates all scheduled background processing.
  *
  * Owns cron jobs for payment timeout, seat reconciliation,
- * circuit breaker recovery, and workshop auto-completion.
+ * and workshop auto-completion.
  *
  * Business rules:
  * - Seat reconciliation runs on a 10-minute cron cycle.
@@ -59,7 +58,6 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     SystemMonitorService,
     PaymentTimeoutCron,
     ReconciliationCron,
-    CircuitBreakerRecoveryCron,
     WorkshopAutoCompleteCron,
     // New crons
     IdempotencyCleanupCron,

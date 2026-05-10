@@ -63,22 +63,41 @@ export class PaymentTimeoutCron {
         return;
       }
 
-      let processed = 0;
-      for (const payment of overdueResult.data) {
-        const result = await this.paymentsService.expirePayment(
-          payment.paymentId
+      const CONCURRENCY = 5;
+      const payments = overdueResult.data;
+      let succeeded = 0;
+
+      for (let i = 0; i < payments.length; i += CONCURRENCY) {
+        const chunk = payments.slice(i, i + CONCURRENCY);
+        const results = await Promise.allSettled(
+          chunk.map((p) => this.paymentsService.expirePayment(p.paymentId))
         );
-        if (result.isSuccess) {
-          processed++;
-        } else {
-          this.logger.warn(
-            `Failed to expire payment ${payment.paymentId}: ${result.error.code}`
-          );
+
+        for (let j = 0; j < results.length; j++) {
+          const payment = chunk[j];
+          const result = results[j];
+
+          if (result.status === "rejected") {
+            this.logger.error(
+              `Payment timeout cron: expirePayment(${payment.paymentId}) threw:`,
+              result.reason
+            );
+            continue;
+          }
+
+          const expireResult = result.value;
+          if (expireResult.isFailure) {
+            this.logger.warn(
+              `Payment timeout cron: expirePayment(${payment.paymentId}) failed: ${expireResult.error.code}`
+            );
+          } else {
+            succeeded++;
+          }
         }
       }
 
       this.logger.log(
-        `Payment timeout cron: ${processed}/${overdueResult.data.length} payments handled`
+        `Payment timeout cron: ${succeeded}/${overdueResult.data.length} payments handled`
       );
 
       // Record last_run timestamp for system monitoring

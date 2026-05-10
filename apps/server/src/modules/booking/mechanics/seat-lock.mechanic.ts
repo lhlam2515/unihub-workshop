@@ -108,6 +108,12 @@ export class SeatLockMechanic {
     const key = this.buildKey(workshopId, registrationId);
     const ttl = await this.redisService.ttl(key);
 
+    if (ttl === -1) {
+      // Key exists but no TTL — unexpected state (e.g., PERSIST command).
+      // Assume full remaining TTL for safety, matching the configured lock TTL.
+      return Result.ok({ valid: true, remainingSeconds: LOCK_TTL_SECONDS });
+    }
+
     if (ttl <= 0) {
       return Result.fail(seatErrors.lockExpired(workshopId, registrationId));
     }

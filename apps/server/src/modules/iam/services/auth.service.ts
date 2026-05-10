@@ -274,11 +274,7 @@ export class AuthService {
     const userResult = await this.usersRepo.findById(userId);
     if (userResult.isFailure) return Result.fail(userResult.error);
     if (!userResult.data) {
-      return Result.fail({
-        category: "NOT_FOUND" as const,
-        code: "USER_NOT_FOUND" as const,
-        message: "User not found.",
-      });
+      return Result.fail(authErrors.userNotFound(userId));
     }
 
     const user = userResult.data;
