@@ -1,44 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import type { PaginatedResult } from "@/lib/api/client";
 import {
   listNotificationChannels,
   listNotificationLogs,
 } from "@/lib/api/services/admin";
-import type {
-  NotificationChannel,
-  NotificationLog,
-} from "@/types/admin-operations";
+import type { NotificationLog } from "@/types/admin-operations";
 import { AdminNotificationsWidget } from "@/widgets/AdminNotificationsWidget";
 
 export default function NotificationsPage() {
-  const [channels, setChannels] = useState<NotificationChannel[] | null>(null);
-  const [logs, setLogs] = useState<PaginatedResult<NotificationLog> | null>(
-    null
+  const channelsQuery = useAsyncQuery(["admin-notif-channels"], () =>
+    listNotificationChannels()
   );
-  const [error, setError] = useState<string | undefined>(undefined);
+  const logsQuery = useAsyncQuery(["admin-notif-logs"], () =>
+    listNotificationLogs()
+  );
 
-  useEffect(() => {
-    Promise.all([listNotificationChannels(), listNotificationLogs()]).then(
-      ([channelsResult, logsResult]) => {
-        if (channelsResult.isFailure) {
-          setError((channelsResult.error as { message?: string })?.message);
-        } else {
-          setChannels(channelsResult.data);
-        }
-        if (logsResult.isSuccess) {
-          setLogs(logsResult.data);
-        }
-      }
-    );
-  }, []);
+  const error =
+    channelsQuery.error?.message ?? logsQuery.error?.message ?? undefined;
 
   return (
     <AdminNotificationsWidget
-      initialChannels={channels}
-      initialLogs={logs}
+      initialChannels={channelsQuery.data ?? null}
+      initialLogs={(logsQuery.data as PaginatedResult<NotificationLog>) ?? null}
       initialError={error}
     />
   );

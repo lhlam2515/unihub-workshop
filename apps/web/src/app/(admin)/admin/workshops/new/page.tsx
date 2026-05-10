@@ -1,23 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { listSpeakers, listRooms } from "@/lib/api/services/admin";
-import type { SpeakerSummary, RoomSummary } from "@/types/workshop";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
 export default function AdminCreateWorkshopPage() {
-  const [speakers, setSpeakers] = useState<SpeakerSummary[]>([]);
-  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const speakersQuery = useAsyncQuery(["admin-speakers-form"], () =>
+    listSpeakers()
+  );
+  const roomsQuery = useAsyncQuery(["admin-rooms-form"], () => listRooms());
 
-  useEffect(() => {
-    Promise.all([listSpeakers(), listRooms()]).then(
-      ([speakersResult, roomsResult]) => {
-        if (speakersResult.isSuccess) setSpeakers(speakersResult.data);
-        if (roomsResult.isSuccess) setRooms(roomsResult.data);
-      }
-    );
-  }, []);
+  if (speakersQuery.isLoading || roomsQuery.isLoading) {
+    return <ContentLoader count={2} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -30,8 +26,8 @@ export default function AdminCreateWorkshopPage() {
 
       <AdminWorkshopFormWidget
         mode="create"
-        speakers={speakers}
-        rooms={rooms}
+        speakers={speakersQuery.data ?? []}
+        rooms={roomsQuery.data ?? []}
       />
     </div>
   );

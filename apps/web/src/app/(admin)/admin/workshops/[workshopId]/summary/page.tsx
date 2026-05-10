@@ -1,52 +1,49 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useParams, notFound } from "next/navigation";
-import { useEffect, useState } from "react";
 
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getAdminWorkshop, getAiSummary } from "@/lib/api/services/admin";
-import type { WorkshopAdmin } from "@/types/workshop";
-import type { AiSummary } from "@/types/workshop";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
-import { AdminWorkshopSummaryWidget } from "@/widgets/AdminWorkshopSummaryWidget";
+
+const AdminWorkshopSummaryWidget = dynamic(
+  () =>
+    import("@/widgets/AdminWorkshopSummaryWidget").then((mod) => ({
+      default: mod.AdminWorkshopSummaryWidget,
+    })),
+  {
+    loading: () => <ContentLoader count={2} />,
+    ssr: false,
+  }
+);
 
 export default function AdminWorkshopSummaryPage() {
-  const params = useParams<{ workshopId: string }>();
-  const [workshop, setWorkshop] = useState<WorkshopAdmin | null>(null);
-  const [summary, setSummary] = useState<AiSummary | null>(null);
-  const [summaryError, setSummaryError] = useState<string | undefined>(
-    undefined
+  const { workshopId } = useParams<{ workshopId: string }>();
+
+  const workshopQuery = useAsyncQuery(
+    ["admin-workshop-summary", workshopId],
+    () => getAdminWorkshop(workshopId)
   );
-  const [notFoundState, setNotFoundState] = useState(false);
+  const summaryQuery = useAsyncQuery(
+    ["admin-workshop-summary-ai", workshopId],
+    () => getAiSummary(workshopId)
+  );
 
-  useEffect(() => {
-    Promise.all([
-      getAdminWorkshop(params.workshopId),
-      getAiSummary(params.workshopId),
-    ]).then(([workshopResult, summaryResult]) => {
-      if (workshopResult.isFailure) {
-        setNotFoundState(true);
-        return;
-      }
-      setWorkshop(workshopResult.data);
-
-      if (summaryResult.isSuccess) {
-        setSummary(summaryResult.data);
-      } else {
-        setSummaryError((summaryResult.error as { message?: string })?.message);
-      }
-    });
-  }, [params.workshopId]);
-
-  if (notFoundState) notFound();
-  if (!workshop) return null;
+  if (workshopQuery.error) notFound();
+  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
 
   return (
     <div className="space-y-6">
-      <AdminWorkshopEditWidget workshop={workshop} activeTab="summary" />
+      <AdminWorkshopEditWidget
+        workshop={workshopQuery.data!}
+        activeTab="summary"
+      />
       <AdminWorkshopSummaryWidget
-        workshop={workshop}
-        initialSummary={summary}
-        initialError={summaryError}
+        workshop={workshopQuery.data!}
+        initialSummary={summaryQuery.data ?? null}
+        initialError={summaryQuery.error?.message}
       />
     </div>
   );

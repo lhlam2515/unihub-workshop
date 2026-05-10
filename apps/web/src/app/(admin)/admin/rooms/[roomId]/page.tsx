@@ -1,47 +1,34 @@
 "use client";
 
 import { useParams, notFound } from "next/navigation";
-import { useEffect, useState } from "react";
 
+import { ContentLoader } from "@/components/ContentLoader";
 import type { WorkshopScheduleEntry } from "@/features/admin-room-management/components/RoomScheduleCalendar";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getRoom, listAdminWorkshops } from "@/lib/api/services/admin";
-import type { RoomAdmin } from "@/types/workshop";
 import { AdminRoomEditWidget } from "@/widgets/AdminRoomEditWidget";
 
 export default function AdminRoomEditPage() {
-  const params = useParams<{ roomId: string }>();
-  const [room, setRoom] = useState<RoomAdmin | null>(null);
-  const [schedule, setSchedule] = useState<WorkshopScheduleEntry[]>([]);
-  const [notFoundState, setNotFoundState] = useState(false);
+  const { roomId } = useParams<{ roomId: string }>();
 
-  useEffect(() => {
-    Promise.all([
-      getRoom(params.roomId),
-      listAdminWorkshops({ q: params.roomId }),
-    ]).then(([roomResult, workshopsResult]) => {
-      if (roomResult.isFailure) {
-        setNotFoundState(true);
-        return;
-      }
-      setRoom(roomResult.data);
+  const roomQuery = useAsyncQuery(["admin-room", roomId], () =>
+    getRoom(roomId)
+  );
+  const workshopsQuery = useAsyncQuery(["admin-room-schedule", roomId], () =>
+    listAdminWorkshops({ q: roomId })
+  );
 
-      if (workshopsResult.isSuccess) {
-        const items: WorkshopScheduleEntry[] = workshopsResult.data.items.map(
-          (w) => ({
-            id: w.id,
-            title: w.title,
-            startsAt: w.startsAt,
-            endsAt: w.endsAt,
-            status: w.status,
-          })
-        );
-        setSchedule(items);
-      }
-    });
-  }, [params.roomId]);
+  if (roomQuery.error) notFound();
+  if (roomQuery.isLoading) return <ContentLoader count={2} />;
 
-  if (notFoundState) notFound();
-  if (!room) return null;
+  const schedule: WorkshopScheduleEntry[] =
+    workshopsQuery.data?.items.map((w) => ({
+      id: w.id,
+      title: w.title,
+      startsAt: w.startsAt,
+      endsAt: w.endsAt,
+      status: w.status,
+    })) ?? [];
 
-  return <AdminRoomEditWidget room={room} schedule={schedule} />;
+  return <AdminRoomEditWidget room={roomQuery.data!} schedule={schedule} />;
 }

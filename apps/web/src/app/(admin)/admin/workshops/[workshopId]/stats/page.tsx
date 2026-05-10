@@ -1,49 +1,49 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useParams, notFound } from "next/navigation";
-import { useEffect, useState } from "react";
 
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getAdminWorkshop, getWorkshopStats } from "@/lib/api/services/admin";
-import type { WorkshopAdmin, WorkshopStats } from "@/types/workshop";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
-import { AdminWorkshopStatsWidget } from "@/widgets/AdminWorkshopStatsWidget";
+
+const AdminWorkshopStatsWidget = dynamic(
+  () =>
+    import("@/widgets/AdminWorkshopStatsWidget").then((mod) => ({
+      default: mod.AdminWorkshopStatsWidget,
+    })),
+  {
+    loading: () => <ContentLoader count={3} />,
+    ssr: false,
+  }
+);
 
 export default function AdminWorkshopStatsPage() {
-  const params = useParams<{ workshopId: string }>();
-  const [workshop, setWorkshop] = useState<WorkshopAdmin | null>(null);
-  const [stats, setStats] = useState<WorkshopStats | null>(null);
-  const [statsError, setStatsError] = useState<string | undefined>(undefined);
-  const [notFoundState, setNotFoundState] = useState(false);
+  const { workshopId } = useParams<{ workshopId: string }>();
 
-  useEffect(() => {
-    Promise.all([
-      getAdminWorkshop(params.workshopId),
-      getWorkshopStats(params.workshopId),
-    ]).then(([workshopResult, statsResult]) => {
-      if (workshopResult.isFailure) {
-        setNotFoundState(true);
-        return;
-      }
-      setWorkshop(workshopResult.data);
+  const workshopQuery = useAsyncQuery(
+    ["admin-workshop-stats", workshopId],
+    () => getAdminWorkshop(workshopId)
+  );
+  const statsQuery = useAsyncQuery(
+    ["admin-workshop-stats-data", workshopId],
+    () => getWorkshopStats(workshopId)
+  );
 
-      if (statsResult.isSuccess) {
-        setStats(statsResult.data);
-      } else {
-        setStatsError((statsResult.error as { message?: string })?.message);
-      }
-    });
-  }, [params.workshopId]);
-
-  if (notFoundState) notFound();
-  if (!workshop) return null;
+  if (workshopQuery.error) notFound();
+  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
 
   return (
     <div className="space-y-6">
-      <AdminWorkshopEditWidget workshop={workshop} activeTab="stats" />
+      <AdminWorkshopEditWidget
+        workshop={workshopQuery.data!}
+        activeTab="stats"
+      />
       <AdminWorkshopStatsWidget
-        workshop={workshop}
-        initialStats={stats}
-        initialError={statsError}
+        workshop={workshopQuery.data!}
+        initialStats={statsQuery.data ?? null}
+        initialError={statsQuery.error?.message}
       />
     </div>
   );

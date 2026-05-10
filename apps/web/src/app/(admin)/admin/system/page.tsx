@@ -1,30 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getCircuitBreakers } from "@/lib/api/services/admin";
-import type { CircuitBreakerState } from "@/types/admin-operations";
 import { AdminSystemWidget } from "@/widgets/AdminSystemWidget";
 
 export default function AdminSystemPage() {
-  const [cb, setCb] = useState<CircuitBreakerState[] | null>(null);
-  const [error, setError] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    getCircuitBreakers().then((result) => {
-      if (result.isFailure) {
-        setError((result.error as { message?: string })?.message);
-      } else {
-        setCb(result.data);
-      }
-    });
-  }, []);
+  const { data, error } = useAsyncQuery(["admin-circuit-breakers"], () =>
+    getCircuitBreakers()
+  );
 
   return (
     <AdminSystemWidget
-      initialCB={cb}
+      initialCB={data ?? null}
       initialReconcileInfo={null}
-      initialError={error}
+      initialError={error?.message}
     />
   );
 }

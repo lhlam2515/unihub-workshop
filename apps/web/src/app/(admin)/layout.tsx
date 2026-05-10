@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
 import ROUTES from "@/constants/routes";
@@ -68,7 +69,9 @@ export default function AdminLayout({
             </Button>
           </div>
         </nav>
-        <main className="flex-1 bg-slate-100 p-6">{children}</main>
+        <main className="flex-1 bg-slate-100 p-6">
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </main>
       </div>
     </div>
   );

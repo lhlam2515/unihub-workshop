@@ -1,28 +1,21 @@
 "use client";
 
 import { useParams, notFound } from "next/navigation";
-import { useEffect, useState } from "react";
 
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getSpeaker } from "@/lib/api/services/admin";
-import type { SpeakerAdmin } from "@/types/workshop";
 import { AdminSpeakerFormWidget } from "@/widgets/AdminSpeakerFormWidget";
 
 export default function AdminEditSpeakerPage() {
-  const params = useParams<{ speakerId: string }>();
-  const [data, setData] = useState<SpeakerAdmin | undefined>(undefined);
-  const [notFoundState, setNotFoundState] = useState(false);
+  const { speakerId } = useParams<{ speakerId: string }>();
+  const { data, error, isLoading } = useAsyncQuery(
+    ["admin-speaker", speakerId],
+    () => getSpeaker(speakerId)
+  );
 
-  useEffect(() => {
-    getSpeaker(params.speakerId).then((result) => {
-      if (result.isFailure) {
-        setNotFoundState(true);
-      } else {
-        setData(result.data);
-      }
-    });
-  }, [params.speakerId]);
-
-  if (notFoundState) notFound();
+  if (error) notFound();
+  if (isLoading || !data) return <ContentLoader count={1} />;
 
   return <AdminSpeakerFormWidget mode="edit" initialData={data} />;
 }
