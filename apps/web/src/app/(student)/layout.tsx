@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
 
 import { PageLoader } from "@/components/PageLoader";
 import ROUTES from "@/constants/routes";
@@ -15,13 +17,14 @@ export default function StudentLayout({
   const router = useRouter();
   const { user, isLoading, isAuthenticated } = useAuth();
 
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== "student") {
+      router.replace(ROUTES.LOGIN);
+    }
+  }, [isAuthenticated, user?.role, router]);
+
   if (isLoading) {
     return <PageLoader />;
-  }
-
-  if (!isAuthenticated || user?.role !== "student") {
-    router.replace(ROUTES.LOGIN);
-    return null;
   }
 
   return (
