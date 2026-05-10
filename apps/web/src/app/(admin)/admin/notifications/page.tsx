@@ -1,31 +1,30 @@
-export const dynamic = "force-dynamic";
+"use client";
 
+import { useAsyncQuery } from "@/hooks/use-async-query";
+import type { PaginatedResult } from "@/lib/api/client";
 import {
   listNotificationChannels,
   listNotificationLogs,
 } from "@/lib/api/services/admin";
+import type { NotificationLog } from "@/types/admin-operations";
 import { AdminNotificationsWidget } from "@/widgets/AdminNotificationsWidget";
 
-export default async function NotificationsPage() {
-  const [channelsResult, logsResult] = await Promise.all([
-    listNotificationChannels(),
-    listNotificationLogs(),
-  ]);
+export default function NotificationsPage() {
+  const channelsQuery = useAsyncQuery(["admin-notif-channels"], () =>
+    listNotificationChannels()
+  );
+  const logsQuery = useAsyncQuery(["admin-notif-logs"], () =>
+    listNotificationLogs()
+  );
 
-  if (channelsResult.isFailure) {
-    return (
-      <AdminNotificationsWidget
-        initialChannels={null}
-        initialLogs={null}
-        initialError={(channelsResult.error as { message?: string })?.message}
-      />
-    );
-  }
+  const error =
+    channelsQuery.error?.message ?? logsQuery.error?.message ?? undefined;
 
   return (
     <AdminNotificationsWidget
-      initialChannels={channelsResult.data}
-      initialLogs={logsResult.isSuccess ? logsResult.data : null}
+      initialChannels={channelsQuery.data ?? null}
+      initialLogs={(logsQuery.data as PaginatedResult<NotificationLog>) ?? null}
+      initialError={error}
     />
   );
 }

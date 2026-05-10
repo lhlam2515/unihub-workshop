@@ -18,7 +18,6 @@ import { isApiError, isValidationError } from "@/lib/api/errors";
 import { AvatarUrlInput } from "./AvatarUrlInput";
 import { CreateSpeakerSchema } from "../lib/speaker-form.schema";
 
-
 import type { z } from "zod";
 
 // ---------------------------------------------------------------------------

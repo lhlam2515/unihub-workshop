@@ -17,6 +17,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -29,6 +30,7 @@ import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { CreateSpeakerDto } from "../dto/create-speaker.dto";
 import { UpdateSpeakerDto } from "../dto/update-speaker.dto";
+import { ListSpeakersQueryDto } from "../dto/list-speakers-query.dto";
 import { SpeakersService } from "../services/speakers.service";
 
 @Controller("admin/speakers")
@@ -49,8 +51,8 @@ export class SpeakersAdminController {
    * @returns Array of speaker DTOs.
    */
   @Get()
-  async listSpeakers() {
-    return this.speakersService.listSpeakers();
+  async listSpeakers(@Query() query: ListSpeakersQueryDto) {
+    return this.speakersService.listSpeakers(query);
   }
 
   /**

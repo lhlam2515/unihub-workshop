@@ -26,5 +26,6 @@ export const parseIfMatch = (header: string | undefined): number | null => {
  * @param entity - An object with a version property, or null.
  * @returns ETag string, or null if entity is null.
  */
-export const versionFromEntity = (entity: { version: number } | null): string | null =>
-  entity ? generateETag(entity.version) : null;
+export const versionFromEntity = (
+  entity: { version: number } | null
+): string | null => (entity ? generateETag(entity.version) : null);

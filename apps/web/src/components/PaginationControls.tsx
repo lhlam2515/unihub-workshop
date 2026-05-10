@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { memo } from "react";
 
 import type { PaginationMeta } from "@/lib/api/types";
 
@@ -8,7 +9,7 @@ interface PaginationControlsProps {
   isLoading?: boolean;
 }
 
-export function PaginationControls({
+export const PaginationControls = memo(function PaginationControls({
   pagination,
   onLoadMore,
   isLoading = false,
@@ -33,4 +34,4 @@ export function PaginationControls({
       </button>
     </div>
   );
-}
+});

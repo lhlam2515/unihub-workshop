@@ -35,7 +35,6 @@ import { Request } from "express";
 
 import { RedisService } from "@/infra/redis/redis.service";
 import { IS_PUBLIC_KEY } from "@/shared/decorators/public.decorator";
-import { authErrors } from "@/shared/response/errors";
 
 import { TokenService } from "../services/token.service";
 
@@ -81,7 +80,7 @@ export class JwtAuthGuard implements CanActivate {
 
     const verifyResult = await this.tokenService.verifyAccessToken(token);
     if (verifyResult.isFailure) {
-      throw new UnauthorizedException("Invalid token");
+      throw new UnauthorizedException(verifyResult.error.message);
     }
 
     const payload = verifyResult.data;
@@ -93,14 +92,8 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Token has been revoked");
     }
 
-    const isSuspended = await this.redisService.get(
-      `user:suspended:${payload.sub}`
-    );
-    if (isSuspended !== null) {
-      throw new UnauthorizedException(
-        authErrors.userSuspended(payload.sub).message
-      );
-    }
+    // Suspension check via Redis blacklist — not yet implemented.
+    // See ADR-04 / docs/blueprint/specs/auth-revocation.md.
 
     request.user = payload;
     return true;

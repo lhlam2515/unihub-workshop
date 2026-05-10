@@ -10,11 +10,10 @@ import { WorkshopNotificationPublisher } from "./workshop-notification-publisher
 import { WorkshopsService } from "./workshops.service";
 import { RoomsRepository } from "../repositories/rooms.repository";
 import { SpeakersRepository } from "../repositories/speakers.repository";
-import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
 import { WorkshopsRepository } from "../repositories/workshops.repository";
 
 // ---------------------------------------------------------------------------
-// Mock data
+// Mock data — matches the Workshop schema from event-core.schema.ts
 // ---------------------------------------------------------------------------
 
 const baseWorkshop = {
@@ -25,16 +24,17 @@ const baseWorkshop = {
   roomId: "r-001",
   startsAt: new Date("2026-06-01T09:00:00Z"),
   endsAt: new Date("2026-06-01T11:00:00Z"),
-  capacity: 30,
-  isPaid: false,
+  seatsTotal: 30,
+  seatsAvailable: 30,
   price: null as string | null,
   status: "DRAFT" as const,
   createdBy: "u-001",
+  version: 1,
   createdAt: new Date("2026-05-01T00:00:00Z"),
   updatedAt: new Date("2026-05-01T00:00:00Z"),
 };
 
-const publishedWorkshop = { ...baseWorkshop, status: "PUBLISHED" as const };
+const openWorkshop = { ...baseWorkshop, status: "OPEN" as const };
 const cancelledWorkshop = { ...baseWorkshop, status: "CANCELLED" as const };
 
 const mockSpeaker = {
@@ -59,36 +59,14 @@ const mockRoom = {
   updatedAt: new Date("2026-01-01T00:00:00Z"),
 };
 
-const mockSlot = {
-  workshopId: "w-001",
-  slotId: "slot-xxx",
-  totalCapacity: 30,
-  lockedCount: 2,
-  confirmedCount: 10,
-  updatedAt: new Date(),
-};
-
-const mockAiSummary = {
-  summaryId: "sum-001",
-  documentId: "doc-001",
-  workshopId: "w-001",
-  status: "DONE" as const,
-  summaryText: "AI generated summary",
-  modelUsed: "gpt-4",
-  rawText: null,
-  generatedAt: new Date("2026-05-01T00:00:00Z"),
-  createdAt: new Date(),
-  errorMessage: null,
-};
-
 const mockWorkshopRow = {
   workshops: baseWorkshop,
   speakers: mockSpeaker,
   rooms: mockRoom,
 };
 
-const mockPublishedRow = {
-  workshops: publishedWorkshop,
+const mockOpenRow = {
+  workshops: openWorkshop,
   speakers: mockSpeaker,
   rooms: mockRoom,
 };
@@ -110,8 +88,8 @@ describe("WorkshopsService", () => {
   let seatCounterService: jest.Mocked<SeatCounterService>;
   let speakersRepo: jest.Mocked<SpeakersRepository>;
   let roomsRepo: jest.Mocked<RoomsRepository>;
-  let notificationLogProducer: jest.Mocked<NotificationLogProducer>;
   let notificationPublisher: jest.Mocked<WorkshopNotificationPublisher>;
+  let notificationLogProducer: jest.Mocked<NotificationLogProducer>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -126,7 +104,12 @@ describe("WorkshopsService", () => {
             create: jest.fn(),
             update: jest.fn(),
             updateStatus: jest.fn(),
-            completePastPublished: jest.fn(),
+            completePastOpen: jest.fn(),
+            findOpenBasic: jest.fn(),
+            decrementSeat: jest.fn(),
+            incrementSeat: jest.fn(),
+            getSeatVersion: jest.fn(),
+            countConfirmedRegistrations: jest.fn(),
           },
         },
         {
@@ -136,7 +119,7 @@ describe("WorkshopsService", () => {
         {
           provide: SeatCounterService,
           useValue: {
-            getAvailable: jest.fn(),
+            getCachedSeats: jest.fn(),
             initialize: jest.fn(),
             delete: jest.fn(),
           },
@@ -150,16 +133,16 @@ describe("WorkshopsService", () => {
           useValue: { findById: jest.fn() },
         },
         {
-          provide: NotificationLogProducer,
-          useValue: {
-            createAndEnqueue: jest.fn(),
-          },
-        },
-        {
           provide: WorkshopNotificationPublisher,
           useValue: {
             publishEmergencyUpdate: jest.fn(),
             publishCancelled: jest.fn(),
+          },
+        },
+        {
+          provide: NotificationLogProducer,
+          useValue: {
+            createAndEnqueue: jest.fn(),
           },
         },
       ],
@@ -171,10 +154,8 @@ describe("WorkshopsService", () => {
     seatCounterService = module.get(SeatCounterService);
     speakersRepo = module.get(SpeakersRepository);
     roomsRepo = module.get(RoomsRepository);
-    workshopSlotsRepo = module.get(WorkshopSlotsRepository);
-    // workshopDocumentsRepo = module.get(WorkshopDocumentsRepository);
-    aiSummariesRepo = module.get(AiSummariesRepository);
     notificationPublisher = module.get(WorkshopNotificationPublisher);
+    notificationLogProducer = module.get(NotificationLogProducer);
   });
 
   afterEach(() => {
@@ -188,19 +169,19 @@ describe("WorkshopsService", () => {
     const createDto = {
       title: "New Workshop",
       description: "Description",
-      speaker_id: "s-001",
-      room_id: "r-001",
-      starts_at: new Date("2026-06-01T09:00:00Z"),
-      ends_at: new Date("2026-06-01T11:00:00Z"),
-      capacity: 30,
-      is_paid: false,
-      price: undefined,
+      speakerId: "s-001",
+      roomId: "r-001",
+      startsAt: new Date("2026-06-01T09:00:00Z"),
+      endsAt: new Date("2026-06-01T11:00:00Z"),
+      seatsTotal: 30,
+      price: 0,
     };
 
-    it("creates a workshop in DRAFT status with slot, speaker, and room (FR-F02-001)", async () => {
+    it("creates a workshop in DRAFT status with speaker and room (FR-F02-001)", async () => {
       roomConflictService.checkConflict.mockResolvedValue(Result.ok());
-      workshopsRepo.create.mockResolvedValue(Result.ok(baseWorkshop));
-      workshopSlotsRepo.create.mockResolvedValue(Result.ok(mockSlot));
+      workshopsRepo.create.mockResolvedValue(
+        Result.ok({ ...baseWorkshop, title: "New Workshop" })
+      );
       speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeaker));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
@@ -208,20 +189,25 @@ describe("WorkshopsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        const dto = result.data;
-        expect(dto.workshop_id).toBe("w-001");
-        expect(dto.status).toBe("DRAFT");
-        expect(dto.speaker_name).toBe("John Doe");
-        expect(dto.room_name).toBe("Room A");
+        expect(result.data.id).toBe("w-001");
+        expect(result.data.title).toBe("New Workshop");
+        expect(result.data.status).toBe("DRAFT");
+        expect(result.data.speaker?.fullName).toBe("John Doe");
+        expect(result.data.room?.name).toBe("Room A");
       }
       expect(roomConflictService.checkConflict).toHaveBeenCalledWith(
         "r-001",
-        createDto.starts_at,
-        createDto.ends_at
+        createDto.startsAt,
+        createDto.endsAt
       );
-      expect(workshopSlotsRepo.create).toHaveBeenCalledWith(
-        baseWorkshop.workshopId,
-        30
+      expect(workshopsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "New Workshop",
+          status: "DRAFT",
+          seatsTotal: 30,
+          seatsAvailable: 30,
+          createdBy: "u-001",
+        })
       );
     });
 
@@ -247,39 +233,29 @@ describe("WorkshopsService", () => {
       expect(result.isFailure).toBe(true);
     });
 
-    it("fails when slot creation fails", async () => {
+    it("handles missing speaker gracefully", async () => {
       roomConflictService.checkConflict.mockResolvedValue(Result.ok());
       workshopsRepo.create.mockResolvedValue(Result.ok(baseWorkshop));
-      workshopSlotsRepo.create.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
+      speakersRepo.findById.mockResolvedValue(
+        Result.fail(workshopErrors.notFound("s-001"))
       );
-
-      const result = await service.createWorkshop(createDto, "u-001");
-
-      expect(result.isFailure).toBe(true);
-    });
-
-    it("handles missing speaker gracefully with 'Unknown'", async () => {
-      roomConflictService.checkConflict.mockResolvedValue(Result.ok());
-      workshopsRepo.create.mockResolvedValue(Result.ok(baseWorkshop));
-      workshopSlotsRepo.create.mockResolvedValue(Result.ok(mockSlot));
-      speakersRepo.findById.mockResolvedValue(Result.ok(null));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
       const result = await service.createWorkshop(createDto, "u-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.speaker_name).toBe("Unknown");
+        expect(result.data.speaker).toBeNull();
       }
     });
 
-    it("passes price as string when is_paid is true", async () => {
-      const paidDto = { ...createDto, is_paid: true, price: 50 };
+    it("passes price as string to repository", async () => {
+      const paidDto = { ...createDto, price: 50 };
       roomConflictService.checkConflict.mockResolvedValue(Result.ok());
-      workshopsRepo.create.mockResolvedValue(Result.ok(baseWorkshop));
-      workshopSlotsRepo.create.mockResolvedValue(Result.ok(mockSlot));
-      speakersRepo.findById.mockResolvedValue(Result.ok(null));
+      workshopsRepo.create.mockResolvedValue(
+        Result.ok({ ...baseWorkshop, price: "50" })
+      );
+      speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeaker));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
       await service.createWorkshop(paidDto, "u-001");
@@ -287,9 +263,22 @@ describe("WorkshopsService", () => {
       expect(workshopsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           price: "50",
-          isPaid: true,
+          seatsTotal: 30,
+          seatsAvailable: 30,
         })
       );
+    });
+
+    it("skips room conflict check when no roomId provided", async () => {
+      const noRoomDto = { ...createDto, roomId: undefined };
+      workshopsRepo.create.mockResolvedValue(Result.ok(baseWorkshop));
+      speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeaker));
+      roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
+
+      const result = await service.createWorkshop(noRoomDto, "u-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(roomConflictService.checkConflict).not.toHaveBeenCalled();
     });
   });
 
@@ -303,25 +292,29 @@ describe("WorkshopsService", () => {
       const updatedWorkshop = { ...baseWorkshop, title: "Updated Title" };
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
       workshopsRepo.update.mockResolvedValue(Result.ok(updatedWorkshop));
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
       speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeaker));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.updateWorkshop("w-001", updateDto);
+      const result = await service.updateWorkshop("w-001", updateDto, 1);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.workshop_id).toBe("w-001");
+        expect(result.data.id).toBe("w-001");
+        expect(result.data.title).toBe("Updated Title");
       }
-      expect(workshopsRepo.update).toHaveBeenCalledWith("w-001", {
-        title: "Updated Title",
-      });
+      expect(workshopsRepo.update).toHaveBeenCalledWith(
+        "w-001",
+        {
+          title: "Updated Title",
+        },
+        1
+      );
     });
 
     it("fails when workshop is not DRAFT", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
 
-      const result = await service.updateWorkshop("w-001", updateDto);
+      const result = await service.updateWorkshop("w-001", updateDto, 1);
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_NOT_PUBLISHED");
@@ -329,22 +322,21 @@ describe("WorkshopsService", () => {
 
     it("re-checks room conflict when room/time changes", async () => {
       const dtoWithRoom = {
-        room_id: "r-002",
-        starts_at: new Date("2026-07-01T09:00:00Z"),
+        roomId: "r-002",
+        startsAt: new Date("2026-07-01T09:00:00Z"),
       };
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
       roomConflictService.checkConflict.mockResolvedValue(Result.ok());
       workshopsRepo.update.mockResolvedValue(Result.ok(baseWorkshop));
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
       speakersRepo.findById.mockResolvedValue(Result.ok(mockSpeaker));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.updateWorkshop("w-001", dtoWithRoom);
+      const result = await service.updateWorkshop("w-001", dtoWithRoom, 1);
 
       expect(result.isSuccess).toBe(true);
       expect(roomConflictService.checkConflict).toHaveBeenCalledWith(
         "r-002",
-        dtoWithRoom.starts_at,
+        dtoWithRoom.startsAt,
         baseWorkshop.endsAt,
         "w-001"
       );
@@ -356,22 +348,34 @@ describe("WorkshopsService", () => {
         Result.fail(workshopErrors.roomConflict("r-002", "09:00", "11:00"))
       );
 
-      const result = await service.updateWorkshop("w-001", {
-        room_id: "r-002",
-      });
+      const result = await service.updateWorkshop(
+        "w-001",
+        { roomId: "r-002" },
+        1
+      );
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_TIME_CONFLICT");
     });
 
-    it("fails when findById fails", async () => {
+    it("fails on findById error", async () => {
       workshopsRepo.findById.mockResolvedValue(
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.updateWorkshop("w-001", updateDto);
+      const result = await service.updateWorkshop("w-001", updateDto, 1);
 
       expect(result.isFailure).toBe(true);
+    });
+
+    it("fails on version mismatch (concurrent modification)", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
+      workshopsRepo.update.mockResolvedValue(Result.ok(null));
+
+      const result = await service.updateWorkshop("w-001", updateDto, 999);
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("CONCURRENT_MODIFICATION");
     });
   });
 
@@ -381,10 +385,7 @@ describe("WorkshopsService", () => {
   describe("publishWorkshop", () => {
     it("publishes a DRAFT workshop initializing Redis (FR-F02-003)", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
-      workshopsRepo.updateStatus.mockResolvedValue(
-        Result.ok(publishedWorkshop)
-      );
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
+      workshopsRepo.updateStatus.mockResolvedValue(Result.ok(openWorkshop));
       seatCounterService.initialize.mockResolvedValue();
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
@@ -392,17 +393,14 @@ describe("WorkshopsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.status).toBe("PUBLISHED");
+        expect(result.data.status).toBe("OPEN");
       }
-      expect(workshopsRepo.updateStatus).toHaveBeenCalledWith(
-        "w-001",
-        "PUBLISHED"
-      );
+      expect(workshopsRepo.updateStatus).toHaveBeenCalledWith("w-001", "OPEN");
       expect(seatCounterService.initialize).toHaveBeenCalledWith("w-001", 30);
     });
 
-    it("fails when workshop is already PUBLISHED", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
+    it("fails when workshop is already OPEN", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
 
       const result = await service.publishWorkshop("w-001");
 
@@ -410,23 +408,13 @@ describe("WorkshopsService", () => {
       expect(result.error.code).toBe("WORKSHOP_ALREADY_PUBLISHED");
     });
 
-    it("creates a slot if none exists during publish", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
-      workshopsRepo.updateStatus.mockResolvedValue(
-        Result.ok(publishedWorkshop)
-      );
-      // First findByWorkshopId returns null (no slot yet)
-      workshopSlotsRepo.findByWorkshopId
-        .mockResolvedValueOnce(Result.ok(null))
-        .mockResolvedValueOnce(Result.ok(mockSlot));
-      workshopSlotsRepo.create.mockResolvedValue(Result.ok(mockSlot));
-      seatCounterService.initialize.mockResolvedValue();
-      roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
+    it("fails with WORKSHOP_NOT_PUBLISHED for CANCELLED workshops", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockCancelledRow));
 
       const result = await service.publishWorkshop("w-001");
 
-      expect(result.isSuccess).toBe(true);
-      expect(workshopSlotsRepo.create).toHaveBeenCalledWith("w-001", 30);
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("WORKSHOP_NOT_PUBLISHED");
     });
 
     it("fails when findById fails", async () => {
@@ -444,95 +432,85 @@ describe("WorkshopsService", () => {
   // emergencyUpdate
   // ---------------------------------------------------------------------------
   describe("emergencyUpdate", () => {
-    const emergencyDto = { room_id: "r-002" };
+    const emergencyDto = { roomId: "r-002" };
 
-    it("updates scheduling fields on a PUBLISHED workshop (FR-F02-005)", async () => {
-      const updateChanges = {
-        workshops: publishedWorkshop,
-        speakers: mockSpeaker,
-        rooms: mockRoom,
-      };
-      workshopsRepo.findById.mockResolvedValue(Result.ok(updateChanges));
+    it("updates scheduling fields on an OPEN workshop (FR-F02-005)", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       roomConflictService.checkConflict.mockResolvedValue(Result.ok());
-      workshopsRepo.update.mockResolvedValue(Result.ok(publishedWorkshop));
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
+      workshopsRepo.update.mockResolvedValue(Result.ok(openWorkshop));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.emergencyUpdate("w-001", emergencyDto);
+      const result = await service.emergencyUpdate("w-001", emergencyDto, 1);
 
       expect(result.isSuccess).toBe(true);
-      expect(workshopsRepo.update).toHaveBeenCalledWith("w-001", {
-        roomId: "r-002",
-      });
+      expect(workshopsRepo.update).toHaveBeenCalledWith(
+        "w-001",
+        { roomId: "r-002" },
+        1
+      );
       expect(notificationPublisher.publishEmergencyUpdate).toHaveBeenCalled();
     });
 
-    it("fails when workshop is not PUBLISHED", async () => {
+    it("fails when workshop is not OPEN", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
 
-      const result = await service.emergencyUpdate("w-001", emergencyDto);
+      const result = await service.emergencyUpdate("w-001", emergencyDto, 1);
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_NOT_PUBLISHED");
     });
 
     it("re-checks room conflict and excludes self", async () => {
-      const updateChanges = {
-        workshops: publishedWorkshop,
-        speakers: mockSpeaker,
-        rooms: mockRoom,
-      };
-      workshopsRepo.findById.mockResolvedValue(Result.ok(updateChanges));
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       roomConflictService.checkConflict.mockResolvedValue(Result.ok());
-      workshopsRepo.update.mockResolvedValue(Result.ok(publishedWorkshop));
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
+      workshopsRepo.update.mockResolvedValue(Result.ok(openWorkshop));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.emergencyUpdate("w-001", emergencyDto);
+      await service.emergencyUpdate("w-001", emergencyDto, 1);
 
       expect(roomConflictService.checkConflict).toHaveBeenCalledWith(
         "r-002",
-        publishedWorkshop.startsAt,
-        publishedWorkshop.endsAt,
+        openWorkshop.startsAt,
+        openWorkshop.endsAt,
         "w-001"
       );
     });
 
     it("fails on room conflict (FR-F02-002)", async () => {
-      const updateChanges = {
-        workshops: publishedWorkshop,
-        speakers: mockSpeaker,
-        rooms: mockRoom,
-      };
-      workshopsRepo.findById.mockResolvedValue(Result.ok(updateChanges));
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       roomConflictService.checkConflict.mockResolvedValue(
         Result.fail(workshopErrors.roomConflict("r-002", "09:00", "11:00"))
       );
 
-      const result = await service.emergencyUpdate("w-001", emergencyDto);
+      const result = await service.emergencyUpdate("w-001", emergencyDto, 1);
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_TIME_CONFLICT");
     });
 
     it("publishes notification event for async dispatch (FR-F02-005)", async () => {
-      const updateChanges = {
-        workshops: publishedWorkshop,
-        speakers: mockSpeaker,
-        rooms: mockRoom,
-      };
-      workshopsRepo.findById.mockResolvedValue(Result.ok(updateChanges));
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       roomConflictService.checkConflict.mockResolvedValue(Result.ok());
-      workshopsRepo.update.mockResolvedValue(Result.ok(publishedWorkshop));
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
+      workshopsRepo.update.mockResolvedValue(Result.ok(openWorkshop));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.emergencyUpdate("w-001", emergencyDto);
+      await service.emergencyUpdate("w-001", emergencyDto, 1);
 
       expect(notificationPublisher.publishEmergencyUpdate).toHaveBeenCalledWith(
-        publishedWorkshop,
+        openWorkshop,
         { roomId: "r-002" }
       );
+    });
+
+    it("fails on version mismatch (concurrent modification)", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      roomConflictService.checkConflict.mockResolvedValue(Result.ok());
+      workshopsRepo.update.mockResolvedValue(Result.ok(null));
+
+      const result = await service.emergencyUpdate("w-001", emergencyDto, 999);
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("CONCURRENT_MODIFICATION");
     });
   });
 
@@ -540,16 +518,18 @@ describe("WorkshopsService", () => {
   // cancelWorkshop
   // ---------------------------------------------------------------------------
   describe("cancelWorkshop", () => {
-    it("cancels a PUBLISHED workshop and deletes Redis seat key (FR-F02-004)", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
+    it("cancels an OPEN workshop and deletes Redis seat key (FR-F02-004)", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       workshopsRepo.updateStatus.mockResolvedValue(
         Result.ok(cancelledWorkshop)
       );
       seatCounterService.delete.mockResolvedValue();
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      const result = await service.cancelWorkshop("w-001");
+      const result = await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -566,7 +546,10 @@ describe("WorkshopsService", () => {
     it("fails when workshop is already CANCELLED", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockCancelledRow));
 
-      const result = await service.cancelWorkshop("w-001");
+      const result = await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_CANCELLED");
@@ -577,13 +560,36 @@ describe("WorkshopsService", () => {
       workshopsRepo.updateStatus.mockResolvedValue(
         Result.ok({ ...baseWorkshop, status: "CANCELLED" })
       );
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
 
-      await service.cancelWorkshop("w-001");
+      await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
 
       expect(seatCounterService.delete).not.toHaveBeenCalled();
       expect(notificationPublisher.publishCancelled).toHaveBeenCalled();
+    });
+
+    it("creates notification log for workshop owner on cancel", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      workshopsRepo.updateStatus.mockResolvedValue(
+        Result.ok(cancelledWorkshop)
+      );
+      seatCounterService.delete.mockResolvedValue();
+      roomsRepo.findById.mockResolvedValue(Result.ok(mockRoom));
+
+      await service.cancelWorkshop("w-001", {
+        reason: "Test cancellation reason for testing",
+        notifyRegistered: true,
+      });
+
+      expect(notificationLogProducer.createAndEnqueue).toHaveBeenCalledWith({
+        userId: "u-001",
+        workshopId: "w-001",
+        type: "WORKSHOP_CANCELLED",
+        payload: { title: "Intro to Testing" },
+      });
     });
   });
 
@@ -591,53 +597,59 @@ describe("WorkshopsService", () => {
   // listPublished
   // ---------------------------------------------------------------------------
   describe("listPublished", () => {
-    const query = { page: 1, limit: 20 };
+    const query: any = {
+      cursor: undefined,
+      limit: 20,
+      hasSeats: false,
+      sort: "startsAt",
+    };
 
-    it("returns published workshops with seat counts (FR-F02-006)", async () => {
-      // Service accesses workshop.workshopId / workshop.speakers?.fullName,
-      // so items must expose Workshop fields at top level (WorkshopWithSpeakerRoom).
-      const flatItem = {
-        ...publishedWorkshop,
-        speakers: mockSpeaker,
-        rooms: mockRoom,
-      };
+    it("returns open workshops with seat counts (FR-F02-006)", async () => {
       workshopsRepo.findPublished.mockResolvedValue(
         Result.ok({
-          items: [flatItem],
-          total: 1,
+          items: [mockOpenRow],
+          nextCursor: null,
+          hasMore: false,
+          limit: 20,
         })
       );
-      seatCounterService.getAvailable.mockResolvedValue(25);
+      seatCounterService.getCachedSeats.mockResolvedValue(25);
 
       const result = await service.listPublished(query);
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.items).toHaveLength(1);
-        expect(result.data.total).toBe(1);
-        expect(result.data.page).toBe(1);
+        expect(result.data.hasMore).toBe(false);
         expect(result.data.limit).toBe(20);
-        expect(result.data.items[0].workshop_id).toBe("w-001");
-        expect(result.data.items[0].available_seats).toBe(25);
+        expect(result.data.items[0].id).toBe("w-001");
+        expect(result.data.items[0].seatsAvailable).toBe(25);
+        expect(result.data.items[0].status).toBe("OPEN");
       }
     });
 
-    it("applies filters from query", async () => {
-      const filteredQuery = {
-        page: 1,
+    it("applies date filters from query", async () => {
+      const filteredQuery: any = {
+        cursor: undefined,
         limit: 10,
-        dateFrom: new Date("2026-06-01"),
-        dateTo: new Date("2026-06-30"),
-        isPaid: false,
+        day: "2026-06-01",
       };
       workshopsRepo.findPublished.mockResolvedValue(
-        Result.ok({ items: [], total: 0 })
+        Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 10 })
       );
 
       const result = await service.listPublished(filteredQuery);
 
       expect(result.isSuccess).toBe(true);
-      expect(workshopsRepo.findPublished).toHaveBeenCalledWith(filteredQuery);
+      expect(workshopsRepo.findPublished).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dateFrom: expect.any(Date),
+          dateTo: expect.any(Date),
+          q: undefined,
+          cursor: undefined,
+          limit: 10,
+        })
+      );
     });
   });
 
@@ -645,25 +657,22 @@ describe("WorkshopsService", () => {
   // getPublicDetail
   // ---------------------------------------------------------------------------
   describe("getPublicDetail", () => {
-    it("returns detail for a published workshop with AI summary (FR-F02-007)", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
-      seatCounterService.getAvailable.mockResolvedValue(25);
-      aiSummariesRepo.findByWorkshopId.mockResolvedValue(
-        Result.ok([mockAiSummary])
-      );
+    it("returns detail for an open workshop (FR-F02-007)", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      seatCounterService.getCachedSeats.mockResolvedValue(25);
 
       const result = await service.getPublicDetail("w-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.workshop_id).toBe("w-001");
-        expect(result.data.available_seats).toBe(25);
-        expect(result.data.speaker_name).toBe("John Doe");
-        expect(result.data.room_name).toBe("Room A");
+        expect(result.data.id).toBe("w-001");
+        expect(result.data.seatsAvailable).toBe(25);
+        expect(result.data.speaker?.fullName).toBe("John Doe");
+        expect(result.data.room?.name).toBe("Room A");
       }
     });
 
-    it("fails when workshop is not PUBLISHED", async () => {
+    it("fails when workshop is not OPEN", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
 
       const result = await service.getPublicDetail("w-001");
@@ -683,16 +692,23 @@ describe("WorkshopsService", () => {
       expect(result.error.code).toBe("WORKSHOP_NOT_FOUND");
     });
 
-    it("returns detail without AI summary when none exists", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
-      seatCounterService.getAvailable.mockResolvedValue(25);
-      aiSummariesRepo.findByWorkshopId.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR" } as any)
-      );
+    it("returns detail with speaker=null and room=null when not set", async () => {
+      const rowWithoutRefs = {
+        workshops: { ...openWorkshop, speakerId: null, roomId: null },
+        speakers: null,
+        rooms: null,
+      };
+      workshopsRepo.findById.mockResolvedValue(Result.ok(rowWithoutRefs));
+      seatCounterService.getCachedSeats.mockResolvedValue(30);
 
       const result = await service.getPublicDetail("w-001");
 
       expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data.id).toBe("w-001");
+        expect(result.data.speaker).toBeNull();
+        expect(result.data.room).toBeNull();
+      }
     });
   });
 
@@ -700,25 +716,17 @@ describe("WorkshopsService", () => {
   // getAdminDetail
   // ---------------------------------------------------------------------------
   describe("getAdminDetail", () => {
-    it("returns admin detail with slot counters", async () => {
-      workshopsRepo.findById.mockResolvedValue(
-        Result.ok({
-          workshops: baseWorkshop,
-          speakers: mockSpeaker,
-          rooms: mockRoom,
-        })
-      );
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
+    it("returns admin detail with version info", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
 
       const result = await service.getAdminDetail("w-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.workshop_id).toBe("w-001");
-        expect(result.data.confirmed_count).toBe(10);
-        expect(result.data.locked_count).toBe(2);
+        expect(result.data.id).toBe("w-001");
         expect(result.data.status).toBe("DRAFT");
-        expect(result.data.created_by).toBe("u-001");
+        expect(result.data.version).toBe(1);
+        expect(result.data.createdBy).toBe("u-001");
       }
     });
 
@@ -731,45 +739,26 @@ describe("WorkshopsService", () => {
 
       expect(result.isFailure).toBe(true);
     });
-
-    it("uses 0 for slot counters when slot is null", async () => {
-      workshopsRepo.findById.mockResolvedValue(
-        Result.ok({
-          workshops: baseWorkshop,
-          speakers: mockSpeaker,
-          rooms: mockRoom,
-        })
-      );
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
-
-      const result = await service.getAdminDetail("w-001");
-
-      expect(result.isSuccess).toBe(true);
-      if (result.isSuccess) {
-        expect(result.data.confirmed_count).toBe(0);
-        expect(result.data.locked_count).toBe(0);
-      }
-    });
   });
 
   // ---------------------------------------------------------------------------
   // listAdmin
   // ---------------------------------------------------------------------------
   describe("listAdmin", () => {
-    const query = { page: 1, limit: 20 };
+    const query: any = {
+      cursor: undefined,
+      limit: 20,
+      hasSeats: false,
+      sort: "startsAt",
+    };
 
     it("returns paginated admin workshop list", async () => {
       workshopsRepo.listAdmin.mockResolvedValue(
         Result.ok({
-          items: [
-            {
-              workshops: baseWorkshop,
-              workshopSlots: mockSlot,
-              speakers: mockSpeaker,
-              rooms: mockRoom,
-            },
-          ],
-          total: 1,
+          items: [mockWorkshopRow],
+          nextCursor: null,
+          hasMore: false,
+          limit: 20,
         })
       );
 
@@ -778,23 +767,30 @@ describe("WorkshopsService", () => {
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.items).toHaveLength(1);
-        expect(result.data.total).toBe(1);
-        expect(result.data.page).toBe(1);
+        expect(result.data.hasMore).toBe(false);
         expect(result.data.limit).toBe(20);
-        expect(result.data.items[0].confirmed_count).toBe(10);
+        expect(result.data.items[0].id).toBe("w-001");
       }
     });
 
     it("filters by status when provided", async () => {
-      const filteredQuery = { status: "DRAFT", page: 1, limit: 20 };
+      const filteredQuery: any = {
+        status: "DRAFT",
+        cursor: undefined,
+        limit: 20,
+      };
       workshopsRepo.listAdmin.mockResolvedValue(
-        Result.ok({ items: [], total: 0 })
+        Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
       );
 
       const result = await service.listAdmin(filteredQuery);
 
       expect(result.isSuccess).toBe(true);
-      expect(workshopsRepo.listAdmin).toHaveBeenCalledWith(filteredQuery);
+      expect(workshopsRepo.listAdmin).toHaveBeenCalledWith({
+        status: "DRAFT",
+        cursor: undefined,
+        limit: 20,
+      });
     });
 
     it("proxies repository failure", async () => {
@@ -809,36 +805,66 @@ describe("WorkshopsService", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // getAvailability
+  // ---------------------------------------------------------------------------
+  describe("getAvailability", () => {
+    it("returns real-time seat availability", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      seatCounterService.getCachedSeats.mockResolvedValue(25);
+
+      const result = await service.getAvailability("w-001");
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data.workshopId).toBe("w-001");
+        expect(result.data.seatsAvailable).toBe(25);
+        expect(result.data.asOf).toBeDefined();
+      }
+    });
+
+    it("fails when workshop not found", async () => {
+      workshopsRepo.findById.mockResolvedValue(
+        Result.fail(workshopErrors.notFound("w-001"))
+      );
+
+      const result = await service.getAvailability("w-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("WORKSHOP_NOT_FOUND");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // getStats
   // ---------------------------------------------------------------------------
   describe("getStats", () => {
-    it("returns stats from slot and Redis", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(mockSlot));
-      seatCounterService.getAvailable.mockResolvedValue(18);
+    it("returns stats with actual confirmed_count from repository", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      workshopsRepo.countConfirmedRegistrations.mockResolvedValue(
+        Result.ok(12)
+      );
+      seatCounterService.getCachedSeats.mockResolvedValue(18);
 
       const result = await service.getStats("w-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.confirmed_count).toBe(10);
-        expect(result.data.locked_count).toBe(2);
+        expect(result.data.confirmed_count).toBe(12);
         expect(result.data.available_seats).toBe(18);
         expect(result.data.total_capacity).toBe(30);
       }
     });
 
-    it("uses 0 for slot counters when slot is null", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
-      seatCounterService.getAvailable.mockResolvedValue(30);
+    it("returns 0 available seats when cache returns 0", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
+      workshopsRepo.countConfirmedRegistrations.mockResolvedValue(Result.ok(0));
+      seatCounterService.getCachedSeats.mockResolvedValue(0);
 
       const result = await service.getStats("w-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.confirmed_count).toBe(0);
-        expect(result.data.locked_count).toBe(0);
+        expect(result.data.available_seats).toBe(0);
       }
     });
 
@@ -850,6 +876,7 @@ describe("WorkshopsService", () => {
       const result = await service.getStats("w-001");
 
       expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("WORKSHOP_NOT_FOUND");
     });
   });
 
@@ -857,18 +884,19 @@ describe("WorkshopsService", () => {
   // getPublishedById (cross-module)
   // ---------------------------------------------------------------------------
   describe("getPublishedById", () => {
-    it("returns workshop entity when published (cross-module)", async () => {
-      workshopsRepo.findById.mockResolvedValue(Result.ok(mockPublishedRow));
+    it("returns workshop entity when open (cross-module)", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
 
       const result = await service.getPublishedById("w-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.workshopId).toBe("w-001");
+        expect(result.data.status).toBe("OPEN");
       }
     });
 
-    it("fails with WORKSHOP_NOT_PUBLISHED when status is not PUBLISHED", async () => {
+    it("fails with WORKSHOP_NOT_PUBLISHED when status is not OPEN", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
 
       const result = await service.getPublishedById("w-001");
@@ -891,8 +919,8 @@ describe("WorkshopsService", () => {
   // completePastWorkshops (cron)
   // ---------------------------------------------------------------------------
   describe("completePastWorkshops", () => {
-    it("completes past published workshops and returns count (FR-F10-005)", async () => {
-      workshopsRepo.completePastPublished.mockResolvedValue(Result.ok(5));
+    it("completes past open workshops and returns count (FR-F10-005)", async () => {
+      workshopsRepo.completePastOpen.mockResolvedValue(Result.ok(5));
 
       const result = await service.completePastWorkshops();
 
@@ -903,7 +931,7 @@ describe("WorkshopsService", () => {
     });
 
     it("returns 0 when no workshops to complete", async () => {
-      workshopsRepo.completePastPublished.mockResolvedValue(Result.ok(0));
+      workshopsRepo.completePastOpen.mockResolvedValue(Result.ok(0));
 
       const result = await service.completePastWorkshops();
 
@@ -914,13 +942,80 @@ describe("WorkshopsService", () => {
     });
 
     it("proxies repository failure", async () => {
-      workshopsRepo.completePastPublished.mockResolvedValue(
+      workshopsRepo.completePastOpen.mockResolvedValue(
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
       const result = await service.completePastWorkshops();
 
       expect(result.isFailure).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getPublishedWorkshopsBasic (cron helper)
+  // ---------------------------------------------------------------------------
+  describe("getPublishedWorkshopsBasic", () => {
+    it("returns basic open workshop data", async () => {
+      workshopsRepo.findOpenBasic.mockResolvedValue(
+        Result.ok([
+          { workshopId: "w-001", seatsTotal: 30 },
+          { workshopId: "w-002", seatsTotal: 25 },
+        ])
+      );
+
+      const result = await service.getPublishedWorkshopsBasic();
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data).toHaveLength(2);
+        expect(result.data[0].workshopId).toBe("w-001");
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Seat atomic operations (used by booking module)
+  // ---------------------------------------------------------------------------
+  describe("decrementSeat", () => {
+    it("decrements seat count with optimistic locking", async () => {
+      workshopsRepo.decrementSeat.mockResolvedValue(
+        Result.ok({ rowsAffected: 1, newVersion: 2 })
+      );
+
+      const result = await service.decrementSeat("w-001", 1);
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data.rowsAffected).toBe(1);
+        expect(result.data.newVersion).toBe(2);
+      }
+    });
+  });
+
+  describe("incrementSeat", () => {
+    it("increments seat count", async () => {
+      workshopsRepo.incrementSeat.mockResolvedValue(Result.ok());
+
+      const result = await service.incrementSeat("w-001");
+
+      expect(result.isSuccess).toBe(true);
+    });
+  });
+
+  describe("getSeatVersion", () => {
+    it("returns current version and seats available", async () => {
+      workshopsRepo.getSeatVersion.mockResolvedValue(
+        Result.ok({ version: 1, seatsAvailable: 30 })
+      );
+
+      const result = await service.getSeatVersion("w-001");
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data?.version).toBe(1);
+        expect(result.data?.seatsAvailable).toBe(30);
+      }
     });
   });
 });

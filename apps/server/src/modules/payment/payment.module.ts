@@ -9,6 +9,7 @@ import { BookingModule } from "../booking/booking.module";
 import { CatalogModule } from "../catalog/catalog.module";
 import { IamModule } from "../iam/iam.module";
 import { NotificationModule } from "../notification/notification.module";
+import { PaymentsAdminController } from "./controllers/payments-admin.controller";
 import { PaymentsController } from "./controllers/payments.controller";
 import { MockGatewayAdapter } from "./gateways/mock-gateway.adapter";
 import { MomoGatewayAdapter } from "./gateways/momo-gateway.adapter";
@@ -35,7 +36,7 @@ import { PaymentsService } from "./services/payments.service";
     IamModule,
     NotificationModule,
   ],
-  controllers: [PaymentsController],
+  controllers: [PaymentsController, PaymentsAdminController],
   providers: [
     // Services
     PaymentsService,

@@ -13,6 +13,7 @@ import {
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Public } from "@/shared/decorators/public.decorator";
+import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
@@ -21,14 +22,13 @@ import { AuthService } from "../services/auth.service";
 import type { LoginDto } from "../dto/login.dto";
 import type { RefreshTokenDto } from "../dto/refresh-token.dto";
 import type { Request, Response } from "express";
-import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: true,
+  secure: process.env.NODE_ENV === "production",
   sameSite: "strict" as const,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  path: "/api/auth/refresh",
+  path: "/api/v1/auth/refresh",
 };
 
 @Controller("auth")
@@ -136,9 +136,25 @@ export class AuthController {
   @Post("logout")
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(@CurrentUser() user: JwtPayload) {
-    const result = await this.authService.logout(user.sub, user.jti);
+  async logout(
+    @CurrentUser() user: JwtPayload,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ) {
+    const refreshTokenStr = request.cookies?.refreshToken as string | undefined;
+    const result = await this.authService.logout(
+      user.sub,
+      user.jti,
+      refreshTokenStr
+    );
     if (result.isFailure) return result;
+
+    response.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict" as const,
+      path: "/api/v1/auth/refresh",
+    });
     return;
   }
 

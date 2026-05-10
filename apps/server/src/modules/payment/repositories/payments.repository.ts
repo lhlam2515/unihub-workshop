@@ -158,7 +158,7 @@ export class PaymentsRepository {
    * the JWT subject, never a value from request params or body.
    * Results are ordered by initiated_at descending (most recent first).
    *
-   * @param studentId - The UUID of the student (from JWT, IDOR-enforced).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, IDOR-enforced).
    * @param pagination - Optional pagination with page (default 1) and limit (default 20).
    * @returns OkResult with { items: Payment[], total: number }, or FailResult with INTERNAL_ERROR.
    */

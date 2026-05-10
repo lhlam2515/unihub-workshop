@@ -1,72 +1,39 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { RedisService } from "@/infra/redis/redis.service";
-
 import { CircuitBreakerMechanic } from "./circuit-breaker.mechanic";
 
 describe("CircuitBreakerMechanic", () => {
   let mechanic: CircuitBreakerMechanic;
-  let redisService: jest.Mocked<RedisService>;
-
   const GATEWAY = "MOCK";
-  const key = `circuit:payment:${GATEWAY}`;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CircuitBreakerMechanic,
-        {
-          provide: RedisService,
-          useValue: {
-            hGetAll: jest.fn(),
-            hSet: jest.fn(),
-            hGet: jest.fn(),
-          },
-        },
-      ],
+      providers: [CircuitBreakerMechanic],
     }).compile();
 
     mechanic = module.get<CircuitBreakerMechanic>(CircuitBreakerMechanic);
-    redisService = module.get(RedisService);
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // -----------------------------------------------------------------------
+  // checkAndAllow — FR-F05-002 (circuit breaker)
+  // -----------------------------------------------------------------------
   describe("checkAndAllow — FR-F05-002 (circuit breaker)", () => {
-    it("should allow request when state is CLOSED", async () => {
-      redisService.hGetAll.mockResolvedValue({
-        state: "CLOSED",
-        failure_count: "0",
-        opened_at: "",
-        last_attempt: "",
-      });
-
-      const result = await mechanic.checkAndAllow(GATEWAY);
-
-      expect(result.isSuccess).toBe(true);
-      expect(result.data).toBe(true);
-      expect(redisService.hSet).toHaveBeenCalledWith(
-        key,
-        "last_attempt",
-        expect.any(String)
-      );
-    });
-
-    it("should allow CLOSED when hash is empty (default to CLOSED)", async () => {
-      redisService.hGetAll.mockResolvedValue({});
-
+    it("allows request when state is CLOSED", async () => {
       const result = await mechanic.checkAndAllow(GATEWAY);
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBe(true);
     });
 
-    it("should reject with PAYMENT_GATEWAY_OPEN when state is OPEN and cooldown not expired", async () => {
-      const openedAt = new Date(Date.now() - 5_000).toISOString(); // 5s ago, < 30s
-      redisService.hGetAll.mockResolvedValue({
-        state: "OPEN",
-        failure_count: "5",
-        opened_at: openedAt,
-        last_attempt: "",
-      });
+    it("rejects with PAYMENT_GATEWAY_OPEN when state is OPEN and cooldown not expired", async () => {
+      // 3 consecutive failures triggers OPEN via rate check (3/3=100% >= 50%)
+      for (let i = 0; i < 3; i++) {
+        await mechanic.recordFailure(GATEWAY);
+      }
 
       const result = await mechanic.checkAndAllow(GATEWAY);
 
@@ -74,30 +41,37 @@ describe("CircuitBreakerMechanic", () => {
       expect(result.error.code).toBe("PAYMENT_GATEWAY_OPEN");
     });
 
-    it("should allow canary (HALF_OPEN) when OPEN + cooldown expired (≥30s)", async () => {
-      const openedAt = new Date(Date.now() - 35_000).toISOString(); // 35s ago, >= 30s
-      redisService.hGetAll.mockResolvedValue({
-        state: "OPEN",
-        failure_count: "5",
-        opened_at: openedAt,
-        last_attempt: "",
-      });
+    it("allows canary when OPEN + cooldown expired (>=30s) and transitions to HALF_OPEN", async () => {
+      // Trigger OPEN via 3 consecutive failures (rate check)
+      for (let i = 0; i < 3; i++) {
+        await mechanic.recordFailure(GATEWAY);
+      }
+
+      const state = mechanic.getGatewayState(GATEWAY);
+      // Advance time past 30s cooldown
+      jest.spyOn(Date, "now").mockReturnValue(state.openedAt + 31_000);
 
       const result = await mechanic.checkAndAllow(GATEWAY);
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBe(true);
-      // Should transition to HALF_OPEN
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "state", "HALF_OPEN");
+
+      // Should have transitioned to HALF_OPEN — subsequent call rejects
+      jest.restoreAllMocks();
+      const secondResult = await mechanic.checkAndAllow(GATEWAY);
+      expect(secondResult.isFailure).toBe(true);
+      expect(secondResult.error.code).toBe("PAYMENT_GATEWAY_OPEN");
     });
 
-    it("should reject with PAYMENT_GATEWAY_OPEN when state is HALF_OPEN (only canary allowed)", async () => {
-      redisService.hGetAll.mockResolvedValue({
-        state: "HALF_OPEN",
-        failure_count: "5",
-        opened_at: new Date().toISOString(),
-        last_attempt: "",
-      });
+    it("rejects with PAYMENT_GATEWAY_OPEN when state is HALF_OPEN (only one canary allowed)", async () => {
+      // Trigger OPEN → advance time → HALF_OPEN
+      for (let i = 0; i < 3; i++) {
+        await mechanic.recordFailure(GATEWAY);
+      }
+      const state = mechanic.getGatewayState(GATEWAY);
+      jest.spyOn(Date, "now").mockReturnValue(state.openedAt + 31_000);
+      await mechanic.checkAndAllow(GATEWAY); // Transitions to HALF_OPEN
+      jest.restoreAllMocks();
 
       const result = await mechanic.checkAndAllow(GATEWAY);
 
@@ -106,116 +80,142 @@ describe("CircuitBreakerMechanic", () => {
     });
   });
 
+  // -----------------------------------------------------------------------
+  // recordSuccess — FR-F05-004 (state transition on success)
+  // -----------------------------------------------------------------------
   describe("recordSuccess — FR-F05-004 (state transition on success)", () => {
-    it("should reset failure_count and stay in CLOSED when already CLOSED", async () => {
-      redisService.hGet.mockResolvedValue("CLOSED");
+    it("resets failureCount and stays in CLOSED when already CLOSED", async () => {
+      // 2 failures keeps totalCount=2 (<3, rate check not applicable)
+      await mechanic.recordFailure(GATEWAY);
+      await mechanic.recordFailure(GATEWAY);
+
+      let state = mechanic.getGatewayState(GATEWAY);
+      expect(state.failureCount).toBe(2);
 
       await mechanic.recordSuccess(GATEWAY);
 
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "failure_count", "0");
-      // Should NOT transition state
-      const stateCalls = redisService.hSet.mock.calls.filter(
-        (call) => call[1] === "state"
-      );
-      expect(stateCalls).toHaveLength(0);
+      state = mechanic.getGatewayState(GATEWAY);
+      expect(state.failureCount).toBe(0);
+      expect(state.state).toBe("CLOSED");
     });
 
-    it("should transition HALF_OPEN to CLOSED and reset count", async () => {
-      redisService.hGet.mockResolvedValue("HALF_OPEN");
+    it("transitions HALF_OPEN to CLOSED after 2 successful canaries", async () => {
+      // Trigger OPEN → HALF_OPEN via cooldown
+      for (let i = 0; i < 3; i++) {
+        await mechanic.recordFailure(GATEWAY);
+      }
+      const state = mechanic.getGatewayState(GATEWAY);
+      jest.spyOn(Date, "now").mockReturnValue(state.openedAt + 31_000);
+      await mechanic.checkAndAllow(GATEWAY); // Now HALF_OPEN
+      jest.restoreAllMocks();
 
+      // 1st success: still HALF_OPEN, halfOpenSuccessCount=1
       await mechanic.recordSuccess(GATEWAY);
+      let current = mechanic.getGatewayState(GATEWAY);
+      expect(current.state).toBe("HALF_OPEN");
+      expect(current.halfOpenSuccessCount).toBe(1);
 
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "state", "CLOSED");
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "failure_count", "0");
+      // 2nd success: CLOSED
+      await mechanic.recordSuccess(GATEWAY);
+      current = mechanic.getGatewayState(GATEWAY);
+      expect(current.state).toBe("CLOSED");
+      expect(current.failureCount).toBe(0);
     });
 
-    it("should handle null state gracefully", async () => {
-      redisService.hGet.mockResolvedValue(null);
-
-      await mechanic.recordSuccess(GATEWAY);
-
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "failure_count", "0");
+    it("handles default CLOSED state for unknown gateway", async () => {
+      await mechanic.recordSuccess("UNKNOWN_GATEWAY");
+      const state = mechanic.getGatewayState("UNKNOWN_GATEWAY");
+      expect(state.failureCount).toBe(0);
+      expect(state.state).toBe("CLOSED");
     });
   });
 
+  // -----------------------------------------------------------------------
+  // recordFailure — FR-F05-004, BR-025
+  // -----------------------------------------------------------------------
   describe("recordFailure — FR-F05-004, BR-025", () => {
-    it("should transition HALF_OPEN back to OPEN on canary failure", async () => {
-      redisService.hGet.mockResolvedValue("HALF_OPEN");
-      // No further Redis reads needed for HALF_OPEN path
+    it("transitions HALF_OPEN back to OPEN on canary failure", async () => {
+      // Trigger OPEN → HALF_OPEN
+      for (let i = 0; i < 3; i++) {
+        await mechanic.recordFailure(GATEWAY);
+      }
+      const state = mechanic.getGatewayState(GATEWAY);
+      jest.spyOn(Date, "now").mockReturnValue(state.openedAt + 31_000);
+      await mechanic.checkAndAllow(GATEWAY); // Now HALF_OPEN
+      jest.restoreAllMocks();
 
+      // Canary fails → back to OPEN
       await mechanic.recordFailure(GATEWAY);
-
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "state", "OPEN");
-      expect(redisService.hSet).toHaveBeenCalledWith(
-        key,
-        "opened_at",
-        expect.any(String)
-      );
+      const current = mechanic.getGatewayState(GATEWAY);
+      expect(current.state).toBe("OPEN");
+      expect(current.halfOpenSuccessCount).toBe(0);
     });
 
-    it("should transition to OPEN after 5 failures (CLOSED→OPEN)", async () => {
-      redisService.hGet
-        .mockResolvedValueOnce("CLOSED") // state
-        .mockResolvedValueOnce("4") // failure_count
-        .mockResolvedValueOnce(new Date(Date.now() - 10_000).toISOString()); // last_failure_at
-      redisService.hSet.mockResolvedValue(1);
+    it("transitions CLOSED to OPEN after 5 failures (hard threshold)", async () => {
+      // Pre-load successes to keep failure rate below 50%,
+      // otherwise rate check (>=50% with total>=3) opens earlier.
+      for (let i = 0; i < 6; i++) {
+        await mechanic.recordSuccess(GATEWAY);
+      }
 
+      for (let i = 0; i < 4; i++) {
+        await mechanic.recordFailure(GATEWAY);
+      }
+
+      let state = mechanic.getGatewayState(GATEWAY);
+      expect(state.state).toBe("CLOSED");
+      expect(state.failureCount).toBe(4);
+
+      // 5th failure triggers the hard threshold (failureCount >= 5)
       await mechanic.recordFailure(GATEWAY);
-
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "state", "OPEN");
-      expect(redisService.hSet).toHaveBeenCalledWith(
-        key,
-        "opened_at",
-        expect.any(String)
-      );
+      state = mechanic.getGatewayState(GATEWAY);
+      expect(state.state).toBe("OPEN");
+      expect(state.failureCount).toBe(5);
     });
 
-    it("should increment failure_count without opening at 4 failures", async () => {
-      redisService.hGet
-        .mockResolvedValueOnce("CLOSED") // state
-        .mockResolvedValueOnce("3") // failure_count
-        .mockResolvedValueOnce(new Date(Date.now() - 10_000).toISOString()); // last_failure_at
+    it("increments failureCount without opening at 4 failures", async () => {
+      // Pre-load successes to keep rate below 50%
+      for (let i = 0; i < 6; i++) {
+        await mechanic.recordSuccess(GATEWAY);
+      }
 
-      await mechanic.recordFailure(GATEWAY);
+      for (let i = 0; i < 4; i++) {
+        await mechanic.recordFailure(GATEWAY);
+      }
 
-      // State should NOT change to OPEN
-      const stateSetCalls = redisService.hSet.mock.calls.filter(
-        (call) => call[1] === "state"
-      );
-      expect(stateSetCalls).toHaveLength(0);
+      const state = mechanic.getGatewayState(GATEWAY);
+      expect(state.state).toBe("CLOSED");
+      expect(state.failureCount).toBe(4);
     });
 
-    it("should reset failure count after rolling window of 60s", async () => {
-      redisService.hGet
-        .mockResolvedValueOnce("CLOSED") // state
-        .mockResolvedValueOnce("4") // failure_count from 70s ago
-        .mockResolvedValueOnce(new Date(Date.now() - 70_000).toISOString()); // last_failure_at
+    it("resets failure count after rolling window of 60s", async () => {
+      const now = Date.now();
+      jest.spyOn(Date, "now").mockReturnValue(now);
+
+      // Pre-load successes so 4 failures stay below rate threshold
+      for (let i = 0; i < 6; i++) {
+        await mechanic.recordSuccess(GATEWAY);
+      }
 
       await mechanic.recordFailure(GATEWAY);
-
-      // Rolling window reset: old 4 + 1 = 5 = OPEN. But since >60s elapsed,
-      // currentCount resets to 0, then becomes 1. So NOT open.
-      // newCount = 0 + 1 = 1 — no OPEN transition
-      const stateSetCalls = redisService.hSet.mock.calls.filter(
-        (call) => call[1] === "state"
-      );
-      expect(stateSetCalls).toHaveLength(0);
-      expect(redisService.hSet).toHaveBeenCalledWith(key, "failure_count", "1");
-    });
-
-    it("should set last_failure_at timestamp on each failure", async () => {
-      redisService.hGet
-        .mockResolvedValueOnce("CLOSED") // state
-        .mockResolvedValueOnce("0") // failure_count
-        .mockResolvedValueOnce(null); // last_failure_at (null → no reset)
-
+      await mechanic.recordFailure(GATEWAY);
+      await mechanic.recordFailure(GATEWAY);
       await mechanic.recordFailure(GATEWAY);
 
-      expect(redisService.hSet).toHaveBeenCalledWith(
-        key,
-        "last_failure_at",
-        expect.any(String)
-      );
+      let state = mechanic.getGatewayState(GATEWAY);
+      expect(state.failureCount).toBe(4);
+      expect(state.state).toBe("CLOSED");
+
+      // Advance past 60s window — next failure resets counters
+      jest.spyOn(Date, "now").mockReturnValue(now + 61_000);
+      await mechanic.recordFailure(GATEWAY);
+      jest.restoreAllMocks();
+
+      state = mechanic.getGatewayState(GATEWAY);
+      // failureCount reset to 0 then incremented to 1 — not enough to open
+      expect(state.failureCount).toBe(1);
+      expect(state.totalCount).toBe(1);
+      expect(state.state).toBe("CLOSED");
     });
   });
 });

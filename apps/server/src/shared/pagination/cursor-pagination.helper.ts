@@ -35,9 +35,11 @@ export interface CursorPaginationInput {
  * - `items`: the current page of results
  * - `nextCursor`: opaque token for the next page, or null when there are no more results
  * - `hasMore`: convenience boolean — true when at least one more page exists
+ * - `limit`: page size used for this response, echoed back for client convenience
  */
 export interface CursorPaginationResult<T> {
   items: T[];
   nextCursor: string | null;
   hasMore: boolean;
+  limit: number;
 }

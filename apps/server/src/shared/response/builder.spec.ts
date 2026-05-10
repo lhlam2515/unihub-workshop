@@ -75,29 +75,40 @@ describe("successResponse", () => {
 describe("paginatedResponse", () => {
   it("computes pagination metadata", () => {
     const resp = paginatedResponse(["a", "b"], {
-      page: 1,
       limit: 10,
+      nextCursor: "cursor-2",
+      hasMore: true,
       total: 25,
     });
     expect(resp.success).toBe(true);
-    expect(resp.data!.items).toEqual(["a", "b"]);
+    expect(resp.data!.data).toEqual(["a", "b"]);
     expect(resp.pagination).toBeDefined();
-    expect(resp.pagination!.page).toBe(1);
     expect(resp.pagination!.limit).toBe(10);
+    expect(resp.pagination!.nextCursor).toBe("cursor-2");
+    expect(resp.pagination!.hasMore).toBe(true);
     expect(resp.pagination!.total).toBe(25);
-    expect(resp.pagination!.totalPages).toBe(3);
-    expect(resp.pagination!.hasNextPage).toBe(true);
-    expect(resp.pagination!.hasPrevPage).toBe(false);
   });
 
-  it("sets hasPrevPage when page > 1", () => {
-    const resp = paginatedResponse([], { page: 2, limit: 10, total: 25 });
-    expect(resp.pagination!.hasPrevPage).toBe(true);
+  it("sets nextCursor to null on last page", () => {
+    const resp = paginatedResponse([], {
+      limit: 10,
+      nextCursor: null,
+      hasMore: false,
+      total: 25,
+    });
+    expect(resp.pagination!.nextCursor).toBeNull();
+    expect(resp.pagination!.hasMore).toBe(false);
   });
 
   it("handles empty results", () => {
-    const resp = paginatedResponse([], { page: 1, limit: 20, total: 0 });
-    expect(resp.pagination!.totalPages).toBe(0);
-    expect(resp.pagination!.hasNextPage).toBe(false);
+    const resp = paginatedResponse([], {
+      limit: 20,
+      nextCursor: null,
+      hasMore: false,
+      total: 0,
+    });
+    expect(resp.pagination!.nextCursor).toBeNull();
+    expect(resp.pagination!.hasMore).toBe(false);
+    expect(resp.pagination!.total).toBe(0);
   });
 });

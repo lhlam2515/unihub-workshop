@@ -128,6 +128,7 @@ export function WorkshopAdminTable({
             {workshops.map((w) => (
               <tr
                 key={w.id}
+                data-testid="workshop-row"
                 className={`transition-colors hover:bg-slate-50 ${
                   selectedIds.has(w.id) ? "bg-blue-50" : ""
                 }`}

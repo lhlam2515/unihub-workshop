@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 
 import type { Registration } from "@/infra/database/types/transaction.types";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
@@ -18,8 +18,10 @@ import { Result, tryCatch } from "@/shared/response/result";
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import {
   RegistrationResponseBuilder,
+  RegistrationAdminBuilder,
   type NextStepInfo,
   type RegistrationDto,
+  type RegistrationAdminDto,
 } from "../dto/registration-response.dto";
 import { SeatLockMechanic } from "../mechanics/seat-lock.mechanic";
 import {
@@ -39,6 +41,8 @@ export class RegistrationsService {
     private readonly workshopsService: WorkshopsService,
     private readonly notificationLogProducer: NotificationLogProducer
   ) {}
+
+  private readonly logger = new Logger(RegistrationsService.name);
 
   /**
    * Registers a student for a workshop through a multi-stage pipeline.
@@ -61,7 +65,7 @@ export class RegistrationsService {
    * - Inserts a row into the registrations table.
    * - For paid: creates seat:lock:{workshopId}:{registrationId} in Redis (TTL 900s).
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param dto - Registration request containing the target workshop_id.
    * @param idempotencyKey - Optional idempotency key for safe retry.
    * @returns OkResult with RegistrationDto, or FailResult with codes:
@@ -137,7 +141,7 @@ export class RegistrationsService {
     const MAX_RETRIES = 1; // 2 attempts total per ADR-03
 
     // Stage 4-6: OL seat decrement + INSERT in transaction
-    let registration: Registration;
+    let registration: Registration | undefined;
     let attempts = 0;
 
     while (attempts <= MAX_RETRIES) {
@@ -211,7 +215,7 @@ export class RegistrationsService {
     }
 
     // If we exhausted retries, return high contention
-    if (!registration!) {
+    if (!registration) {
       return Result.fail(systemErrors.dbLockTimeout("registration", 2));
     }
 
@@ -223,16 +227,29 @@ export class RegistrationsService {
       const lockResult = await this.seatLock.acquire(
         dto.workshopId,
         registration.registrationId,
-        studentId,
-        Number(workshop.price ?? "0")
+        studentId
       );
       if (lockResult.isFailure) {
         // Compensate: release seat + invalidate cache
-        await this.workshopsService.incrementSeat(dto.workshopId);
-        await this.registrationsRepo.updateStatus(
+        const incrResult = await this.workshopsService.incrementSeat(
+          dto.workshopId
+        );
+        if (incrResult.isFailure) {
+          this.logger.error(
+            `Seat compensation failed for workshop ${dto.workshopId}: ${incrResult.error.message}`
+          );
+        }
+
+        const statusResult = await this.registrationsRepo.updateStatus(
           registration.registrationId,
           "CANCELLED"
         );
+        if (statusResult.isFailure) {
+          this.logger.error(
+            `Status rollback failed: ${statusResult.error.message}`
+          );
+        }
+
         await this.seatCounter.invalidateCache(dto.workshopId);
         return Result.fail(lockResult.error);
       }
@@ -269,36 +286,70 @@ export class RegistrationsService {
   /**
    * Lists a student's own registrations.
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param query - Optional filters: status, page, limit.
    * @returns OkResult with paginated RegistrationDto list.
    */
   async getMyRegistrations(
     studentId: string,
-    query?: { status?: string; page?: number; limit?: number }
+    query?: {
+      status?: string[];
+      upcoming?: boolean;
+      cursor?: string;
+      limit?: number;
+    }
   ): Promise<
     Result<{
       items: RegistrationDto[];
-      total: number;
-      page: number;
+      nextCursor: string | null;
+      hasMore: boolean;
       limit: number;
     }>
   > {
     const result = await this.registrationsRepo.findMyRegistrations(
       studentId,
-      query?.status,
-      { page: query?.page, limit: query?.limit }
+      query
     );
     if (result.isFailure) return Result.fail(result.error);
 
     const items = result.data.items.map((item) =>
-      RegistrationResponseBuilder.from(item)
+      RegistrationResponseBuilder.from(item, {
+        workshop: {
+          id: item.workshopId,
+          title: item.workshopTitle,
+          startsAt: item.workshopStartsAt ?? new Date(),
+          endsAt: item.workshopEndsAt ?? new Date(),
+          seatsTotal: item.workshopSeatsTotal ?? 0,
+          seatsAvailable: item.workshopSeatsAvailable ?? 0,
+          price: item.workshopPrice ?? 0,
+          currency: "VND",
+          status: item.workshopStatus ?? "",
+          speaker: item.speakerId
+            ? {
+                id: item.speakerId,
+                fullName: item.speakerFullName ?? "",
+                title: item.speakerTitle,
+                avatarUrl: item.speakerAvatarUrl,
+              }
+            : null,
+          room: item.roomId
+            ? {
+                id: item.roomId,
+                name: item.roomName ?? "",
+                building: item.roomBuilding,
+                floor: item.roomFloor,
+                floorPlanUrl: item.roomFloorPlanUrl,
+              }
+            : null,
+          isRegistered: true,
+        },
+      })
     );
 
     return Result.ok({
       items,
-      total: result.data.total,
-      page: query?.page ?? 1,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
       limit: query?.limit ?? 20,
     });
   }
@@ -306,7 +357,7 @@ export class RegistrationsService {
   /**
    * Retrieves a single registration's detail with IDOR enforcement.
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param registrationId - The UUID of the registration to retrieve.
    * @returns OkResult with RegistrationDto, or FailResult (REGISTRATION_NOT_FOUND).
    */
@@ -324,6 +375,44 @@ export class RegistrationsService {
   }
 
   /**
+   * Lists registrations for a workshop (admin view).
+   *
+   * Returns registrations with student info and check-in status.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param filters - Optional status filter and pagination.
+   * @returns OkResult with paginated RegistrationAdminDto items.
+   */
+  async getRegistrationsForWorkshop(
+    workshopId: string,
+    filters?: { status?: string[]; cursor?: string; limit?: number }
+  ): Promise<
+    Result<{
+      items: RegistrationAdminDto[];
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
+  > {
+    const result = await this.registrationsRepo.findByWorkshopId(
+      workshopId,
+      filters
+    );
+    if (result.isFailure) return Result.fail(result.error);
+
+    const items = result.data.items.map((item) =>
+      RegistrationAdminBuilder.from(item)
+    );
+
+    return Result.ok({
+      items,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
+      limit: result.data.limit,
+    });
+  }
+
+  /**
    * Cancels a student's own registration, releases the seat, and clears lock.
    *
    * Business rules:
@@ -335,7 +424,7 @@ export class RegistrationsService {
    * - Increments seat:available:{workshopId} in Redis.
    * - Deletes seat:lock:{workshopId}:{registrationId} in Redis (if paid).
    *
-   * @param studentId - The UUID of the student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param registrationId - The UUID of the registration to cancel.
    * @returns OkResult with the updated RegistrationDto, or FailResult.
    */

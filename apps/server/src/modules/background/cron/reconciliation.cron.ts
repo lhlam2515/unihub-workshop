@@ -50,10 +50,7 @@ export class ReconciliationCron {
       for (const workshop of workshops) {
         try {
           const wid = workshop.workshopId;
-          const diff = await this.reconcileWorkshop(
-            wid,
-            workshop.seatsTotal
-          );
+          const diff = await this.reconcileWorkshop(wid, workshop.seatsTotal);
           if (diff > DISCREPANCY_THRESHOLD) {
             discrepancyCount++;
             this.logger.warn(

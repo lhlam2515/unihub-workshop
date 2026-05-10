@@ -1,19 +1,31 @@
-export const dynamic = "force-dynamic";
+"use client";
 
+import dynamic from "next/dynamic";
+
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getAdminDashboardOverview } from "@/lib/api/services/admin";
-import { AdminDashboardWidget } from "@/widgets/AdminDashboardWidget";
 
-export default async function AdminDashboardPage() {
-  const result = await getAdminDashboardOverview();
-
-  if (result.isFailure) {
-    return (
-      <AdminDashboardWidget
-        initialResult={null}
-        initialError={(result.error as { message?: string })?.message}
-      />
-    );
+const AdminDashboardWidget = dynamic(
+  () =>
+    import("@/widgets/AdminDashboardWidget").then((mod) => ({
+      default: mod.AdminDashboardWidget,
+    })),
+  {
+    loading: () => <ContentLoader layout="grid" count={3} />,
+    ssr: false,
   }
+);
 
-  return <AdminDashboardWidget initialResult={result.data} />;
+export default function AdminDashboardPage() {
+  const { data, error } = useAsyncQuery(["admin-dashboard"], () =>
+    getAdminDashboardOverview()
+  );
+
+  return (
+    <AdminDashboardWidget
+      initialResult={data ?? null}
+      initialError={error?.message}
+    />
+  );
 }

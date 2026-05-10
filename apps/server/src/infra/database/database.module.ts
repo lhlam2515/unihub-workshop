@@ -1,24 +1,36 @@
-import { neon } from "@neondatabase/serverless";
-import { Global, Module } from "@nestjs/common";
+import { Pool } from "@neondatabase/serverless";
+import { Global, Inject, Module, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/neon-serverless";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "./database.constants";
 import * as schema from "./schema";
 
-import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
+import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
-const databaseConnectionProvider = {
-  provide: DATABASE_CONNECTION,
+export const DATABASE_POOL = "DATABASE_POOL";
+
+const poolProvider = {
+  provide: DATABASE_POOL,
   inject: [ConfigService],
   useFactory: (config: ConfigService) => {
-    const url = config.getOrThrow<string>("database.url");
-    return drizzle({ client: neon(url), schema });
+    return new Pool({
+      connectionString: config.getOrThrow<string>("database.url"),
+    });
   },
 };
 
-export type DatabaseClient = NeonHttpDatabase<typeof schema>;
+const databaseConnectionProvider = {
+  provide: DATABASE_CONNECTION,
+  inject: [DATABASE_POOL],
+  useFactory: (pool: Pool) => {
+    return drizzle({ client: pool, schema });
+  },
+};
+
+export type DatabaseClient = NeonDatabase<typeof schema>;
 export type DatabaseSchema = typeof schema;
+
 const databaseSchemaProvider = {
   provide: DATABASE_SCHEMA,
   useValue: schema,
@@ -26,7 +38,13 @@ const databaseSchemaProvider = {
 
 @Global()
 @Module({
-  providers: [databaseConnectionProvider, databaseSchemaProvider],
+  providers: [poolProvider, databaseConnectionProvider, databaseSchemaProvider],
   exports: [DATABASE_CONNECTION, DATABASE_SCHEMA],
 })
-export class DatabaseModule {}
+export class DatabaseModule implements OnModuleDestroy {
+  constructor(@Inject(DATABASE_POOL) private readonly pool: Pool) {}
+
+  async onModuleDestroy() {
+    await this.pool.end();
+  }
+}

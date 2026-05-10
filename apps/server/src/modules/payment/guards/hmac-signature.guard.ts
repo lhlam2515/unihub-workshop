@@ -98,11 +98,8 @@ export class HmacSignatureGuard implements CanActivate {
       throw new UnauthorizedException("Unknown payment gateway");
     }
 
-    const rawBody = request.rawBody
-      ? request.rawBody.toString("utf-8")
-      : typeof request.body === "string"
-        ? request.body
-        : JSON.stringify(request.body);
+    const rawBody =
+      request.rawBody?.toString("utf-8") ?? JSON.stringify(request.body);
 
     const computed = createHmac("sha256", secret).update(rawBody).digest("hex");
 

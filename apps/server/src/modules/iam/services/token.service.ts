@@ -38,21 +38,25 @@ export class TokenService {
       userId: string;
       role: UserRole;
       allowedWorkshopIds?: string[];
+      studentId?: string;
     },
     platform: "WEB" | "MOBILE"
   ): Promise<string> {
     const jti = randomUUID();
+    const jwtPayload: Record<string, unknown> = {
+      sub: payload.userId,
+      role: payload.role,
+      jti,
+      allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
+    };
+    if (payload.studentId) {
+      jwtPayload.studentId = payload.studentId;
+    }
     return Promise.resolve(
-      jwt.sign(
-        {
-          sub: payload.userId,
-          role: payload.role,
-          jti,
-          allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
-        },
-        this.config.getOrThrow<string>("jwt.privateKey"),
-        { algorithm: "RS256", expiresIn: ACCESS_EXPIRY[platform] }
-      )
+      jwt.sign(jwtPayload, this.config.getOrThrow<string>("jwt.privateKey"), {
+        algorithm: "RS256",
+        expiresIn: ACCESS_EXPIRY[platform],
+      })
     );
   }
 
@@ -127,6 +131,25 @@ export class TokenService {
   }
 
   /**
+   * Decodes a refresh token to extract its JTI without cryptographic verification.
+   *
+   * Used during logout to blacklist the refresh token's JTI even if the token
+   * has expired (where jwt.verify would fail). This is safe because the caller
+   * is already authenticated via a valid access token.
+   *
+   * @param token - The raw JWT refresh token string.
+   * @returns The JTI string, or null if the token is malformed.
+   */
+  extractRefreshTokenJti(token: string): string | null {
+    try {
+      const decoded = jwt.decode(token) as { jti: string } | null;
+      return decoded?.jti ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Verifies a JWT refresh token's signature and expiration using RS256.
    *
    * @param token - The raw JWT string from the refresh request.
@@ -135,6 +158,9 @@ export class TokenService {
   verifyRefreshToken(
     token: string
   ): Promise<Result<{ sub: string; jti: string }>> {
+    if (!token) {
+      return Promise.resolve(Result.fail(authErrors.refreshTokenInvalid()));
+    }
     return tryCatch(
       () =>
         Promise.resolve(

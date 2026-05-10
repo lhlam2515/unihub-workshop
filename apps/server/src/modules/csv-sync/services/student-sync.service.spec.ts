@@ -31,7 +31,7 @@ const mockStudentSyncErrorsRepo = {
 };
 
 const mockStudentsRepo = {
-  upsertByStudentCode: jest.fn(),
+  upsert: jest.fn(),
 };
 
 const mockUsersRepo = {
@@ -187,7 +187,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.ok({ studentCode: "STU001" })
       );
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
@@ -201,12 +201,10 @@ describe("StudentSyncService", () => {
       expect(result.data.totalRows).toBe(1);
       expect(result.data.processedRows).toBe(1);
       expect(result.data.errorRows).toBe(0);
-      expect(mockStudentsRepo.upsertByStudentCode).toHaveBeenCalledWith({
-        studentCode: "STU001",
+      expect(mockStudentsRepo.upsert).toHaveBeenCalledWith({
+        studentId: "STU001",
         fullName: "John Doe",
-        emailEdu: "stu001@university.edu",
-        faculty: "Engineering",
-        classYear: 2024,
+        email: "stu001@university.edu",
       });
       expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenNthCalledWith(
         2,
@@ -236,7 +234,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.ok({ studentCode: "STU001" })
       );
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
@@ -297,7 +295,7 @@ describe("StudentSyncService", () => {
       expect(result.data.totalRows).toBe(2);
       expect(result.data.processedRows).toBe(0);
       expect(result.data.errorRows).toBe(2);
-      expect(mockStudentsRepo.upsertByStudentCode).not.toHaveBeenCalled();
+      expect(mockStudentsRepo.upsert).not.toHaveBeenCalled();
       expect(mockStudentSyncErrorsRepo.createBatch).toHaveBeenCalledTimes(1);
       expect(mockStudentSyncJobsRepo.updateStatus).toHaveBeenCalledWith(
         "job-001",
@@ -394,7 +392,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.fail(systemErrors.internal(new Error("DB constraint")))
       );
 
@@ -430,7 +428,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.ok({ studentCode: "STU001" })
       );
       mockStudentSyncErrorsRepo.createBatch.mockResolvedValue(
@@ -461,7 +459,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.ok({ studentCode: "STU001" })
       );
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
@@ -514,7 +512,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.ok({ studentCode: "STU001" })
       );
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
@@ -545,7 +543,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.ok({ studentCode: "STU002" })
       );
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
@@ -577,7 +575,7 @@ describe("StudentSyncService", () => {
           ])
         )
       );
-      mockStudentsRepo.upsertByStudentCode.mockResolvedValue(
+      mockStudentsRepo.upsert.mockResolvedValue(
         Result.ok({ studentCode: "STU001" })
       );
       mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
@@ -590,12 +588,10 @@ describe("StudentSyncService", () => {
       expect(mockUsersRepo.findById).toHaveBeenCalledWith(
         "11111111-1111-4111-8111-111111111111"
       );
-      expect(mockStudentsRepo.upsertByStudentCode).toHaveBeenCalledWith({
-        studentCode: "STU001",
+      expect(mockStudentsRepo.upsert).toHaveBeenCalledWith({
+        studentId: "STU001",
         fullName: "John Doe",
-        emailEdu: "stu001@university.edu",
-        faculty: "Engineering",
-        classYear: 2024,
+        email: "stu001@university.edu",
         userId: "11111111-1111-4111-8111-111111111111",
       });
     });
@@ -832,14 +828,21 @@ describe("StudentSyncService", () => {
   describe("listJobs", () => {
     it("returns paginated job list", async () => {
       mockStudentSyncJobsRepo.findMany.mockResolvedValue(
-        Result.ok({ items: [mockJobRecord], total: 1 })
+        Result.ok({
+          items: [mockJobRecord],
+          nextCursor: null,
+          hasMore: false,
+          limit: 20,
+        })
       );
 
-      const result = await service.listJobs({ page: 1, limit: 20 });
+      const result = await service.listJobs({ limit: 20 });
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toHaveLength(1);
-      expect(result.data.total).toBe(1);
+      expect(result.data.nextCursor).toBeNull();
+      expect(result.data.hasMore).toBe(false);
+      expect(result.data.limit).toBe(20);
     });
   });
 });

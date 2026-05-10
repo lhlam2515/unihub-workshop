@@ -15,6 +15,7 @@
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import cookieParser from "cookie-parser";
+import { json } from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 
@@ -32,6 +33,19 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const frontendUrl = configService.get<string>("cors.frontendUrl");
 
+  app.setGlobalPrefix("api/v1");
+
+  // Preserve raw request body for HMAC signature verification (payment webhooks).
+  // NestFactory.create({ rawBody: true }) sets up the internal parser; this
+  // explicit middleware with verify ensures req.rawBody is always populated.
+  app.use(
+    json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    })
+  );
+
   app.use(helmet());
   app.enableCors(getCorsConfig(frontendUrl));
   app.use(cookieParser());
@@ -48,11 +62,11 @@ async function bootstrap() {
     )
   );
 
-  const port = configService.get<number>("app.port") ?? 3000;
+  const port = configService.get<number>("app.port") ?? 8000;
   await app.listen(port);
 
   winstonLogger.log(
-    `Server is listening on http://localhost:${port}`,
+    `Server is listening on http://localhost:${port}/api/v1`,
     "Bootstrap"
   );
 }

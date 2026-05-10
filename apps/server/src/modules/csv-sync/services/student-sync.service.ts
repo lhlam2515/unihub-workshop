@@ -284,21 +284,30 @@ export class StudentSyncService {
   }
 
   /**
-   * List all sync jobs with pagination
+   * List all sync jobs with cursor-based pagination
    *
    * Results ordered by triggered_at DESC (most recent first).
    *
-   * @param pagination - Page and limit controls
-   * @param pagination.page - Current page (1-indexed)
-   * @param pagination.limit - Items per page
-   * @returns OkResult with items array and total count,
+   * @param filters - Status filter and cursor controls
+   * @param filters.status - Optional status filter (IN_PROGRESS, SUCCESS, FAILED)
+   * @param filters.cursor - Base64-encoded ISO timestamp for cursor pagination
+   * @param filters.limit - Items per page
+   * @returns OkResult with items array, nextCursor, hasMore flag, and limit,
    *          or FailResult with INTERNAL_ERROR.
    */
-  async listJobs(pagination: {
-    page: number;
+  async listJobs(filters: {
+    status?: string;
+    cursor?: string;
     limit: number;
-  }): Promise<Result<{ items: StudentSyncJob[]; total: number }>> {
-    return this.studentSyncJobsRepo.findMany(pagination);
+  }): Promise<
+    Result<{
+      items: StudentSyncJob[];
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
+  > {
+    return this.studentSyncJobsRepo.findMany(filters);
   }
 
   /**

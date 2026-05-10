@@ -25,8 +25,9 @@ export class TriggerStudentSyncDto extends createZodDto(
  * Query schema for listing sync jobs with pagination.
  */
 export const ListSyncJobsQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.enum(["IN_PROGRESS", "SUCCESS", "FAILED"]).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).default(20),
 });
 
 /**

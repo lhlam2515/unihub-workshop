@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { useEffect, use, useState } from "react";
 
 import { getWorkshopDetail } from "@/features/workshop-browsing/api/catalog.service";
 import type { ApiError } from "@/lib/api/errors";
@@ -13,27 +13,29 @@ interface PageProps {
 
 /**
  * Client page: unwraps params promise, fetches workshop detail, delegates to widget.
- *
- * Workshop detail data is not critical for SEO — client fetch is acceptable
- * and simplifies the SSR/cache story for this dynamic content.
  */
 export default function WorkshopDetailPage({ params }: PageProps) {
   const { workshopId } = use(params);
 
   const [workshop, setWorkshop] = useState<WorkshopDetail | null>(null);
   const [error, setError] = useState<string | undefined>();
-  const [loaded, setLoaded] = useState(false);
 
-  if (!loaded) {
-    setLoaded(true);
+  useEffect(() => {
+    let cancelled = false;
+
     getWorkshopDetail(workshopId).then((result) => {
+      if (cancelled) return;
       if (result.isFailure) {
         setError((result.error as ApiError).message);
       } else {
         setWorkshop(result.data);
       }
     });
-  }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workshopId]);
 
   return (
     <WorkshopDetailWidget

@@ -1,24 +1,21 @@
-export const dynamic = "force-dynamic";
+"use client";
 
+import { useParams } from "next/navigation";
+
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getImportDetail } from "@/lib/api/services/admin";
 import { AdminImportDetailWidget } from "@/widgets/AdminImportDetailWidget";
 
-interface PageProps {
-  params: Promise<{ importId: string }>;
-}
+export default function ImportDetailPage() {
+  const { importId } = useParams<{ importId: string }>();
+  const { data, error } = useAsyncQuery(["admin-import", importId], () =>
+    getImportDetail(importId)
+  );
 
-export default async function ImportDetailPage({ params }: PageProps) {
-  const { importId } = await params;
-  const result = await getImportDetail(importId);
-
-  if (result.isFailure) {
-    return (
-      <AdminImportDetailWidget
-        initialResult={null}
-        initialError={(result.error as { message?: string })?.message}
-      />
-    );
-  }
-
-  return <AdminImportDetailWidget initialResult={result.data} />;
+  return (
+    <AdminImportDetailWidget
+      initialResult={data ?? null}
+      initialError={error?.message}
+    />
+  );
 }

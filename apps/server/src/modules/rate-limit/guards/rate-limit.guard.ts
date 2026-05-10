@@ -1,4 +1,3 @@
-import type { CanActivate, ExecutionContext } from "@nestjs/common";
 import { HttpException, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
@@ -9,8 +8,10 @@ import {
   HEADER_RESET,
   HEADER_RETRY_AFTER,
 } from "../constants/rate-limit.constants";
-import type { RateLimitConfig } from "../constants/rate-limit.constants";
 import { SlidingWindowService } from "../services/sliding-window.service";
+
+import type { RateLimitConfig } from "../constants/rate-limit.constants";
+import type { CanActivate, ExecutionContext } from "@nestjs/common";
 
 /**
  * NestJS guard that enforces rate-limit tiers sequentially (T1 → T2 → T3).
@@ -44,42 +45,29 @@ export class RateLimitGuard implements CanActivate {
     if (configs.length === 0) return true;
 
     const request = context.switchToHttp().getRequest();
-    const identifier = (request as any).user?.sub ?? request.ip ?? "unknown";
+    const identifier = request.user?.sub ?? request.ip ?? "unknown";
     const response = context.switchToHttp().getResponse();
 
     for (const cfg of configs) {
       const result = await this.slidingWindow.check(cfg.tier, identifier);
+
+      if (result.isFailure) {
+        const err = result.error;
+        response.header(HEADER_LIMIT, String(cfg.limit));
+        response.header(
+          HEADER_RETRY_AFTER,
+          String(Math.ceil((err.context?.retryAfterSeconds as number) ?? 1))
+        );
+        // Pass the AppError directly — GlobalExceptionFilter checks for
+        // the `category` field to map it via categoryToStatus (→ 429).
+        throw new HttpException(err, 429);
+      }
 
       const data = result.isSuccess ? result.data : null;
       if (data) {
         response.header(HEADER_LIMIT, String(cfg.limit));
         response.header(HEADER_REMAINING, String(data.remaining));
         response.header(HEADER_RESET, String(data.resetMs));
-        if (!data.allowed) {
-          response.header(
-            HEADER_RETRY_AFTER,
-            String(Math.ceil(data.resetMs / 1000))
-          );
-        }
-      }
-
-      if (result.isFailure) {
-        const err = result.error;
-        response.header(
-          HEADER_RETRY_AFTER,
-          String(Math.ceil((err.context?.retryAfterSeconds as number) ?? 1))
-        );
-        throw new HttpException(
-          {
-            success: false,
-            error: {
-              code: err.code,
-              message: err.message,
-              context: err.context,
-            },
-          },
-          429
-        );
       }
     }
 

@@ -1,8 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense } from "react";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import { PageLoader } from "@/components/PageLoader";
 import { usePaymentPolling } from "@/features/payment-result/hooks/use-payment-polling";
@@ -18,13 +17,15 @@ function PaymentResultContent() {
     if (!paymentId) router.replace("/me/registrations");
   }, [paymentId, router]);
 
-  const { payment, state } = usePaymentPolling(
-    pollKey > 0 ? paymentId : paymentId
-  );
+  // pollKey change restarts polling via hook dependency
+  const { payment, state } = usePaymentPolling(paymentId, pollKey);
 
   const handleCheckAgain = () => {
     setPollKey((k) => k + 1);
   };
+
+  // Prevent flash render before redirect
+  if (!paymentId) return null;
 
   return (
     <div className="mx-auto max-w-lg p-4">

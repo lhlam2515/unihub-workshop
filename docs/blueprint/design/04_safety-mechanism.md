@@ -287,16 +287,16 @@ Key lưu trong bảng `idempotency_keys` (PostgreSQL), không phải Redis:
                NOT terminal — retry với cùng key để gateway dedup.
 ```
 
-Sự khác biệt then chốt giữa `COMPLETED` và `UNRESOLVED`: khi idempotency check thấy `UNRESOLVED`, nó không trả 409 và không trả cached response — thay vào đó, cho phép request tiếp tục đến gateway. Gateway sẽ dedup vì nhận cùng `Idempotency-Key` header. Nếu mark  là `COMPLETED` với response 504: client nhận 504 được cache → không bao giờ biết tiền đã trừ hay chưa → bắt buộc dùng key mới → double-charge.
+Sự khác biệt then chốt giữa `COMPLETED` và `UNRESOLVED`: khi idempotency check thấy `UNRESOLVED`, nó không trả 409 và không trả cached response — thay vào đó, cho phép request tiếp tục đến gateway. Gateway sẽ dedup vì nhận cùng `X-Idempotency-Key` header. Nếu mark  là `COMPLETED` với response 504: client nhận 504 được cache → không bao giờ biết tiền đã trừ hay chưa → bắt buộc dùng key mới → double-charge.
 
 **Cơ chế forward key đến gateway — điểm phân biệt quan trọng:**
 
-Server không chỉ dùng idempotency key cho dedup nội bộ — server còn forward key này đến gateway như `Idempotency-Key` header trong HTTP request đến gateway:
+Server không chỉ dùng idempotency key cho dedup nội bộ — server còn forward key này đến gateway như `X-Idempotency-Key` header trong HTTP request đến gateway:
 
 ```
 Client → Server: POST /payments {registration_id, payment_key: "uuid-K1"}
 Server → Gateway: POST /charge
-                  Headers: Idempotency-Key: uuid-K1
+                  Headers: X-Idempotency-Key: uuid-K1
                   Body: {amount, currency, card_token}
 ```
 
@@ -350,7 +350,7 @@ POST /payments {registration_id, amount, payment_key}
 
 ④ Gọi gateway:
    POST gateway.com/charge
-   Headers: Idempotency-Key: {payment_key}
+   Headers: X-Idempotency-Key: {payment_key}
    Timeout: 5s
 
    CASE:

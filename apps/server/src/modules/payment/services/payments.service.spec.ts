@@ -1,13 +1,11 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import type { Payment } from "@/infra/database/types/transaction.types";
-import { NotificationPublisher } from "@/infra/messaging/notification-publisher";
 import { SeatLockMechanic } from "@/modules/booking/mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "@/modules/booking/repositories/registrations.repository";
-import { TicketsRepository } from "@/modules/booking/repositories/tickets.repository";
-import { TicketsService } from "@/modules/booking/services/tickets.service";
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
+import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { paymentErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -20,19 +18,14 @@ import { PaymentsRepository } from "../repositories/payments.repository";
 describe("PaymentsService", () => {
   let service: PaymentsService;
   let paymentsRepo: jest.Mocked<PaymentsRepository>;
-
-  beforeAll(() => {
-    process.env.JWT_SECRET = "test-secret";
-  });
   let registrationsRepo: jest.Mocked<RegistrationsRepository>;
-  let ticketsRepo: jest.Mocked<TicketsRepository>;
   let seatLock: jest.Mocked<SeatLockMechanic>;
   let idempotencyMechanic: jest.Mocked<IdempotencyMechanic>;
   let circuitBreaker: jest.Mocked<CircuitBreakerMechanic>;
   let paymentGatewayService: jest.Mocked<PaymentGatewayService>;
   let workshopsService: jest.Mocked<WorkshopsService>;
   let seatCounter: jest.Mocked<SeatCounterService>;
-  let notificationPublisher: jest.Mocked<NotificationPublisher>;
+  let notificationLogProducer: jest.Mocked<NotificationLogProducer>;
 
   const STUDENT_ID = "stu-001";
   const WORKSHOP_ID = "ws-001";
@@ -46,7 +39,7 @@ describe("PaymentsService", () => {
     registrationId: REGISTRATION_ID,
     studentId: STUDENT_ID,
     workshopId: WORKSHOP_ID,
-    status: "PENDING_PAYMENT",
+    status: "PENDING",
     registeredAt: new Date(),
     confirmedAt: null,
     cancelledAt: null,
@@ -60,9 +53,10 @@ describe("PaymentsService", () => {
     amount: String(AMOUNT),
     currency: "VND",
     gateway: GATEWAY,
-    status: "PENDING",
+    status: "INITIATED",
     idempotencyKey: IDEMPOTENCY_KEY,
     gatewayTxnId: null,
+    rawGatewayResponse: null,
     timeoutAt: new Date(Date.now() + 900_000),
     initiatedAt: new Date(),
     completedAt: null,
@@ -96,7 +90,6 @@ describe("PaymentsService", () => {
             updateStatus: jest.fn(),
             findMyPayments: jest.fn(),
             findPendingOverdue: jest.fn(),
-            lockWorkshopSlot: jest.fn(),
             transaction: jest.fn(),
           },
         },
@@ -105,14 +98,6 @@ describe("PaymentsService", () => {
           useValue: {
             findById: jest.fn(),
             updateStatus: jest.fn(),
-          },
-        },
-        {
-          provide: TicketsRepository,
-          useValue: {
-            create: jest.fn(),
-            findByRegistrationId: jest.fn(),
-            updateQrToken: jest.fn(),
           },
         },
         {
@@ -148,24 +133,20 @@ describe("PaymentsService", () => {
           provide: WorkshopsService,
           useValue: {
             getPublishedById: jest.fn(),
+            incrementSeat: jest.fn(),
           },
         },
         {
           provide: SeatCounterService,
           useValue: {
-            increment: jest.fn(),
+            getCachedSeats: jest.fn(),
+            invalidateCache: jest.fn(),
           },
         },
         {
-          provide: TicketsService,
+          provide: NotificationLogProducer,
           useValue: {
-            signAndUpdateQrToken: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: NotificationPublisher,
-          useValue: {
-            fire: jest.fn(),
+            createAndEnqueue: jest.fn().mockResolvedValue(Result.ok()),
           },
         },
       ],
@@ -174,19 +155,18 @@ describe("PaymentsService", () => {
     service = module.get<PaymentsService>(PaymentsService);
     paymentsRepo = module.get(PaymentsRepository);
     registrationsRepo = module.get(RegistrationsRepository);
-    ticketsRepo = module.get(TicketsRepository);
     seatLock = module.get(SeatLockMechanic);
     idempotencyMechanic = module.get(IdempotencyMechanic);
     circuitBreaker = module.get(CircuitBreakerMechanic);
     paymentGatewayService = module.get(PaymentGatewayService);
     workshopsService = module.get(WorkshopsService);
     seatCounter = module.get(SeatCounterService);
-    notificationPublisher = module.get(NotificationPublisher);
+    notificationLogProducer = module.get(NotificationLogProducer);
   });
 
   // ==================== initiate ====================
   describe("initiate — 5-stage pipeline (FR-F05-001, FR-F05-002, FR-F05-003)", () => {
-    const dto = { registration_id: REGISTRATION_ID, gateway: GATEWAY as any };
+    const dto = { registrationId: REGISTRATION_ID, gateway: GATEWAY as any };
 
     function setupInitiateSuccess() {
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
@@ -199,7 +179,6 @@ describe("PaymentsService", () => {
       );
       circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       paymentsRepo.transaction.mockImplementation((cb: any) => cb({}));
-      paymentsRepo.lockWorkshopSlot.mockResolvedValue(Result.ok());
       paymentsRepo.create.mockResolvedValue(Result.ok(mockPayment));
       paymentGatewayService.initiatePayment.mockResolvedValue(
         Result.ok({
@@ -219,11 +198,11 @@ describe("PaymentsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.payment_id).toBe(PAYMENT_ID);
-        expect(result.data.redirect_url).toBe(
+        expect(result.data.paymentId).toBe(PAYMENT_ID);
+        expect(result.data.redirectUrl).toBe(
           "https://mock-gateway.test/pay/abc"
         );
-        expect(result.data.payment_deadline).toBeDefined();
+        expect(result.data.paymentDeadline).toBeDefined();
       }
       // Verify pipeline stages
       expect(registrationsRepo.findById).toHaveBeenCalledWith(REGISTRATION_ID);
@@ -237,7 +216,6 @@ describe("PaymentsService", () => {
       );
       expect(circuitBreaker.checkAndAllow).toHaveBeenCalledWith(GATEWAY);
       expect(paymentsRepo.transaction).toHaveBeenCalled();
-      expect(paymentsRepo.lockWorkshopSlot).toHaveBeenCalled();
       expect(paymentsRepo.create).toHaveBeenCalled();
       expect(paymentGatewayService.initiatePayment).toHaveBeenCalledWith(
         GATEWAY,
@@ -398,8 +376,8 @@ describe("PaymentsService", () => {
   describe("handleWebhook — FR-F05-003, BR-027", () => {
     const webhookDto = {
       status: "SUCCESS" as const,
-      gateway_txn_id: "txn-001",
-      idempotency_key: IDEMPOTENCY_KEY,
+      gatewayTxnId: "txn-001",
+      idempotencyKey: IDEMPOTENCY_KEY,
     };
 
     function setupWebhookSuccess() {
@@ -418,25 +396,14 @@ describe("PaymentsService", () => {
       paymentsRepo.updateStatus.mockResolvedValue(
         Result.ok({
           ...mockPayment,
-          status: "SUCCESS",
+          status: "SUCCEEDED",
           completedAt: new Date(),
         })
       );
       registrationsRepo.updateStatus.mockResolvedValue(
         Result.ok(mockRegistrationUpdated)
       );
-      ticketsRepo.create.mockResolvedValue(
-        Result.ok({ ticketId: "tkt-001" } as any)
-      );
-      ticketsRepo.findByRegistrationId.mockResolvedValue(
-        Result.ok({
-          ticketId: "tkt-001",
-          registrationId: REGISTRATION_ID,
-        } as any)
-      );
-      ticketsRepo.updateQrToken.mockResolvedValue(Result.ok({} as any));
       seatLock.release.mockResolvedValue(Result.ok(true));
-      seatCounter.increment.mockResolvedValue(1);
     }
 
     it("should process SUCCESS webhook with ACID transaction (BR-027)", async () => {
@@ -452,7 +419,7 @@ describe("PaymentsService", () => {
       );
       expect(paymentsRepo.updateStatus).toHaveBeenCalledWith(
         PAYMENT_ID,
-        "SUCCESS",
+        "SUCCEEDED",
         "txn-001",
         expect.anything()
       );
@@ -461,19 +428,12 @@ describe("PaymentsService", () => {
         "CONFIRMED",
         expect.anything()
       );
-      expect(ticketsRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          registrationId: REGISTRATION_ID,
-          status: "ACTIVE",
-        }),
-        expect.anything()
-      );
       // Post-tx: Redis + event
       expect(seatLock.release).toHaveBeenCalledWith(
         WORKSHOP_ID,
         REGISTRATION_ID
       );
-      expect(notificationPublisher.fire).toHaveBeenCalled();
+      expect(notificationLogProducer.createAndEnqueue).toHaveBeenCalled();
     });
 
     it("should process FAILED webhook — payment FAILED, seat released, event fired", async () => {
@@ -488,7 +448,8 @@ describe("PaymentsService", () => {
       // On failure path, registrationsRepo.findById is called (not updateStatus)
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
       seatLock.release.mockResolvedValue(Result.ok(true));
-      seatCounter.increment.mockResolvedValue(1);
+      seatCounter.invalidateCache.mockResolvedValue(undefined);
+      workshopsService.incrementSeat.mockResolvedValue(Result.ok());
 
       const result = await service.handleWebhook(GATEWAY, failedDto);
 
@@ -499,16 +460,15 @@ describe("PaymentsService", () => {
         undefined,
         expect.anything()
       );
-      // Post-tx: seat released AND counter incremented (failure path)
-      expect(seatCounter.increment).toHaveBeenCalledWith(WORKSHOP_ID);
+      // Post-tx: seat released AND counter invalidated (failure path)
+      expect(seatCounter.invalidateCache).toHaveBeenCalledWith(WORKSHOP_ID);
       expect(seatLock.release).toHaveBeenCalledWith(
         WORKSHOP_ID,
         REGISTRATION_ID
       );
-      // event type should be payment.failed
-      expect(notificationPublisher.fire).toHaveBeenCalledWith(
-        "payment.failed",
-        expect.objectContaining({ eventType: "payment.failed" })
+      // event type should be PAYMENT_FAILED
+      expect(notificationLogProducer.createAndEnqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "PAYMENT_FAILED" })
       );
     });
 
@@ -540,21 +500,18 @@ describe("PaymentsService", () => {
 
       await service.handleWebhook(GATEWAY, webhookDto);
 
-      // Seat counter only incremented on failure/timeout, not success
-      expect(seatCounter.increment).not.toHaveBeenCalled();
+      // Seat counter only invalidated on failure/timeout, not success
+      expect(seatCounter.invalidateCache).not.toHaveBeenCalled();
     });
 
-    it("should fire payment.success event after SUCCESS webhook", async () => {
+    it("should fire REGISTRATION_CONFIRMED notification after SUCCESS webhook", async () => {
       setupWebhookSuccess();
 
       await service.handleWebhook(GATEWAY, webhookDto);
 
-      expect(notificationPublisher.fire).toHaveBeenCalledWith(
-        "payment.success",
+      expect(notificationLogProducer.createAndEnqueue).toHaveBeenCalledWith(
         expect.objectContaining({
-          paymentId: PAYMENT_ID,
-          registrationId: REGISTRATION_ID,
-          eventType: "payment.success",
+          type: "REGISTRATION_CONFIRMED",
         })
       );
     });
@@ -562,13 +519,13 @@ describe("PaymentsService", () => {
 
   // ==================== expirePayment ====================
   describe("expirePayment", () => {
-    it("should expire a PENDING payment → TIMEOUT + CANCELLED + seat released", async () => {
+    it("should expire an INITIATED payment → FAILED + CANCELLED + seat released", async () => {
       paymentsRepo.findById.mockResolvedValue(Result.ok(mockPayment));
       paymentsRepo.transaction.mockImplementation((cb: any) => cb({} as any));
       paymentsRepo.updateStatus.mockResolvedValue(
         Result.ok({
           ...mockPayment,
-          status: "TIMEOUT",
+          status: "FAILED",
           completedAt: new Date(),
         })
       );
@@ -580,14 +537,15 @@ describe("PaymentsService", () => {
         })
       );
       seatLock.release.mockResolvedValue(Result.ok(true));
-      seatCounter.increment.mockResolvedValue(1);
+      seatCounter.invalidateCache.mockResolvedValue(undefined);
+      workshopsService.incrementSeat.mockResolvedValue(Result.ok());
 
       const result = await service.expirePayment(PAYMENT_ID);
 
       expect(result.isSuccess).toBe(true);
       expect(paymentsRepo.updateStatus).toHaveBeenCalledWith(
         PAYMENT_ID,
-        "TIMEOUT",
+        "FAILED",
         undefined,
         expect.anything()
       );
@@ -601,10 +559,10 @@ describe("PaymentsService", () => {
         WORKSHOP_ID,
         REGISTRATION_ID
       );
-      expect(seatCounter.increment).toHaveBeenCalledWith(WORKSHOP_ID);
-      expect(notificationPublisher.fire).toHaveBeenCalledWith(
-        "payment.failed",
-        expect.objectContaining({ eventType: "payment.failed" })
+      expect(workshopsService.incrementSeat).toHaveBeenCalledWith(WORKSHOP_ID);
+      expect(seatCounter.invalidateCache).toHaveBeenCalledWith(WORKSHOP_ID);
+      expect(notificationLogProducer.createAndEnqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "PAYMENT_FAILED" })
       );
     });
 
@@ -619,7 +577,7 @@ describe("PaymentsService", () => {
 
     it("should return PAYMENT_ALREADY_SUCCESS for a SUCCESS payment", async () => {
       paymentsRepo.findById.mockResolvedValue(
-        Result.ok({ ...mockPayment, status: "SUCCESS" })
+        Result.ok({ ...mockPayment, status: "SUCCEEDED" })
       );
 
       const result = await service.expirePayment(PAYMENT_ID);
@@ -639,12 +597,12 @@ describe("PaymentsService", () => {
       // No transaction or side effects
       expect(paymentsRepo.transaction).not.toHaveBeenCalled();
       expect(seatLock.release).not.toHaveBeenCalled();
-      expect(seatCounter.increment).not.toHaveBeenCalled();
+      expect(seatCounter.invalidateCache).not.toHaveBeenCalled();
     });
 
     it("should return Ok (no-op) for TIMEOUT payments", async () => {
       paymentsRepo.findById.mockResolvedValue(
-        Result.ok({ ...mockPayment, status: "TIMEOUT" })
+        Result.ok({ ...mockPayment, status: "UNRESOLVED" })
       );
 
       const result = await service.expirePayment(PAYMENT_ID);
@@ -679,7 +637,7 @@ describe("PaymentsService", () => {
         expect(result.data.total).toBe(1);
         expect(result.data.page).toBe(1);
         expect(result.data.limit).toBe(20);
-        expect(result.data.items[0].payment_id).toBe(PAYMENT_ID);
+        expect(result.data.items[0].id).toBe(PAYMENT_ID);
       }
     });
 
@@ -716,7 +674,7 @@ describe("PaymentsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.payment_id).toBe(PAYMENT_ID);
+        expect(result.data.id).toBe(PAYMENT_ID);
       }
     });
 

@@ -5,12 +5,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { SyncProgressSteps } from "@/features/checkin/components/SyncProgressSteps";
-import { useSync } from "@/features/checkin/hooks/use-sync";
-
 import ROUTES from "@/constants/routes";
 import { createDatabaseClient } from "@/database/client";
 import { deviceConfig } from "@/database/schema/device-config.schema";
+import { SyncProgressSteps } from "@/features/checkin/components/SyncProgressSteps";
+import { useSync } from "@/features/checkin/hooks/use-sync";
 
 export default function SyncProgressScreen() {
   const params = useLocalSearchParams<{ workshopId?: string }>();

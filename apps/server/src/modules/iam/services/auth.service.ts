@@ -44,7 +44,7 @@ export class AuthService {
    * @returns OkResult with LoginResponseDto, or FailResult with INVALID_CREDENTIALS.
    */
   async login(params: {
-    accountType: "student" | "staff";
+    accountType: "STUDENT" | "STAFF";
     password: string;
     studentId?: string;
     email?: string;
@@ -54,7 +54,7 @@ export class AuthService {
     let user: User;
     let studentProfile: { studentId: string; fullName: string } | undefined;
 
-    if (accountType === "student") {
+    if (accountType === "STUDENT") {
       if (!studentId) return Result.fail(authErrors.invalidCredentials());
 
       const studentResult = await this.studentsRepo.findById(studentId);
@@ -108,7 +108,12 @@ export class AuthService {
     }
 
     const accessToken = await this.tokenService.signAccessToken(
-      { userId: user.userId, role: user.role, allowedWorkshopIds },
+      {
+        userId: user.userId,
+        role: user.role,
+        allowedWorkshopIds,
+        studentId: studentProfile?.studentId,
+      },
       "WEB"
     );
 
@@ -158,6 +163,12 @@ export class AuthService {
 
     const { sub: userId, jti: oldJti } = verifyResult.data;
 
+    // Check if the refresh token has been blacklisted (e.g., during logout)
+    const isBlacklisted = await this.tokenService.isBlacklisted(oldJti);
+    if (isBlacklisted) {
+      return Result.fail(authErrors.refreshTokenInvalid());
+    }
+
     const userResult = await this.usersRepo.findById(userId);
     if (userResult.isFailure) return Result.fail(userResult.error);
     if (!userResult.data || userResult.data.status !== "ACTIVE") {
@@ -170,6 +181,8 @@ export class AuthService {
     await this.tokenService.blacklistToken(oldJti, 604_800);
 
     let allowedWorkshopIds: string[] | undefined;
+    let newStudentId: string | undefined;
+
     if (user.role === "CHECKIN_STAFF") {
       const assignmentResult = await this.assignmentsRepo.findByUserId(
         user.userId
@@ -179,11 +192,19 @@ export class AuthService {
       }
     }
 
+    if (user.role === "STUDENT") {
+      const profileResult = await this.studentsRepo.findByUserId(user.userId);
+      if (profileResult.isSuccess && profileResult.data) {
+        newStudentId = profileResult.data.studentId;
+      }
+    }
+
     const newAccessToken = await this.tokenService.signAccessToken(
       {
         userId: user.userId,
         role: user.role,
         allowedWorkshopIds,
+        studentId: newStudentId,
       },
       platform
     );
@@ -212,8 +233,23 @@ export class AuthService {
    * @param jti - The unique token identifier to blacklist.
    * @returns OkResult<void> on success.
    */
-  async logout(userId: string, jti: string): Promise<Result<void>> {
+  async logout(
+    userId: string,
+    jti: string,
+    refreshTokenStr?: string
+  ): Promise<Result<void>> {
+    // Blacklist access token (15 min TTL matches ACCESS_EXPIRY.WEB)
     await this.tokenService.blacklistToken(jti, 900);
+
+    // Blacklist refresh token if present in the request cookie
+    if (refreshTokenStr) {
+      const refreshJti =
+        this.tokenService.extractRefreshTokenJti(refreshTokenStr);
+      if (refreshJti) {
+        await this.tokenService.blacklistToken(refreshJti, 604_800); // 7 days
+      }
+    }
+
     return Result.ok();
   }
 
@@ -238,11 +274,7 @@ export class AuthService {
     const userResult = await this.usersRepo.findById(userId);
     if (userResult.isFailure) return Result.fail(userResult.error);
     if (!userResult.data) {
-      return Result.fail({
-        category: "NOT_FOUND" as const,
-        code: "USER_NOT_FOUND" as const,
-        message: "User not found.",
-      });
+      return Result.fail(authErrors.userNotFound(userId));
     }
 
     const user = userResult.data;

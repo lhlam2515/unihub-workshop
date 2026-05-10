@@ -251,43 +251,33 @@ describe("StudentSyncJobsRepository", () => {
   // -----------------------------------------------------------------------
   describe("findMany", () => {
     it("returns paginated list of jobs sorted by triggeredAt desc", async () => {
-      let callCount = 0;
-      mockChain.then = (resolve: any) => {
-        callCount++;
-        if (callCount === 1) resolve([mockJob]);
-        else resolve([{ count: "1" }]);
-      };
+      mockChain.then = (resolve: any) => resolve([mockJob]);
 
-      const result = await repo.findMany({ page: 1, limit: 20 });
+      const result = await repo.findMany({ limit: 20 });
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toHaveLength(1);
-      expect(result.data.total).toBe(1);
+      expect(result.data.nextCursor).toBeDefined();
+      expect(result.data.hasMore).toBe(false);
+      expect(result.data.limit).toBe(20);
     });
 
     it("returns empty items when no jobs exist", async () => {
-      let callCount = 0;
-      mockChain.then = (resolve: any) => {
-        callCount++;
-        if (callCount === 1) resolve([]);
-        else resolve([{ count: "0" }]);
-      };
+      mockChain.then = (resolve: any) => resolve([]);
 
-      const result = await repo.findMany({ page: 1, limit: 20 });
+      const result = await repo.findMany({ limit: 20 });
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toEqual([]);
-      expect(result.data.total).toBe(0);
+      expect(result.data.nextCursor).toBeNull();
+      expect(result.data.hasMore).toBe(false);
     });
 
     it("returns FailResult when DB query throws", async () => {
-      let callCount = 0;
-      mockChain.then = (_resolve: any, reject: any) => {
-        callCount++;
-        if (callCount === 1) reject(new Error("DB down"));
-      };
+      mockChain.then = (_resolve: any, reject: any) =>
+        reject(new Error("DB down"));
 
-      const result = await repo.findMany({ page: 1, limit: 20 });
+      const result = await repo.findMany({ limit: 20 });
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");

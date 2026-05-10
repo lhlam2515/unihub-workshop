@@ -16,6 +16,7 @@ describe("AuthController", () => {
   const mockResponse = () => {
     const res: Partial<Response> = {
       cookie: jest.fn(),
+      clearCookie: jest.fn(),
     };
     return res as Response;
   };
@@ -49,41 +50,40 @@ describe("AuthController", () => {
   describe("POST /auth/login", () => {
     it("returns result from authService.login", async () => {
       const dto = {
-        email: "test@test.com",
+        accountType: "STUDENT" as const,
         password: "pass",
-        account_type: "student" as const,
-        student_id: "student-1",
-        platform: "WEB" as const,
+        studentId: "student-1",
+        email: "test@test.com",
       };
       authService.login.mockResolvedValue(
         Result.ok({
-          access_token: "at1",
-          refresh_token: "rt1",
-          expires_in: 900,
+          accessToken: "at1",
+          refreshToken: "rt1",
+          expiresIn: 900,
         } as any)
       );
       const res = mockResponse();
       await controller.login(dto, res);
-      expect(authService.login).toHaveBeenCalledWith(
-        "test@test.com",
-        "pass",
-        "WEB"
-      );
+      expect(authService.login).toHaveBeenCalledWith({
+        accountType: "STUDENT",
+        password: "pass",
+        studentId: "student-1",
+        email: "test@test.com",
+      });
     });
 
-    it("sets refresh cookie for WEB platform", async () => {
+    it("sets refresh cookie on success", async () => {
       const dto = {
-        email: "test@test.com",
+        accountType: "STUDENT" as const,
         password: "pass",
-        account_type: "student" as const,
-        student_id: "student-1",
-        platform: "WEB" as const,
+        studentId: "student-1",
+        email: "test@test.com",
       };
       authService.login.mockResolvedValue(
         Result.ok({
-          access_token: "at1",
-          refresh_token: "rt1",
-          expires_in: 900,
+          accessToken: "at1",
+          refreshToken: "rt1",
+          expiresIn: 900,
         } as any)
       );
       const res = mockResponse();
@@ -98,7 +98,7 @@ describe("AuthController", () => {
 
   describe("POST /auth/refresh", () => {
     it("returns result from authService.refreshToken", async () => {
-      const dto = { refresh_token: "rt1", platform: "MOBILE" as const };
+      const dto = { refreshToken: "rt1" };
       authService.refreshToken.mockResolvedValue(
         Result.ok({
           accessToken: "at2",
@@ -107,14 +107,13 @@ describe("AuthController", () => {
         } as any)
       );
       const res = mockResponse();
-      await controller.refresh(dto, res, {
-        cookies: {},
-      } as any);
+      const req = { cookies: {} } as any;
+      await controller.refresh(dto, res, req);
       expect(authService.refreshToken).toHaveBeenCalledWith("rt1", "MOBILE");
     });
 
     it("reads refresh token from cookie when body is empty", async () => {
-      const dto = { refresh_token: "", platform: "WEB" as const };
+      const dto = { refreshToken: "" };
       authService.refreshToken.mockResolvedValue(
         Result.ok({
           accessToken: "at2",
@@ -123,18 +122,23 @@ describe("AuthController", () => {
         } as any)
       );
       const res = mockResponse();
-      await controller.refresh(dto, res, {
-        cookies: { refreshToken: "cookie-rt" },
-      } as any);
+      const req = { cookies: { refreshToken: "cookie-rt" } } as any;
+      await controller.refresh(dto, res, req);
       expect(authService.refreshToken).toHaveBeenCalledWith("cookie-rt", "WEB");
     });
   });
 
   describe("POST /auth/logout", () => {
-    it("calls authService.logout with user sub and jti", async () => {
+    it("calls authService.logout with user sub, jti, and refresh token from cookie", async () => {
       authService.logout.mockResolvedValue(Result.ok());
-      await controller.logout(mockUser);
-      expect(authService.logout).toHaveBeenCalledWith("usr-1", "jti-1");
+      const req = { cookies: { refreshToken: "rt-cookie" } } as any;
+      const res = mockResponse();
+      await controller.logout(mockUser, req, res);
+      expect(authService.logout).toHaveBeenCalledWith(
+        "usr-1",
+        "jti-1",
+        "rt-cookie"
+      );
     });
   });
 

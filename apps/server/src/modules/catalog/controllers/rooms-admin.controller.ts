@@ -16,6 +16,7 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 
@@ -25,6 +26,7 @@ import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { CreateRoomDto } from "../dto/create-room.dto";
+import { ListRoomsQueryDto } from "../dto/list-rooms-query.dto";
 import { UpdateRoomDto } from "../dto/update-room.dto";
 import { RoomsService } from "../services/rooms.service";
 
@@ -46,8 +48,8 @@ export class RoomsAdminController {
    * @returns Array of room DTOs.
    */
   @Get()
-  async listRooms() {
-    return this.roomsService.listRooms();
+  async listRooms(@Query() query: ListRoomsQueryDto) {
+    return this.roomsService.listRooms(query);
   }
 
   /**

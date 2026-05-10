@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
 
 import { PageLoader } from "@/components/PageLoader";
 import ROUTES from "@/constants/routes";
 import { useAuth } from "@/context/auth-context";
-import { StudentSidebarWidget } from "@/widgets/StudentSidebarWidget";
+import { PublicHeaderWidget } from "@/widgets/PublicHeaderWidget";
 
 export default function StudentLayout({
   children,
@@ -15,22 +17,22 @@ export default function StudentLayout({
   const router = useRouter();
   const { user, isLoading, isAuthenticated } = useAuth();
 
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== "student") {
+      router.replace(ROUTES.LOGIN);
+    }
+  }, [isAuthenticated, user?.role, router]);
+
   if (isLoading) {
     return <PageLoader />;
   }
 
-  if (!isAuthenticated || user?.role !== "student") {
-    router.replace(ROUTES.LOGIN);
-    return null;
-  }
-
   return (
-    <main className="relative bg-white">
-      <nav className="border-b p-4">Student Navbar</nav>
-      <div className="flex">
-        <StudentSidebarWidget />
-        <section className="flex-1 bg-gray-50/50">{children}</section>
-      </div>
-    </main>
+    <>
+      <PublicHeaderWidget />
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
+        {children}
+      </main>
+    </>
   );
 }

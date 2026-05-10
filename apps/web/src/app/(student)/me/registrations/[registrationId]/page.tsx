@@ -1,36 +1,54 @@
+"use client";
+
+import { use, useEffect, useState } from "react";
+
 import { getRegistration } from "@/features/registration-detail/api/registration-detail.service";
+import type { ApiError } from "@/lib/api/errors";
 import { getWorkshopDetail } from "@/lib/api/services/catalog";
+import type { Registration } from "@/types/registration";
 import type { WorkshopDetail } from "@/types/workshop";
 import { RegistrationDetailWidget } from "@/widgets/RegistrationDetailWidget";
 
-const StudentRegistrationDetailPage = async ({
+const StudentRegistrationDetailPage = ({
   params,
 }: {
   params: Promise<{ registrationId: string }>;
 }) => {
-  const registrationId = (await params).registrationId;
+  const { registrationId } = use(params);
 
-  const regResult = await getRegistration(registrationId);
+  const [registration, setRegistration] = useState<Registration | null>(null);
+  const [workshop, setWorkshop] = useState<WorkshopDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>();
 
-  let workshop: WorkshopDetail | null = null;
-  if (regResult.isSuccess) {
-    const wsResult = await getWorkshopDetail(regResult.data.workshopId);
-    if (wsResult.isSuccess) workshop = wsResult.data;
-  }
+  useEffect(() => {
+    async function load() {
+      const regResult = await getRegistration(registrationId);
+      if (regResult.isFailure) {
+        setError(
+          (regResult.error as ApiError)?.message ?? "Không thể tải thông tin"
+        );
+        setLoading(false);
+        return;
+      }
+      setRegistration(regResult.data);
+
+      const wsResult = await getWorkshopDetail(regResult.data.workshopId);
+      if (wsResult.isSuccess) {
+        setWorkshop(wsResult.data);
+      }
+      setLoading(false);
+    }
+    load();
+  }, [registrationId]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4">
       <RegistrationDetailWidget
-        registration={regResult.isSuccess ? regResult.data : null}
+        registration={registration}
         workshop={workshop}
-        payment={null}
-        loading={false}
-        error={
-          regResult.isFailure
-            ? ((regResult.error as { message?: string })?.message ??
-              "Không thể tải thông tin")
-            : undefined
-        }
+        loading={loading}
+        error={error}
         registrationId={registrationId}
       />
     </div>

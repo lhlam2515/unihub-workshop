@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useCallback } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 
 import { ErrorDisplay } from "@/components/ErrorDisplay";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,7 @@ export function AuthForm({ variant }: AuthFormProps) {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(config.schema),
@@ -133,7 +134,12 @@ export function AuthForm({ variant }: AuthFormProps) {
   const showEmail = variant === "staff";
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+    <form
+      data-testid="login-form"
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-4"
+      noValidate
+    >
       {/* Server error banner */}
       {serverError && <ErrorDisplay error={serverError} variant="banner" />}
 
@@ -190,6 +196,16 @@ export function AuthForm({ variant }: AuthFormProps) {
           <FieldError errors={mergeError("password")} />
         </FieldContent>
       </Field>
+
+      {/* Hidden accountType — registered via Controller for react-hook-form */}
+      <Controller
+        name="accountType"
+        control={control}
+        defaultValue={variant === "student" ? "STUDENT" : "STAFF"}
+        render={({ field }) => (
+          <input name={field.name} value={field.value} type="hidden" />
+        )}
+      />
 
       {/* Submit button */}
       <Button type="submit" className="w-full" disabled={isSubmitting}>

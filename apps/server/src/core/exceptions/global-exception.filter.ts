@@ -18,7 +18,24 @@ import {
   systemErrors,
   validationError,
 } from "@/shared/response/errors";
-import type { AppError, FieldError } from "@/shared/response/types";
+import type {
+  AppError,
+  ErrorCategory,
+  FieldError,
+} from "@/shared/response/types";
+
+/** Maps HTTP status codes to error categories for non-domain HttpExceptions. */
+const STATUS_TO_CATEGORY: Partial<Record<number, ErrorCategory>> = {
+  [HttpStatus.BAD_REQUEST]: "VALIDATION",
+  [HttpStatus.UNAUTHORIZED]: "AUTH",
+  [HttpStatus.FORBIDDEN]: "FORBIDDEN",
+  [HttpStatus.NOT_FOUND]: "NOT_FOUND",
+  [HttpStatus.CONFLICT]: "CONFLICT",
+  [HttpStatus.GONE]: "GONE",
+  [HttpStatus.UNPROCESSABLE_ENTITY]: "BUSINESS",
+  [HttpStatus.TOO_MANY_REQUESTS]: "RATE_LIMIT",
+};
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -57,7 +74,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         statusCode = categoryToStatus(appError.category);
       } else {
         statusCode = exception.getStatus();
-        appError = systemErrors.internal(exception);
+        const category = STATUS_TO_CATEGORY[statusCode] ?? "INTERNAL";
+        const responseBody = exception.getResponse();
+        const message =
+          typeof responseBody === "string" ? responseBody : exception.message;
+        appError = {
+          category,
+          code: "INTERNAL_ERROR",
+          message,
+        };
       }
     } else {
       statusCode = HttpStatus.INTERNAL_SERVER_ERROR;

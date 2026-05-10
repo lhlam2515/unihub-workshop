@@ -38,7 +38,11 @@ import { RegistrationsRepository } from "@/modules/booking/repositories/registra
 import { SeatCounterService } from "@/modules/catalog/services/seat-counter.service";
 import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
-import { passthroughOrInternal, paymentErrors } from "@/shared/response/errors";
+import {
+  passthroughOrInternal,
+  paymentErrors,
+  registrationErrors,
+} from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
 import { PaymentGatewayService } from "./payment-gateway.service";
@@ -93,9 +97,9 @@ export class PaymentsService {
    * - Creates idempotency_keys row with IN_PROGRESS (or updates to COMPLETED/UNRESOLVED).
    * - Reads/writes circuit breaker state in Redis.
    *
-   * @param studentId - The UUID of the authenticated student (from JWT).
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param dto - CreatePaymentDto with registration_id and gateway.
-   * @param idempotencyKey - The Idempotency-Key header value.
+   * @param idempotencyKey - The X-Idempotency-Key header value.
    * @returns OkResult with CreatePaymentResponseDto (includes redirect_url and deadline),
    * or FailResult with codes:
    * - IDEMPOTENCY_CONFLICT: Another request with this key is in progress.
@@ -300,9 +304,12 @@ export class PaymentsService {
           );
           if (payUpdate.isFailure) throw payUpdate.error;
 
-          // Read registration for workshopId (not part of write tx)
+          // Read registration for workshopId — fail visibly instead
+          // of silently passing an empty workshopId downstream.
           const reg = await this.registrationsRepo.findById(registrationId);
-          workshopId = reg.isSuccess && reg.data ? reg.data.workshopId : "";
+          if (reg.isFailure) throw reg.error;
+          if (!reg.data) throw registrationErrors.notFound(registrationId);
+          workshopId = reg.data.workshopId;
         }
 
         // Return data for post-transaction operations

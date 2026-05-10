@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, gte, lte, lt, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lte, lt, sql, inArray } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -22,6 +22,13 @@ import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
 export type PublishedBasic = { workshopId: string; seatsTotal: number };
+
+/** Shape of a workshop row joined with its speaker and room. */
+export type WorkshopWithSpeakerRoom = {
+  workshops: Workshop;
+  speakers: Speaker | null;
+  rooms: Room | null;
+};
 
 @Injectable()
 export class WorkshopsRepository {
@@ -96,8 +103,12 @@ export class WorkshopsRepository {
   }
 
   async findPublished(
-    filters: { dateFrom?: Date; dateTo?: Date } & CursorPaginationInput
-  ): Promise<Result<CursorPaginationResult<any>>> {
+    filters: {
+      dateFrom?: Date;
+      dateTo?: Date;
+      q?: string;
+    } & CursorPaginationInput
+  ): Promise<Result<CursorPaginationResult<WorkshopWithSpeakerRoom>>> {
     return tryCatch(
       async () => {
         const conditions = [eq(this.schema.workshops.status, "OPEN")];
@@ -108,6 +119,12 @@ export class WorkshopsRepository {
         }
         if (filters.dateTo) {
           conditions.push(lte(this.schema.workshops.startsAt, filters.dateTo));
+        }
+
+        if (filters.q) {
+          conditions.push(
+            sql`${this.schema.workshops.title} ILIKE ${"%" + filters.q + "%"}`
+          );
         }
 
         // Cursor-based pagination: decode cursor and filter by startsAt
@@ -140,20 +157,27 @@ export class WorkshopsRepository {
             ? encodeCursor(items[items.length - 1].workshops.startsAt)
             : null;
 
-        return { items, nextCursor, hasMore };
+        return { items, nextCursor, hasMore, limit: filters.limit };
       },
       (err) => systemErrors.internal(err)
     );
   }
 
   async listAdmin(
-    filters: { status?: WorkshopStatus } & CursorPaginationInput
-  ): Promise<Result<CursorPaginationResult<any>>> {
+    filters: { status?: WorkshopStatus; q?: string } & CursorPaginationInput
+  ): Promise<Result<CursorPaginationResult<WorkshopWithSpeakerRoom>>> {
     return tryCatch(
       async () => {
         const conditions: ReturnType<typeof eq>[] = [];
         if (filters.status) {
           conditions.push(eq(this.schema.workshops.status, filters.status));
+        }
+
+        // ILIKE search on title
+        if (filters.q) {
+          conditions.push(
+            sql`${this.schema.workshops.title} ILIKE ${"%" + filters.q + "%"}`
+          );
         }
 
         // Cursor-based pagination: decode cursor and filter by createdAt
@@ -187,7 +211,7 @@ export class WorkshopsRepository {
             ? encodeCursor(items[items.length - 1].workshops.createdAt)
             : null;
 
-        return { items, nextCursor, hasMore };
+        return { items, nextCursor, hasMore, limit: filters.limit };
       },
       (err) => systemErrors.internal(err)
     );
@@ -391,6 +415,33 @@ export class WorkshopsRepository {
         return result ?? null;
       },
       (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Counts confirmed registrations (CONFIRMED or PAID status) for a workshop.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with the count, or FailResult (INTERNAL_ERROR).
+   */
+  async countConfirmedRegistrations(
+    workshopId: string
+  ): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const result = await this.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(this.schema.registrations)
+          .where(
+            and(
+              eq(this.schema.registrations.workshopId, workshopId),
+              inArray(this.schema.registrations.status, ["CONFIRMED", "PAID"])
+            )
+          );
+        return result[0]?.count ?? 0;
+      },
+      (err) =>
+        systemErrors.internal(err instanceof Error ? err.message : String(err))
     );
   }
 }

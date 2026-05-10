@@ -9,14 +9,16 @@
 import type { Payment } from "@/infra/database/types/transaction.types";
 
 export interface PaymentResponseDto {
-  paymentId: string;
+  id: string;
   registrationId: string;
   amount: number;
+  currency: string;
   status: string;
   gateway: string;
-  gatewayTxnId?: string;
-  initiatedAt: Date;
-  completedAt?: Date;
+  gatewayChargeId?: string;
+  qrCode: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
 }
 
 export interface CreatePaymentResponseDto {
@@ -29,22 +31,25 @@ export class PaymentResponseBuilder {
   /**
    * Maps a Payment entity to a client-safe PaymentResponseDto.
    *
-   * Strips internal fields (raw_gateway_response) and renames
-   * camelCase DB columns to snake_case API response format.
+   * Strips internal fields (raw_gateway_response) and maps
+   * DB fields to API response fields matching OpenAPI spec.
    *
    * @param payment - The Payment entity from the database.
+   * @param qrCode - Optional QR code from the associated registration.
    * @returns A PaymentResponseDto suitable for API responses.
    */
-  static from(payment: Payment): PaymentResponseDto {
+  static from(payment: Payment, qrCode?: string | null): PaymentResponseDto {
     return {
-      paymentId: payment.paymentId,
+      id: payment.paymentId,
       registrationId: payment.registrationId,
       amount: Number(payment.amount),
+      currency: payment.currency || "VND",
       status: payment.status,
       gateway: payment.gateway,
-      gatewayTxnId: payment.gatewayTxnId ?? undefined,
-      initiatedAt: payment.initiatedAt,
-      completedAt: payment.completedAt ?? undefined,
+      gatewayChargeId: payment.gatewayTxnId ?? undefined,
+      qrCode: qrCode ?? null,
+      createdAt: payment.initiatedAt.toISOString(),
+      resolvedAt: payment.completedAt?.toISOString() ?? null,
     };
   }
 

@@ -17,10 +17,11 @@ const mockWorkshop = {
   roomId: "r-001",
   startsAt: new Date("2026-06-01T09:00:00Z"),
   endsAt: new Date("2026-06-01T11:00:00Z"),
-  capacity: 30,
-  isPaid: false,
-  price: null,
-  status: "PUBLISHED" as const,
+  seatsTotal: 30,
+  seatsAvailable: 30,
+  price: "0",
+  status: "OPEN" as const,
+  version: 0,
   createdBy: "u-001",
   createdAt: new Date("2026-05-01T00:00:00Z"),
   updatedAt: new Date("2026-05-01T00:00:00Z"),
@@ -46,13 +47,6 @@ const mockRoom = {
   facilities: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
   updatedAt: new Date("2026-01-01T00:00:00Z"),
-};
-
-const mockSlot = {
-  workshopId: "w-001",
-  totalCapacity: 30,
-  lockedCount: 2,
-  confirmedCount: 10,
 };
 
 // ---------------------------------------------------------------------------
@@ -209,7 +203,7 @@ describe("WorkshopsRepository", () => {
     it("returns the workshop when found with matching status", async () => {
       mockChain.pushResolve([mockWorkshop]);
 
-      const result = await repo.findByIdAndStatus("w-001", "PUBLISHED");
+      const result = await repo.findByIdAndStatus("w-001", "OPEN");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toEqual(mockWorkshop);
@@ -227,7 +221,7 @@ describe("WorkshopsRepository", () => {
     it("returns FailResult on DB error", async () => {
       mockChain.pushReject(new Error("DB error"));
 
-      const result = await repo.findByIdAndStatus("w-001", "PUBLISHED");
+      const result = await repo.findByIdAndStatus("w-001", "OPEN");
 
       expect(result.isFailure).toBe(true);
     });
@@ -237,11 +231,9 @@ describe("WorkshopsRepository", () => {
   // findPublished
   // -----------------------------------------------------------------------
   describe("findPublished", () => {
-    const defaultFilters = { page: 1, limit: 20 };
+    const defaultFilters = { limit: 20 };
 
-    it("returns published workshops with pagination and total count (FR-F02-006)", async () => {
-      // Two sequential queries: count then items
-      mockChain.pushResolve([{ count: "1" }]);
+    it("returns published workshops with cursor pagination (FR-F02-006)", async () => {
       mockChain.pushResolve([
         { workshops: mockWorkshop, speakers: mockSpeaker, rooms: mockRoom },
       ]);
@@ -250,20 +242,20 @@ describe("WorkshopsRepository", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.total).toBe(1);
         expect(result.data.items).toHaveLength(1);
+        expect(result.data.hasMore).toBe(false);
+        // Cursor always set when items exist (points to last item's startsAt)
+        expect(result.data.nextCursor).toEqual(expect.any(String));
       }
     });
 
-    it("applies date and payment filters when provided", async () => {
-      mockChain.pushResolve([{ count: "0" }]);
+    it("applies date filters when provided", async () => {
       mockChain.pushResolve([]);
 
       const filters = {
         ...defaultFilters,
         dateFrom: new Date("2026-06-01"),
         dateTo: new Date("2026-06-30"),
-        isPaid: false,
       };
 
       const result = await repo.findPublished(filters);
@@ -286,12 +278,10 @@ describe("WorkshopsRepository", () => {
   describe("listAdmin", () => {
     const defaultFilters = { page: 1, limit: 20 };
 
-    it("returns all workshops with slot, speaker, and room joins", async () => {
-      mockChain.pushResolve([{ count: "1" }]);
+    it("returns all workshops with speaker and room joins", async () => {
       mockChain.pushResolve([
         {
           workshops: mockWorkshop,
-          workshopSlots: mockSlot,
           speakers: mockSpeaker,
           rooms: mockRoom,
         },
@@ -301,13 +291,11 @@ describe("WorkshopsRepository", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.total).toBe(1);
         expect(result.data.items).toHaveLength(1);
       }
     });
 
     it("filters by status when provided", async () => {
-      mockChain.pushResolve([{ count: "0" }]);
       mockChain.pushResolve([]);
 
       const result = await repo.listAdmin({
@@ -358,7 +346,7 @@ describe("WorkshopsRepository", () => {
       const updated = { ...mockWorkshop, title: "Updated Title" };
       mockChain.pushResolve([updated]);
 
-      const result = await repo.update("w-001", { title: "Updated Title" });
+      const result = await repo.update("w-001", { title: "Updated Title" }, 0);
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toEqual(updated);
@@ -367,7 +355,7 @@ describe("WorkshopsRepository", () => {
     it("returns FailResult on update error", async () => {
       mockChain.pushReject(new Error("Update failed"));
 
-      const result = await repo.update("w-001", { title: "Updated" });
+      const result = await repo.update("w-001", { title: "Updated" }, 0);
 
       expect(result.isFailure).toBe(true);
     });
@@ -378,13 +366,13 @@ describe("WorkshopsRepository", () => {
   // -----------------------------------------------------------------------
   describe("updateStatus", () => {
     it("updates only the status column", async () => {
-      const updated = { ...mockWorkshop, status: "PUBLISHED" };
+      const updated = { ...mockWorkshop, status: "OPEN" };
       mockChain.pushResolve([updated]);
 
-      const result = await repo.updateStatus("w-001", "PUBLISHED");
+      const result = await repo.updateStatus("w-001", "OPEN");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.status).toBe("PUBLISHED");
+      expect(result.data.status).toBe("OPEN");
     });
 
     it("returns FailResult on DB error", async () => {
@@ -397,14 +385,14 @@ describe("WorkshopsRepository", () => {
   });
 
   // -----------------------------------------------------------------------
-  // completePastPublished
+  // completePastOpen
   // -----------------------------------------------------------------------
-  describe("completePastPublished", () => {
+  describe("completePastOpen", () => {
     it("returns the count of transitioned workshops (FR-F10-005)", async () => {
       // Chain: update().set().where() -- .where() is the terminal, one await
       mockChain.pushResolve({ rowCount: 5 });
 
-      const result = await repo.completePastPublished();
+      const result = await repo.completePastOpen();
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -415,7 +403,7 @@ describe("WorkshopsRepository", () => {
     it("returns 0 when no workshops are eligible", async () => {
       mockChain.pushResolve({ rowCount: 0 });
 
-      const result = await repo.completePastPublished();
+      const result = await repo.completePastOpen();
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
@@ -426,7 +414,7 @@ describe("WorkshopsRepository", () => {
     it("returns FailResult on DB error", async () => {
       mockChain.pushReject(new Error("DB error"));
 
-      const result = await repo.completePastPublished();
+      const result = await repo.completePastOpen();
 
       expect(result.isFailure).toBe(true);
     });

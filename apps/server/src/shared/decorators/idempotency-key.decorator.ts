@@ -1,7 +1,7 @@
 /**
  * Idempotency Key Decorator
  *
- * Extracts the `Idempotency-Key` header from the request (IETF standard).
+ * Extracts the `X-Idempotency-Key` header from the request (IETF standard).
  * Used in PaymentsController and RegistrationsController to feed the
  * IdempotencyMechanic for duplicate-prevention.
  *
@@ -18,11 +18,11 @@ import { Request } from "express";
 export const IdempotencyKey = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): string => {
     const request = ctx.switchToHttp().getRequest<Request>();
-    const raw = request.headers["idempotency-key"];
+    const raw = request.headers["x-idempotency-key"];
     const key = Array.isArray(raw) ? raw[0] : raw;
 
     if (!key) {
-      throw new BadRequestException("Missing Idempotency-Key header");
+      throw new BadRequestException("Missing X-Idempotency-Key header");
     }
 
     return key;

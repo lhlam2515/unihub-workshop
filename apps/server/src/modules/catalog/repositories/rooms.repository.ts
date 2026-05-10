@@ -2,7 +2,7 @@
  * Retrieves and persists room records and checks for scheduling conflicts.
  */
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, lte, gte, ne } from "drizzle-orm";
+import { eq, and, desc, lte, gte, ne, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -30,13 +30,21 @@ export class RoomsRepository {
    *
    * @returns OkResult containing an array of all Room records, or FailResult (INTERNAL_ERROR).
    */
-  async findAll(): Promise<Result<Room[]>> {
+  async findAll(q?: string): Promise<Result<Room[]>> {
     return tryCatch(
-      async () =>
-        this.db
+      async () => {
+        if (!q) {
+          return this.db
+            .select()
+            .from(this.schema.rooms)
+            .orderBy(desc(this.schema.rooms.createdAt));
+        }
+        return this.db
           .select()
           .from(this.schema.rooms)
-          .orderBy(desc(this.schema.rooms.createdAt)),
+          .where(and(sql`${this.schema.rooms.name} ILIKE ${"%" + q + "%"}`))
+          .orderBy(desc(this.schema.rooms.createdAt));
+      },
       (err) => systemErrors.internal(err)
     );
   }

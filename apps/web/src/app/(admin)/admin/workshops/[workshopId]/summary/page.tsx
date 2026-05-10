@@ -1,39 +1,49 @@
-import { notFound } from "next/navigation";
+"use client";
 
+import dynamic from "next/dynamic";
+import { useParams, notFound } from "next/navigation";
+
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getAdminWorkshop, getAiSummary } from "@/lib/api/services/admin";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
-import { AdminWorkshopSummaryWidget } from "@/widgets/AdminWorkshopSummaryWidget";
 
-interface PageProps {
-  params: Promise<{ workshopId: string }>;
-}
-
-export default async function AdminWorkshopSummaryPage({ params }: PageProps) {
-  const { workshopId } = await params;
-
-  const [workshopResult, summaryResult] = await Promise.all([
-    getAdminWorkshop(workshopId),
-    getAiSummary(workshopId),
-  ]);
-
-  if (workshopResult.isFailure) {
-    notFound();
+const AdminWorkshopSummaryWidget = dynamic(
+  () =>
+    import("@/widgets/AdminWorkshopSummaryWidget").then((mod) => ({
+      default: mod.AdminWorkshopSummaryWidget,
+    })),
+  {
+    loading: () => <ContentLoader count={2} />,
+    ssr: false,
   }
+);
+
+export default function AdminWorkshopSummaryPage() {
+  const { workshopId } = useParams<{ workshopId: string }>();
+
+  const workshopQuery = useAsyncQuery(
+    ["admin-workshop-summary", workshopId],
+    () => getAdminWorkshop(workshopId)
+  );
+  const summaryQuery = useAsyncQuery(
+    ["admin-workshop-summary-ai", workshopId],
+    () => getAiSummary(workshopId)
+  );
+
+  if (workshopQuery.error) notFound();
+  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
 
   return (
     <div className="space-y-6">
       <AdminWorkshopEditWidget
-        workshop={workshopResult.data}
+        workshop={workshopQuery.data!}
         activeTab="summary"
       />
       <AdminWorkshopSummaryWidget
-        workshop={workshopResult.data}
-        initialSummary={summaryResult.isSuccess ? summaryResult.data : null}
-        initialError={
-          summaryResult.isFailure
-            ? (summaryResult.error as { message?: string })?.message
-            : undefined
-        }
+        workshop={workshopQuery.data!}
+        initialSummary={summaryQuery.data ?? null}
+        initialError={summaryQuery.error?.message}
       />
     </div>
   );

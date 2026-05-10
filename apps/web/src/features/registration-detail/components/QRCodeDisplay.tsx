@@ -33,6 +33,7 @@ export function QRCodeDisplay({ qrCode, size = 256 }: QRCodeDisplayProps) {
 
   return (
     <div
+      data-testid="qr-code"
       className="inline-block rounded-lg bg-white p-2"
       dangerouslySetInnerHTML={{ __html: svg }}
     />

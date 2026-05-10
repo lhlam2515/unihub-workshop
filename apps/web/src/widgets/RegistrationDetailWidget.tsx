@@ -8,15 +8,14 @@ import { ErrorDisplay } from "@/components/ErrorDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ROUTES from "@/constants/routes";
-import { PaymentReceiptCard } from "@/features/registration-detail/components/PaymentReceiptCard";
 import { QRCodeDisplay } from "@/features/registration-detail/components/QRCodeDisplay";
 import { RegistrationStatusBadge } from "@/features/registration-detail/components/RegistrationStatusBadge";
-import type { Payment, Registration } from "@/types/registration";
+import type { Registration } from "@/types/registration";
+import type { WorkshopDetail } from "@/types/workshop";
 
 interface RegistrationDetailWidgetProps {
   registration: Registration | null;
-  workshop: import("@/types/workshop").WorkshopListItem | null;
-  payment: Payment | null;
+  workshop: WorkshopDetail | null;
   loading: boolean;
   error?: string;
   registrationId: string;
@@ -25,7 +24,6 @@ interface RegistrationDetailWidgetProps {
 export function RegistrationDetailWidget({
   registration,
   workshop,
-  payment,
   loading,
   error,
   registrationId,
@@ -107,8 +105,6 @@ export function RegistrationDetailWidget({
           </Button>
         </div>
       )}
-
-      {payment && <PaymentReceiptCard payment={payment} />}
 
       <div className="flex flex-wrap gap-3">
         {needsPayment && (

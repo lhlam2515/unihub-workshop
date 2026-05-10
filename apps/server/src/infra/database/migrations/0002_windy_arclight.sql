@@ -1,2 +1,0 @@
-ALTER TABLE "registrations" DROP CONSTRAINT "uq_registrations_student_workshop";--> statement-breakpoint
-CREATE UNIQUE INDEX "uq_registrations_student_workshop_active" ON "registrations" USING btree ("student_id","workshop_id") WHERE "registrations"."status" <> 'CANCELLED';

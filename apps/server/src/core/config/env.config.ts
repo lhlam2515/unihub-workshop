@@ -20,7 +20,7 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 
 export const envSchema = z.object({
-  PORT: z.coerce.number().default(3000),
+  PORT: z.coerce.number().default(8000),
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
@@ -106,7 +106,7 @@ export function validateEnv(config: Record<string, unknown>): EnvConfig {
 // ---------------------------------------------------------------------------
 
 export const appConfig = registerAs("app", () => ({
-  port: parseInt(process.env.PORT!, 10) || 3000,
+  port: parseInt(process.env.PORT!, 10) || 8000,
   nodeEnv: process.env.NODE_ENV || "development",
 }));
 

@@ -31,41 +31,35 @@ export class NotificationsService {
   ) {}
 
   /**
-   * List notification logs with filtering and pagination
+   * List notification logs with filtering and cursor pagination
    *
-   * @param filters - Filter criteria (status, channel, type, userId, workshopId)
-   * @param pagination - Page and limit controls
-   * @returns OkResult with paginated notification log response items and total count,
+   * @param filters - Filter criteria (status, channel, from, to) and cursor pagination (cursor, limit)
+   * @returns OkResult with cursor-paginated notification log response items,
    * or FailResult (INTERNAL_ERROR)
    */
-  async listLogs(
-    filters: {
-      status?: string;
-      channel?: string;
-      type?: string;
-      userId?: string;
-      workshopId?: string;
-    },
-    pagination: { page: number; limit: number }
-  ): Promise<
+  async listLogs(filters: {
+    status?: string;
+    channel?: string;
+    from?: string;
+    to?: string;
+    cursor?: string;
+    limit: number;
+  }): Promise<
     Result<{
       items: Record<string, unknown>[];
-      total: number;
-      page: number;
+      nextCursor: string | null;
+      hasMore: boolean;
       limit: number;
     }>
   > {
-    const result = await this.notificationLogsRepo.findMany(
-      filters,
-      pagination
-    );
+    const result = await this.notificationLogsRepo.findMany(filters);
     if (result.isFailure) return Result.fail(result.error);
 
     return Result.ok({
       items: result.data.items.map((log) => NotificationLogResponse.from(log)),
-      total: result.data.total,
-      page: pagination.page,
-      limit: pagination.limit,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
+      limit: filters.limit,
     });
   }
 

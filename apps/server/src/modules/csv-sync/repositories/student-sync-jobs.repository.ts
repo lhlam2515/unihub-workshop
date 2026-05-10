@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 
 import {
   DATABASE_CONNECTION,
@@ -120,37 +120,70 @@ export class StudentSyncJobsRepository {
   }
 
   /**
-   * List sync jobs with pagination, ordered by triggered_at DESC
+   * List sync jobs with cursor-based pagination, ordered by triggered_at DESC
    *
-   * @param pagination - Page and limit controls
-   * @param pagination.page - Current page (1-indexed)
-   * @param pagination.limit - Items per page (max 100)
-   * @returns OkResult with items array and total count, or FailResult (INTERNAL_ERROR)
+   * @param filters - Status filter and cursor controls
+   * @param filters.status - Optional status filter (IN_PROGRESS, SUCCESS, FAILED)
+   * @param filters.cursor - Base64-encoded ISO timestamp for cursor pagination
+   * @param filters.limit - Items per page (max 100)
+   * @returns OkResult with items array, nextCursor, hasMore flag, and limit, or FailResult (INTERNAL_ERROR)
    */
-  async findMany(pagination: {
-    page: number;
-    limit: number;
-  }): Promise<Result<{ items: StudentSyncJob[]; total: number }>> {
+  async findMany(filters: {
+    status?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<
+    Result<{
+      items: StudentSyncJob[];
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
+  > {
     return tryCatch(
-      async (): Promise<{ items: StudentSyncJob[]; total: number }> => {
-        const offset = (pagination.page - 1) * pagination.limit;
+      async (): Promise<{
+        items: StudentSyncJob[];
+        nextCursor: string | null;
+        hasMore: boolean;
+        limit: number;
+      }> => {
+        const conditions: ReturnType<typeof eq>[] = [];
+        const limit = filters.limit ?? 20;
 
-        const [items, countResult] = await Promise.all([
-          this.db
-            .select()
-            .from(this.schema.studentSyncJobs)
-            .orderBy(desc(this.schema.studentSyncJobs.triggeredAt))
-            .limit(pagination.limit)
-            .offset(offset),
-          this.db
-            .select({ count: sql<number>`count(*)` })
-            .from(this.schema.studentSyncJobs),
-        ]);
+        if (filters.status)
+          conditions.push(
+            eq(this.schema.studentSyncJobs.status, filters.status as any)
+          );
 
-        return {
-          items: items,
-          total: Number(countResult[0]?.count ?? 0),
-        };
+        if (filters.cursor) {
+          const cursorDate = new Date(
+            Buffer.from(filters.cursor, "base64").toString("ascii")
+          );
+          conditions.push(
+            lt(this.schema.studentSyncJobs.triggeredAt, cursorDate)
+          );
+        }
+
+        const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+        const items = await this.db
+          .select()
+          .from(this.schema.studentSyncJobs)
+          .where(where)
+          .orderBy(desc(this.schema.studentSyncJobs.triggeredAt))
+          .limit(limit + 1);
+
+        const hasMore = items.length > limit;
+        if (hasMore) items.pop();
+
+        const nextCursor =
+          items.length > 0
+            ? Buffer.from(
+                items[items.length - 1].triggeredAt.toISOString()
+              ).toString("base64")
+            : null;
+
+        return { items, nextCursor, hasMore, limit };
       },
       (err) => systemErrors.internal(err)
     );

@@ -16,7 +16,6 @@
  */
 import { Injectable, Logger } from "@nestjs/common";
 
-import { paymentErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { PaymentGatewayFactory } from "../gateways/payment-gateway.factory";
@@ -43,13 +42,12 @@ export class PaymentGatewayService {
     amount: number,
     metadata: Record<string, unknown>
   ): Promise<Result<GatewayInitiateResult>> {
-    try {
-      const adapter = this.gatewayFactory.getAdapter(gateway);
-      return adapter.initiatePayment(amount, metadata);
-    } catch (err) {
-      this.logger.warn(`No adapter for gateway "${gateway}": ${err}`);
-      return Result.fail(paymentErrors.gatewayError(gateway));
+    const adapterResult = this.gatewayFactory.getAdapter(gateway);
+    if (adapterResult.isFailure) {
+      this.logger.warn(`No adapter for gateway "${gateway}"`);
+      return Result.fail(adapterResult.error);
     }
+    return adapterResult.data.initiatePayment(amount, metadata);
   }
 
   /**
@@ -65,12 +63,11 @@ export class PaymentGatewayService {
     payload: unknown,
     signature: string
   ): Promise<Result<boolean>> {
-    try {
-      const adapter = this.gatewayFactory.getAdapter(gateway);
-      return adapter.verifyHmacSignature(payload, signature);
-    } catch (err) {
-      this.logger.warn(`No adapter for gateway "${gateway}": ${err}`);
-      return Result.fail(paymentErrors.gatewayError(gateway));
+    const adapterResult = this.gatewayFactory.getAdapter(gateway);
+    if (adapterResult.isFailure) {
+      this.logger.warn(`No adapter for gateway "${gateway}"`);
+      return Result.fail(adapterResult.error);
     }
+    return adapterResult.data.verifyHmacSignature(payload, signature);
   }
 }

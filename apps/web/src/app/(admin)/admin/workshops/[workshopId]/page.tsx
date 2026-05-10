@@ -1,5 +1,9 @@
-import { notFound } from "next/navigation";
+"use client";
 
+import { useParams, notFound } from "next/navigation";
+
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import {
   getAdminWorkshop,
   listSpeakers,
@@ -8,35 +12,28 @@ import {
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
-interface PageProps {
-  params: Promise<{ workshopId: string }>;
-}
+export default function AdminWorkshopEditPage() {
+  const { workshopId } = useParams<{ workshopId: string }>();
 
-export default async function AdminWorkshopEditPage({ params }: PageProps) {
-  const { workshopId } = await params;
+  const workshopQuery = useAsyncQuery(["admin-workshop", workshopId], () =>
+    getAdminWorkshop(workshopId)
+  );
+  const speakersQuery = useAsyncQuery(["admin-speakers-edit"], () =>
+    listSpeakers()
+  );
+  const roomsQuery = useAsyncQuery(["admin-rooms-edit"], () => listRooms());
 
-  const [workshopResult, speakersResult, roomsResult] = await Promise.all([
-    getAdminWorkshop(workshopId),
-    listSpeakers(),
-    listRooms(),
-  ]);
-
-  if (workshopResult.isFailure) {
-    notFound();
-  }
-
-  const speakers = speakersResult.isSuccess ? speakersResult.data : [];
-  const rooms = roomsResult.isSuccess ? roomsResult.data : [];
+  if (workshopQuery.error) notFound();
+  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
 
   return (
     <div className="space-y-6">
-      <AdminWorkshopEditWidget workshop={workshopResult.data} />
-
+      <AdminWorkshopEditWidget workshop={workshopQuery.data!} />
       <AdminWorkshopFormWidget
         mode="edit"
-        initialData={workshopResult.data}
-        speakers={speakers}
-        rooms={rooms}
+        initialData={workshopQuery.data!}
+        speakers={speakersQuery.data ?? []}
+        rooms={roomsQuery.data ?? []}
       />
     </div>
   );

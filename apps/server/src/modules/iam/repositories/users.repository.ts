@@ -91,6 +91,7 @@ export class UsersRepository {
    */
   async list(
     role?: string,
+    q?: string,
     page = 1,
     limit = 20
   ): Promise<Result<{ items: User[]; total: number }>> {
@@ -99,6 +100,11 @@ export class UsersRepository {
         const conditions: SQLWrapper[] = [];
         if (role) {
           conditions.push(sql`${this.schema.users.role} = ${role}`);
+        }
+        if (q) {
+          conditions.push(
+            sql`${this.schema.users.email} ILIKE ${"%" + q + "%"}`
+          );
         }
 
         const where = conditions.length > 0 ? and(...conditions) : undefined;

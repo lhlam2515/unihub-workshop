@@ -2,9 +2,14 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const ListWorkshopsQuerySchema = z.object({
-  dateFrom: z.coerce.date().optional(),
-  dateTo: z.coerce.date().optional(),
-  status: z.string().optional(),
+  // Public endpoint params
+  day: z.string().optional(),
+  hasSeats: z.coerce.boolean().optional().default(false),
+  sort: z.string().optional().default("startsAt"),
+  // Admin endpoint params
+  status: z.enum(["DRAFT", "OPEN", "COMPLETED", "CANCELLED"]).optional(),
+  q: z.string().optional(),
+  // Pagination
   cursor: z.string().optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),
 });

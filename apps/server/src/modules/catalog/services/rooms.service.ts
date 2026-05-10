@@ -15,6 +15,7 @@ import { RoomResponseBuilder } from "../dto/room-response.dto";
 import { RoomsRepository } from "../repositories/rooms.repository";
 
 import type { CreateRoomDto } from "../dto/create-room.dto";
+import type { ListRoomsQueryDto } from "../dto/list-rooms-query.dto";
 import type { RoomResponseDto } from "../dto/room-response.dto";
 import type { UpdateRoomDto } from "../dto/update-room.dto";
 
@@ -40,8 +41,10 @@ export class RoomsService {
     return Result.ok(RoomResponseBuilder.from(result.data));
   }
 
-  async listRooms(): Promise<Result<RoomResponseDto[]>> {
-    const result = await this.roomsRepo.findAll();
+  async listRooms(
+    query?: ListRoomsQueryDto
+  ): Promise<Result<RoomResponseDto[]>> {
+    const result = await this.roomsRepo.findAll(query?.q);
     if (result.isFailure) return Result.fail(result.error);
     return Result.ok(result.data.map((r) => RoomResponseBuilder.from(r)));
   }

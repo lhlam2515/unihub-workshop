@@ -24,13 +24,13 @@ const mockSpeakerEntity = {
 const mockSpeakerDto = SpeakerResponseBuilder.from(mockSpeakerEntity);
 
 const createDto = {
-  full_name: "John Doe",
+  fullName: "John Doe",
   title: "Expert Speaker",
   bio: "An experienced speaker",
-  avatar_url: undefined,
+  avatarUrl: undefined,
 };
 
-const updateDto = { full_name: "Jane Doe" };
+const updateDto = { fullName: "Jane Doe" };
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -114,7 +114,7 @@ describe("SpeakersService", () => {
 
     it("sets null for optional fields when not provided", async () => {
       speakersRepo.create.mockResolvedValue(Result.ok(mockSpeakerEntity));
-      const dtoMinimal = { full_name: "John Doe" };
+      const dtoMinimal = { fullName: "John Doe" };
 
       await service.createSpeaker(dtoMinimal);
 
@@ -152,7 +152,7 @@ describe("SpeakersService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.full_name).toBe("Jane Doe");
+        expect(result.data.fullName).toBe("Jane Doe");
       }
     });
 

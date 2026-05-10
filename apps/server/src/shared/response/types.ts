@@ -75,6 +75,7 @@ export type ErrorCode =
   | "WRONG_WORKSHOP"
   | "BATCH_TOO_LARGE"
   | "WORKSHOP_NOT_ASSIGNED"
+  | "INVALID_TIMESTAMP"
   | "INTERNAL_ERROR";
 
 /**
@@ -111,20 +112,19 @@ export interface AppError {
 
 /**
  * Describe pagination metadata returned with list responses
+ *
+ * Matches OpenAPI spec: cursor-based for write-heavy lists,
+ * offset-aware (total) for admin dashboards.
  */
 export interface PaginationMeta {
-  /** Current page index used for navigation. */
-  page: number;
   /** Page size requested by the client. */
   limit: number;
-  /** Total number of items matching the query. */
-  total: number;
-  /** Total number of pages calculated from total and limit. */
-  totalPages: number;
-  /** Whether another page is available after the current one. */
-  hasNextPage: boolean;
-  /** Whether a page exists before the current one. */
-  hasPrevPage: boolean;
+  /** Opaque cursor for the next page. null when on the last page. */
+  nextCursor: string | null;
+  /** Convenience boolean — true when at least one more page exists. */
+  hasMore: boolean;
+  /** Only populated for offset-aware admin endpoints. null for cursor-based pages. */
+  total: number | null;
 }
 
 /**
@@ -183,7 +183,13 @@ export type ApiResponse<T = void> =
 /**
  * Describe the container used for paginated items
  */
+/**
+ * Describe the container used for paginated items
+ *
+ * data is an array, matching OpenAPI spec: `"data": [...]` at the
+ * response envelope level, consumed by the frontend as `success.data.data`.
+ */
 export interface PaginatedData<T> {
   /** Items returned for the current page. */
-  items: T[];
+  data: T[];
 }

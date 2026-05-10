@@ -16,7 +16,7 @@ export function AISummaryPanel({ summary }: AISummaryPanelProps) {
   // Loading states
   if (summary.status === "QUEUED" || summary.status === "PROCESSING") {
     return (
-      <section className="space-y-3">
+      <section data-testid="ai-summary-tab" className="space-y-3">
         <h2 className="text-lg font-semibold">Tóm tắt AI</h2>
         <div className="rounded-xl border p-4">
           <div className="flex items-center gap-2">
@@ -39,7 +39,7 @@ export function AISummaryPanel({ summary }: AISummaryPanelProps) {
 
   // Done state
   return (
-    <section className="space-y-3">
+    <section data-testid="ai-summary-tab" className="space-y-3">
       <h2 className="text-lg font-semibold">Tóm tắt AI</h2>
       <div className="rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
         <div className="flex items-start gap-2">

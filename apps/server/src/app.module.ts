@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { WinstonModule } from "nest-winston";
 import { ZodValidationPipe } from "nestjs-zod";
 
 import {
@@ -16,7 +17,9 @@ import {
   redisConfig,
   validateEnv,
 } from "@/core/config/env.config";
+import { createWinstonLoggerOptions } from "@/core/config/logger.config";
 import { GlobalExceptionFilter } from "@/core/exceptions/global-exception.filter";
+import { FailResultLoggerInterceptor } from "@/core/interceptors/fail-result-logger.interceptor";
 import { ResponseInterceptor } from "@/core/interceptors/response.interceptor";
 
 import { AppController } from "./app.controller";
@@ -35,6 +38,7 @@ import { CsvSyncModule } from "./modules/csv-sync/csv-sync.module";
 import { IamModule } from "./modules/iam/iam.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { PaymentModule } from "./modules/payment/payment.module";
+import { RateLimitGuard } from "./modules/rate-limit/guards/rate-limit.guard";
 import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
 
 /**
@@ -74,6 +78,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
         aiProviderConfig,
       ],
     }),
+    WinstonModule.forRoot(createWinstonLoggerOptions()),
     DatabaseModule,
     RedisModule,
     StorageModule.forRootAsync({
@@ -100,7 +105,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
     AiSummaryModule,
     CsvSyncModule,
     NotificationModule,
-    BackgroundModule,
+    // BackgroundModule,
   ],
   controllers: [AppController],
   providers: [
@@ -114,8 +119,16 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
       useClass: ResponseInterceptor,
     },
     {
+      provide: APP_INTERCEPTOR,
+      useClass: FailResultLoggerInterceptor,
+    },
+    {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
     },
   ],
 })

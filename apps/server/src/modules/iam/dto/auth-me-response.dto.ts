@@ -1,17 +1,17 @@
 /**
  * Current user profile returned by GET /auth/me.
  *
+ * Matches OpenAPI User schema.
  * Fields vary by role:
- * - STUDENT: includes studentId, fullName.
- * - CHECKIN_STAFF: includes allowedWorkshopIds.
- * - BTC: base fields only.
+ * - STUDENT: id = studentId
+ * - CHECKIN_STAFF: includes allowedWorkshopIds
+ * - BTC: base fields only
  */
 export interface AuthMeResponseDto {
-  userId: string;
+  id: string;
   email: string;
-  role: string;
-  studentId?: string;
-  fullName?: string;
+  role: "STUDENT" | "BTC" | "CHECKIN_STAFF";
+  fullName: string;
   allowedWorkshopIds?: string[];
 }
 
@@ -32,18 +32,11 @@ export class AuthMeResponseBuilder {
     }
   ): AuthMeResponseDto {
     const base = {
-      userId: user.userId,
+      id: user.userId,
       email: user.email,
-      role: user.role,
+      role: user.role as "STUDENT" | "BTC" | "CHECKIN_STAFF",
+      fullName: studentProfile?.fullName ?? "",
     };
-
-    if (user.role === "STUDENT" && studentProfile) {
-      return {
-        ...base,
-        studentId: studentProfile.studentId,
-        fullName: studentProfile.fullName,
-      };
-    }
 
     if (user.role === "CHECKIN_STAFF") {
       return {

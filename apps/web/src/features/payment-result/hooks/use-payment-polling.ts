@@ -19,7 +19,7 @@ export type PollState =
  * - `initiated` → (polling) → `succeeded` | `failed` | `unresolved`
  * - If still `initiated` after 15 attempts → `timeout`
  */
-export function usePaymentPolling(paymentId: string | null) {
+export function usePaymentPolling(paymentId: string | null, retryKey?: number) {
   const [payment, setPayment] = useState<Payment | null>(null);
   const [state, setState] = useState<PollState>("initiated");
   const attemptsRef = useRef(0);
@@ -59,7 +59,7 @@ export function usePaymentPolling(paymentId: string | null) {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [paymentId]);
+  }, [paymentId, retryKey]);
 
   return { payment, state };
 }

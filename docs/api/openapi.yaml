@@ -15,7 +15,7 @@ info:
     \ `refresh_token` is also included in the JSON response body\n    (in addition\
     \ to the cookie) because mobile has no cookie jar — app stores it in\n    Android\
     \ Keystore / iOS Keychain.\n- **Idempotency:** `POST /registrations` and `POST\
-    \ /payments` require an\n  `Idempotency-Key: <UUID v4>` **HTTP header** (client-generated,\
+    \ /payments` require an\n  `X-Idempotency-Key: <UUID v4>` **HTTP header** (client-generated,\
     \ reuse on retry).\n  Server uses 3-state lifecycle (`in_progress` / `completed`\
     \ / `unresolved`).\n  See ADR-08, ADR-15.\n- **Optimistic Locking:** Admin updates\
     \ on `workshops` use `ETag` / `If-Match`\n  headers carrying the `version` column.\
@@ -88,7 +88,7 @@ tags:
 - name: Payment
   description: 'Module `payment` — Paid-workshop transactions with Circuit Breaker
 
-    (ADR-07) and Idempotency-Key gateway forward (ADR-08 `unresolved` state).
+    (ADR-07) and X-Idempotency-Key gateway forward (ADR-08 `unresolved` state).
 
     '
 - name: Check-in
@@ -126,6 +126,18 @@ tags:
     payments.
 
     '
+- name: User Admin
+  description: 'Module `iam` (admin write) — User management for BTC role. Role `btc` only.
+
+    List, view, suspend, and revoke tokens for any user in the system.
+
+    '
+- name: Check-in Staff Admin
+  description: 'Module `iam` (admin write) — Workshop assignment for check-in staff. Role `btc` only.
+
+    Manage which workshops each check-in staff member is authorized to scan.
+
+    '
 paths:
   /auth/login:
     post:
@@ -133,7 +145,7 @@ paths:
       - Auth
       summary: Login (student or staff)
       description: "Returns a JWT access token (15 min) and a refresh token (7 days).\n\
-        Server distinguishes account type via the `account_type` field.\n\n## Refresh\
+        Server distinguishes account type via the `accountType` field.\n\n## Refresh\
         \ token transport (`authentication.md` INV-02)\n\nBoth client types receive\
         \ the refresh token, but via different mechanisms:\n\n**Web client:**\n- `access_token`\
         \ in JSON body — kept in JS memory, **not** `localStorage`.\n- `refresh_token`\
@@ -392,7 +404,7 @@ paths:
       tags:
       - Catalog
       summary: List workshops (public)
-      description: 'Returns workshops the student can see. By default, only `status='OPEN'`.
+      description: "Returns workshops the student can see. By default, only `status='OPEN'`.
 
         Heavily cached (10s TTL via Redis cache-aside). Hot endpoint — sized for
 
@@ -403,7 +415,7 @@ paths:
 
         per workshop. Without Bearer, that field is `null`.
 
-        '
+        "
       operationId: listWorkshops
       security:
       - {}
@@ -421,6 +433,11 @@ paths:
         schema:
           type: boolean
           default: false
+      - name: q
+        in: query
+        description: Search by title (ILIKE)
+        schema:
+          type: string
       - name: cursor
         in: query
         schema:
@@ -477,11 +494,11 @@ paths:
       tags:
       - Catalog
       summary: Get workshop detail
-      description: 'Full workshop detail page including speaker bio, room floor plan,
+      description: "Full workshop detail page including speaker bio, room floor plan,
 
         and AI summary (if `summary_status='DONE'`).
 
-        '
+        "
       operationId: getWorkshop
       security:
       - {}
@@ -778,6 +795,67 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
+  /admin/workshops/{workshopId}/emergency-update:
+    patch:
+      tags:
+      - Catalog Admin
+      summary: Emergency update a published workshop
+      description: 'Updates scheduling fields (`roomId`, `startsAt`, `endsAt`) of an
+        already published workshop without changing its status.
+        Re-validates room time conflicts if scheduling fields are modified.
+
+        **Concurrency:** Requires `If-Match` header with the current `version`.
+        Mismatch returns `412 Precondition Failed`.
+
+        **Edge case:** Lowering `seatsTotal` is NOT allowed through this endpoint
+        — use the regular PATCH on draft workshops instead.
+        '
+      operationId: adminEmergencyUpdateWorkshop
+      parameters:
+      - $ref: '#/components/parameters/WorkshopIdPath'
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roomId:
+                  type: string
+                  format: uuid
+                  description: New room UUID. Null to remove assignment.
+                startsAt:
+                  type: string
+                  format: date-time
+                  description: New start time
+                endsAt:
+                  type: string
+                  format: date-time
+                  description: New end time
+              minProperties: 1
+              description: At least one field must be provided.
+      responses:
+        '200':
+          description: Workshop updated successfully
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkshopAdmin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`workshop.room_conflict` — the new room/time overlaps another
+            workshop.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
   /admin/workshops/{workshopId}/cancel:
     post:
       tags:
@@ -849,6 +927,11 @@ paths:
       summary: List speakers
       operationId: adminListSpeakers
       parameters:
+      - name: q
+        in: query
+        description: Search by full name (ILIKE)
+        schema:
+          type: string
       - $ref: '#/components/parameters/CursorParam'
       - $ref: '#/components/parameters/LimitParam'
       responses:
@@ -938,6 +1021,11 @@ paths:
       summary: List rooms
       operationId: adminListRooms
       parameters:
+      - name: q
+        in: query
+        description: Search by name (ILIKE)
+        schema:
+          type: string
       - $ref: '#/components/parameters/CursorParam'
       - $ref: '#/components/parameters/LimitParam'
       responses:
@@ -1017,7 +1105,7 @@ paths:
       summary: Register for a workshop ⭐
       description: "**The most contention-sensitive endpoint.** Single endpoint for\
         \ both\nfree and paid workshops; the server branches internally on\n`workshop.price`.\n\
-        \n## Idempotency (`registration-paid.md` §Bước 2)\n\nThe `Idempotency-Key`\
+        \n## Idempotency (`registration-paid.md` §Bước 2)\n\nThe `X-Idempotency-Key`\
         \ **header** (UUID v4 generated by client) is\nrequired. Lifecycle (3-state,\
         \ ADR-08, ADR-15):\n\n| Server state | What client sees |\n|---|---|\n| `completed`\
         \ | Cached response replayed (idempotent) |\n| `in_progress` (locked) | `409\
@@ -1082,7 +1170,7 @@ paths:
                       currency: VND
                       expiresAt: '2026-05-12T08:45:15+07:00'
         '200':
-          description: 'Idempotent replay — same `Idempotency-Key` header was used
+          description: 'Idempotent replay — same `X-Idempotency-Key` header was used
             and a result
 
             already exists (`status=completed`). Body is the original `201` response.
@@ -1093,15 +1181,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Registration'
         '400':
-          description: '`registration.workshop_not_open` — workshop is not in `status='OPEN'`.
+          description: "`registration.workshop_not_open` — workshop is not in `status='OPEN'`."
 
-            '
+
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: '`request_in_progress` — the `Idempotency-Key` is currently
+          description: '`request_in_progress` — the `X-Idempotency-Key` is currently
             locked
 
             (`status=in_progress`, `locked_until` not yet expired). Back off
@@ -1297,7 +1385,7 @@ paths:
         \ (per-gateway) — if OPEN, return 503 immediately\n   without claiming a new\
         \ key.\n4. Claim / refresh idempotency key (`in_progress`).\n5. Insert `payments`\
         \ record (`status=initiated`).\n6. Call gateway with timeout 5s, forwarding\
-        \ `paymentKey` as the gateway's\n   own `Idempotency-Key` header (prevents\
+        \ `paymentKey` as the gateway's\n   own `X-Idempotency-Key` header (prevents\
         \ double-charge).\n\n## `paymentKey` — body field, not a header\n\nThe `paymentKey`\
         \ is included **in the request body** (per `registration-paid.md`).\nThe client\
         \ must generate it once and **reuse the same key on every retry**.\nGenerating\
@@ -1338,7 +1426,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: '`payment_in_progress` — `Idempotency-Key` is currently `in_progress`
+          description: '`payment_in_progress` — `X-Idempotency-Key` is currently `in_progress`
 
             and `locked_until` has not expired. Back off and retry after
 
@@ -1366,7 +1454,7 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '504':
           description: '`PAYMENT_TIMEOUT` — payment is `unresolved`. **Use the same
-            `Idempotency-Key`
+            `X-Idempotency-Key`
 
             on retry** — do NOT generate a new one. The reconciliation cron job (every
 
@@ -1387,7 +1475,7 @@ paths:
                     idempotencyKey:
                       type: string
                       format: uuid
-                      description: Echo of the request Idempotency-Key header — reuse
+                      description: Echo of the request X-Idempotency-Key header — reuse
                         on retry
                     retryAfter:
                       type: integer
@@ -1540,6 +1628,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /checkin/workshops/{workshopId}/status:
+    get:
+      tags:
+      - Check-in
+      summary: Get workshop check-in status (dashboard)
+      description: |
+        Returns aggregated check-in counts and recent activity for a workshop.
+        Used by the mobile check-in staff dashboard.
+
+        **Authorization:** `workshopId` must be in the staff's
+        `allowedWorkshopIds` (from JWT).
+      parameters:
+      - $ref: '#/components/parameters/WorkshopIdPath'
+      responses:
+        '200':
+          description: Check-in status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckinStatus'
+        '403':
+          description: '`checkin.workshop_not_assigned` — staff is not authorized
+            for this workshop.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /checkins:
     post:
       tags:
@@ -1622,7 +1737,7 @@ paths:
         serves as the per-item idempotency key.
 
 
-        **No `Idempotency-Key` header** — each item has its own `localId`.
+        **No `X-Idempotency-Key` header** — each item has its own `localId`.
 
         Same batch sent twice produces the same result via
 
@@ -1740,12 +1855,9 @@ paths:
       tags:
       - AI Summary
       summary: Manual override of AI-generated text
-      description: 'Sets `summary_status='DONE'` and replaces `summary_text` with
-        the
-
+      description: |
+        Sets `summary_status='DONE'` and replaces `summary_text` with the
         provided value. Useful when the BTC wants to edit the AI output.
-
-        '
       operationId: putSummary
       requestBody:
         required: true
@@ -1997,6 +2109,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /admin/system/jobs/payment-timeout:
+    get:
+      tags:
+      - System Admin
+      summary: Get payment timeout job status
+      description: |
+        Returns the current state of the payment-timeout cron job.
+        Used by BTC to monitor job health and detect stalls.
+      responses:
+        '200':
+          description: Payment timeout job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentTimeoutJobStatus'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/system/jobs/reconciliation:
+    get:
+      tags:
+      - System Admin
+      summary: Get reconciliation job status
+      description: |
+        Returns the current state of the payment-reconciliation cron job.
+        Shows discrepancy counts and last-run timestamps.
+      responses:
+        '200':
+          description: Reconciliation job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconciliationJobStatus'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /admin/payments/reconcile:
     post:
       tags:
@@ -2167,6 +2313,201 @@ paths:
                       $ref: '#/components/schemas/NotificationLog'
                   pagination:
                     $ref: '#/components/schemas/PaginationMeta'
+  /admin/users:
+    get:
+      tags:
+      - User Admin
+      summary: List all users
+      description: |
+        Paginated user list. Supports filtering by role.
+        **Role:** `btc`.
+      operationId: adminListUsers
+      parameters:
+      - name: q
+        in: query
+        description: Search by email (ILIKE)
+        schema:
+          type: string
+      - name: role
+        in: query
+        schema:
+          type: string
+          enum:
+          - STUDENT
+          - BTC
+          - CHECKIN_STAFF
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserResponse'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/users/{id}:
+    get:
+      tags:
+      - User Admin
+      summary: Get user by ID
+      operationId: adminGetUser
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: User detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/users/{id}/status:
+    patch:
+      tags:
+      - User Admin
+      summary: Update user status (activate / suspend)
+      description: |
+        Suspend or re-activate a user account. Suspended users cannot
+        log in or perform any action.
+        **Role:** `btc`.
+      operationId: adminUpdateUserStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusRequest'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/users/{id}/revoke-token:
+    post:
+      tags:
+      - User Admin
+      summary: Revoke all refresh tokens for a user
+      description: |
+        Invalidates all active refresh tokens for the given user,
+        forcing them to re-authenticate.
+        **Role:** `btc`.
+      operationId: adminRevokeUserTokens
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Tokens revoked
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/checkin-staff/{userId}/assign-workshops:
+    post:
+      tags:
+      - Check-in Staff Admin
+      summary: Assign workshops to a check-in staff member
+      description: |
+        Replaces the full set of assigned workshops for a check-in staff
+        member (not incremental). Previously assigned workshops not in
+        the new list are unlinked.
+        **Role:** `btc`.
+      operationId: adminAssignCheckinWorkshops
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignWorkshopsRequest'
+      responses:
+        '200':
+          description: Workshops assigned
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/checkin-staff/{userId}/workshops:
+    get:
+      tags:
+      - Check-in Staff Admin
+      summary: Get workshops assigned to a check-in staff member
+      operationId: adminGetCheckinWorkshops
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: List of assigned workshop IDs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workshopIds:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -2218,7 +2559,7 @@ components:
         type: string
         format: uuid
     IdempotencyKeyHeader:
-      name: Idempotency-Key
+      name: X-Idempotency-Key
       in: header
       required: true
       description: 'Client-generated UUID v4. Generate once before the first attempt;
@@ -2331,47 +2672,116 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
           example:
+            success: false
             error:
-              type: rate_limit_exceeded
-              title: Quá nhiều yêu cầu
-              status: 429
-              detail: Bạn đã gửi quá nhiều lần đăng ký workshop này. Vui lòng thử
-                lại sau 23 giây.
+              code: rate_limit_exceeded
+              message: Bạn đã gửi quá nhiều lần đăng ký workshop này. Vui lòng thử lại sau 23 giây.
+            meta:
+              requestId: req-abc123
+              timestamp: '2026-05-09T12:00:00+07:00'
+              apiVersion: v1
             tier: T3_user_workshop
             retryAfter: 23
   schemas:
     ErrorEnvelope:
       type: object
       required:
+      - success
       - error
+      - meta
       properties:
+        success:
+          type: boolean
+          enum:
+          - false
+          description: Always false for error responses
         error:
           type: object
           required:
-          - type
-          - title
-          - status
+          - code
+          - message
           properties:
-            type:
+            code:
               type: string
-              description: Stable URN for the error class (clients switch on this)
+              description: Stable error code clients can switch on
               example: registration.workshop_full
-            title:
+            message:
               type: string
-              description: Human-readable summary (i18n-friendly key on backend)
+              description: Human-readable error message safe for client display
               example: Workshop đã đầy chỗ
-            status:
-              type: integer
-              example: 409
-            detail:
-              type: string
-              description: Detailed message specific to this occurrence
-            instance:
-              type: string
-              description: URI of the request that produced this error
-            traceId:
-              type: string
-              description: Server-side trace ID for support correlation
+            fieldErrors:
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldError'
+              description: Field-level validation details when applicable
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    SuccessEnvelope:
+      type: object
+      description: Standard success response envelope for all endpoints
+      required:
+      - success
+      - data
+      - meta
+      properties:
+        success:
+          type: boolean
+          enum:
+          - true
+          description: Always true for successful responses
+        data:
+          description: Response payload (schema varies per endpoint)
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    RequestMeta:
+      type: object
+      description: Metadata attached to every API response for tracing
+      required:
+      - requestId
+      - timestamp
+      - apiVersion
+      properties:
+        requestId:
+          type: string
+          description: Correlation ID for request tracing
+          example: req-abc123
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp (RFC 3339)
+        apiVersion:
+          type: string
+          description: API version tag
+          example: v1
+        processingMs:
+          type: integer
+          description: Server-side processing duration in milliseconds
+          example: 42
+    FieldError:
+      type: object
+      description: Field-level validation error details
+      required:
+      - field
+      - rule
+      - message
+      properties:
+        field:
+          type: string
+          description: Field path that failed validation
+          example: email
+        rule:
+          type: string
+          description: Validation rule identifier
+          example: isEmail
+        message:
+          type: string
+          description: Human-readable validation message
+          example: Invalid email format
+        received:
+          description: Raw input value (when safe to expose)
+    PaginationMeta:
     PaginationMeta:
       type: object
       required:
@@ -2412,14 +2822,14 @@ components:
           - STAFF
         studentId:
           type: string
-          description: 'Required when `account_type=student`. MSSV format (e.g., `21127001`).
+          description: 'Required when `accountType=student`. MSSV format (e.g., `21127001`).
 
             '
           example: '21127001'
         email:
           type: string
           format: email
-          description: Required when `account_type=staff`.
+          description: Required when `accountType=staff`.
           example: btc01@unihub.edu.vn
         password:
           type: string
@@ -2880,7 +3290,7 @@ components:
       description: 'Body contains only business fields. Idempotency key is supplied
         via the
 
-        `Idempotency-Key` request header (ADR-15).
+        `X-Idempotency-Key` request header (ADR-15).
 
         '
       properties:
@@ -3016,9 +3426,9 @@ components:
       description: 'Body contains only business fields. Idempotency key is supplied
         via the
 
-        `Idempotency-Key` request header (ADR-15). The server forwards the header
+        `X-Idempotency-Key` request header (ADR-15). The server forwards the header
 
-        value to the payment gateway as its own `Idempotency-Key` (ADR-08 INV-04).
+        value to the payment gateway as its own `X-Idempotency-Key` (ADR-08 INV-04).
 
         '
       properties:
@@ -3464,3 +3874,157 @@ components:
           nullable: true
           description: When CB will transition to HALF_OPEN (OPEN + 30s). `null` if
             not OPEN.
+    PaymentTimeoutJobStatus:
+      type: object
+      required:
+      - pendingCount
+      - timeoutCount
+      - lastRun
+      - nextRun
+      - jobStatus
+      properties:
+        pendingCount:
+          type: integer
+          minimum: 0
+          description: Payments currently in `initiated` state
+        timeoutCount:
+          type: integer
+          minimum: 0
+          description: Payments that exceeded the gateway timeout threshold
+        lastRun:
+          type: string
+          format: date-time
+          description: Last cron execution timestamp
+        nextRun:
+          type: string
+          format: date-time
+          description: Next scheduled cron execution
+        jobStatus:
+          type: string
+          enum:
+          - RUNNING
+          - IDLE
+          - ERROR
+          description: Current health of the cron job
+    ReconciliationJobStatus:
+      type: object
+      required:
+      - totalWorkshops
+      - discrepanciesFound
+      - lastRun
+      - nextRun
+      properties:
+        totalWorkshops:
+          type: integer
+          minimum: 0
+          description: Total workshops with unresolved payments in the scan window
+        discrepanciesFound:
+          type: integer
+          minimum: 0
+          description: Payments whose gateway status differs from DB status
+        lastRun:
+          type: string
+          format: date-time
+          description: Last cron execution timestamp
+        nextRun:
+          type: string
+          format: date-time
+          description: Next scheduled cron execution
+        lastAlert:
+          type: string
+          nullable: true
+          description: Error message from the last failed run, if any
+    CheckinStatus:
+      type: object
+      required:
+      - confirmedCount
+      - checkedInCount
+      - pendingCount
+      properties:
+        confirmedCount:
+          type: integer
+          minimum: 0
+          description: Total confirmed registrations for the workshop
+        checkedInCount:
+          type: integer
+          minimum: 0
+          description: Number of registrations that have been checked in
+        pendingCount:
+          type: integer
+          minimum: 0
+          description: confirmedCount - checkedInCount (students yet to arrive)
+        recentCheckins:
+          type: array
+          description: Up to 20 most recent check-in records
+          items:
+            type: object
+            required:
+            - checkinId
+            - studentName
+            - studentCode
+            - checkedInAt
+            - source
+            properties:
+              checkinId:
+                type: string
+                format: uuid
+              studentName:
+                type: string
+              studentCode:
+                type: string
+              checkedInAt:
+                type: string
+                format: date-time
+              source:
+                type: string
+                description: Check-in source (e.g. 'QR_SCAN', 'MANUAL')
+    UserResponse:
+      type: object
+      required:
+      - userId
+      - email
+      - role
+      - status
+      - createdAt
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+          - STUDENT
+          - BTC
+          - CHECKIN_STAFF
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - SUSPENDED
+        createdAt:
+          type: string
+          format: date-time
+    UpdateUserStatusRequest:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - SUSPENDED
+    AssignWorkshopsRequest:
+      type: object
+      required:
+      - workshopIds
+      properties:
+        workshopIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Full replacement list of workshop UUIDs

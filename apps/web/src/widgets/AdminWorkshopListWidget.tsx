@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -8,19 +9,27 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
 import { PageHeader } from "@/components/PageHeader";
 import { PaginationControls } from "@/components/PaginationControls";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import ROUTES from "@/constants/routes";
 import { BulkActionBar } from "@/features/admin-workshop-management/components/BulkActionBar";
 import { WorkshopAdminTable } from "@/features/admin-workshop-management/components/WorkshopAdminTable";
 import type { PaginatedResult } from "@/lib/api/client";
 import {
   cancelWorkshop,
-  publishWorkshop,
   listAdminWorkshops,
+  publishWorkshop,
 } from "@/lib/api/services/admin";
 import type {
-  WorkshopAdmin,
   AdminWorkshopFilters,
+  WorkshopAdmin,
   WorkshopStatus,
 } from "@/types/workshop";
 
@@ -29,54 +38,89 @@ import type {
 // ---------------------------------------------------------------------------
 
 export interface AdminWorkshopListWidgetProps {
-  initialResult: PaginatedResult<WorkshopAdmin> | null;
-  initialError?: string;
   filters: AdminWorkshopFilters;
 }
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "Tất cả trạng thái" },
+  { value: "DRAFT", label: "Bản nháp" },
+  { value: "OPEN", label: "Đang mở" },
+  { value: "COMPLETED", label: "Hoàn thành" },
+  { value: "CANCELLED", label: "Đã hủy" },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function AdminWorkshopListWidget({
-  initialResult,
-  initialError,
   filters,
 }: AdminWorkshopListWidgetProps) {
   const router = useRouter();
+  const requestIdRef = useRef(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [accumulated, setAccumulated] = useState<WorkshopAdmin[]>(
-    initialResult?.items ?? []
-  );
-  const [pagination, setPagination] = useState(
-    initialResult?.pagination ?? null
-  );
+  const [accumulated, setAccumulated] = useState<WorkshopAdmin[]>([]);
+  const [pagination, setPagination] = useState<
+    PaginatedResult<WorkshopAdmin>["pagination"] | null
+  >(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [searchValue, setSearchValue] = useState(filters.q ?? "");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [initialError, setInitialError] = useState<string | null>(null);
 
-  // Sync accumulated list when server re-renders with new filters
-  const filterKey = JSON.stringify(filters);
-  const prevFilterKey = useRef(filterKey);
   useEffect(() => {
-    if (filterKey !== prevFilterKey.current) {
-      prevFilterKey.current = filterKey;
-      setAccumulated(initialResult?.items ?? []);
-      setPagination(initialResult?.pagination ?? null);
-      setSelectedIds(new Set());
-    }
-  }, [filterKey, initialResult]);
+    setSearchValue(filters.q ?? "");
+  }, [filters.q]);
+
+  useEffect(() => {
+    let isActive = true;
+    const requestId = ++requestIdRef.current;
+
+    setIsInitialLoading(true);
+    setInitialError(null);
+    setLoadMoreError(null);
+    setSelectedIds(new Set());
+    setAccumulated([]);
+    setPagination(null);
+
+    void listAdminWorkshops(filters)
+      .then((result) => {
+        if (!isActive || requestId !== requestIdRef.current) {
+          return;
+        }
+
+        if (result.isFailure) {
+          setInitialError(
+            (result.error as { message?: string })?.message ?? "Lỗi tải dữ liệu"
+          );
+          return;
+        }
+
+        setAccumulated(result.data.items);
+        setPagination(result.data.pagination);
+      })
+      .finally(() => {
+        if (isActive && requestId === requestIdRef.current) {
+          setIsInitialLoading(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [filters]);
 
   // ---- Handlers ----
 
   const applyFilter = useCallback(
     (patch: Partial<AdminWorkshopFilters>) => {
       const params = new URLSearchParams();
-      const merged = { ...filters, ...patch };
-      for (const [k, v] of Object.entries(merged)) {
-        if (v !== undefined && v !== null && v !== "") {
-          params.set(k, String(v));
+      const merged = { ...filters, ...patch, cursor: undefined };
+      for (const [key, value] of Object.entries(merged)) {
+        if (value !== undefined && value !== null && value !== "") {
+          params.set(key, String(value));
         }
       }
       const qs = params.toString();
@@ -89,19 +133,22 @@ export function AdminWorkshopListWidget({
     if (!pagination?.nextCursor || isLoadingMore) return;
     setIsLoadingMore(true);
     setLoadMoreError(null);
+
     try {
       const result = await listAdminWorkshops({
         ...filters,
         cursor: pagination.nextCursor,
       });
+
       if (result.isFailure) {
         setLoadMoreError(
           (result.error as { message?: string })?.message ?? "Lỗi tải thêm"
         );
-      } else {
-        setAccumulated((prev) => [...prev, ...result.data.items]);
-        setPagination(result.data.pagination);
+        return;
       }
+
+      setAccumulated((prev) => [...prev, ...result.data.items]);
+      setPagination(result.data.pagination);
     } catch {
       setLoadMoreError("Lỗi kết nối");
     } finally {
@@ -143,14 +190,15 @@ export function AdminWorkshopListWidget({
 
   // ---- Derived state ----
 
-  const selectedWorkshops = accumulated.filter((w) => selectedIds.has(w.id));
-  const selectedStatuses: WorkshopStatus[] = selectedWorkshops.map(
-    (w) => w.status
+  const selectedWorkshops = accumulated.filter((workshop) =>
+    selectedIds.has(workshop.id)
   );
-  const isFirstLoad = !initialResult && !initialError;
+  const selectedStatuses: WorkshopStatus[] = selectedWorkshops.map(
+    (workshop) => workshop.status
+  );
 
   // ---- Loading ----
-  if (isFirstLoad) {
+  if (isInitialLoading) {
     return (
       <div className="space-y-4">
         <PageHeader title="Quản lý workshop" />
@@ -180,38 +228,41 @@ export function AdminWorkshopListWidget({
       <PageHeader
         title="Quản lý workshop"
         action={
-          <a
-            href={ROUTES.ADMIN_WORKSHOP_NEW}
-            className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            + Tạo workshop
-          </a>
+          <Button asChild>
+            <Link href={ROUTES.ADMIN_WORKSHOP_NEW}>+ Tạo workshop</Link>
+          </Button>
         }
       />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <select
-          className="border-input h-10 rounded-lg border bg-white px-3 text-sm shadow-xs"
-          value={filters.status ?? ""}
-          onChange={(e) =>
+        <Select
+          value={filters.status ?? "all"}
+          onValueChange={(value) =>
             applyFilter({
-              status: (e.target.value as WorkshopStatus) || undefined,
+              status: value === "all" ? undefined : (value as WorkshopStatus),
             })
           }
         >
-          <option value="">Tất cả trạng thái</option>
-          <option value="DRAFT">Bản nháp</option>
-          <option value="OPEN">Đang mở</option>
-          <option value="COMPLETED">Hoàn thành</option>
-          <option value="CANCELLED">Đã hủy</option>
-        </select>
+          <SelectTrigger className="h-10 w-48">
+            <SelectValue placeholder="Tất cả trạng thái" />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Input
           type="date"
           className="h-10 w-44"
           value={filters.day ?? ""}
-          onChange={(e) => applyFilter({ day: e.target.value || undefined })}
+          onChange={(event) =>
+            applyFilter({ day: event.target.value || undefined })
+          }
         />
 
         <div className="relative max-w-xs flex-1">
@@ -220,15 +271,16 @@ export function AdminWorkshopListWidget({
             placeholder="Tìm kiếm..."
             className="h-10 pl-9"
             value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
+            onChange={(event) => setSearchValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
                 applyFilter({ q: searchValue || undefined });
               }
             }}
           />
           {searchValue && (
             <button
+              type="button"
               className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               onClick={() => {
                 setSearchValue("");
@@ -269,7 +321,7 @@ export function AdminWorkshopListWidget({
               pagination={{
                 hasMore: pagination.hasMore,
                 limit: pagination.limit,
-                nextCursor: pagination.nextCursor,
+                nextCursor: pagination.nextCursor ?? null,
                 total: pagination.total ?? accumulated.length,
               }}
               onLoadMore={handleLoadMore}

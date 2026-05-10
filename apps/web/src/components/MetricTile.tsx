@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { memo } from "react";
 
 import { Card } from "@/components/ui/card";
 
@@ -12,7 +13,7 @@ interface MetricTileProps {
   skeleton?: boolean;
 }
 
-export function MetricTile({
+export const MetricTile = memo(function MetricTile({
   label,
   value,
   icon: Icon,
@@ -34,7 +35,7 @@ export function MetricTile({
   }
 
   return (
-    <Card className="flex items-center gap-4 p-5">
+    <Card data-testid="stat-card" className="flex items-center gap-4 p-5">
       {Icon && (
         <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
           <Icon className="h-6 w-6" />
@@ -58,4 +59,4 @@ export function MetricTile({
       </div>
     </Card>
   );
-}
+});

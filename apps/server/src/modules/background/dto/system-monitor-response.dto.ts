@@ -52,7 +52,7 @@ export const CircuitBreakerStatusSchema = z.object({
   failureCount: z.number().int().nonnegative(),
   openedAt: z.date().optional(),
   lastAttempt: z.date().optional(),
-  recoveryDeadline: z.date().optional(),
+  autoCloseAt: z.date().optional(),
 });
 
 export type CircuitBreakerStatusDto = z.infer<

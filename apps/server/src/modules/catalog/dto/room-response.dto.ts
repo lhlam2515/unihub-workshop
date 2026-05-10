@@ -1,48 +1,56 @@
 /**
- * Room Response DTO
+ * Room Response DTOs
  *
- * Shape: full room entity
+ * Matches OpenAPI RoomSummary and Room schemas.
+ * - RoomSummary: nested in WorkshopListItem
+ * - Room: full detail (extends RoomSummary + capacity, facilities, createdAt)
  */
 
 import type { Room } from "@/infra/database/types/event-core.types";
 
-export interface RoomResponseDto {
-  roomId: string;
+/** Nested in WorkshopListItem — id + name + optional building/floor/floorPlanUrl */
+export interface RoomSummaryDto {
+  id: string;
   name: string;
-  building?: string;
-  floor?: number;
+  building: string | null;
+  floor: number | null;
+  floorPlanUrl: string | null;
+}
+
+/** Full room detail — extends RoomSummary with capacity, facilities, createdAt */
+export interface RoomResponseDto extends RoomSummaryDto {
   capacity: number;
-  floorPlanUrl?: string;
-  facilities?: string[];
+  facilities: Record<string, unknown> | null;
+  createdAt: string | null;
 }
 
 export class RoomResponseBuilder {
+  static fromSummary(room: Room): RoomSummaryDto {
+    return {
+      id: room.roomId,
+      name: room.name,
+      building: room.building,
+      floor: room.floor,
+      floorPlanUrl: room.floorPlanUrl,
+    };
+  }
+
   /**
-   * Builds a room response DTO from a database entity.
-   *
-   * Field mapping (camelCase DB -> snake_case API):
-   * - roomId -> room_id
-   * - building/floor/floorPlanUrl: nullish values converted to undefined for clean JSON
-   * - facilities: JSONB record ({ "projector": true, "wifi": true }) converted to a
-   *   string array of keys (["projector", "wifi"]). Null facilities -> undefined.
+   * Builds a full RoomResponseDto from a database entity.
    *
    * @param room - Raw room entity from the database.
    * @returns RoomResponseDto with API-safe fields.
    */
   static from(room: Room): RoomResponseDto {
-    const facilitiesRaw = room.facilities;
-    const facilities: string[] | undefined = facilitiesRaw
-      ? Object.keys(facilitiesRaw)
-      : undefined;
-
     return {
-      roomId: room.roomId,
+      id: room.roomId,
       name: room.name,
-      building: room.building ?? undefined,
-      floor: room.floor ?? undefined,
+      building: room.building,
+      floor: room.floor,
       capacity: room.capacity,
-      floorPlanUrl: room.floorPlanUrl ?? undefined,
-      facilities,
+      floorPlanUrl: room.floorPlanUrl,
+      facilities: room.facilities ?? null,
+      createdAt: room.createdAt ? room.createdAt.toISOString() : null,
     };
   }
 }

@@ -1,11 +1,10 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { RedisService } from "@/infra/redis/redis.service";
-import { seatErrors } from "@/shared/response/errors";
+import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { Result } from "@/shared/response/result";
 
 import { SeatCounterService } from "./seat-counter.service";
-import { WorkshopSlotsRepository } from "../repositories/workshop-slots.repository";
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -14,10 +13,10 @@ import { WorkshopSlotsRepository } from "../repositories/workshop-slots.reposito
 describe("SeatCounterService", () => {
   let service: SeatCounterService;
   let redisService: jest.Mocked<RedisService>;
-  let workshopSlotsRepo: jest.Mocked<WorkshopSlotsRepository>;
+  let workshopsRepo: jest.Mocked<WorkshopsRepository>;
 
   const workshopId = "w-001";
-  const key = "seat:available:w-001";
+  const key = "cache:workshop:w-001:seats";
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -29,14 +28,12 @@ describe("SeatCounterService", () => {
             get: jest.fn(),
             set: jest.fn(),
             del: jest.fn(),
-            incr: jest.fn(),
-            decr: jest.fn(),
           },
         },
         {
-          provide: WorkshopSlotsRepository,
+          provide: WorkshopsRepository,
           useValue: {
-            findByWorkshopId: jest.fn(),
+            getSeatVersion: jest.fn(),
           },
         },
       ],
@@ -44,7 +41,7 @@ describe("SeatCounterService", () => {
 
     service = module.get<SeatCounterService>(SeatCounterService);
     redisService = module.get(RedisService);
-    workshopSlotsRepo = module.get(WorkshopSlotsRepository);
+    workshopsRepo = module.get(WorkshopsRepository);
   });
 
   afterEach(() => {
@@ -60,98 +57,67 @@ describe("SeatCounterService", () => {
 
       await service.initialize(workshopId, 30);
 
-      expect(redisService.set).toHaveBeenCalledWith(key, "30");
+      expect(redisService.set).toHaveBeenCalledWith(key, "30", 10);
     });
   });
 
   // ---------------------------------------------------------------------------
-  // getAvailable
+  // getCachedSeats
   // ---------------------------------------------------------------------------
-  describe("getAvailable", () => {
+  describe("getCachedSeats", () => {
     it("returns value from Redis when available (FR-F04-002)", async () => {
       redisService.get.mockResolvedValue("25");
 
-      const result = await service.getAvailable(workshopId);
+      const result = await service.getCachedSeats(workshopId);
 
       expect(result).toBe(25);
       expect(redisService.get).toHaveBeenCalledWith(key);
-      expect(workshopSlotsRepo.findByWorkshopId).not.toHaveBeenCalled();
+      expect(workshopsRepo.getSeatVersion).not.toHaveBeenCalled();
     });
 
     it("falls back to DB when Redis key is missing", async () => {
       redisService.get.mockResolvedValue(null);
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(
-        Result.ok({
-          totalCapacity: 30,
-          confirmedCount: 10,
-        } as any)
+      workshopsRepo.getSeatVersion.mockResolvedValue(
+        Result.ok({ version: 1, seatsAvailable: 30 })
       );
 
-      const result = await service.getAvailable(workshopId);
+      const result = await service.getCachedSeats(workshopId);
 
-      expect(result).toBe(20); // 30 - 10
+      expect(result).toBe(30);
+      expect(redisService.set).toHaveBeenCalledWith(key, "30", 10);
     });
 
     it("returns 0 when Redis and DB both have no data", async () => {
       redisService.get.mockResolvedValue(null);
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
+      workshopsRepo.getSeatVersion.mockResolvedValue(Result.ok(null));
 
-      const result = await service.getAvailable(workshopId);
+      const result = await service.getCachedSeats(workshopId);
 
       expect(result).toBe(0);
     });
 
     it("returns 0 when DB query fails", async () => {
       redisService.get.mockResolvedValue(null);
-      workshopSlotsRepo.findByWorkshopId.mockResolvedValue(
+      workshopsRepo.getSeatVersion.mockResolvedValue(
         Result.fail({ code: "INTERNAL_ERROR" } as any)
       );
 
-      const result = await service.getAvailable(workshopId);
+      const result = await service.getCachedSeats(workshopId);
 
       expect(result).toBe(0);
     });
   });
 
   // ---------------------------------------------------------------------------
-  // decrement
+  // invalidateCache
   // ---------------------------------------------------------------------------
-  describe("decrement", () => {
-    it("returns ok when counter stays non-negative (FR-F04-002)", async () => {
-      redisService.decr.mockResolvedValue(29);
+  describe("invalidateCache", () => {
+    it("deletes the Redis cache key", async () => {
+      redisService.del.mockResolvedValue(1);
 
-      const result = await service.decrement(workshopId);
+      await service.invalidateCache(workshopId);
 
-      expect(result.isSuccess).toBe(true);
-      expect(redisService.decr).toHaveBeenCalledWith(key);
-      expect(redisService.incr).not.toHaveBeenCalled();
-    });
-
-    it("rolls back and fails when counter goes below 0 (BR-018)", async () => {
-      // DECR brings it to -1 (sold out)
-      redisService.decr.mockResolvedValue(-1);
-      redisService.incr.mockResolvedValue(0);
-
-      const result = await service.decrement(workshopId);
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error).toEqual(seatErrors.unavailable(workshopId));
-      // Rollback: incr should have been called
-      expect(redisService.incr).toHaveBeenCalledWith(key);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // increment
-  // ---------------------------------------------------------------------------
-  describe("increment", () => {
-    it("increments the counter and returns new value", async () => {
-      redisService.incr.mockResolvedValue(26);
-
-      const result = await service.increment(workshopId);
-
-      expect(result).toBe(26);
-      expect(redisService.incr).toHaveBeenCalledWith(key);
+      expect(redisService.del).toHaveBeenCalledWith(key);
     });
   });
 

@@ -294,8 +294,8 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 **Primary actions:**
 
 - `[Đăng ký]` (chỉ hiện khi `seatsAvailable > 0 && !isRegistered && status='OPEN'`)
-  - Sinh `Idempotency-Key = crypto.randomUUID()` ở client
-  - `POST /api/v1/registrations` header `Idempotency-Key`, body `{workshopId}`
+  - Sinh `X-Idempotency-Key = crypto.randomUUID()` ở client
+  - `POST /api/v1/registrations` header `X-Idempotency-Key`, body `{workshopId}`
   - Nếu `nextStep.action === null` (free workshop) → toast success → redirect `/me/registrations/{id}`
   - Nếu `nextStep.action === 'create_payment'` (paid) → redirect `/me/registrations/{id}/pay`
 - `[Xem QR]` (nếu đã đăng ký) → navigate `/me/registrations/{myRegistrationId}`
@@ -308,7 +308,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 **Business rules:**
 
 - BR-W03.1 Pre-check `seatsAvailable` ở client để fail-fast UX, nhưng server vẫn là source of truth (race với cache TTL 10s)
-- BR-W03.2 Idempotency-Key sinh **trước** khi mở dialog confirm — re-click không sinh key mới
+- BR-W03.2 X-Idempotency-Key sinh **trước** khi mở dialog confirm — re-click không sinh key mới
 - BR-W03.3 Nếu workshop bị `cancelled` ngay khi đang xem → poll detect → banner "Workshop đã bị hủy"
 - BR-W03.4 Workshop `status='DRAFT'` không truy cập được public → 404
 
@@ -347,7 +347,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 
 - `GET /api/v1/workshops/{id}` (initial, cache 10s)
 - `GET /api/v1/workshops/{id}/availability` (polling 10s khi user idle ở screen — chỉ trong 5 phút trước `startsAt`)
-- `POST /api/v1/registrations` (header `Idempotency-Key`, body `{workshopId}`)
+- `POST /api/v1/registrations` (header `X-Idempotency-Key`, body `{workshopId}`)
 
 ---
 
@@ -484,8 +484,8 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 **Primary actions:**
 
 - `[Thanh toán]`
-  - Sinh `Idempotency-Key = crypto.randomUUID()` (lưu vào sessionStorage cùng key `registrationId`)
-  - `POST /api/v1/payments` header `Idempotency-Key`, body `{registrationId, gateway, returnUrl: window.location.origin + '/payment-result'}`
+  - Sinh `X-Idempotency-Key = crypto.randomUUID()` (lưu vào sessionStorage cùng key `registrationId`)
+  - `POST /api/v1/payments` header `X-Idempotency-Key`, body `{registrationId, gateway, returnUrl: window.location.origin + '/payment-result'}`
   - Server response:
     - 200 succeeded (sync MOCK) → redirect `/payment-result?paymentId=...&status=succeeded`
     - 302/redirect URL từ gateway → external redirect (browser tự follow)
@@ -498,9 +498,9 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 
 **Business rules:**
 
-- BR-W06.1 **Idempotency-Key sinh ở client trước request đầu tiên** (ADR-08, ADR-15) — KHÔNG sinh lại khi retry
+- BR-W06.1 **X-Idempotency-Key sinh ở client trước request đầu tiên** (ADR-08, ADR-15) — KHÔNG sinh lại khi retry
 - BR-W06.2 Nếu sessionStorage đã có key cho registrationId này → reuse nguyên key (browser refresh trong khi đang chờ gateway)
-- BR-W06.3 Idempotency-Key TTL 24h (server-side); client phải clear sau khi `succeeded` confirm
+- BR-W06.3 X-Idempotency-Key TTL 24h (server-side); client phải clear sau khi `succeeded` confirm
 - BR-W06.4 CB OPEN → page hiển thị, nhưng `[Thanh toán]` disabled + banner — listing workshop khác vẫn hoạt động (graceful degradation, đúng với requirement)
 - BR-W06.5 Registration phải ở status `pending` mới vào được; nếu đã `paid`/`cancelled` → redirect tương ứng
 
@@ -537,7 +537,7 @@ Key assumptions (xem chi tiết trong Ambiguity Log):
 
 - `GET /api/v1/registrations/{id}` (load summary)
 - `GET /api/v1/admin/system/circuit-breaker` — *KHÔNG, đây là admin-only*. Thay vào đó, server returns 503 PAYMENT_GATEWAY_OPEN khi POST → client biết qua error code, không cần endpoint riêng cho student.
-- `POST /api/v1/payments` (header `Idempotency-Key`)
+- `POST /api/v1/payments` (header `X-Idempotency-Key`)
 - `DELETE /api/v1/registrations/{id}` (cancel option)
 
 ---

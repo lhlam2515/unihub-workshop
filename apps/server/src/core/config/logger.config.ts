@@ -4,6 +4,8 @@ import { inspect } from "util";
 import { WinstonModule } from "nest-winston";
 import * as winston from "winston";
 
+import type { WinstonModuleOptions } from "nest-winston";
+
 const { combine, timestamp, errors, json, printf, colorize } = winston.format;
 
 const formatLogValue = (value: unknown, fallback = ""): string => {
@@ -30,7 +32,7 @@ const consoleFormat = combine(
   })
 );
 
-export const winstonLogger = WinstonModule.createLogger({
+export const createWinstonLoggerOptions = (): WinstonModuleOptions => ({
   level: process.env.LOG_LEVEL || "info",
   defaultMeta: { service: "unihub-api" },
   transports: [
@@ -48,3 +50,7 @@ export const winstonLogger = WinstonModule.createLogger({
       : []),
   ],
 });
+
+export const winstonLogger = WinstonModule.createLogger(
+  createWinstonLoggerOptions()
+);

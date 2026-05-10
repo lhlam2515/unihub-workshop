@@ -45,7 +45,7 @@ export function TicketCard({ ticket }: TicketCardProps) {
       </View>
 
       {/* QR code block */}
-      <View className="bg-border/15 mt-1 gap-1.5 rounded-2xl p-3.5">
+      <View className="mt-1 gap-1.5 rounded-2xl bg-border/15 p-3.5">
         <Text className="text-[10px] font-bold tracking-widest text-muted-foreground">
           MÃ QR
         </Text>

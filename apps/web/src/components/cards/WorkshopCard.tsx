@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock, MapPin, Ticket, User } from "lucide-react";
+import { memo } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +48,7 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-export function WorkshopCard({
+export const WorkshopCard = memo(function WorkshopCard({
   workshop,
   onClick,
   className,
@@ -58,6 +59,7 @@ export function WorkshopCard({
 
   return (
     <Card
+      data-testid="workshop-card"
       size="sm"
       className={cn(
         "cursor-pointer transition-shadow hover:shadow-lg",
@@ -78,7 +80,9 @@ export function WorkshopCard({
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <CardTitle className="truncate">{workshop.title}</CardTitle>
+            <CardTitle data-testid="workshop-title" className="truncate">
+              {workshop.title}
+            </CardTitle>
             <CardDescription>
               <span className="flex items-center gap-1">
                 <Clock className="size-3" />
@@ -106,7 +110,10 @@ export function WorkshopCard({
       <CardContent>
         <div className="flex flex-col gap-3">
           {/* Speaker */}
-          <div className="flex items-center gap-2">
+          <div
+            data-testid="workshop-speaker"
+            className="flex items-center gap-2"
+          >
             <Avatar size="sm">
               {workshop.speaker?.avatarUrl ? (
                 <AvatarImage
@@ -136,7 +143,10 @@ export function WorkshopCard({
 
           {/* Room + Seats + Price */}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground flex items-center gap-1 text-xs">
+            <span
+              data-testid="workshop-room"
+              className="text-muted-foreground flex items-center gap-1 text-xs"
+            >
               <MapPin className="size-3" />
               {workshop.room
                 ? `${workshop.room.name}${workshop.room.building ? ` - ${workshop.room.building}` : ""}`
@@ -167,4 +177,4 @@ export function WorkshopCard({
       </CardContent>
     </Card>
   );
-}
+});

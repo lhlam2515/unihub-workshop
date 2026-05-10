@@ -212,7 +212,7 @@ Một process duy nhất, nhiều module với ranh giới enforce tại compile
 
 ### 1. Quyết định
 
-**Client-generated idempotency key** (UUID v4, sinh một lần trước khi gửi, không sinh lại khi retry). Key lưu trong PostgreSQL bảng `idempotency_keys` (schema → `database-schema.md`). Key được **forward đến payment gateway** như `Idempotency-Key` header — đây là quyết định phân biệt ADR-08 với idempotency registration ở ADR-03.
+**Client-generated idempotency key** (UUID v4, sinh một lần trước khi gửi, không sinh lại khi retry). Key lưu trong PostgreSQL bảng `idempotency_keys` (schema → `database-schema.md`). Key được **forward đến payment gateway** như `X-Idempotency-Key` header — đây là quyết định phân biệt ADR-08 với idempotency registration ở ADR-03.
 
 **3 trạng thái:**
 
@@ -570,10 +570,10 @@ Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thá
 
 | Endpoint              | Header                       | Ghi chú                            |
 | --------------------- | ---------------------------- | ---------------------------------- |
-| `POST /registrations` | `Idempotency-Key: <UUID v4>` | Dedup lần đăng ký                  |
-| `POST /payments`      | `Idempotency-Key: <UUID v4>` | Dedup + server forward đến gateway |
+| `POST /registrations` | `X-Idempotency-Key: <UUID v4>` | Dedup lần đăng ký                  |
+| `POST /payments`      | `X-Idempotency-Key: <UUID v4>` | Dedup + server forward đến gateway |
 
-Cả hai endpoint dùng cùng header name `Idempotency-Key` — thống nhất convention, không phân biệt field name theo endpoint. Server forward giá trị này làm `Idempotency-Key` header khi gọi ra payment gateway (ADR-08 INV-04).
+Cả hai endpoint dùng cùng header name `X-Idempotency-Key` — thống nhất convention, không phân biệt field name theo endpoint. Server forward giá trị này làm `X-Idempotency-Key` header khi gọi ra payment gateway (ADR-08 INV-04).
 
 Cơ chế xử lý và 3-state lifecycle (`IN_PROGRESS` / `COMPLETED` / `UNRESOLVED`) không thay đổi — ADR-15 chỉ quyết định transport location, không quyết định behavior.
 
@@ -583,9 +583,9 @@ Cơ chế xử lý và 3-state lifecycle (`IN_PROGRESS` / `COMPLETED` / `UNRESOL
 
 **Tách biệt transport concern và business concern.** Idempotency key không phải dữ liệu nghiệp vụ của operation — nó là cơ chế an toàn ở tầng transport. Header là nơi đúng theo HTTP semantics: `Authorization`, `Content-Type`, `Cache-Control` đều là transport metadata. Body chỉ chứa business payload.
 
-**Không bị log cùng request body.** Hầu hết middleware, API Gateway (Nginx, Kong), và log aggregator mặc định capture body khi debug. Header có thể được filter riêng khỏi log (ví dụ: redact `Idempotency-Key` khỏi production log). Key không phải secret nhưng giảm noise trong audit trail.
+**Không bị log cùng request body.** Hầu hết middleware, API Gateway (Nginx, Kong), và log aggregator mặc định capture body khi debug. Header có thể được filter riêng khỏi log (ví dụ: redact `X-Idempotency-Key` khỏi production log). Key không phải secret nhưng giảm noise trong audit trail.
 
-**Nhất quán với industry standard.** Stripe, Adyen, Square — tất cả đều dùng `Idempotency-Key` header. Developer tích hợp API đã quen với pattern này. Documentation và tooling (Postman, Insomnia) xử lý header idempotency tốt hơn body field.
+**Nhất quán với industry standard.** Stripe, Adyen, Square — tất cả đều dùng `X-Idempotency-Key` header. Developer tích hợp API đã quen với pattern này. Documentation và tooling (Postman, Insomnia) xử lý header idempotency tốt hơn body field.
 
 **Body schema gọn hơn.** `POST /registrations` body chỉ cần `{ "workshop_id": "..." }`. Không trộn lẫn business field với infrastructure field trong cùng object — giảm nhầm lẫn khi client build request.
 
@@ -595,7 +595,7 @@ Cơ chế xử lý và 3-state lifecycle (`IN_PROGRESS` / `COMPLETED` / `UNRESOL
 
 **`registration-paid.md` cần cập nhật AC.** Spec gốc viết AC với `body.idempotency_key`. Sau ADR-15, AC-03 và AC-04 phải test qua header. Đây là cost thực của quyết định — không phải zero-cost như nếu giữ body.
 
-**Mobile client cần cấu hình interceptor.** Expo app phải thêm `Idempotency-Key` vào axios/fetch interceptor cho đúng hai endpoint. Không phức tạp nhưng cần explicit — không tự nhiên như điền body field.
+**Mobile client cần cấu hình interceptor.** Expo app phải thêm `X-Idempotency-Key` vào axios/fetch interceptor cho đúng hai endpoint. Không phức tạp nhưng cần explicit — không tự nhiên như điền body field.
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 

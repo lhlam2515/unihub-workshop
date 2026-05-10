@@ -17,7 +17,18 @@ import {
   tokenStore,
   onForcedLogout,
 } from "@/lib/api/client";
-import type { User, LoginRequest, LoginResponse } from "@/types/auth";
+import { acquireFreshToken } from "@/lib/api/client/auth-session";
+import type { Role, User, LoginRequest, LoginResponse } from "@/types/auth";
+
+// Backend returns uppercase roles (STUDENT, BTC, CHECKIN_STAFF).
+// Normalize to lowercase (student, btc, checkin_staff) for frontend guards.
+function normalizeRole(role: string): Role {
+  return role.toLowerCase() as Role;
+}
+
+function normalizeUser(raw: User): User {
+  return { ...raw, role: normalizeRole(raw.role) };
+}
 
 // ---------------------------------------------------------------------------
 // State & Context shape
@@ -45,29 +56,62 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  // Derive initial loading state from token presence to avoid synchronous setState in effect
-  const [isLoading, setIsLoading] = useState(() => tokenStore.get() !== null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // ---- Mount: check existing token ----
+  // ---- Mount: try to restore session via refresh token ----
   useEffect(() => {
-    const token = tokenStore.get();
-    if (!token) return;
+    let cancelled = false;
 
-    // Validate existing token & fetch profile
-    api
-      .get<User>("/auth/me")
-      .then(setUser)
-      .catch(() => {
-        // Token invalid / expired — silent refresh will handle this
-        // If refresh also fails, onForcedLogout will fire
-      })
-      .finally(() => setIsLoading(false));
+    async function init() {
+      const pathname = window.location.pathname;
+
+      // Skip refresh on login pages — user is explicitly trying to log in
+      if (pathname === ROUTES.LOGIN || pathname === ROUTES.ADMIN_LOGIN) {
+        return;
+      }
+
+      const token = tokenStore.get();
+      if (!token) {
+        // No in-memory token (e.g. after F5) — try silent refresh via HttpOnly cookie
+        try {
+          await acquireFreshToken();
+        } catch {
+          // No valid refresh cookie — user is not authenticated
+          return;
+        }
+      }
+
+      if (cancelled) return;
+
+      // Fetch user profile with the (existing or freshly refreshed) token
+      try {
+        const profile = await api.get<User>("/auth/me");
+        if (!cancelled) setUser(normalizeUser(profile));
+      } catch {
+        // Profile fetch failed even with a token — user needs to log in
+      }
+    }
+
+    init().finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ---- Forced logout handler (refresh token invalid) ----
   const handleForcedLogout = useCallback(() => {
     setUser(null);
-    router.push(ROUTES.LOGIN);
+    const pathname = window.location.pathname;
+    // Already on a login page — stay put
+    if (pathname === ROUTES.LOGIN || pathname === ROUTES.ADMIN_LOGIN) {
+      return;
+    }
+    router.push(
+      pathname.startsWith("/admin") ? ROUTES.ADMIN_LOGIN : ROUTES.LOGIN
+    );
   }, [router]);
 
   useEffect(() => {
@@ -79,8 +123,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(
     async (credentials: LoginRequest): Promise<User> => {
       const session = await apiLogin<LoginRequest, LoginResponse>(credentials);
-      setUser(session.user);
-      return session.user;
+      const normalized = normalizeUser(session.user);
+      setUser(normalized);
+      return normalized;
     },
     []
   );

@@ -116,7 +116,9 @@ export function WorkshopDetailWidget({
         {/* Hero */}
         <div className="mb-8 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold">{workshop.title}</h1>
+            <h1 data-testid="workshop-title" className="text-2xl font-bold">
+              {workshop.title}
+            </h1>
             <Badge
               variant={
                 workshop.status === "CANCELLED"
@@ -159,7 +161,10 @@ export function WorkshopDetailWidget({
         {workshop.description && (
           <section className="mb-8 space-y-3">
             <h2 className="text-lg font-semibold">Mô tả</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
+            <p
+              data-testid="workshop-description"
+              className="text-muted-foreground text-sm leading-relaxed"
+            >
               {workshop.description}
             </p>
           </section>
@@ -173,7 +178,7 @@ export function WorkshopDetailWidget({
             initialAvailable={workshop.seatsAvailable}
             initialTotal={workshop.seatsTotal}
           />
-          <AISummaryPanel summary={workshop.summary} />
+          {workshop.summary && <AISummaryPanel summary={workshop.summary} />}
           <SpeakerBio speaker={workshop.speaker} />
           <RoomInfo room={workshop.room} />
         </div>

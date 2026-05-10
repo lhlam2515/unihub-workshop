@@ -15,7 +15,7 @@ import type { RegistrationListItem } from "@/types/registration";
 
 interface CancelConfirmDialogProps {
   open: boolean;
-  registration: RegistrationListItem;
+  registration: RegistrationListItem | null;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }
@@ -38,7 +38,7 @@ export function CancelConfirmDialog({
   };
 
   const needsRefund =
-    registration.status === "PAID" || registration.status === "CONFIRMED";
+    registration?.status === "PAID" || registration?.status === "CONFIRMED";
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -47,7 +47,7 @@ export function CancelConfirmDialog({
           <DialogTitle>Hủy đăng ký</DialogTitle>
           <DialogDescription>
             Bạn có chắc muốn hủy đăng ký workshop{" "}
-            <strong>{registration.workshop.title}</strong>?
+            <strong>{registration?.workshop.title}</strong>?
           </DialogDescription>
         </DialogHeader>
 

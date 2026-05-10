@@ -337,7 +337,7 @@ describe("UsersRepository", () => {
       };
       Object.assign(mockDb, thenable);
 
-      await repository.list(undefined, 2, 10);
+      await repository.list(undefined, undefined, 2, 10);
 
       expect(mockDb.limit).toHaveBeenCalledWith(10);
       expect(mockDb.offset).toHaveBeenCalledWith(10); // (page - 1) * limit = 10

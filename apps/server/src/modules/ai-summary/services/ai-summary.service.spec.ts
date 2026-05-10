@@ -1,6 +1,8 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
+import { StorageService } from "@/infra/storage/storage.service";
 import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
+import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { Result } from "@/shared/response/result";
 
 import { AiSummaryService } from "./ai-summary.service";
@@ -20,6 +22,14 @@ const mockAiSummariesRepo = {
   upsert: jest.fn(),
   updateStatus: jest.fn(),
   findByDocumentId: jest.fn(),
+};
+
+const mockStorageService = {
+  uploadFile: jest.fn(),
+};
+
+const mockWorkshopsRepo = {
+  findById: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -57,6 +67,8 @@ describe("AiSummaryService", () => {
         AiSummaryService,
         { provide: PdfSummaryPipeline, useValue: mockPdfSummaryPipeline },
         { provide: AiSummariesRepository, useValue: mockAiSummariesRepo },
+        { provide: StorageService, useValue: mockStorageService },
+        { provide: WorkshopsRepository, useValue: mockWorkshopsRepo },
       ],
     }).compile();
 

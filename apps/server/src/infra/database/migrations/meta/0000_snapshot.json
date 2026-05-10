@@ -1,5 +1,5 @@
 {
-  "id": "c8f8bf44-3053-41ec-ae62-2da2ab76c7f8",
+  "id": "ed851748-1bef-41f9-a09c-53cdfe692f2b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -47,11 +47,11 @@
         },
         "status": {
           "name": "status",
-          "type": "ai_summary_status",
+          "type": "summary_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'PENDING'"
+          "default": "'NONE'"
         },
         "generated_at": {
           "name": "generated_at",
@@ -100,7 +100,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"ai_summaries\".\"status\" IN ('PENDING', 'PROCESSING')",
+          "where": "\"ai_summaries\".\"status\" IN ('QUEUED', 'PROCESSING')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -224,7 +224,7 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -254,7 +254,7 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'PENDING'"
+          "default": "'SENT'"
         },
         "payload": {
           "name": "payload",
@@ -325,26 +325,13 @@
             }
           ],
           "isUnique": false,
-          "where": "\"notification_logs\".\"status\" = 'PENDING'",
+          "where": "\"notification_logs\".\"status\" IN ('FAILED', 'TIMEOUT')",
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "notification_logs_user_id_users_user_id_fk": {
-          "name": "notification_logs_user_id_users_user_id_fk",
-          "tableFrom": "notification_logs",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "notification_logs_workshop_id_workshops_workshop_id_fk": {
           "name": "notification_logs_workshop_id_workshops_workshop_id_fk",
           "tableFrom": "notification_logs",
@@ -863,6 +850,13 @@
           "notNull": true,
           "default": 0
         },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
@@ -937,13 +931,13 @@
           "name": "speaker_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "room_id": {
           "name": "room_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "starts_at": {
           "name": "starts_at",
@@ -957,24 +951,24 @@
           "primaryKey": false,
           "notNull": true
         },
-        "capacity": {
-          "name": "capacity",
-          "type": "smallint",
+        "seats_total": {
+          "name": "seats_total",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "is_paid": {
-          "name": "is_paid",
-          "type": "boolean",
+        "seats_available": {
+          "name": "seats_available",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": true
         },
         "price": {
           "name": "price",
-          "type": "numeric(12, 2)",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'0'"
         },
         "status": {
           "name": "status",
@@ -989,6 +983,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -1006,24 +1007,37 @@
         }
       },
       "indexes": {
-        "idx_workshops_status": {
-          "name": "idx_workshops_status",
+        "idx_workshops_status_starts": {
+          "name": "idx_workshops_status_starts",
           "columns": [
             {
               "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "starts_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": false,
+          "where": "\"workshops\".\"status\" = 'OPEN'",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "idx_workshops_starts_at": {
-          "name": "idx_workshops_starts_at",
+        "idx_workshops_room": {
+          "name": "idx_workshops_room",
           "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "starts_at",
               "isExpression": false,
@@ -1041,21 +1055,6 @@
           "columns": [
             {
               "expression": "speaker_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_workshops_room_id": {
-          "name": "idx_workshops_room_id",
-          "columns": [
-            {
-              "expression": "room_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1089,7 +1088,6 @@
             }
           ],
           "isUnique": true,
-          "where": "\"workshops\".\"status\" = 'PUBLISHED'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1122,15 +1120,15 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "workshops_created_by_users_user_id_fk": {
-          "name": "workshops_created_by_users_user_id_fk",
+        "workshops_created_by_staff_staff_id_fk": {
+          "name": "workshops_created_by_staff_staff_id_fk",
           "tableFrom": "workshops",
-          "tableTo": "users",
+          "tableTo": "staff",
           "columnsFrom": [
             "created_by"
           ],
           "columnsTo": [
-            "user_id"
+            "staff_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -1144,23 +1142,114 @@
           "name": "chk_workshops_time",
           "value": "\"workshops\".\"ends_at\" > \"workshops\".\"starts_at\""
         },
-        "chk_workshops_capacity": {
-          "name": "chk_workshops_capacity",
-          "value": "\"workshops\".\"capacity\" > 0"
+        "chk_workshops_seats_total": {
+          "name": "chk_workshops_seats_total",
+          "value": "\"workshops\".\"seats_total\" > 0"
+        },
+        "chk_workshops_seats_available": {
+          "name": "chk_workshops_seats_available",
+          "value": "\"workshops\".\"seats_available\" >= 0 AND \"workshops\".\"seats_available\" <= \"workshops\".\"seats_total\""
         },
         "chk_workshops_price": {
           "name": "chk_workshops_price",
-          "value": "(\"workshops\".\"is_paid\" = false AND \"workshops\".\"price\" IS NULL) OR (\"workshops\".\"is_paid\" = true AND \"workshops\".\"price\" > 0)"
+          "value": "\"workshops\".\"price\" >= 0"
         }
       },
       "isRLSEnabled": false
     },
-    "public.students": {
-      "name": "students",
+    "public.idempotency_keys": {
+      "name": "idempotency_keys",
       "schema": "",
       "columns": {
-        "student_id": {
-          "name": "student_id",
+        "key_hash": {
+          "name": "key_hash",
+          "type": "varchar(64)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "idempotency_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'IN_PROGRESS'"
+        },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response_body": {
+          "name": "response_body",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_code": {
+          "name": "status_code",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locked_until": {
+          "name": "locked_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "NOW() + INTERVAL '30 seconds'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_idempotency_stale": {
+          "name": "idx_idempotency_stale",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "locked_until",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.checkin_staff_assignments": {
+      "name": "checkin_staff_assignments",
+      "schema": "",
+      "columns": {
+        "assignment_id": {
+          "name": "assignment_id",
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
@@ -1170,43 +1259,14 @@
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
-        },
-        "student_code": {
-          "name": "student_code",
-          "type": "varchar(20)",
-          "primaryKey": false,
           "notNull": true
         },
-        "full_name": {
-          "name": "full_name",
-          "type": "varchar(255)",
+        "workshop_ids": {
+          "name": "workshop_ids",
+          "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
-        },
-        "faculty": {
-          "name": "faculty",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "class_year": {
-          "name": "class_year",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email_edu": {
-          "name": "email_edu",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_synced_at": {
-          "name": "last_synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "created_at": {
           "name": "created_at",
@@ -1224,8 +1284,8 @@
         }
       },
       "indexes": {
-        "idx_students_user_id": {
-          "name": "idx_students_user_id",
+        "idx_checkin_staff_assignments_user": {
+          "name": "idx_checkin_staff_assignments_user",
           "columns": [
             {
               "expression": "user_id",
@@ -1238,12 +1298,298 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        }
+      },
+      "foreignKeys": {
+        "checkin_staff_assignments_user_id_users_user_id_fk": {
+          "name": "checkin_staff_assignments_user_id_users_user_id_fk",
+          "tableFrom": "checkin_staff_assignments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_checkin_staff_assignments_user": {
+          "name": "uq_checkin_staff_assignments_user",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.device_tokens": {
+      "name": "device_tokens",
+      "schema": "",
+      "columns": {
+        "device_token_id": {
+          "name": "device_token_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
-        "idx_students_student_code": {
-          "name": "idx_students_student_code",
+        "student_id": {
+          "name": "student_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform": {
+          "name": "platform",
+          "type": "platform",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "last_seen": {
+          "name": "last_seen",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_device_tokens_student": {
+          "name": "idx_device_tokens_student",
           "columns": [
             {
-              "expression": "student_code",
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"device_tokens\".\"is_active\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_device_tokens_token": {
+          "name": "idx_device_tokens_token",
+          "columns": [
+            {
+              "expression": "token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "device_tokens_student_id_students_student_id_fk": {
+          "name": "device_tokens_student_id_students_student_id_fk",
+          "tableFrom": "device_tokens",
+          "tableTo": "students",
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "student_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "device_tokens_token_unique": {
+          "name": "device_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.staff": {
+      "name": "staff",
+      "schema": "",
+      "columns": {
+        "staff_id": {
+          "name": "staff_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "staff_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_staff_role": {
+          "name": "idx_staff_role",
+          "columns": [
+            {
+              "expression": "role",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"staff\".\"is_active\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_staff_email": {
+          "name": "idx_staff_email",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "staff_email_unique": {
+          "name": "staff_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.students": {
+      "name": "students",
+      "schema": "",
+      "columns": {
+        "student_id": {
+          "name": "student_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_students_email": {
+          "name": "idx_students_email",
+          "columns": [
+            {
+              "expression": "email",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1254,11 +1600,11 @@
           "method": "btree",
           "with": {}
         },
-        "idx_students_email_edu": {
-          "name": "idx_students_email_edu",
+        "idx_students_user_id": {
+          "name": "idx_students_user_id",
           "columns": [
             {
-              "expression": "email_edu",
+              "expression": "user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1286,22 +1632,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uq_students_student_code": {
-          "name": "uq_students_student_code",
-          "nullsNotDistinct": false,
-          "columns": [
-            "student_code"
-          ]
-        },
-        "uq_students_user_id": {
-          "name": "uq_students_user_id",
-          "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1423,15 +1754,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "student_id": {
           "name": "student_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1536,19 +1861,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "checkin_records_ticket_id_tickets_ticket_id_fk": {
-          "name": "checkin_records_ticket_id_tickets_ticket_id_fk",
-          "tableFrom": "checkin_records",
-          "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "ticket_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "checkin_records_student_id_students_student_id_fk": {
           "name": "checkin_records_student_id_students_student_id_fk",
           "tableFrom": "checkin_records",
@@ -1591,11 +1903,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "uq_checkin_ticket_workshop": {
-          "name": "uq_checkin_ticket_workshop",
+        "uq_checkin_registration_workshop": {
+          "name": "uq_checkin_registration_workshop",
           "nullsNotDistinct": false,
           "columns": [
-            "ticket_id",
+            "registration_id",
             "workshop_id"
           ]
         }
@@ -1646,7 +1958,8 @@
         },
         "sync_status": {
           "name": "sync_status",
-          "type": "varchar(20)",
+          "type": "offline_sync_status",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'PENDING'"
@@ -1669,12 +1982,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "offline_checkin_queue_sync_status_check": {
-          "name": "offline_checkin_queue_sync_status_check",
-          "value": "\"offline_checkin_queue\".\"sync_status\" IN ('PENDING', 'SYNCED', 'CONFLICT')"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.payments": {
@@ -1696,7 +2004,7 @@
         },
         "student_id": {
           "name": "student_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1726,11 +2034,11 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'PENDING'"
+          "default": "'INITIATED'"
         },
         "idempotency_key": {
           "name": "idempotency_key",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1838,7 +2146,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"payments\".\"status\" = 'PENDING'",
+          "where": "\"payments\".\"status\" = 'INITIATED'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1873,15 +2181,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uq_payments_idempotency": {
-          "name": "uq_payments_idempotency",
-          "nullsNotDistinct": false,
-          "columns": [
-            "idempotency_key"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "chk_payments_amount": {
@@ -1904,7 +2204,7 @@
         },
         "student_id": {
           "name": "student_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1920,7 +2220,13 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'PENDING_PAYMENT'"
+          "default": "'PENDING'"
+        },
+        "qr_code": {
+          "name": "qr_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "registered_at": {
           "name": "registered_at",
@@ -1947,6 +2253,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
@@ -1956,6 +2269,28 @@
         }
       },
       "indexes": {
+        "uq_registrations_student_workshop_active": {
+          "name": "uq_registrations_student_workshop_active",
+          "columns": [
+            {
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "workshop_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"registrations\".\"status\" <> 'CANCELLED'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_registrations_student_id": {
           "name": "idx_registrations_student_id",
           "columns": [
@@ -2000,6 +2335,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_registrations_qr_code": {
+          "name": "idx_registrations_qr_code",
+          "columns": [
+            {
+              "expression": "qr_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2032,12 +2382,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "uq_registrations_student_workshop": {
-          "name": "uq_registrations_student_workshop",
+        "registrations_qr_code_unique": {
+          "name": "registrations_qr_code_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "student_id",
-            "workshop_id"
+            "qr_code"
           ]
         }
       },
@@ -2165,16 +2514,6 @@
     }
   },
   "enums": {
-    "public.ai_summary_status": {
-      "name": "ai_summary_status",
-      "schema": "public",
-      "values": [
-        "PENDING",
-        "PROCESSING",
-        "DONE",
-        "FAILED"
-      ]
-    },
     "public.checkin_source": {
       "name": "checkin_source",
       "schema": "public",
@@ -2208,7 +2547,8 @@
       "values": [
         "PENDING",
         "SENT",
-        "FAILED"
+        "FAILED",
+        "TIMEOUT"
       ]
     },
     "public.notification_type": {
@@ -2221,7 +2561,19 @@
         "WORKSHOP_CANCELLED",
         "PAYMENT_SUCCESS",
         "PAYMENT_FAILED",
-        "CHECKIN_REMINDER"
+        "PAYMENT_CONFIRMED_LATE",
+        "PAYMENT_FAILED_RECONCILED",
+        "CHECKIN_REMINDER",
+        "CSV_IMPORT_COMPLETED_WITH_ERRORS"
+      ]
+    },
+    "public.offline_sync_status": {
+      "name": "offline_sync_status",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "SYNCED",
+        "CONFLICT"
       ]
     },
     "public.payment_gateway": {
@@ -2238,21 +2590,47 @@
       "name": "payment_status",
       "schema": "public",
       "values": [
-        "PENDING",
-        "SUCCESS",
+        "INITIATED",
+        "SUCCEEDED",
         "FAILED",
-        "REFUNDED",
-        "TIMEOUT"
+        "UNRESOLVED"
+      ]
+    },
+    "public.platform": {
+      "name": "platform",
+      "schema": "public",
+      "values": [
+        "IOS",
+        "ANDROID"
       ]
     },
     "public.registration_status": {
       "name": "registration_status",
       "schema": "public",
       "values": [
-        "PENDING_PAYMENT",
+        "PENDING",
         "CONFIRMED",
-        "CANCELLED",
-        "WAITLISTED"
+        "PAID",
+        "CANCELLED"
+      ]
+    },
+    "public.staff_role": {
+      "name": "staff_role",
+      "schema": "public",
+      "values": [
+        "BTC",
+        "CHECKIN_STAFF"
+      ]
+    },
+    "public.summary_status": {
+      "name": "summary_status",
+      "schema": "public",
+      "values": [
+        "NONE",
+        "QUEUED",
+        "PROCESSING",
+        "DONE",
+        "FAILED"
       ]
     },
     "public.sync_error_reason": {
@@ -2288,7 +2666,7 @@
       "schema": "public",
       "values": [
         "STUDENT",
-        "ORGANIZER",
+        "BTC",
         "CHECKIN_STAFF"
       ]
     },
@@ -2306,9 +2684,18 @@
       "schema": "public",
       "values": [
         "DRAFT",
-        "PUBLISHED",
+        "OPEN",
         "CANCELLED",
         "COMPLETED"
+      ]
+    },
+    "public.idempotency_status": {
+      "name": "idempotency_status",
+      "schema": "public",
+      "values": [
+        "IN_PROGRESS",
+        "COMPLETED",
+        "UNRESOLVED"
       ]
     }
   },

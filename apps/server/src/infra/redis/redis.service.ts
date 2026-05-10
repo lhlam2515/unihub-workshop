@@ -19,7 +19,12 @@
  *
  * Redis key blueprint reference: `docs/blueprint/data/redis-keys.md`
  */
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
@@ -43,6 +48,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   /** DB2 — rate limit (volatile-ttl eviction policy) */
   private rateLimitClient!: Redis;
 
+  private readonly logger = new Logger(RedisService.name);
+
   constructor(private readonly configService: ConfigService) {}
 
   /**
@@ -60,6 +67,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.client = new Redis(url);
     this.queueClient = new Redis(url);
     this.rateLimitClient = new Redis(url);
+
+    // Prevent process crash on Redis connection errors
+    this.client.on("error", (err) =>
+      this.logger.error("Redis client (DB0) error", err)
+    );
+    this.queueClient.on("error", (err) =>
+      this.logger.error("Redis queue client (DB1) error", err)
+    );
+    this.rateLimitClient.on("error", (err) =>
+      this.logger.error("Redis rate-limit client (DB2) error", err)
+    );
+
     // Note: Database selection (SELECT command) is skipped because managed Redis services
     // (Upstash, Redis Cloud, etc.) typically only support database 0. Logical separation
     // is achieved through distinct client instances, which is sufficient for this use case.

@@ -1,38 +1,49 @@
-import { notFound } from "next/navigation";
+"use client";
 
+import dynamic from "next/dynamic";
+import { useParams, notFound } from "next/navigation";
+
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getAdminWorkshop, getWorkshopStats } from "@/lib/api/services/admin";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
-import { AdminWorkshopStatsWidget } from "@/widgets/AdminWorkshopStatsWidget";
 
-interface PageProps {
-  params: Promise<{ workshopId: string }>;
-}
-
-export default async function AdminWorkshopStatsPage({ params }: PageProps) {
-  const { workshopId } = await params;
-
-  const [workshopResult, statsResult] = await Promise.all([
-    getAdminWorkshop(workshopId),
-    getWorkshopStats(workshopId),
-  ]);
-
-  if (workshopResult.isFailure) {
-    notFound();
+const AdminWorkshopStatsWidget = dynamic(
+  () =>
+    import("@/widgets/AdminWorkshopStatsWidget").then((mod) => ({
+      default: mod.AdminWorkshopStatsWidget,
+    })),
+  {
+    loading: () => <ContentLoader count={3} />,
+    ssr: false,
   }
+);
 
-  const workshop = workshopResult.data;
+export default function AdminWorkshopStatsPage() {
+  const { workshopId } = useParams<{ workshopId: string }>();
+
+  const workshopQuery = useAsyncQuery(
+    ["admin-workshop-stats", workshopId],
+    () => getAdminWorkshop(workshopId)
+  );
+  const statsQuery = useAsyncQuery(
+    ["admin-workshop-stats-data", workshopId],
+    () => getWorkshopStats(workshopId)
+  );
+
+  if (workshopQuery.error) notFound();
+  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
 
   return (
     <div className="space-y-6">
-      <AdminWorkshopEditWidget workshop={workshop} activeTab="stats" />
+      <AdminWorkshopEditWidget
+        workshop={workshopQuery.data!}
+        activeTab="stats"
+      />
       <AdminWorkshopStatsWidget
-        workshop={workshop}
-        initialStats={statsResult.isSuccess ? statsResult.data : null}
-        initialError={
-          statsResult.isFailure
-            ? (statsResult.error as { message?: string })?.message
-            : undefined
-        }
+        workshop={workshopQuery.data!}
+        initialStats={statsQuery.data ?? null}
+        initialError={statsQuery.error?.message}
       />
     </div>
   );

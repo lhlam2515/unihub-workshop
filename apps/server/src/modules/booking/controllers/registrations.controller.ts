@@ -20,6 +20,8 @@ import { Roles } from "@/shared/decorators/roles.decorator";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
+import { ListRegistrationsQueryDto } from "../dto/list-registrations-query.dto";
+import { ListAdminRegistrationsQueryDto } from "../dto/list-admin-registrations-query.dto";
 import { RegistrationsService } from "../services/registrations.service";
 
 @Controller("registrations")
@@ -33,7 +35,7 @@ export class RegistrationsController {
    * POST /registrations
    *
    * @param dto - Zod-validated body containing the target workshop_id (UUID).
-   * @param idempotencyKey - Idempotency-Key header value for safe retry.
+   * @param idempotencyKey - X-Idempotency-Key header value for safe retry.
    * @param user - JWT payload providing student identity.
    * @returns HTTP 201 with RegistrationDto on success, or error response.
    */
@@ -49,7 +51,11 @@ export class RegistrationsController {
     @IdempotencyKey() idempotencyKey: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.register(user.sub, dto, idempotencyKey);
+    return this.registrationsService.register(
+      user.studentId!,
+      dto,
+      idempotencyKey
+    );
   }
 
   /**
@@ -67,15 +73,9 @@ export class RegistrationsController {
   @Get()
   async getMyRegistrations(
     @CurrentUser() user: JwtPayload,
-    @Query("status") status?: string,
-    @Query("page") page?: string,
-    @Query("limit") limit?: string
+    @Query() query: ListRegistrationsQueryDto
   ) {
-    return this.registrationsService.getMyRegistrations(user.sub, {
-      status,
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-    });
+    return this.registrationsService.getMyRegistrations(user.studentId!, query);
   }
 
   /**
@@ -93,7 +93,7 @@ export class RegistrationsController {
     @Param("id") id: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.getRegistrationDetail(user.sub, id);
+    return this.registrationsService.getRegistrationDetail(user.studentId!, id);
   }
 
   /**
@@ -114,6 +114,32 @@ export class RegistrationsController {
     @Param("id") id: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.cancelRegistration(user.sub, id);
+    return this.registrationsService.cancelRegistration(user.studentId!, id);
+  }
+
+  /**
+   * Lists registrations for a workshop (admin view).
+   *
+   * GET /admin/workshops/{workshopId}/registrations
+   *
+   * **Owned by booking module** despite the URL prefix.
+   * Role: BTC only.
+   *
+   * @param workshopId - UUID of the workshop.
+   * @param status - Optional status filter.
+   * @param cursor - Pagination cursor.
+   * @param limit - Page size.
+   * @returns Paginated list of RegistrationAdminDto.
+   */
+  @Roles("BTC")
+  @Get("/admin/workshops/:workshopId/registrations")
+  async adminListRegistrations(
+    @Param("workshopId") workshopId: string,
+    @Query() query: ListAdminRegistrationsQueryDto
+  ) {
+    return this.registrationsService.getRegistrationsForWorkshop(
+      workshopId,
+      query
+    );
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, lt, gte } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -12,7 +12,22 @@ import { systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
 
 export interface RegistrationWithWorkshopTitle extends Registration {
-  workshop_title: string;
+  workshopTitle: string;
+  workshopStartsAt: Date | null;
+  workshopEndsAt: Date | null;
+  workshopSeatsTotal: number | null;
+  workshopSeatsAvailable: number | null;
+  workshopPrice: number | null;
+  workshopStatus: string | null;
+  speakerId: string | null;
+  speakerFullName: string | null;
+  speakerTitle: string | null;
+  speakerAvatarUrl: string | null;
+  roomId: string | null;
+  roomName: string | null;
+  roomBuilding: string | null;
+  roomFloor: number | null;
+  roomFloorPlanUrl: string | null;
 }
 
 export interface CancelResult {
@@ -75,7 +90,7 @@ export class RegistrationsRepository {
    * Excludes registrations with CANCELLED status via raw SQL comparison to
    * allow re-registration after cancellation without hitting a unique constraint.
    *
-   * @param studentId - The UUID of the student.
+   * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param workshopId - The UUID of the workshop.
    * @returns OkResult with the Registration entity, or null if no active registration exists.
    * - May return FailResult with INTERNAL_ERROR on database failure.
@@ -245,35 +260,64 @@ export class RegistrationsRepository {
    */
   async findMyRegistrations(
     studentId: string,
-    statusFilter?: string | null,
-    pagination?: { page?: number; limit?: number }
+    filters?: {
+      status?: string[];
+      upcoming?: boolean;
+      cursor?: string;
+      limit?: number;
+    }
   ): Promise<
-    Result<{ items: RegistrationWithWorkshopTitle[]; total: number }>
+    Result<{
+      items: RegistrationWithWorkshopTitle[];
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
   > {
     return tryCatch(
       async () => {
-        const page = pagination?.page ?? 1;
-        const limit = pagination?.limit ?? 20;
-        const offset = (page - 1) * limit;
-
+        const limit = filters?.limit ?? 20;
         const conditions = [eq(this.schema.registrations.studentId, studentId)];
-        if (statusFilter) {
+
+        if (filters?.status && filters.status.length > 0) {
           conditions.push(
-            eq(this.schema.registrations.status, statusFilter as any)
+            inArray(this.schema.registrations.status, filters.status as any[])
           );
         }
 
-        const [countResult] = await this.db
-          .select({ total: sql<number>`count(*)` })
-          .from(this.schema.registrations)
-          .where(and(...conditions));
+        if (filters?.upcoming) {
+          conditions.push(gte(this.schema.workshops.startsAt, new Date()));
+        }
 
-        const total = Number(countResult?.total ?? 0);
+        if (filters?.cursor) {
+          const cursorDate = new Date(
+            Buffer.from(filters.cursor, "base64").toString("ascii")
+          );
+          conditions.push(
+            lt(this.schema.registrations.registeredAt, cursorDate)
+          );
+        }
 
         const rows = await this.db
           .select({
             registration: this.schema.registrations,
+            workshopId: this.schema.workshops.workshopId,
             workshopTitle: this.schema.workshops.title,
+            workshopStartsAt: this.schema.workshops.startsAt,
+            workshopEndsAt: this.schema.workshops.endsAt,
+            workshopSeatsTotal: this.schema.workshops.seatsTotal,
+            workshopSeatsAvailable: this.schema.workshops.seatsAvailable,
+            workshopPrice: this.schema.workshops.price,
+            workshopStatus: this.schema.workshops.status,
+            speakerId: this.schema.speakers.speakerId,
+            speakerFullName: this.schema.speakers.fullName,
+            speakerTitle: this.schema.speakers.title,
+            speakerAvatarUrl: this.schema.speakers.avatarUrl,
+            roomId: this.schema.rooms.roomId,
+            roomName: this.schema.rooms.name,
+            roomBuilding: this.schema.rooms.building,
+            roomFloor: this.schema.rooms.floor,
+            roomFloorPlanUrl: this.schema.rooms.floorPlanUrl,
           })
           .from(this.schema.registrations)
           .leftJoin(
@@ -283,17 +327,49 @@ export class RegistrationsRepository {
               this.schema.workshops.workshopId
             )
           )
+          .leftJoin(
+            this.schema.speakers,
+            eq(this.schema.workshops.speakerId, this.schema.speakers.speakerId)
+          )
+          .leftJoin(
+            this.schema.rooms,
+            eq(this.schema.workshops.roomId, this.schema.rooms.roomId)
+          )
           .where(and(...conditions))
           .orderBy(desc(this.schema.registrations.registeredAt))
-          .limit(limit)
-          .offset(offset);
+          .limit(limit + 1);
+
+        const hasMore = rows.length > limit;
+        if (hasMore) rows.pop();
 
         const items: RegistrationWithWorkshopTitle[] = rows.map((row) => ({
           ...row.registration,
-          workshop_title: row.workshopTitle ?? "",
+          workshopTitle: row.workshopTitle ?? "",
+          workshopStartsAt: row.workshopStartsAt,
+          workshopEndsAt: row.workshopEndsAt,
+          workshopSeatsTotal: row.workshopSeatsTotal ?? null,
+          workshopSeatsAvailable: row.workshopSeatsAvailable ?? null,
+          workshopPrice: row.workshopPrice ? Number(row.workshopPrice) : null,
+          workshopStatus: row.workshopStatus ?? null,
+          speakerId: row.speakerId ?? null,
+          speakerFullName: row.speakerFullName ?? null,
+          speakerTitle: row.speakerTitle ?? null,
+          speakerAvatarUrl: row.speakerAvatarUrl ?? null,
+          roomId: row.roomId ?? null,
+          roomName: row.roomName ?? null,
+          roomBuilding: row.roomBuilding ?? null,
+          roomFloor: row.roomFloor ?? null,
+          roomFloorPlanUrl: row.roomFloorPlanUrl ?? null,
         }));
 
-        return { items, total };
+        const nextCursor =
+          items.length > 0
+            ? Buffer.from(
+                items[items.length - 1].registeredAt.toISOString()
+              ).toString("base64")
+            : null;
+
+        return { items, nextCursor, hasMore, limit };
       },
       (err) => systemErrors.internal(err)
     );
@@ -366,6 +442,102 @@ export class RegistrationsRepository {
             )
           );
         return count;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Finds registrations for a workshop with student info and check-in status.
+   *
+   * Used by the admin registration listing endpoint.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @param filters - Optional status filter and pagination.
+   * @returns OkResult with items array, or FailResult with INTERNAL_ERROR.
+   */
+  async findByWorkshopId(
+    workshopId: string,
+    filters?: { status?: string[]; cursor?: string; limit?: number }
+  ): Promise<
+    Result<{
+      items: Array<{
+        registrationId: string;
+        workshopId: string;
+        studentId: string;
+        status: string;
+        registeredAt: Date;
+        studentName: string;
+        studentEmail: string;
+        checkedInAt: Date | null;
+      }>;
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
+  > {
+    return tryCatch(
+      async () => {
+        const limit = filters?.limit ?? 20;
+        const conditions = [
+          eq(this.schema.registrations.workshopId, workshopId),
+        ];
+        if (filters?.status && filters.status.length > 0) {
+          conditions.push(
+            inArray(this.schema.registrations.status, filters.status as any[])
+          );
+        }
+
+        if (filters?.cursor) {
+          const cursorDate = new Date(
+            Buffer.from(filters.cursor, "base64").toString("ascii")
+          );
+          conditions.push(
+            lt(this.schema.registrations.registeredAt, cursorDate)
+          );
+        }
+
+        const rows = await this.db
+          .select({
+            registrationId: this.schema.registrations.registrationId,
+            workshopId: this.schema.registrations.workshopId,
+            studentId: this.schema.registrations.studentId,
+            status: this.schema.registrations.status,
+            registeredAt: this.schema.registrations.registeredAt,
+            studentName: this.schema.students.fullName,
+            studentEmail: this.schema.students.email,
+            checkedInAt: this.schema.checkinRecords.checkedInAt,
+          })
+          .from(this.schema.registrations)
+          .leftJoin(
+            this.schema.students,
+            eq(
+              this.schema.registrations.studentId,
+              this.schema.students.studentId
+            )
+          )
+          .leftJoin(
+            this.schema.checkinRecords,
+            eq(
+              this.schema.registrations.registrationId,
+              this.schema.checkinRecords.registrationId
+            )
+          )
+          .where(and(...conditions))
+          .orderBy(desc(this.schema.registrations.registeredAt))
+          .limit(limit + 1);
+
+        const hasMore = rows.length > limit;
+        if (hasMore) rows.pop();
+
+        const nextCursor =
+          rows.length > 0
+            ? Buffer.from(
+                rows[rows.length - 1].registeredAt.toISOString()
+              ).toString("base64")
+            : null;
+
+        return { items: rows as any, nextCursor, hasMore, limit };
       },
       (err) => systemErrors.internal(err)
     );

@@ -27,7 +27,7 @@ export interface User {
  * - `accountType="staff"` requires `email`.
  */
 export interface LoginRequest {
-  accountType: "student" | "staff";
+  accountType: "STUDENT" | "STAFF";
   studentId?: string;
   email?: string;
   password: string;

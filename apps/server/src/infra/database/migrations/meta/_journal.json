@@ -5,44 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1777316348582,
-      "tag": "0000_chilly_reptil",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1777519952008,
-      "tag": "0001_familiar_gideon",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1777586707393,
-      "tag": "0002_windy_arclight",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1778190232841,
-      "tag": "0003_lovely_mattie_franklin",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1778191542066,
-      "tag": "0004_little_naoko",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "dialect": "postgresql",
-      "when": 1744032000000,
-      "tag": "0005_add_csv_import_notification",
+      "when": 1778261689006,
+      "tag": "0000_warm_robin_chapel",
       "breakpoints": true
     }
   ]

@@ -3,7 +3,8 @@ import { AuthMeResponseBuilder } from "./auth-me-response.dto";
 /**
  * Response returned by POST /auth/login.
  *
- * Contains the access token (Bearer) with 15-minute expiry, optional refresh token,
+ * Matches OpenAPI LoginResponse schema.
+ * Contains the access token (Bearer) with 15-minute expiry, nullable refresh token,
  * and the user's role alongside their basic profile. The refresh token is also set
  * as an HttpOnly cookie by the controller for the WEB flow.
  */
@@ -11,8 +12,8 @@ export interface LoginResponseDto {
   accessToken: string;
   tokenType: "Bearer";
   expiresIn: number;
-  refreshToken?: string;
-  role: string;
+  refreshToken: string | null;
+  role: "STUDENT" | "BTC" | "CHECKIN_STAFF";
   user: ReturnType<typeof AuthMeResponseBuilder.from>;
 }
 
@@ -23,7 +24,7 @@ export class LoginResponseBuilder {
   static from(
     tokenPair: {
       accessToken: string;
-      refreshToken?: string;
+      refreshToken: string | null;
       expiresIn: number;
     },
     user: {
@@ -42,7 +43,7 @@ export class LoginResponseBuilder {
       tokenType: "Bearer",
       expiresIn: tokenPair.expiresIn,
       refreshToken: tokenPair.refreshToken,
-      role: user.role,
+      role: user.role as "STUDENT" | "BTC" | "CHECKIN_STAFF",
       user: AuthMeResponseBuilder.from(user, studentProfile),
     };
   }

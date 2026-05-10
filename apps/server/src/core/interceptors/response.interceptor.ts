@@ -15,19 +15,24 @@ import { Result } from "@/shared/response/result";
 import type { Request, Response } from "express";
 
 /**
- * Determines whether a Result payload has a paginated shape.
+ * Determines whether a Result payload has a cursor-based paginated shape.
+ *
+ * Matches CursorPaginationResult: { items, nextCursor, hasMore, limit }.
  */
-function isPaginatedShape(
-  data: unknown
-): data is { items: unknown[]; total: number; page: number; limit: number } {
+function isCursorPaginatedShape(data: unknown): data is {
+  items: unknown[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  limit: number;
+} {
   if (data === null || data === undefined || typeof data !== "object") {
     return false;
   }
   const obj = data as Record<string, unknown>;
   return (
     Array.isArray(obj.items) &&
-    Number.isFinite(obj.total) &&
-    Number.isFinite(obj.page) &&
+    (obj.nextCursor === null || typeof obj.nextCursor === "string") &&
+    typeof obj.hasMore === "boolean" &&
     Number.isFinite(obj.limit)
   );
 }
@@ -55,12 +60,12 @@ export class ResponseInterceptor implements NestInterceptor {
           ? requestIdHeader[0]
           : requestIdHeader;
 
-        // Handle paginated results (data has items + total + page + limit)
-        if (value.isSuccess && isPaginatedShape(value.data)) {
-          const { items, total, page, limit } = value.data;
+        // Handle cursor-based paginated results (CursorPaginationResult)
+        if (value.isSuccess && isCursorPaginatedShape(value.data)) {
+          const { items, nextCursor, hasMore, limit } = value.data;
           const [statusCode, body] = paginatedResultToHttpResponse(
-            Result.ok({ items, total }),
-            { page, limit },
+            Result.ok({ items }),
+            { limit, nextCursor, hasMore },
             requestId
           );
           response.status(statusCode);

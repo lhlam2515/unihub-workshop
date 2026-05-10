@@ -16,6 +16,7 @@ import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { UsersService } from "../services/users.service";
 
+import type { ListUsersQueryDto } from "../dto/list-users-query.dto";
 import type { UpdateUserStatusDto } from "../dto/update-user-status.dto";
 
 @Controller("admin/users")
@@ -31,15 +32,8 @@ export class UsersAdminController {
    * Returns a paginated list of users, optionally filtered by role.
    */
   @Get()
-  async listUsers(
-    @Query("role") role?: string,
-    @Query("page") page?: string,
-    @Query("limit") limit?: string
-  ) {
-    return this.usersService.listUsers(role, {
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 20,
-    });
+  async listUsers(@Query() query: ListUsersQueryDto) {
+    return this.usersService.listUsers(query);
   }
 
   /**

@@ -84,7 +84,7 @@ export function AdminDashboardWidget({
   const data = initialResult!;
 
   return (
-    <div className="space-y-6">
+    <div data-testid="stats-overview" className="space-y-6">
       <PageHeader
         title="Tổng quan"
         description={`Tổng số workshop: ${data.totalWorkshops}`}

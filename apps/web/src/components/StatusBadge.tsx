@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { cn } from "@/lib/utils";
 
 type StatusVariant = "workshop" | "registration" | "payment";
@@ -33,7 +35,7 @@ const variantMap: Record<StatusVariant, Record<string, string>> = {
 
 const fallbackStyle = "bg-gray-100 text-gray-700 border-gray-300";
 
-export function StatusBadge({
+export const StatusBadge = memo(function StatusBadge({
   status,
   variant = "registration",
   className,
@@ -51,4 +53,4 @@ export function StatusBadge({
       {status}
     </span>
   );
-}
+});

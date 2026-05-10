@@ -1,22 +1,19 @@
-export const dynamic = "force-dynamic";
+"use client";
 
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { getCircuitBreakers } from "@/lib/api/services/admin";
 import { AdminSystemWidget } from "@/widgets/AdminSystemWidget";
 
-export default async function AdminSystemPage() {
-  const result = await getCircuitBreakers();
-
-  if (result.isFailure) {
-    return (
-      <AdminSystemWidget
-        initialCB={null}
-        initialReconcileInfo={null}
-        initialError={(result.error as { message?: string })?.message}
-      />
-    );
-  }
+export default function AdminSystemPage() {
+  const { data, error } = useAsyncQuery(["admin-circuit-breakers"], () =>
+    getCircuitBreakers()
+  );
 
   return (
-    <AdminSystemWidget initialCB={result.data} initialReconcileInfo={null} />
+    <AdminSystemWidget
+      initialCB={data ?? null}
+      initialReconcileInfo={null}
+      initialError={error?.message}
+    />
   );
 }

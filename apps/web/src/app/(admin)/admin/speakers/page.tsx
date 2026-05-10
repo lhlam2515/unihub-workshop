@@ -1,17 +1,18 @@
+"use client";
+
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { listSpeakers } from "@/lib/api/services/admin";
 import { AdminSpeakerListWidget } from "@/widgets/AdminSpeakerListWidget";
 
-export default async function AdminSpeakerListPage() {
-  const result = await listSpeakers();
+export default function AdminSpeakerListPage() {
+  const { data, error } = useAsyncQuery(["admin-speakers"], () =>
+    listSpeakers()
+  );
 
-  if (result.isFailure) {
-    return (
-      <AdminSpeakerListWidget
-        initialResult={null}
-        initialError={(result.error as { message?: string })?.message}
-      />
-    );
-  }
-
-  return <AdminSpeakerListWidget initialResult={result.data} />;
+  return (
+    <AdminSpeakerListWidget
+      initialResult={data ?? null}
+      initialError={error?.message}
+    />
+  );
 }

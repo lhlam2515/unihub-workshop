@@ -1,14 +1,19 @@
+"use client";
+
+import { ContentLoader } from "@/components/ContentLoader";
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { listSpeakers, listRooms } from "@/lib/api/services/admin";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
-export default async function AdminCreateWorkshopPage() {
-  const [speakersResult, roomsResult] = await Promise.all([
-    listSpeakers(),
-    listRooms(),
-  ]);
+export default function AdminCreateWorkshopPage() {
+  const speakersQuery = useAsyncQuery(["admin-speakers-form"], () =>
+    listSpeakers()
+  );
+  const roomsQuery = useAsyncQuery(["admin-rooms-form"], () => listRooms());
 
-  const speakers = speakersResult.isSuccess ? speakersResult.data : [];
-  const rooms = roomsResult.isSuccess ? roomsResult.data : [];
+  if (speakersQuery.isLoading || roomsQuery.isLoading) {
+    return <ContentLoader count={2} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -21,8 +26,8 @@ export default async function AdminCreateWorkshopPage() {
 
       <AdminWorkshopFormWidget
         mode="create"
-        speakers={speakers}
-        rooms={rooms}
+        speakers={speakersQuery.data ?? []}
+        rooms={roomsQuery.data ?? []}
       />
     </div>
   );

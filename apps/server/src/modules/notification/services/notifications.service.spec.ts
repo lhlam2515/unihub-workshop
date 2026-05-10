@@ -87,18 +87,20 @@ describe("NotificationsService", () => {
   describe("listLogs", () => {
     it("returns paginated notification logs", async () => {
       mockNotificationLogsRepo.findMany.mockResolvedValue(
-        Result.ok({ items: [mockLog], total: 1 })
+        Result.ok({
+          items: [mockLog],
+          nextCursor: null,
+          hasMore: false,
+          limit: 20,
+        })
       );
 
-      const result = await service.listLogs(
-        { status: "PENDING" },
-        { page: 1, limit: 20 }
-      );
+      const result = await service.listLogs({ status: "PENDING", limit: 20 });
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toHaveLength(1);
-      expect(result.data.total).toBe(1);
-      expect(result.data.page).toBe(1);
+      expect(result.data.nextCursor).toBeNull();
+      expect(result.data.hasMore).toBe(false);
       expect(result.data.limit).toBe(20);
     });
 
@@ -107,7 +109,7 @@ describe("NotificationsService", () => {
         Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
       );
 
-      const result = await service.listLogs({}, { page: 1, limit: 20 });
+      const result = await service.listLogs({ limit: 20 });
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
@@ -124,7 +126,7 @@ describe("NotificationsService", () => {
       const result = await service.getLogById("notif-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.notification_id).toBe("notif-001");
+      expect(result.data.notificationId).toBe("notif-001");
     });
 
     it("returns NOTIFICATION_LOG_NOT_FOUND when log does not exist", async () => {
@@ -171,8 +173,8 @@ describe("NotificationsService", () => {
       mockChannelConfigsRepo.update.mockResolvedValue(Result.ok(updated));
 
       const result = await service.updateChannelConfig("EMAIL", {
-        is_active: false,
-        config_json: undefined,
+        isActive: false,
+        configJson: undefined,
       });
 
       expect(result.isSuccess).toBe(true);

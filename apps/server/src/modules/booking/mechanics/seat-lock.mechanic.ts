@@ -28,27 +28,25 @@ export class SeatLockMechanic {
   }
 
   /**
-   * Acquires a distributed seat lock for a paid workshop registration.
+   * Acquires a distributed seat lock for a workshop registration.
    *
    * Uses Redis SET NX with a 900-second TTL to prevent concurrent seat
    * claims during the payment window.
    *
    * Side effects:
    * - Creates Redis key seat:lock:{workshopId}:{registrationId} with JSON payload
-   *   containing studentId, amount, and createdAt.
+   *   containing studentId.
    *
    * @param workshopId - The UUID of the workshop being registered for.
    * @param registrationId - The UUID of the newly created registration.
    * @param studentId - The UUID of the student claiming the seat.
-   * @param amount - The payment amount required (VND), stored for payment verification.
    * @returns OkResult(true) if lock acquired, or FailResult with code:
    * - SEAT_LOCK_EXPIRED: Lock key already exists — duplicate seat claim.
    */
   async acquire(
     workshopId: string,
     registrationId: string,
-    studentId: string,
-    _amount: number
+    studentId: string
   ): Promise<Result<boolean>> {
     const key = this.buildKey(workshopId, registrationId);
     const payload: SeatLockPayload = {
@@ -107,6 +105,12 @@ export class SeatLockMechanic {
   ): Promise<Result<SeatLockCheckResult>> {
     const key = this.buildKey(workshopId, registrationId);
     const ttl = await this.redisService.ttl(key);
+
+    if (ttl === -1) {
+      // Key exists but no TTL — unexpected state (e.g., PERSIST command).
+      // Assume full remaining TTL for safety, matching the configured lock TTL.
+      return Result.ok({ valid: true, remainingSeconds: LOCK_TTL_SECONDS });
+    }
 
     if (ttl <= 0) {
       return Result.fail(seatErrors.lockExpired(workshopId, registrationId));

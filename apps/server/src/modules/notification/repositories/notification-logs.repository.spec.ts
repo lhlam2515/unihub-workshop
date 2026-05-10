@@ -186,46 +186,30 @@ describe("NotificationLogsRepository", () => {
   });
 
   // -----------------------------------------------------------------------
-  // findByUser (via findMany)
+  // findMany — base query
   // -----------------------------------------------------------------------
-  describe("findByUser (via findMany)", () => {
-    it("returns notification logs filtered by userId", async () => {
-      let callCount = 0;
-      mockChain.then = (resolve: any) => {
-        callCount++;
-        if (callCount === 1) resolve([mockNotificationLog]);
-        else resolve([{ count: "1" }]);
-      };
+  describe("findMany — base query", () => {
+    it("returns notification logs with pagination", async () => {
+      mockChain.then = (resolve: any) => resolve([mockNotificationLog]);
 
-      const result = await repo.findMany(
-        { userId: "u-001" },
-        { page: 1, limit: 20 }
-      );
+      const result = await repo.findMany({ limit: 20 });
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toHaveLength(1);
-      expect(result.data.total).toBe(1);
-      // findMany runs two parallel select queries (items + count),
-      // so we verify items/data shape rather than which arg select() received
-      expect(mockDb.select).toHaveBeenCalledTimes(2);
+      expect(result.data.nextCursor).toBeDefined();
+      expect(result.data.hasMore).toBe(false);
+      expect(result.data.limit).toBe(20);
     });
 
-    it("returns empty array when no logs exist for user", async () => {
-      let callCount = 0;
-      mockChain.then = (resolve: any) => {
-        callCount++;
-        if (callCount === 1) resolve([]);
-        else resolve([{ count: "0" }]);
-      };
+    it("returns empty array when no logs exist", async () => {
+      mockChain.then = (resolve: any) => resolve([]);
 
-      const result = await repo.findMany(
-        { userId: "nonexistent" },
-        { page: 1, limit: 20 }
-      );
+      const result = await repo.findMany({ limit: 20 });
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.items).toEqual([]);
-      expect(result.data.total).toBe(0);
+      expect(result.data.nextCursor).toBeNull();
+      expect(result.data.hasMore).toBe(false);
     });
   });
 
@@ -268,49 +252,26 @@ describe("NotificationLogsRepository", () => {
   // -----------------------------------------------------------------------
   describe("findMany — filters and pagination", () => {
     it("applies status filter when provided", async () => {
-      let callCount = 0;
-      mockChain.then = (resolve: any) => {
-        callCount++;
-        if (callCount === 1) resolve([mockNotificationLog]);
-        else resolve([{ count: "1" }]);
-      };
+      mockChain.then = (resolve: any) => resolve([mockNotificationLog]);
 
-      const result = await repo.findMany(
-        { status: "PENDING" },
-        { page: 1, limit: 20 }
-      );
+      const result = await repo.findMany({ status: "PENDING", limit: 20 });
 
       expect(result.isSuccess).toBe(true);
     });
 
     it("applies channel filter when provided", async () => {
-      let callCount = 0;
-      mockChain.then = (resolve: any) => {
-        callCount++;
-        if (callCount === 1) resolve([mockNotificationLog]);
-        else resolve([{ count: "1" }]);
-      };
+      mockChain.then = (resolve: any) => resolve([mockNotificationLog]);
 
-      const result = await repo.findMany(
-        { channel: "EMAIL" },
-        { page: 1, limit: 20 }
-      );
+      const result = await repo.findMany({ channel: "EMAIL", limit: 20 });
 
       expect(result.isSuccess).toBe(true);
     });
 
     it("returns FailResult when DB query throws", async () => {
-      let callCount = 0;
-      mockChain.then = (_resolve: any, reject: any) => {
-        callCount++;
-        // First call rejects, second settles with dummy to avoid unhandled rejection
-        if (callCount === 1) reject(new Error("DB down"));
-      };
+      mockChain.then = (_resolve: any, reject: any) =>
+        reject(new Error("DB down"));
 
-      const result = await repo.findMany(
-        { status: "PENDING" },
-        { page: 1, limit: 20 }
-      );
+      const result = await repo.findMany({ status: "PENDING", limit: 20 });
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");

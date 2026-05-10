@@ -125,7 +125,8 @@ export class StudentSyncWorker
     errorRows: number;
   }): Promise<void> {
     try {
-      const usersResult = await this.usersService.listUsers("BTC", {
+      const usersResult = await this.usersService.listUsers({
+        role: "BTC",
         page: 1,
         limit: 100,
       });

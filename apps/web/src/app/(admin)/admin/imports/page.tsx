@@ -1,29 +1,41 @@
-export const dynamic = "force-dynamic";
+"use client";
 
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+import { useAsyncQuery } from "@/hooks/use-async-query";
 import { listImports } from "@/lib/api/services/admin";
 import { AdminImportsListWidget } from "@/widgets/AdminImportsListWidget";
 
-interface PageProps {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+function ImportsContent() {
+  const searchParams = useSearchParams();
+
+  const filters = {
+    status: searchParams.get("status") || undefined,
+    cursor: searchParams.get("cursor") || undefined,
+    limit: searchParams.get("limit")
+      ? Number(searchParams.get("limit"))
+      : undefined,
+  };
+
+  const searchParamsKey = searchParams.toString();
+  const { data, error } = useAsyncQuery(
+    ["admin-imports", searchParamsKey],
+    () => listImports(filters)
+  );
+
+  return (
+    <AdminImportsListWidget
+      initialResult={data ?? null}
+      initialError={error?.message}
+    />
+  );
 }
 
-export default async function ImportsPage({ searchParams }: PageProps) {
-  const raw = await searchParams;
-
-  const result = await listImports({
-    status: (raw.status as string) || undefined,
-    cursor: (raw.cursor as string) || undefined,
-    limit: raw.limit ? Number(raw.limit) : undefined,
-  });
-
-  if (result.isFailure) {
-    return (
-      <AdminImportsListWidget
-        initialResult={null}
-        initialError={(result.error as { message?: string })?.message}
-      />
-    );
-  }
-
-  return <AdminImportsListWidget initialResult={result.data} />;
+export default function ImportsPage() {
+  return (
+    <Suspense fallback={<div className="p-4">Đang tải...</div>}>
+      <ImportsContent />
+    </Suspense>
+  );
 }

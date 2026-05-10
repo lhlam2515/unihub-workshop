@@ -2,7 +2,7 @@
  * Retrieves and persists speaker records from the database.
  */
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -29,13 +29,23 @@ export class SpeakersRepository {
    *
    * @returns OkResult containing an array of all Speaker records, or FailResult (INTERNAL_ERROR).
    */
-  async findAll(): Promise<Result<Speaker[]>> {
+  async findAll(q?: string): Promise<Result<Speaker[]>> {
     return tryCatch(
-      async () =>
-        this.db
+      async () => {
+        if (!q) {
+          return this.db
+            .select()
+            .from(this.schema.speakers)
+            .orderBy(desc(this.schema.speakers.createdAt));
+        }
+        return this.db
           .select()
           .from(this.schema.speakers)
-          .orderBy(desc(this.schema.speakers.createdAt)),
+          .where(
+            and(sql`${this.schema.speakers.fullName} ILIKE ${"%" + q + "%"}`)
+          )
+          .orderBy(desc(this.schema.speakers.createdAt));
+      },
       (err) => systemErrors.internal(err)
     );
   }
