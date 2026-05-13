@@ -683,6 +683,34 @@ Endpoint này **idempotent tự nhiên** vì gateway có thể gửi lại webho
 
 ---
 
+### 4.4. `GET /students/me/payments`
+
+Lịch sử thanh toán của student đang đăng nhập. Row-level filter `student_id = JWT.sub`.
+
+**Auth:** Bearer (`student`).
+
+**Query:** `?page=1&limit=20`
+
+**Response 200:**
+
+```json
+{
+  "data": [{
+    "id": "payment_uuid",
+    "registrationId": "...",
+    "workshopTitle": "...",
+    "amount": 150000,
+    "currency": "VND",
+    "gateway": "VNPAY",
+    "status": "SUCCEEDED",
+    "createdAt": "2026-05-12T09:20:00+07:00"
+  }],
+  "pagination": { "page": 1, "limit": 20, "total": 3 }
+}
+```
+
+---
+
 ## 5. Module **Check-in (Mobile + Staff)**
 
 > **Bounded context:** Transaction (server) + Mobile SQLite (client).
@@ -845,7 +873,28 @@ Mobile update từng row theo `local_id` (không theo thứ tự index):
 
 ---
 
-### 5.4. `POST /auth/login` cho mobile (M0 — ràng buộc với mobile schema)
+### 5.4. `GET /checkin/workshops/{id}/status`
+
+Dashboard real-time số lượng check-in cho workshop — staff xem trên màn hình tại venue.
+
+**Auth:** Bearer (`checkin_staff`).
+
+**Authorization:** `workshop_id ∈ JWT.allowed_workshop_ids`.
+
+**Response 200:**
+
+```json
+{
+  "workshopId": "...",
+  "totalRegistrations": 60,
+  "checkedInCount": 38,
+  "checkinRate": 0.63
+}
+```
+
+---
+
+### 5.5. `POST /auth/login` cho mobile (M0 — ràng buộc với mobile schema)
 
 Khi mobile gọi `/auth/login`, server cần trả thêm `allowed_workshop_ids` để mobile lưu vào `app_session.allowed_workshop_ids`. Đây là customization của 1.1 cho role `checkin_staff`:
 
@@ -932,6 +981,30 @@ RETURNING version;
 **Side effect:** Nếu đổi `room_id` hoặc `starts_at`/`ends_at` → đẩy job notification "workshop changed" cho tất cả `registrations` đang ở status active.
 
 **Edge case:** Đổi `seats_total` xuống thấp hơn `seats_total - seats_available` (số chỗ đã đăng ký) → 422 `workshop.seats_total_below_registered`.
+
+---
+
+### 6.4.1. `PATCH /admin/workshops/{id}/emergency-update`
+
+Update thông tin lịch của workshop **đã published** mà không đổi status (không cần về draft).
+
+**Auth:** Bearer (`btc`). **Headers bắt buộc:** `If-Match: "<version>"`.
+
+**Chỉ cho phép update các field:** `roomId`, `startsAt`, `endsAt`.
+
+**Không cho phép:** Hạ `seatsTotal` (dùng PATCH thường trên draft).
+
+**Behavior:**
+```
+1. Verify If-Match header khớp workshops.version → nếu không 412
+2. Validate room không xung đột lịch mới
+3. UPDATE workshops SET room_id/starts_at/ends_at, version = version + 1
+4. Emit job notification "workshop_rescheduled" cho tất cả registrations active
+```
+
+**Response 200:** Workshop DTO sau update (với `version` mới).
+
+**Errors:** `412 Precondition Failed` (version mismatch), `409 room.time_conflict`.
 
 ---
 
@@ -1118,6 +1191,8 @@ Manual trigger — BTC kích hoạt import ngoài lịch (vd. khi nhận CSV b�
 
 ## 10. Module **Statistics & Reports**
 
+> ⚠️ **Chưa triển khai** — Các endpoint dưới đây chưa có trong `openapi.yaml` và chưa có controller. Đây là thiết kế dự kiến cho Stage 7. Không sử dụng cho integration hiện tại.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/admin/stats/overview` | Dashboard tổng quan: tổng đăng ký, fill rate trung bình, top workshop |
@@ -1148,6 +1223,16 @@ Bật/tắt channel hoặc cập nhật config (vd. thêm Telegram bot token cho
 ### 11.3. `GET /admin/notifications/logs?status=failed`
 
 Audit trail từ `notification_logs` — debug push thất bại.
+
+### 11.4. `GET /admin/notifications/logs/{id}`
+
+Lấy chi tiết một log entry theo UUID — xem đầy đủ payload và error detail.
+
+**Auth:** Bearer (`btc`).
+
+**Response 200:** Full notification log với `payload`, `errorDetail`, `retryCount`, `channel`.
+
+**Errors:** `404 notification_log.not_found`.
 
 ---
 
@@ -1217,6 +1302,121 @@ Trigger reconciliation job ngay lập tức thay vì chờ cron 5 phút.
 
 ---
 
+### 12.4. `GET /admin/system/jobs/payment-timeout`
+
+Xem trạng thái cron job xử lý payment timeout (chạy định kỳ — expire `INITIATED` payments quá 15 phút).
+
+**Auth:** Bearer (`btc`). **Owner:** `background` module.
+
+**Response 200:**
+
+```json
+{
+  "pendingCount": 2,
+  "timeoutCount": 5,
+  "lastRun": "2026-05-12T09:00:00+07:00",
+  "nextRun": "2026-05-12T09:15:00+07:00",
+  "jobStatus": "IDLE"
+}
+```
+
+`jobStatus` ∈ `RUNNING | IDLE | ERROR`.
+
+---
+
+### 12.5. `GET /admin/system/jobs/reconciliation`
+
+Xem trạng thái cron job reconciliation (chạy mỗi 5 phút — đồng bộ Redis seat counter với PostgreSQL).
+
+**Auth:** Bearer (`btc`). **Owner:** `background` module.
+
+**Response 200:**
+
+```json
+{
+  "totalWorkshops": 12,
+  "discrepanciesFound": 0,
+  "lastRun": "2026-05-12T09:00:00+07:00",
+  "nextRun": "2026-05-12T09:05:00+07:00",
+  "lastAlert": null
+}
+```
+
+`lastAlert`: message của lần phát hiện discrepancy gần nhất, `null` nếu clean.
+
+---
+
+## 13. Module **User Management (Admin)**
+
+> **Bounded context:** Identity. Owner: `iam` module.
+> **Liên quan ADR:** ADR-04 (JWT), ADR-05 (RBAC).
+
+### 13.1. `GET /admin/users`
+
+Danh sách tất cả users (student, btc, checkin_staff). Pagination offset-based.
+
+**Auth:** Bearer (`btc`).
+
+**Query:** `?q=email&role=STUDENT|BTC|CHECKIN_STAFF&page=1&limit=20`
+
+**Response 200:** Paginated list với `{ id, email, role, status, createdAt }`.
+
+---
+
+### 13.2. `GET /admin/users/{id}`
+
+Chi tiết một user theo UUID.
+
+**Auth:** Bearer (`btc`).
+
+**Errors:** `404 user.not_found`.
+
+---
+
+### 13.3. `PATCH /admin/users/{id}/status`
+
+Activate hoặc suspend một user account.
+
+**Auth:** Bearer (`btc`).
+
+**Request:** `{ "status": "ACTIVE" | "SUSPENDED" }`
+
+**Side effect:** Nếu suspend → tất cả refresh token của user bị revoke (tương đương gọi 13.4).
+
+---
+
+### 13.4. `POST /admin/users/{id}/revoke-token`
+
+Revoke toàn bộ refresh token của user (force logout mọi thiết bị).
+
+**Auth:** Bearer (`btc`).
+
+**Response 200:** `{ "revokedCount": 3 }`
+
+---
+
+### 13.5. `POST /admin/checkin-staff/{userId}/assign-workshops`
+
+Gán danh sách workshop mà một check-in staff được phép thao tác.
+
+**Auth:** Bearer (`btc`).
+
+**Request:** `{ "workshopIds": ["uuid1", "uuid2"] }` — replace toàn bộ (không merge).
+
+**Side effect:** `allowed_workshop_ids` field trong JWT của staff sẽ có hiệu lực từ lần refresh tiếp theo.
+
+---
+
+### 13.6. `GET /admin/checkin-staff/{userId}/workshops`
+
+Xem danh sách workshop đã gán cho một check-in staff.
+
+**Auth:** Bearer (`btc`).
+
+**Response 200:** `{ "data": [{ "id": "...", "title": "...", "startsAt": "..." }] }`
+
+---
+
 ## Phụ lục A — Ma trận RBAC × Endpoint
 
 | Module | student | btc | checkin_staff | public |
@@ -1224,15 +1424,20 @@ Trigger reconciliation job ngay lập tức thay vì chờ cron 5 phút.
 | `/auth/*` | ✅ | ✅ | ✅ | login/refresh only |
 | `/workshops` (GET) | ✅ | ✅ | ✅ | ✅ |
 | `/registrations` | ✅ own | — | — | — |
+| `/students/me/payments` | ✅ own | — | — | — |
 | `/payments` | ✅ own | — | — | — |
 | `/checkins`, `/checkin/*` | — | — | ✅ assigned ws | — |
 | `/admin/workshops/*` | — | ✅ | — | — |
-| `/admin/speakers`, `/admin/rooms` | — | ✅ | — | — |
+| `/admin/speakers`, `/admin/rooms/*` | — | ✅ | — | — |
 | `/admin/imports/*` | — | ✅ | — | — |
-| `/admin/stats/*` | — | ✅ | — | — |
+| `/admin/stats/*` (Stage 7) | — | ✅ | — | — |
 | `/admin/notification-channels/*` | — | ✅ | — | — |
+| `/admin/notifications/logs/*` | — | ✅ | — | — |
 | `/admin/system/circuit-breaker/*` | — | ✅ | — | — |
+| `/admin/system/jobs/*` | — | ✅ | — | — |
 | `/admin/payments/reconcile` | — | ✅ | — | — |
+| `/admin/users/*` | — | ✅ | — | — |
+| `/admin/checkin-staff/*` | — | ✅ | — | — |
 
 ---
 
