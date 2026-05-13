@@ -277,6 +277,8 @@ describe("PaymentsService", () => {
     });
 
     it("should return REGISTRATION_NOT_FOUND for missing registration", async () => {
+      idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
+      circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(Result.ok(null));
 
       const result = await service.initiate(STUDENT_ID, dto, IDEMPOTENCY_KEY);
@@ -286,6 +288,8 @@ describe("PaymentsService", () => {
     });
 
     it("should return REGISTRATION_NOT_FOUND for non-owned registration (IDOR)", async () => {
+      idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
+      circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(
         Result.ok({ ...mockRegistration, studentId: "other-user" })
       );
@@ -297,6 +301,8 @@ describe("PaymentsService", () => {
     });
 
     it("should return REGISTRATION_NOT_FOUND for non-PENDING_PAYMENT status", async () => {
+      idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
+      circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(
         Result.ok({ ...mockRegistration, status: "CONFIRMED" })
       );
@@ -308,6 +314,8 @@ describe("PaymentsService", () => {
     });
 
     it("should return failure when seat lock expired", async () => {
+      idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
+      circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
       seatLock.check.mockResolvedValue(
         Result.fail(paymentErrors.gatewayError("MOCK")) // just any fail
@@ -330,6 +338,7 @@ describe("PaymentsService", () => {
         Result.ok({ valid: true, remainingSeconds: 500 })
       );
       idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
+      circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       workshopsService.getPublishedById.mockResolvedValue(
         Result.fail({ code: "WORKSHOP_NOT_FOUND" } as any)
       );

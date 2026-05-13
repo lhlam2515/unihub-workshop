@@ -89,7 +89,7 @@ export default function ProfileScreen() {
                   Workshop phân công
                 </Text>
                 <Text className="shrink text-right text-sm font-bold text-foreground">
-                  {session.allowedWorkshopIds?.length ?? 0}
+                  {session.allowed_workshop_ids?.length ?? 0}
                 </Text>
               </View>
               <View className="flex-row justify-between gap-3">

@@ -206,8 +206,7 @@ describe("RegistrationsService", () => {
       expect(seatLock.acquire).toHaveBeenCalledWith(
         WORKSHOP_ID,
         REGISTRATION_ID,
-        STUDENT_ID,
-        50000
+        STUDENT_ID
       );
       expect(seatCounter.invalidateCache).toHaveBeenCalledWith(WORKSHOP_ID);
     });

@@ -588,7 +588,10 @@ describe("WorkshopsService", () => {
         userId: "u-001",
         workshopId: "w-001",
         type: "WORKSHOP_CANCELLED",
-        payload: { title: "Intro to Testing" },
+        payload: {
+          title: "Intro to Testing",
+          reason: "Test cancellation reason for testing",
+        },
       });
     });
   });

@@ -42,21 +42,27 @@ describe("RolesGuard", () => {
   });
 
   it("throws ForbiddenException when user role does not match", () => {
-    reflector.getAllAndOverride.mockReturnValue(["BTC"]);
+    reflector.getAllAndOverride
+      .mockReturnValueOnce(undefined) // IS_PUBLIC_KEY → not public
+      .mockReturnValueOnce(["BTC"]); // "roles" → required roles
     expect(() => guard.canActivate(mockContext({ role: "STUDENT" }))).toThrow(
       ForbiddenException
     );
   });
 
   it("throws ForbiddenException when user has no role", () => {
-    reflector.getAllAndOverride.mockReturnValue(["BTC"]);
+    reflector.getAllAndOverride
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(["BTC"]);
     expect(() => guard.canActivate(mockContext({}))).toThrow(
       ForbiddenException
     );
   });
 
   it("throws ForbiddenException when user is undefined", () => {
-    reflector.getAllAndOverride.mockReturnValue(["BTC"]);
+    reflector.getAllAndOverride
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(["BTC"]);
     expect(() => guard.canActivate(mockContext())).toThrow(ForbiddenException);
   });
 });

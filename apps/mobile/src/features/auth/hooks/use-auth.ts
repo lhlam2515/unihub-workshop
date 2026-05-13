@@ -60,7 +60,9 @@ export function useAuth(): UseAuthResult {
           userId: payload.sub,
           email: email.trim(),
           role: "CHECKIN_STAFF",
-          allowedWorkshopIds: JSON.stringify(payload.allowedWorkshopIds ?? []),
+          allowedWorkshopIds: JSON.stringify(
+            payload.allowed_workshop_ids ?? []
+          ),
           accessTokenExp: payload.exp,
           refreshTokenExp: Math.floor(Date.now() / 1000) + 7 * 86400,
           loggedInAt: Date.now(),
@@ -72,7 +74,7 @@ export function useAuth(): UseAuthResult {
             userId: payload.sub,
             email: email.trim(),
             allowedWorkshopIds: JSON.stringify(
-              payload.allowedWorkshopIds ?? []
+              payload.allowed_workshop_ids ?? []
             ),
             accessTokenExp: payload.exp,
             updatedAt: Date.now(),

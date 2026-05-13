@@ -126,7 +126,7 @@ describe("NotificationsService", () => {
       const result = await service.getLogById("notif-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.notificationId).toBe("notif-001");
+      expect(result.data.id).toBe("notif-001");
     });
 
     it("returns NOTIFICATION_LOG_NOT_FOUND when log does not exist", async () => {

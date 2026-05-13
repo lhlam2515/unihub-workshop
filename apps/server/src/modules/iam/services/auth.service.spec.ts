@@ -84,6 +84,7 @@ describe("AuthService", () => {
       signRefreshToken: jest.fn(),
       verifyRefreshToken: jest.fn(),
       blacklistToken: jest.fn(),
+      isBlacklisted: jest.fn().mockResolvedValue(false),
     };
 
     mockStudentProfileService = {
@@ -149,6 +150,7 @@ describe("AuthService", () => {
             userId: activeUser.userId,
             role: activeUser.role,
             allowedWorkshopIds: undefined,
+            studentId: STUDENT_ID,
           },
           "WEB"
         );
@@ -355,6 +357,8 @@ describe("AuthService", () => {
     beforeEach(() => {
       mockTokenService.signAccessToken.mockResolvedValue(newAccessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(newRefreshToken);
+      // activeUser is STUDENT role — service calls studentsRepo.findByUserId to embed studentId
+      mockStudentsRepo.findByUserId.mockResolvedValue(Result.ok(mockStudent));
     });
 
     it("returns new token pair when refresh token is valid", async () => {
