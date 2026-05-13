@@ -48,7 +48,8 @@ export class PaymentResponseBuilder {
       gateway: payment.gateway,
       gatewayChargeId: payment.gatewayTxnId ?? undefined,
       qrCode: qrCode ?? null,
-      createdAt: payment.initiatedAt.toISOString(),
+      createdAt:
+        payment.initiatedAt?.toISOString() ?? new Date(0).toISOString(),
       resolvedAt: payment.completedAt?.toISOString() ?? null,
     };
   }
