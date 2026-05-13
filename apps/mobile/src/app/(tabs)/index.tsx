@@ -63,7 +63,7 @@ export default function HomeScreen() {
             .where(
               inArray(
                 cacheMetadata.workshopId,
-                successful.map((w) => w.workshopId)
+                successful.map((w) => w.id)
               )
             )
             .all();
@@ -119,9 +119,9 @@ export default function HomeScreen() {
           <View className="gap-3">
             {workshops.map((workshop) => (
               <WorkshopCard
-                key={workshop.workshopId}
+                key={workshop.id}
                 workshop={workshop}
-                cacheInfo={cacheInfo.get(workshop.workshopId)}
+                cacheInfo={cacheInfo.get(workshop.id)}
                 onPress={handleWorkshopPress}
               />
             ))}

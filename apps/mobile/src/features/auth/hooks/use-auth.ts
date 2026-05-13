@@ -37,7 +37,7 @@ export function useAuth(): UseAuthResult {
     setErrorMessage(null);
 
     const result = await authService.loginWithCredentials({
-      accountType: "staff",
+      accountType: "STAFF",
       email: email.trim(),
       password,
     });

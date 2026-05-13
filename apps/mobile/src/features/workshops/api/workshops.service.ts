@@ -2,17 +2,40 @@ import { API_ROUTES } from "@/constants/api-routes";
 import { api } from "@/lib/api/client";
 import { Result } from "@/lib/result";
 
+export interface SpeakerDto {
+  id: string;
+  fullName: string;
+  title: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+}
+
+export interface RoomDto {
+  id: string;
+  name: string;
+  building: string | null;
+  floor: number | null;
+  floorPlanUrl: string | null;
+  capacity: number;
+  facilities: Record<string, unknown> | null;
+  createdAt: string | null;
+}
+
 export interface WorkshopDetailDto {
-  workshopId: string;
+  id: string;
   title: string;
-  speakerName: string;
   startsAt: string;
   endsAt: string;
-  availableSeats: number;
-  isPaid: boolean;
-  price?: number;
-  description?: string;
-  roomName: string;
+  seatsTotal: number;
+  seatsAvailable: number;
+  price: number;
+  currency: string;
+  status: string;
+  description: string | null;
+  speaker: SpeakerDto | null;
+  room: RoomDto | null;
+  isRegistered: boolean | null;
+  myRegistrationId: string | null;
 }
 
 class WorkshopsService {
