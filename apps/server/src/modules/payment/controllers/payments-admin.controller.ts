@@ -42,7 +42,7 @@ export class PaymentsAdminController {
    *         or FailResult (CONFLICT if cron already running)
    */
   @Post("admin/payments/reconcile")
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   async reconcile() {
     return this.paymentReconciliationService.reconcile();
   }
