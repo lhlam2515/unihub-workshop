@@ -53,6 +53,19 @@ export class RoomsAdminController {
   }
 
   /**
+   * Retrieves a single room by its UUID.
+   *
+   * Security context: Requires BTC role.
+   *
+   * @param id - The UUID of the room to retrieve.
+   * @returns The room DTO, or FailResult (ROOM_NOT_FOUND).
+   */
+  @Get(":id")
+  async getRoomById(@Param("id") id: string) {
+    return this.roomsService.getRoomById(id);
+  }
+
+  /**
    * Creates a new room for hosting workshops.
    *
    * Validates input with CreateRoomSchema before persisting.

@@ -49,6 +49,12 @@ Với mỗi endpoint:
 | `GET /auth/me` | `iam` | — | — | `iam(jwt)` |
 | `POST /device-tokens` | `iam` | — | — | `iam(jwt+role:student)` |
 | `DELETE /device-tokens/{token}` | `iam` | — | — | `iam(jwt+role:student)` |
+| `GET /admin/users` | `iam` | — | — | `iam(role:btc)` |
+| `GET /admin/users/{id}` | `iam` | — | — | `iam(role:btc)` |
+| `PATCH /admin/users/{id}/status` | `iam` | — | — | `iam(role:btc)` |
+| `POST /admin/users/{id}/revoke-token` | `iam` | — | — | `iam(role:btc)` |
+| `POST /admin/checkin-staff/{userId}/assign-workshops` | `iam` | — | — | `iam(role:btc)` |
+| `GET /admin/checkin-staff/{userId}/workshops` | `iam` | — | — | `iam(role:btc)` |
 
 > **Note về device-tokens:** Mặc dù device tokens được `notification` module *tiêu thụ* (để dispatch push), bảng `device_tokens` thuộc bounded context Identity và có FK đến `students`. CRUD endpoint do đó nằm ở `iam`. `notification` chỉ inject `DeviceTokensRepository` (read-only) khi cần dispatch.
 
@@ -108,14 +114,13 @@ Sở hữu: `payments`, một phần `idempotency_keys` (resource_type='payment'
 
 | Endpoint | Owner | Calls | Emits | Guards |
 |---|---|---|---|---|
+| `GET /students/me/payments` | `payment` | — | — | `iam(role:student)` + row-level filter `student_id = JWT.sub` |
 | `POST /payments` | `payment` | `booking` (verify registration='PENDING'), Circuit Breaker check, gateway HTTP | `payment.succeeded` / `payment.failed` / `payment.unresolved` | `iam(role:student)`, `rate-limit(T2-user, T3-user×workshop)` |
 | `GET /payments/{id}` | `payment` | — | — | `iam(role:student)` + ownership |
 | `POST /payments/webhook/{gateway}` | `payment` | `booking` (update registration→paid) | `payment.succeeded` | **HMAC signature** (không JWT) |
-| `GET /admin/system/circuit-breaker` | `payment` | — | — | `iam(role:btc)` |
-| `POST /admin/system/circuit-breaker/{gateway}/reset` | `payment` | — | — | `iam(role:btc)` |
 | `POST /admin/payments/reconcile` | `payment` | gateway query API | — | `iam(role:btc)` |
 
-> **CB state:** In-memory, không có repository. `CircuitBreakerService` là stateful singleton trong process. Admin endpoints chỉ read/reset in-memory state — không query DB.
+> **CB state:** In-memory, không có repository. `CircuitBreakerMechanic` là stateful singleton trong process. Các admin endpoint quản lý CB và job status được đặt ở `background` module controller (xem 2.10.3) vì tập trung operational concerns — nhưng đọc state từ `payment.CircuitBreakerMechanic` qua Service injection.
 >
 > **Reconcile endpoint:** Kích hoạt cùng `ReconciliationService` mà cron job dùng (không có code path mới). Concurrency guard bằng PostgreSQL advisory lock — trả 409 nếu cron đang chạy.
 
@@ -133,6 +138,7 @@ Sở hữu: `checkins`. Đối tác đặc biệt với mobile schema (`checkin_
 | Endpoint | Owner | Calls | Emits | Guards |
 |---|---|---|---|---|
 | `GET /checkin/workshops/{id}/registrations` | `checkin` | `booking` (read registrations với filter status, paginated) | — | `iam(role:checkin_staff)` + `workshop_id ∈ allowed_workshop_ids` |
+| `GET /checkin/workshops/{id}/status` | `checkin` | — | — | `iam(role:checkin_staff)` + `workshop_id ∈ allowed_workshop_ids` |
 | `POST /checkins` | `checkin` | `booking` (resolve registration by qr_code) | `checkin.recorded` | `iam(role:checkin_staff)`, `rate-limit(per-user:60/m)` |
 | `POST /checkins/sync` | `checkin` | `booking` (resolve qr_codes batch) | `checkin.recorded` × N | `iam(role:checkin_staff)`, `rate-limit(per-user:30/m)` |
 
@@ -184,6 +190,7 @@ Sở hữu: `notification_logs`, `notification_channel_configs`. **Không có en
 | `GET /admin/notification-channels` | `notification` | — | — | `iam(role:btc)` |
 | `PATCH /admin/notification-channels/{id}` | `notification` | — | — | `iam(role:btc)` |
 | `GET /admin/notifications/logs` | `notification` | — | — | `iam(role:btc)` |
+| `GET /admin/notifications/logs/{id}` | `notification` | — | — | `iam(role:btc)` |
 
 **Internal consumers (không phải HTTP endpoint):**
 
@@ -231,7 +238,7 @@ Internally:
 
 ### 2.10. Module `background` (operational)
 
-**KHÔNG có endpoint.** Tập hợp các **scheduled job** (cron) và **worker process** (BullMQ consumer).
+Tập hợp các **scheduled job** (cron), **worker process** (BullMQ consumer), và **system admin endpoints** (circuit breaker + job monitoring).
 
 #### 2.10.1. Cron jobs (định kỳ)
 
@@ -253,17 +260,28 @@ Internally:
 | `queue: refund` | Refund Worker — gọi gateway refund API cho registrations.cancelled từ paid | `payment` |
 | `queue: ai-summary.dlq` | DLQ Inspector — chỉ log + alert, không tự retry | `background` core |
 
-#### 2.10.3. Endpoint quản lý jobs (gợi ý — Stage 6)
+#### 2.10.3. System Admin Endpoints (đã triển khai)
 
-Nếu cần observability cho ops, có thể thêm:
+Controller: `system-admin.controller.ts`. Đọc state từ `payment.CircuitBreakerMechanic` và `background` cron services.
+
+| Endpoint | Owner | Calls | Emits | Guards |
+|---|---|---|---|---|
+| `GET /admin/system/circuit-breaker` | `background` | `payment` (read CB state) | — | `iam(role:btc)` |
+| `POST /admin/system/circuit-breaker/{gateway}/reset` | `background` | `payment` (reset CB state) | — | `iam(role:btc)` |
+| `GET /admin/system/jobs/payment-timeout` | `background` | — | — | `iam(role:btc)` |
+| `GET /admin/system/jobs/reconciliation` | `background` | — | — | `iam(role:btc)` |
+
+> **Note về ownership:** CB state thuộc domain `payment`, nhưng controller nằm ở `background` vì tập trung tất cả operational/monitoring concerns. `background` inject `CircuitBreakerMechanic` từ `payment` module qua NestJS module import.
+
+#### 2.10.4. Endpoint observability nâng cao (gợi ý — Stage 7)
+
+Nếu cần observability sâu hơn cho ops, có thể thêm:
 
 ```
 GET  /admin/jobs/streams              # Trạng thái queues + PEL size
 GET  /admin/jobs/dlq                  # Danh sách messages trong DLQ
 POST /admin/jobs/dlq/{id}/replay      # Manual replay từ DLQ về main stream
 ```
-
-Owner: `background` module. Tuy nhiên không phải MVP của đồ án — có thể defer.
 
 ---
 
