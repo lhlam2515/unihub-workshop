@@ -73,27 +73,27 @@ export class PaymentsService {
   ) {}
 
   /**
-   * Initiates a payment through the 5-stage pipeline.
+   * Initiates a payment through the 7-stage pipeline.
    *
    * Pipeline stages:
-   * 1. Registration lookup + IDOR verification (must be student's own registration).
-   * 2. Seat lock TTL check (must still be valid).
-   * 3. Idempotency Layer 1 (PostgreSQL 3-state — replays COMPLETED, rejects IN_PROGRESS).
-   * 4. Circuit breaker check (rejects if gateway is OPEN with PAYMENT_GATEWAY_OPEN).
-   * 5. Workshop price lookup (for amount).
-   * 6. Payment INSERT with 15-minute timeout.
-   * 7. Gateway adapter call (MOCK returns fake redirect URL).
-   * 8. On gateway success: mark idempotency COMPLETED + record circuit breaker success.
-   *    On gateway failure: mark idempotency UNRESOLVED + record circuit breaker failure.
+   * 1. Idempotency Layer 1 — replay COMPLETED, reject IN_PROGRESS.
+   * 2. Circuit breaker check — reject early if gateway is OPEN.
+   * 3. Registration lookup + IDOR verification — must be student's own PENDING registration.
+   * 4. Seat lock TTL check + workshop price lookup (parallel).
+   * 5. Payment INSERT with 15-minute timeout.
+   * 6. Gateway adapter call (MOCK returns fake redirect URL).
+   * 7. On gateway success: mark idempotency COMPLETED + record CB success.
+   *    On gateway failure: mark idempotency UNRESOLVED + record CB failure.
    *
    * Business rules:
-   * - Registration must have PENDING_PAYMENT status.
-   * - Sequential pipeline: idempotency MUST be checked before circuit breaker
-   *   to avoid counting duplicates as gateway failures.
-   * - Seat lock check happens after IDOR to avoid unnecessary Redis reads.
+   * - Idempotency MUST be checked before circuit breaker to avoid counting
+   *   duplicate retries as gateway failures.
+   * - Circuit breaker MUST be checked before the DB lookup to avoid wasted
+   *   reads when the gateway is known-failing.
+   * - Registration must have PENDING status (set during free/paid workshop registration).
    *
    * Side effects:
-   * - Inserts a payment record with PENDING status.
+   * - Inserts a payment record with INITIATED status.
    * - Creates idempotency_keys row with IN_PROGRESS (or updates to COMPLETED/UNRESOLVED).
    * - Reads/writes circuit breaker state in Redis.
    *
@@ -104,8 +104,8 @@ export class PaymentsService {
    * or FailResult with codes:
    * - IDEMPOTENCY_CONFLICT: Another request with this key is in progress.
    * - PAYMENT_GATEWAY_OPEN: Circuit breaker is OPEN.
-   * - SEAT_LOCK_EXPIRED: Seat hold has expired.
    * - REGISTRATION_NOT_FOUND: Registration missing or wrong student/status.
+   * - SEAT_LOCK_EXPIRED: Seat hold has expired.
    * - DB_LOCK_TIMEOUT: Database contention.
    * - INTERNAL_ERROR: Unexpected failure.
    */
@@ -114,7 +114,26 @@ export class PaymentsService {
     dto: CreatePaymentDto,
     idempotencyKey: string
   ): Promise<Result<CreatePaymentResponseDto>> {
-    // Stage 1: Registration lookup + IDOR
+    // Stage 1: Idempotency — check before any DB/Redis work
+    const idemResult = await this.idempotencyMechanic.check(
+      idempotencyKey,
+      "PAYMENT"
+    );
+    if (idemResult.isFailure) return Result.fail(idemResult.error);
+    if (!idemResult.data.proceed) {
+      if (idemResult.data.cachedResponse) {
+        return Result.ok(
+          idemResult.data.cachedResponse.body as CreatePaymentResponseDto
+        );
+      }
+      return Result.fail(paymentErrors.duplicate(idempotencyKey, ""));
+    }
+
+    // Stage 2: Circuit breaker — reject early before expensive DB lookup
+    const cbResult = await this.circuitBreaker.checkAndAllow(dto.gateway);
+    if (cbResult.isFailure) return Result.fail(cbResult.error);
+
+    // Stage 3: Registration lookup + IDOR
     const regResult = await this.registrationsRepo.findById(dto.registrationId);
     if (regResult.isFailure) return Result.fail(regResult.error);
     const registration = regResult.data;
@@ -126,34 +145,16 @@ export class PaymentsService {
       return Result.fail(paymentErrors.notFound(dto.registrationId));
     }
 
-    // Stages 2-5: Parallel independent I/O
-    const [lockResult, idemResult, workshopResult] = await Promise.all([
+    // Stage 4: Seat lock check + workshop price (parallel — both need workshopId)
+    const [lockResult, workshopResult] = await Promise.all([
       this.seatLock.check(registration.workshopId, registration.registrationId),
-      this.idempotencyMechanic.check(idempotencyKey, "PAYMENT"),
       this.workshopsService.getPublishedById(registration.workshopId),
     ]);
     if (lockResult.isFailure) return Result.fail(lockResult.error);
-
-    // Stage 3b: Idempotency duplicate detection — replay cached response for COMPLETED
-    if (idemResult.isFailure) return Result.fail(idemResult.error);
-    if (!idemResult.data.proceed) {
-      if (idemResult.data.cachedResponse) {
-        return Result.ok(
-          idemResult.data.cachedResponse.body as CreatePaymentResponseDto
-        );
-      }
-      return Result.fail(paymentErrors.duplicate(idempotencyKey, ""));
-    }
-
-    // Stage 4: Workshop price (from parallel batch)
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
     const amount = Number(workshopResult.data.price);
 
-    // Stage 5: Circuit breaker (sequential — must run after idempotency)
-    const cbResult = await this.circuitBreaker.checkAndAllow(dto.gateway);
-    if (cbResult.isFailure) return Result.fail(cbResult.error);
-
-    // Stage 6: Insert payment record with optimistic lock via version
+    // Stage 5: Insert payment record
     const payResult = await tryCatch(async () => {
       return this.paymentsRepo.transaction(async (tx) => {
         const createResult = await this.paymentsRepo.create(
@@ -175,7 +176,7 @@ export class PaymentsService {
     if (payResult.isFailure) return Result.fail(payResult.error);
     const payment = payResult.data;
 
-    // Stage 7: Gateway adapter call
+    // Stage 6: Gateway adapter call
     const gwResult = await this.paymentGatewayService.initiatePayment(
       dto.gateway,
       amount,
@@ -188,7 +189,7 @@ export class PaymentsService {
       return Result.fail(gwResult.error);
     }
 
-    // Stage 8: Post-gateway — mark idempotency completed + record success
+    // Stage 7: Mark idempotency completed + record CB success
     const responseDto = PaymentResponseBuilder.fromCreate(
       payment,
       gwResult.data.redirect_url,
