@@ -4,12 +4,12 @@ import { z } from "zod";
 /**
  * Zod schema for triggering a student data sync job.
  *
- * Validates the source file name/path in Object Storage.
+ * Validates the file path in Object Storage.
  *
- * @example { "source_file_name": "s3://bucket/uploads/students-2024-04-28.csv" }
+ * @example { "filePath": "s3://bucket/uploads/students-2024-04-28.csv" }
  */
 export const TriggerStudentSyncSchema = z.object({
-  sourceFileName: z.string().min(1).max(500),
+  filePath: z.string().min(1).max(500),
 });
 
 /**
