@@ -134,14 +134,14 @@ export type ApiResponse<T = void> =
       data: T;
       error?: never;
       pagination?: PaginationMeta;
-      meta: RequestMeta;
+      meta?: RequestMeta;
     }
   | {
       success: false;
       data?: never;
       error: ApiErrorShape;
       pagination?: never;
-      meta: RequestMeta;
+      meta?: RequestMeta;
     };
 
 /**
