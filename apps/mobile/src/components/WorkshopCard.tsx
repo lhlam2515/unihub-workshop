@@ -40,14 +40,14 @@ export function WorkshopCard({
       : "secondary";
 
   return (
-    <Pressable onPress={() => onPress(workshop.workshopId)}>
+    <Pressable onPress={() => onPress(workshop.id)}>
       <Card>
         <CardHeader>
           <Text className="text-lg font-bold text-card-foreground">
             {workshop.title}
           </Text>
           <Text className="text-sm text-muted-foreground">
-            {workshop.speakerName}
+            {workshop.speaker?.fullName}
           </Text>
         </CardHeader>
         <CardContent className="flex-row items-center justify-between">
@@ -60,7 +60,7 @@ export function WorkshopCard({
             </Badge>
           </View>
           <Badge variant="secondary">
-            <Text>{workshop.availableSeats} chỗ</Text>
+            <Text>{workshop.seatsAvailable} chỗ</Text>
           </Badge>
         </CardContent>
       </Card>
