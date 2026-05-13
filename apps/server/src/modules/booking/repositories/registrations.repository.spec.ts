@@ -27,6 +27,8 @@ const createMockDb = () => {
 const mockSchema = {
   registrations: {},
   workshops: {},
+  speakers: {},
+  rooms: {},
 };
 
 describe("RegistrationsRepository", () => {
