@@ -56,6 +56,21 @@ export class SpeakersAdminController {
   }
 
   /**
+   * Retrieves a single speaker by ID (admin view).
+   *
+   * GET /admin/speakers/{id}
+   *
+   * Security context: Requires BTC role.
+   *
+   * @param id - UUID of the speaker to retrieve.
+   * @returns SpeakerResponseDto, or FailResult (SPEAKER_NOT_FOUND).
+   */
+  @Get(":id")
+  async getSpeaker(@Param("id") id: string) {
+    return this.speakersService.getSpeakerById(id);
+  }
+
+  /**
    * Creates a new speaker profile.
    *
    * Validates input with CreateSpeakerSchema before persisting.

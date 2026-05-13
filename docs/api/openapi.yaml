@@ -1372,6 +1372,39 @@ paths:
                       $ref: '#/components/schemas/RegistrationAdmin'
                   pagination:
                     $ref: '#/components/schemas/PaginationMeta'
+  /students/me/payments:
+    get:
+      tags:
+      - Payment
+      summary: List authenticated student's payment history
+      description: 'Returns the authenticated student''s payment records. **Row-level
+        filter:**
+
+        `WHERE studentId = JWT.sub`. Prevents peer data enumeration.
+
+        '
+      operationId: listMyPayments
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CursorParam'
+      - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Student's payment history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /payments:
     post:
       tags:
@@ -1407,12 +1440,12 @@ paths:
             schema:
               $ref: '#/components/schemas/PaymentCreateRequest'
       responses:
-        '200':
-          description: Payment succeeded (or idempotent replay of a previous success)
+        '201':
+          description: Payment initiated — redirect client to `redirectUrl` to complete payment at gateway
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Payment'
+                $ref: '#/components/schemas/CreatePaymentResponse'
         '402':
           description: '`payment.declined` — gateway returned a clear decline (insufficient
 
@@ -2313,6 +2346,37 @@ paths:
                       $ref: '#/components/schemas/NotificationLog'
                   pagination:
                     $ref: '#/components/schemas/PaginationMeta'
+  /admin/notifications/logs/{logId}:
+    get:
+      tags:
+      - Notification Admin
+      summary: Retrieve a single notification log entry by ID
+      description: 'Returns the full notification log entry including the dispatched
+        payload. Used for debugging failed or timed-out notifications.
+
+        '
+      operationId: getNotificationLog
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: logId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: UUID of the notification log entry
+      responses:
+        '200':
+          description: Notification log detail with payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationLog'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /admin/users:
     get:
       tags:
@@ -3446,6 +3510,28 @@ components:
           type: string
           format: uri
           description: Where the gateway redirects the browser after payment
+    CreatePaymentResponse:
+      type: object
+      required:
+      - paymentId
+      - redirectUrl
+      - paymentDeadline
+      description: Response body for a successfully initiated payment. Client navigates
+        to `redirectUrl` to complete payment at the gateway. The server webhook callback
+        updates payment status asynchronously.
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+          description: UUID of the created payment record
+        redirectUrl:
+          type: string
+          format: uri
+          description: Gateway redirect URL for client to navigate to
+        paymentDeadline:
+          type: string
+          format: date-time
+          description: Expiry time after which the payment will be auto-voided
     Payment:
       type: object
       required:

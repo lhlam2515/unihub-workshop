@@ -67,16 +67,16 @@ export class StudentSyncService {
    * - Inserts a new row into student_sync_jobs
    * - Enqueues a BullMQ job to the student-sync queue
    *
-   * @param sourceFileName - Path/name of CSV file in Object Storage
+   * @param filePath - Path/name of CSV file in Object Storage
    * @returns OkResult with job metadata (jobId, status, triggeredAt),
    *          or FailResult with INTERNAL_ERROR when job creation or queue enqueue fails.
    */
   async triggerSync(
-    sourceFileName: string
+    filePath: string
   ): Promise<Result<{ jobId: string; status: string; triggeredAt: Date }>> {
     // Create job record with RUNNING status
     const createResult = await this.studentSyncJobsRepo.create({
-      sourceFileName,
+      sourceFileName: filePath,
     });
 
     if (createResult.isFailure) return Result.fail(createResult.error);
@@ -87,7 +87,7 @@ export class StudentSyncService {
     try {
       await this.queue.enqueue("student-sync", {
         jobId: job.jobId,
-        sourceFileName,
+        sourceFileName: filePath,
       } satisfies StudentSyncJobData);
     } catch (err) {
       await this.studentSyncJobsRepo.updateStatus(job.jobId, "FAILED");

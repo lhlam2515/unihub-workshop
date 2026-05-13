@@ -56,7 +56,7 @@ export class StudentSyncAdminController {
   @Post("trigger")
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerSync(@Body() dto: TriggerStudentSyncDto): Promise<Result<any>> {
-    return this.studentSyncService.triggerSync(dto.sourceFileName);
+    return this.studentSyncService.triggerSync(dto.filePath);
   }
 
   /**

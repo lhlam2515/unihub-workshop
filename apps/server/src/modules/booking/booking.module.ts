@@ -9,6 +9,7 @@ import { CatalogModule } from "../catalog/catalog.module";
 import { IamModule } from "../iam/iam.module";
 import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
+import { RegistrationsAdminController } from "./controllers/registrations-admin.controller";
 import { RegistrationsController } from "./controllers/registrations.controller";
 import { SeatLockMechanic } from "./mechanics/seat-lock.mechanic";
 import { RegistrationsRepository } from "./repositories/registrations.repository";
@@ -34,7 +35,7 @@ import { RegistrationsService } from "./services/registrations.service";
     forwardRef(() => PaymentModule),
     RateLimitModule,
   ],
-  controllers: [RegistrationsController],
+  controllers: [RegistrationsController, RegistrationsAdminController],
   providers: [RegistrationsService, SeatLockMechanic, RegistrationsRepository],
   exports: [RegistrationsService, SeatLockMechanic, RegistrationsRepository],
 })
