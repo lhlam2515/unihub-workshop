@@ -2,7 +2,7 @@ import { login } from "@/lib/api/client";
 import { Result } from "@/lib/result";
 
 export interface LoginCredentials {
-  accountType: "staff";
+  accountType: "STAFF";
   email: string;
   password: string;
 }
