@@ -32,8 +32,10 @@ export class DeviceTokensService {
     platform: "IOS" | "ANDROID"
   ): Promise<
     Result<{
-      deviceTokenId: string;
+      id: string;
       platform: string;
+      isActive: boolean;
+      lastSeen: Date;
       createdAt: Date;
     }>
   > {
@@ -57,8 +59,10 @@ export class DeviceTokensService {
 
     const created = createResult.data;
     return Result.ok({
-      deviceTokenId: created.deviceTokenId,
+      id: created.deviceTokenId,
       platform: created.platform,
+      isActive: created.isActive,
+      lastSeen: created.lastSeen,
       createdAt: created.createdAt,
     });
   }

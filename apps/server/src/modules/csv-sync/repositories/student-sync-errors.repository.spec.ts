@@ -35,7 +35,7 @@ const mockError = {
   jobId: "job-001",
   rowNumber: 1,
   rawData: JSON.stringify({ student_code: "" }),
-  errorReason: "MISSING_FIELD",
+  errorReason: "MISSING_FIELD" as const,
   errorDetail: "student_code is required",
   createdAt: new Date("2026-06-01T00:00:00Z"),
 };

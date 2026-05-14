@@ -118,10 +118,7 @@ export class OfflineSyncService {
       return {
         localId: item.localId,
         result: "REJECTED",
-        reason:
-          createResult.error.code === "QR_INVALID"
-            ? "QR_INVALID"
-            : "INTERNAL_ERROR",
+        reason: createResult.error.code === "QR_INVALID" ? "QR_INVALID" : null,
       };
     }
 

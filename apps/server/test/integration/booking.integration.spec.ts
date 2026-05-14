@@ -622,7 +622,11 @@ describe("Booking Module — Integration", () => {
         });
 
         await paymentsController.createPayment(
-          { registrationId: "reg-002", gateway: "VNPAY" },
+          {
+            registrationId: "reg-002",
+            gateway: "VNPAY",
+            returnUrl: "https://example.com/return",
+          },
           "idem-001",
           studentUser
         );
@@ -645,7 +649,11 @@ describe("Booking Module — Integration", () => {
         );
 
         const result = await paymentsController.createPayment(
-          { registrationId: "reg-002", gateway: "VNPAY" },
+          {
+            registrationId: "reg-002",
+            gateway: "VNPAY",
+            returnUrl: "https://example.com/return",
+          },
           "idem-001",
           studentUser
         );
@@ -665,7 +673,11 @@ describe("Booking Module — Integration", () => {
         );
 
         const result = await paymentsController.createPayment(
-          { registrationId: "reg-002", gateway: "VNPAY" },
+          {
+            registrationId: "reg-002",
+            gateway: "VNPAY",
+            returnUrl: "https://example.com/return",
+          },
           "idem-001",
           studentUser
         );
@@ -680,7 +692,11 @@ describe("Booking Module — Integration", () => {
         );
 
         const result = await paymentsController.createPayment(
-          { registrationId: "reg-invalid", gateway: "VNPAY" },
+          {
+            registrationId: "reg-invalid",
+            gateway: "VNPAY",
+            returnUrl: "https://example.com/return",
+          },
           "idem-001",
           studentUser
         );
@@ -696,7 +712,11 @@ describe("Booking Module — Integration", () => {
         });
 
         await paymentsController.createPayment(
-          { registrationId: "reg-002", gateway: "VNPAY" },
+          {
+            registrationId: "reg-002",
+            gateway: "VNPAY",
+            returnUrl: "https://example.com/return",
+          },
           "idem-001",
           studentUser
         );

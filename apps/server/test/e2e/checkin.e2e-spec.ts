@@ -31,8 +31,7 @@ import { RedisService } from "../../src/infra/redis/redis.service";
 import { StorageService } from "../../src/infra/storage/storage.service";
 import { CheckinService } from "../../src/modules/checkin/services/checkin.service";
 import { OfflineSyncService } from "../../src/modules/checkin/services/offline-sync.service";
-import { TicketService as CheckinTicketService } from "../../src/modules/checkin/services/ticket.service";
-import { ticketErrors } from "../../src/shared/response/errors";
+import { checkinErrors } from "../../src/shared/response/errors";
 import { Result } from "../../src/shared/response/result";
 
 // ---------------------------------------------------------------------------
@@ -165,8 +164,6 @@ describe("Check-in Module (E2E) — FR-F07-001 through FR-F07-004", () => {
       .useValue(checkinServiceMock)
       .overrideProvider(OfflineSyncService)
       .useValue(offlineSyncServiceMock)
-      .overrideProvider(CheckinTicketService)
-      .useValue(ticketServiceMock)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -213,7 +210,12 @@ describe("Check-in Module (E2E) — FR-F07-001 through FR-F07-004", () => {
 
     it("returns 422 TICKET_VOID when scanning a VOID ticket (FR-F07-002)", () => {
       checkinServiceMock.scanQR.mockResolvedValue(
-        Result.fail(ticketErrors.void("ticket-void-001"))
+        Result.fail({
+          code: "TICKET_VOID",
+          category: "BUSINESS",
+          message: "Ticket is void.",
+          context: { registrationId: "ticket-void-001" },
+        })
       );
 
       return request(app.getHttpServer())
@@ -229,7 +231,7 @@ describe("Check-in Module (E2E) — FR-F07-001 through FR-F07-004", () => {
     it("returns 409 TICKET_ALREADY_CHECKEDIN for duplicate scan (FR-F07-003)", () => {
       checkinServiceMock.scanQR.mockResolvedValue(
         Result.fail(
-          ticketErrors.alreadyCheckedIn("ticket-dupe-001", "w-checkin-001")
+          checkinErrors.alreadyCheckedIn("ticket-dupe-001", "w-checkin-001")
         )
       );
 

@@ -107,17 +107,17 @@ export class PaymentsController {
   /**
    * GET /students/me/payments
    *
-   * Lists the authenticated student's payments with pagination.
+   * Lists the authenticated student's payments with cursor-based pagination.
    * IDOR enforced at service layer — only own payments returned.
    *
    * @param user - JWT payload providing student identity.
-   * @param query - Optional page and limit for pagination.
-   * @returns Paginated list of PaymentResponseDto.
+   * @param query - Optional cursor (opaque base64 token) and limit for pagination.
+   * @returns Cursor-paginated list of PaymentResponseDto.
    */
   @Get("students/me/payments")
   async getMyPayments(
     @CurrentUser() user: JwtPayload,
-    @Query() query: { page?: number; limit?: number }
+    @Query() query: { cursor?: string; limit?: number }
   ) {
     return this.paymentsService.getMyPayments(user.studentId!, query);
   }

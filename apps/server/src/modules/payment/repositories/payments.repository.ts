@@ -13,7 +13,7 @@
  * - findPendingOverdue: Payments past their timeout deadline.
  */
 import { Injectable, Inject } from "@nestjs/common";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
@@ -152,42 +152,58 @@ export class PaymentsRepository {
   }
 
   /**
-   * Lists payments belonging to a student with pagination.
+   * Lists payments belonging to a student with cursor-based pagination.
    *
    * IDOR is enforced by filtering on student_id — the caller must pass
    * the JWT subject, never a value from request params or body.
    * Results are ordered by initiated_at descending (most recent first).
+   * Cursor is a base64-encoded ISO timestamp of the last item's initiated_at.
    *
    * @param studentId - The student code (MSSV, TEXT PK from students table, IDOR-enforced).
-   * @param pagination - Optional pagination with page (default 1) and limit (default 20).
-   * @returns OkResult with { items: Payment[], total: number }, or FailResult with INTERNAL_ERROR.
+   * @param pagination - Optional cursor and limit (default 20).
+   * @returns OkResult with { items, nextCursor, hasMore, limit }, or FailResult with INTERNAL_ERROR.
    */
   async findMyPayments(
     studentId: string,
-    pagination?: { page?: number; limit?: number }
-  ): Promise<Result<{ items: Payment[]; total: number }>> {
+    pagination?: { cursor?: string; limit?: number }
+  ): Promise<
+    Result<{
+      items: Payment[];
+      nextCursor: string | null;
+      hasMore: boolean;
+      limit: number;
+    }>
+  > {
     return tryCatch(
       async () => {
-        const page = pagination?.page ?? 1;
         const limit = pagination?.limit ?? 20;
-        const offset = (page - 1) * limit;
+        const conditions = [eq(this.schema.payments.studentId, studentId)];
 
-        const [countResult] = await this.db
-          .select({ total: sql<number>`count(*)` })
-          .from(this.schema.payments)
-          .where(eq(this.schema.payments.studentId, studentId));
+        if (pagination?.cursor) {
+          const cursorDate = new Date(
+            Buffer.from(pagination.cursor, "base64").toString("ascii")
+          );
+          conditions.push(lt(this.schema.payments.initiatedAt, cursorDate));
+        }
 
-        const total = Number(countResult?.total ?? 0);
-
-        const items = await this.db
+        const rows = await this.db
           .select()
           .from(this.schema.payments)
-          .where(eq(this.schema.payments.studentId, studentId))
+          .where(and(...conditions))
           .orderBy(desc(this.schema.payments.initiatedAt))
-          .limit(limit)
-          .offset(offset);
+          .limit(limit + 1);
 
-        return { items, total };
+        const hasMore = rows.length > limit;
+        if (hasMore) rows.pop();
+
+        const nextCursor =
+          rows.length > 0
+            ? Buffer.from(
+                rows[rows.length - 1].initiatedAt!.toISOString()
+              ).toString("base64")
+            : null;
+
+        return { items: rows, nextCursor, hasMore, limit };
       },
       (err) => systemErrors.internal(err)
     );

@@ -166,7 +166,11 @@ describe("PaymentsService", () => {
 
   // ==================== initiate ====================
   describe("initiate — 5-stage pipeline (FR-F05-001, FR-F05-002, FR-F05-003)", () => {
-    const dto = { registrationId: REGISTRATION_ID, gateway: GATEWAY as any };
+    const dto = {
+      registrationId: REGISTRATION_ID,
+      gateway: GATEWAY as any,
+      returnUrl: "https://example.com/return",
+    };
 
     function setupInitiateSuccess() {
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
@@ -633,9 +637,14 @@ describe("PaymentsService", () => {
 
   // ==================== getMyPayments ====================
   describe("getMyPayments", () => {
-    it("should return paginated payments", async () => {
+    it("should return cursor-paginated payments", async () => {
       paymentsRepo.findMyPayments.mockResolvedValue(
-        Result.ok({ items: [mockPayment], total: 1 })
+        Result.ok({
+          items: [mockPayment],
+          nextCursor: null,
+          hasMore: false,
+          limit: 20,
+        })
       );
 
       const result = await service.getMyPayments(STUDENT_ID);
@@ -643,22 +652,22 @@ describe("PaymentsService", () => {
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.items).toHaveLength(1);
-        expect(result.data.total).toBe(1);
-        expect(result.data.page).toBe(1);
+        expect(result.data.nextCursor).toBeNull();
+        expect(result.data.hasMore).toBe(false);
         expect(result.data.limit).toBe(20);
         expect(result.data.items[0].id).toBe(PAYMENT_ID);
       }
     });
 
-    it("should pass pagination params", async () => {
+    it("should pass cursor pagination params", async () => {
       paymentsRepo.findMyPayments.mockResolvedValue(
-        Result.ok({ items: [], total: 0 })
+        Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 10 })
       );
 
-      await service.getMyPayments(STUDENT_ID, { page: 2, limit: 10 });
+      await service.getMyPayments(STUDENT_ID, { cursor: "abc123", limit: 10 });
 
       expect(paymentsRepo.findMyPayments).toHaveBeenCalledWith(STUDENT_ID, {
-        page: 2,
+        cursor: "abc123",
         limit: 10,
       });
     });

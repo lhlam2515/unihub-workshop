@@ -202,6 +202,7 @@ describe("NotificationDispatchService", () => {
       mockEmailChannel.send.mockResolvedValue(
         Result.fail({
           code: "INTERNAL_ERROR",
+          category: "INTERNAL",
           message: "SMTP connection timeout",
         })
       );
@@ -223,7 +224,11 @@ describe("NotificationDispatchService", () => {
 
     it("propagates error from findById repo failure", async () => {
       mockNotificationLogsRepo.findById.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          code: "INTERNAL_ERROR",
+          category: "INTERNAL",
+          message: "DB down",
+        })
       );
 
       const result = await service.dispatch("notif-001");
@@ -235,7 +240,11 @@ describe("NotificationDispatchService", () => {
     it("propagates error from findByChannelType repo failure", async () => {
       mockNotificationLogsRepo.findById.mockResolvedValue(Result.ok(mockLog));
       mockChannelConfigsRepo.findByChannelType.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          code: "INTERNAL_ERROR",
+          category: "INTERNAL",
+          message: "DB down",
+        })
       );
 
       const result = await service.dispatch("notif-001");
