@@ -166,7 +166,7 @@ describe("NotificationChannelConfigsRepository", () => {
       const result = await repo.findByChannelType("EMAIL");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.isActive).toBe(true);
+      expect(result.data!.isActive).toBe(true);
     });
   });
 

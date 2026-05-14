@@ -361,14 +361,14 @@ describe("Background Module — Integration", () => {
         mockQueue.enqueue.mockResolvedValue(undefined);
 
         const result = await studentSyncAdminController.triggerSync({
-          sourceFileName: "students_2026.csv",
+          filePath: "students_2026.csv",
         });
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.jobId).toBe("job-001");
         expect(result.data.status).toBe("RUNNING");
         expect(mockSyncJobsRepo.create).toHaveBeenCalledWith({
-          sourceFileName: "students_2026.csv",
+          filePath: "students_2026.csv",
         });
         // Should enqueue the job for background processing
         expect(mockQueue.enqueue).toHaveBeenCalled();

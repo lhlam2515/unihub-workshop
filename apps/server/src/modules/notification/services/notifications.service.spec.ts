@@ -106,7 +106,11 @@ describe("NotificationsService", () => {
 
     it("returns FailResult when repo query fails", async () => {
       mockNotificationLogsRepo.findMany.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          code: "INTERNAL_ERROR",
+          category: "INTERNAL",
+          message: "DB down",
+        })
       );
 
       const result = await service.listLogs({ limit: 20 });
@@ -126,7 +130,7 @@ describe("NotificationsService", () => {
       const result = await service.getLogById("notif-001");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.id).toBe("notif-001");
+      expect(result.data!.id).toBe("notif-001");
     });
 
     it("returns NOTIFICATION_LOG_NOT_FOUND when log does not exist", async () => {
@@ -140,7 +144,11 @@ describe("NotificationsService", () => {
 
     it("returns FailResult when repo query fails", async () => {
       mockNotificationLogsRepo.findById.mockResolvedValue(
-        Result.fail({ code: "INTERNAL_ERROR", message: "DB down" })
+        Result.fail({
+          code: "INTERNAL_ERROR",
+          category: "INTERNAL",
+          message: "DB down",
+        })
       );
 
       const result = await service.getLogById("notif-001");

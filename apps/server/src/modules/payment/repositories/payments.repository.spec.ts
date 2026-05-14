@@ -110,7 +110,10 @@ describe("PaymentsRepository", () => {
         limit: jest.fn().mockResolvedValue([mockPayment]),
       };
 
-      const result = await repo.findByIdempotencyKeyWithLock("idem-001", tx);
+      const result = await repo.findByIdempotencyKeyWithLock(
+        "idem-001",
+        tx as any
+      );
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toEqual(mockPayment);
@@ -126,7 +129,10 @@ describe("PaymentsRepository", () => {
         limit: jest.fn().mockResolvedValue([]),
       };
 
-      const result = await repo.findByIdempotencyKeyWithLock("idem-999", tx);
+      const result = await repo.findByIdempotencyKeyWithLock(
+        "idem-999",
+        tx as any
+      );
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBeNull();
@@ -143,7 +149,10 @@ describe("PaymentsRepository", () => {
           .mockRejectedValue(new Error("could not obtain lock on row")),
       };
 
-      const result = await repo.findByIdempotencyKeyWithLock("idem-001", tx);
+      const result = await repo.findByIdempotencyKeyWithLock(
+        "idem-001",
+        tx as any
+      );
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("DB_LOCK_TIMEOUT");
@@ -169,7 +178,7 @@ describe("PaymentsRepository", () => {
         returning: jest.fn().mockResolvedValue([mockPayment]),
       };
 
-      const result = await repo.create(mockPayment as any, tx);
+      const result = await repo.create(mockPayment as any, tx as any);
 
       expect(result.isSuccess).toBe(true);
       expect(tx.insert).toHaveBeenCalled();
@@ -228,7 +237,7 @@ describe("PaymentsRepository", () => {
         "pay-001",
         "SUCCESS",
         undefined,
-        tx
+        tx as any
       );
 
       expect(result.isSuccess).toBe(true);
@@ -236,25 +245,29 @@ describe("PaymentsRepository", () => {
   });
 
   describe("findMyPayments", () => {
-    it("should return paginated payments for a student", async () => {
+    it("should return cursor-paginated payments for a student", async () => {
       const items = [mockPayment];
-      // First where() is terminal for count → resolve once
-      // Subsequent where() in items chain → default mockReturnThis
-      mockDb.where.mockResolvedValueOnce([{ total: 1 }]);
-      // offset is terminal for items query → resolve
-      mockDb.offset.mockResolvedValueOnce(items);
+      // limit() + 1 fetch → terminal resolve
+      mockDb.limit.mockResolvedValueOnce(items);
 
       const result = await repo.findMyPayments("stu-001");
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
         expect(result.data.items).toEqual(items);
-        expect(result.data.total).toBe(1);
+        expect(result.data.hasMore).toBe(false);
+        expect(result.data.nextCursor).not.toBeUndefined();
+        expect(result.data.limit).toBe(20);
       }
     });
 
     it("should return FailResult on DB error", async () => {
-      mockDb.where.mockRejectedValue(new Error("DB error"));
+      // Mock `limit` (last in chain) so the chain stays intact and rejection is awaited
+      mockDb.select.mockReturnThis();
+      mockDb.from.mockReturnThis();
+      mockDb.where.mockReturnThis();
+      mockDb.orderBy.mockReturnThis();
+      mockDb.limit.mockRejectedValue(new Error("DB error"));
 
       const result = await repo.findMyPayments("stu-001");
 
@@ -286,7 +299,7 @@ describe("PaymentsRepository", () => {
         cb(tx)
       );
 
-      const result = await repo.transaction((t) => {
+      const result = await repo.transaction(async (t) => {
         expect(t).toBe(tx);
         return "ok";
       });
