@@ -180,6 +180,7 @@ export class UsersRepository {
               string | null
             >`COALESCE(${this.schema.students.fullName}, ${this.schema.staff.fullName})`,
             studentId: this.schema.students.studentId,
+            staffId: this.schema.staff.staffId,
           })
           .from(this.schema.users)
           .leftJoin(
@@ -239,6 +240,7 @@ export class UsersRepository {
                 string | null
               >`COALESCE(${this.schema.students.fullName}, ${this.schema.staff.fullName})`,
               studentId: this.schema.students.studentId,
+              staffId: this.schema.staff.staffId,
             })
             .from(this.schema.users)
             .leftJoin(

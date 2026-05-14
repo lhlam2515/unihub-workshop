@@ -39,6 +39,7 @@ export class TokenService {
       role: UserRole;
       allowedWorkshopIds?: string[];
       studentId?: string;
+      staffId?: string;
     },
     platform: "WEB" | "MOBILE"
   ): Promise<string> {
@@ -51,6 +52,9 @@ export class TokenService {
     };
     if (payload.studentId) {
       jwtPayload.studentId = payload.studentId;
+    }
+    if (payload.staffId) {
+      jwtPayload.staffId = payload.staffId;
     }
     return Promise.resolve(
       jwt.sign(jwtPayload, this.config.getOrThrow<string>("jwt.privateKey"), {

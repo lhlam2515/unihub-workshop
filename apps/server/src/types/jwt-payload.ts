@@ -33,4 +33,10 @@ export interface JwtPayload {
    * Example: "21127001"
    */
   studentId?: string;
+  /**
+   * Staff UUID from the `staff` table — present for BTC and CHECKIN_STAFF roles.
+   * Required when setting `created_by` on workshops (FK references `staff.staff_id`).
+   * Distinct from `sub` which references `users.user_id`.
+   */
+  staffId?: string;
 }

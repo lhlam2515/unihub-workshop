@@ -170,7 +170,7 @@ export class WorkshopsService {
 
   async createWorkshop(
     dto: CreateWorkshopDto,
-    userId: string
+    staffId: string
   ): Promise<Result<WorkshopAdminDetailDto>> {
     if (dto.roomId) {
       const conflictResult = await this.roomConflictService.checkConflict(
@@ -192,7 +192,7 @@ export class WorkshopsService {
       seatsAvailable: dto.seatsTotal,
       price: dto.price !== undefined ? String(dto.price) : "0",
       status: dto.status ?? "DRAFT",
-      createdBy: userId,
+      createdBy: staffId,
     };
 
     const workshopResult = await this.workshopsRepo.create(workshopData);

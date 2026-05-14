@@ -126,7 +126,10 @@ export class WorkshopsAdminController {
     @CurrentUser() user: JwtPayload,
     @Res({ passthrough: true }) response?: Response
   ) {
-    const result = await this.workshopsService.createWorkshop(dto, user.sub);
+    const result = await this.workshopsService.createWorkshop(
+      dto,
+      user.staffId ?? user.sub
+    );
     this.setETag(response, result);
     return result;
   }

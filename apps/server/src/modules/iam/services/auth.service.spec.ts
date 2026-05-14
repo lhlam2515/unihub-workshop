@@ -77,6 +77,7 @@ describe("AuthService", () => {
     mockUsersRepo = {
       findByEmail: jest.fn(),
       findById: jest.fn(),
+      findByIdWithProfile: jest.fn().mockResolvedValue(Result.ok(null)),
     };
 
     mockTokenService = {

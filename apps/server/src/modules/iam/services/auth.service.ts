@@ -107,12 +107,23 @@ export class AuthService {
       }
     }
 
+    let staffId: string | undefined;
+    if (user.role === "BTC" || user.role === "CHECKIN_STAFF") {
+      const profileResult = await this.usersRepo.findByIdWithProfile(
+        user.userId
+      );
+      if (profileResult.isSuccess && profileResult.data?.staffId) {
+        staffId = profileResult.data.staffId;
+      }
+    }
+
     const accessToken = await this.tokenService.signAccessToken(
       {
         userId: user.userId,
         role: user.role,
         allowedWorkshopIds,
         studentId: studentProfile?.studentId,
+        staffId,
       },
       "WEB"
     );
@@ -182,6 +193,7 @@ export class AuthService {
 
     let allowedWorkshopIds: string[] | undefined;
     let newStudentId: string | undefined;
+    let newStaffId: string | undefined;
 
     if (user.role === "CHECKIN_STAFF") {
       const assignmentResult = await this.assignmentsRepo.findByUserId(
@@ -199,12 +211,22 @@ export class AuthService {
       }
     }
 
+    if (user.role === "BTC" || user.role === "CHECKIN_STAFF") {
+      const profileResult = await this.usersRepo.findByIdWithProfile(
+        user.userId
+      );
+      if (profileResult.isSuccess && profileResult.data?.staffId) {
+        newStaffId = profileResult.data.staffId;
+      }
+    }
+
     const newAccessToken = await this.tokenService.signAccessToken(
       {
         userId: user.userId,
         role: user.role,
         allowedWorkshopIds,
         studentId: newStudentId,
+        staffId: newStaffId,
       },
       platform
     );

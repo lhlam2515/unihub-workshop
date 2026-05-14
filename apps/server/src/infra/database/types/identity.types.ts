@@ -73,4 +73,6 @@ export interface UserWithProfile {
   fullName: string | null;
   /** students.student_id — present only for STUDENT role users. */
   studentId: string | null;
+  /** staff.staff_id — present only for BTC and CHECKIN_STAFF role users. */
+  staffId: string | null;
 }
