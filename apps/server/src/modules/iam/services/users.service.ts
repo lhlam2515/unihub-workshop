@@ -82,11 +82,10 @@ export class UsersService {
     id: string,
     status: "ACTIVE" | "SUSPENDED"
   ): Promise<Result<UserResponseDto>> {
-    const result = await this.usersRepo.updateStatus(id, status);
-    if (result.isFailure) return Result.fail(result.error);
+    const updateResult = await this.usersRepo.updateStatus(id, status);
+    if (updateResult.isFailure) return Result.fail(updateResult.error);
 
-    const user = result.data;
-    if (!user) {
+    if (!updateResult.data) {
       return Result.fail({
         category: "NOT_FOUND" as const,
         code: "USER_NOT_FOUND" as const,
@@ -104,19 +103,23 @@ export class UsersService {
       await this.redisService.del(`user:suspended:${id}`);
     }
 
-    return Result.ok(UserResponseBuilder.from(user));
+    return Result.ok(UserResponseBuilder.from(updateResult.data));
   }
 
   /**
    * Triggers a token revocation for the specified user.
    *
-   * Note: The system does not track all issued tokens per user. This method
-   * marks the account for re-authentication and invalidates the current session.
+   * Business rules:
+   * - Invalidates the user's current session immediately.
+   * - User must re-authenticate to obtain a new access token.
+   *
+   * Side effects:
+   * - Sets Redis suspension flag for 7 days (checked by JwtAuthGuard on every request).
    *
    * @param userId - The target user's UUID.
-   * @returns OkResult with a confirmation message, or FailResult with USER_NOT_FOUND.
+   * @returns OkResult<void> on success, or FailResult with USER_NOT_FOUND.
    */
-  async revokeUserTokens(userId: string): Promise<Result<{ message: string }>> {
+  async revokeUserTokens(userId: string): Promise<Result<void>> {
     const result = await this.usersRepo.findById(userId);
     if (result.isFailure) return Result.fail(result.error);
     if (!result.data) {
@@ -134,8 +137,6 @@ export class UsersService {
       604_800 // 7 days
     );
 
-    return Result.ok({
-      message: "All active sessions revoked. The user must re-authenticate.",
-    });
+    return Result.ok(undefined);
   }
 }

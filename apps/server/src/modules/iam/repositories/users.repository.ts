@@ -3,7 +3,11 @@ import { and, desc, eq, sql, type SQLWrapper } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
-import type { NewUser, User } from "@/infra/database/types/identity.types";
+import type {
+  NewUser,
+  User,
+  UserWithProfile,
+} from "@/infra/database/types/identity.types";
 import { systemErrors } from "@/shared/response/errors";
 import { tryCatch } from "@/shared/response/result";
 import type { Result } from "@/shared/response/result";
@@ -148,6 +152,114 @@ export class UsersRepository {
           .where(eq(this.schema.users.userId, id))
           .returning();
         return updated;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Looks up a single user by UUID, enriched with fullName and studentId from
+   * a LEFT JOIN against students (STUDENT role) and staff (BTC / CHECKIN_STAFF).
+   *
+   * @param id - The user's UUID.
+   * @returns UserWithProfile or null if not found.
+   */
+  async findByIdWithProfile(
+    id: string
+  ): Promise<Result<UserWithProfile | null>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .select({
+            userId: this.schema.users.userId,
+            email: this.schema.users.email,
+            role: this.schema.users.role,
+            status: this.schema.users.status,
+            createdAt: this.schema.users.createdAt,
+            fullName: sql<
+              string | null
+            >`COALESCE(${this.schema.students.fullName}, ${this.schema.staff.fullName})`,
+            studentId: this.schema.students.studentId,
+          })
+          .from(this.schema.users)
+          .leftJoin(
+            this.schema.students,
+            eq(this.schema.students.userId, this.schema.users.userId)
+          )
+          .leftJoin(
+            this.schema.staff,
+            eq(this.schema.staff.email, this.schema.users.email)
+          )
+          .where(eq(this.schema.users.userId, id))
+          .limit(1);
+        return result ?? null;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Returns a paginated, optionally filtered list of users enriched with fullName
+   * and studentId via LEFT JOINs against students and staff tables.
+   *
+   * @param role - Optional role filter (STUDENT | BTC | CHECKIN_STAFF).
+   * @param q - Optional email search (ILIKE).
+   * @param page - Page index (1-based, default 1).
+   * @param limit - Items per page (default 20).
+   * @returns Object containing enriched items array and total count.
+   */
+  async listWithProfile(
+    role?: string,
+    q?: string,
+    page = 1,
+    limit = 20
+  ): Promise<Result<{ items: UserWithProfile[]; total: number }>> {
+    return tryCatch(
+      async () => {
+        const conditions: SQLWrapper[] = [];
+        if (role) {
+          conditions.push(sql`${this.schema.users.role} = ${role}`);
+        }
+        if (q) {
+          conditions.push(
+            sql`${this.schema.users.email} ILIKE ${"%" + q + "%"}`
+          );
+        }
+        const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+        const [rows, [totalResult]] = await Promise.all([
+          this.db
+            .select({
+              userId: this.schema.users.userId,
+              email: this.schema.users.email,
+              role: this.schema.users.role,
+              status: this.schema.users.status,
+              createdAt: this.schema.users.createdAt,
+              fullName: sql<
+                string | null
+              >`COALESCE(${this.schema.students.fullName}, ${this.schema.staff.fullName})`,
+              studentId: this.schema.students.studentId,
+            })
+            .from(this.schema.users)
+            .leftJoin(
+              this.schema.students,
+              eq(this.schema.students.userId, this.schema.users.userId)
+            )
+            .leftJoin(
+              this.schema.staff,
+              eq(this.schema.staff.email, this.schema.users.email)
+            )
+            .where(where)
+            .orderBy(desc(this.schema.users.createdAt))
+            .limit(limit)
+            .offset((page - 1) * limit),
+          this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(this.schema.users)
+            .where(where),
+        ]);
+
+        return { items: rows, total: totalResult?.count ?? 0 };
       },
       (err) => systemErrors.internal(err)
     );

@@ -32,7 +32,7 @@ export class CheckinStaffAssignmentService {
     userId: string,
     workshopIds: string[]
   ): Promise<
-    Result<{ user_id: string; workshop_ids: string[]; warning: string }>
+    Result<{ userId: string; workshopIds: string[]; warning: string }>
   > {
     const userResult = await this.usersRepo.findById(userId);
     if (userResult.isFailure) return Result.fail(userResult.error);
@@ -57,8 +57,8 @@ export class CheckinStaffAssignmentService {
     if (upsertResult.isFailure) return Result.fail(upsertResult.error);
 
     return Result.ok({
-      user_id: userId,
-      workshop_ids: workshopIds,
+      userId,
+      workshopIds,
       warning:
         "Changes take effect on the staff member's next login (JWT is immutable). " +
         "The staff member needs to log out and log back in to receive updated permissions.",
@@ -69,17 +69,16 @@ export class CheckinStaffAssignmentService {
    * Retrieves the list of workshop IDs currently assigned to a check-in staff member.
    *
    * @param userId - The CHECKIN_STAFF user's UUID.
-   * @returns OkResult with the user ID and workshop ID list (empty array if none assigned).
+   * @returns OkResult with the workshop ID list matching the OpenAPI spec `{ workshopIds }`.
    */
   async getAssignedWorkshops(
     userId: string
-  ): Promise<Result<{ user_id: string; workshop_ids: string[] }>> {
+  ): Promise<Result<{ workshopIds: string[] }>> {
     const result = await this.assignmentRepo.findByUserId(userId);
     if (result.isFailure) return Result.fail(result.error);
 
     return Result.ok({
-      user_id: userId,
-      workshop_ids: result.data?.workshopIds ?? [],
+      workshopIds: result.data?.workshopIds ?? [],
     });
   }
 }

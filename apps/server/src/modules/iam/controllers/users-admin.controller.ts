@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -73,6 +75,7 @@ export class UsersAdminController {
    * @param id - The target user's UUID.
    */
   @Post(":id/revoke-token")
+  @HttpCode(HttpStatus.NO_CONTENT)
   async revokeUserTokens(@Param("id") id: string) {
     return this.usersService.revokeUserTokens(id);
   }

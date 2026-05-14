@@ -9,7 +9,7 @@
  * Depends on: JwtAuthGuard (requires `request.user.allowed_workshop_ids`).
  *
  * Scope validation flow:
- * 1. Extract `workshop_id` from `request.params.id` or `request.body.workshop_id`.
+ * 1. Extract `workshopId` from route params or request body.
  * 2. Read `allowed_workshop_ids` from `request.user` (set by JwtAuthGuard).
  * 3. Verify the workshop ID is in the allowed list — deny with 403 if not.
  *
@@ -48,6 +48,7 @@ export class WorkshopScopeGuard implements CanActivate {
     const allowedWorkshops: string[] = user?.allowed_workshop_ids ?? [];
     const body = request.body as Record<string, unknown> | null;
     const workshopId: string | undefined =
+      (request.params.workshopId as string) ||
       (request.params.id as string) ||
       (body?.workshopId as string | undefined) ||
       (body?.workshop_id as string | undefined);

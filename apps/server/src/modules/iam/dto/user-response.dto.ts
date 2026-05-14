@@ -1,27 +1,33 @@
+import type { User } from "@/infra/database/types/identity.types";
+
 /**
- * Public user representation returned by admin user endpoints.
+ * Public user representation matching the OpenAPI UserResponse schema.
  *
- * Excludes sensitive fields such as `password_hash`.
+ * Used by admin user management endpoints (/admin/users).
+ * Excludes sensitive fields: passwordHash, updatedAt.
  */
 export interface UserResponseDto {
   userId: string;
   email: string;
   role: string;
   status: string;
-  createdAt: Date;
+  createdAt: string;
 }
 
-/**
- * Builds a UserResponseDto from a raw user entity, excluding sensitive fields.
- */
 export class UserResponseBuilder {
-  static from(user: UserResponseDto): UserResponseDto {
+  /**
+   * Maps a User database entity to a UserResponseDto.
+   *
+   * @param user - Raw user entity from the database.
+   * @returns UserResponseDto safe for API responses.
+   */
+  static from(user: User): UserResponseDto {
     return {
       userId: user.userId,
       email: user.email,
       role: user.role,
       status: user.status,
-      createdAt: user.createdAt,
+      createdAt: user.createdAt.toISOString(),
     };
   }
 }

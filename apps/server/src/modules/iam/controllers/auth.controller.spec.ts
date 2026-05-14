@@ -126,6 +126,26 @@ describe("AuthController", () => {
       await controller.refresh(dto, res, req);
       expect(authService.refreshToken).toHaveBeenCalledWith("cookie-rt", "WEB");
     });
+
+    it("returns refreshToken null for web cookie refresh flow", async () => {
+      const dto = { refreshToken: "" };
+      authService.refreshToken.mockResolvedValue(
+        Result.ok({
+          accessToken: "at2",
+          refreshToken: "rt2",
+          expiresIn: 900,
+        } as any)
+      );
+      const res = mockResponse();
+      const req = { cookies: { refreshToken: "cookie-rt" } } as any;
+
+      const result = await controller.refresh(dto, res, req);
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data.refreshToken).toBeNull();
+      }
+    });
   });
 
   describe("POST /auth/logout", () => {

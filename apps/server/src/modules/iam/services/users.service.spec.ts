@@ -219,13 +219,13 @@ describe("UsersService", () => {
   // revokeUserTokens
   // -------------------------------------------------------------------------
   describe("revokeUserTokens", () => {
-    it("returns confirmation message when user exists", async () => {
+    it("returns success when user exists", async () => {
       mockUsersRepo.findById.mockResolvedValue(Result.ok(rawUser));
 
       const result = await usersService.revokeUserTokens("usr-1");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.message).toContain("All active sessions revoked");
+      expect(result.data).toBeUndefined();
     });
 
     it("returns FailResult with USER_NOT_FOUND when user does not exist", async () => {

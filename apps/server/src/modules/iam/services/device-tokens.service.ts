@@ -13,18 +13,19 @@ export class DeviceTokensService {
    * Registers a device token for push notifications.
    *
    * Business rules:
-   * - Deactivates all existing active tokens for the same student+platform before
-   *   creating the new one, preventing token accumulation.
+   * - If the token already exists for the current student, updates lastSeen and returns 200 (upsert).
+   * - If the token is new, deactivates all existing active tokens for the same student+platform
+   *   before creating the new one, preventing token accumulation, and returns 201 (created).
    * - Accepts lowercase platform ("ios" | "android") and uppercases before DB insert.
-   * - Returns the newly created device token record.
+   * - Returns the device token record with isNew flag to signal HTTP status code (201 vs 200).
    *
    * Side effects:
-   * - Updates device_tokens table (deactivate old, insert new).
+   * - Updates device_tokens table (upsert or deactivate old + insert new).
    *
    * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param token - The device token string from the push provider.
    * @param platform - The platform identifier ("IOS" | "ANDROID").
-   * @returns OkResult with the created device token, or FailResult.
+   * @returns OkResult with the device token and isNew flag, or FailResult.
    */
   async registerToken(
     studentId: string,
@@ -37,11 +38,37 @@ export class DeviceTokensService {
       isActive: boolean;
       lastSeen: Date;
       createdAt: Date;
+      isNew: boolean;
     }>
   > {
     const dbPlatform = platform.toUpperCase() as "IOS" | "ANDROID";
 
-    // Deactivate old tokens for this student+platform
+    // Check if token already exists for this student
+    const existingResult = await this.deviceTokensRepo.findByToken(token);
+    if (existingResult.isFailure) return Result.fail(existingResult.error);
+
+    const existingToken = existingResult.data;
+    const isNew = !existingToken || existingToken.studentId !== studentId;
+
+    if (!isNew && existingToken) {
+      // Token exists for this student — upsert: update lastSeen
+      const updateResult = await this.deviceTokensRepo.updateLastSeen(
+        existingToken.deviceTokenId
+      );
+      if (updateResult.isFailure) return Result.fail(updateResult.error);
+
+      const updated = updateResult.data;
+      return Result.ok({
+        id: updated.deviceTokenId,
+        platform: updated.platform,
+        isActive: updated.isActive,
+        lastSeen: updated.lastSeen,
+        createdAt: updated.createdAt,
+        isNew: false,
+      });
+    }
+
+    // Token is new — deactivate old tokens for this student+platform, then create
     const deactivateResult =
       await this.deviceTokensRepo.deactivateAllForStudent(
         studentId,
@@ -64,6 +91,7 @@ export class DeviceTokensService {
       isActive: created.isActive,
       lastSeen: created.lastSeen,
       createdAt: created.createdAt,
+      isNew: true,
     });
   }
 
