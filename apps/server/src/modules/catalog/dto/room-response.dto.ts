@@ -20,8 +20,8 @@ export interface RoomSummaryDto {
 /** Full room detail — extends RoomSummary with capacity, facilities, createdAt */
 export interface RoomResponseDto extends RoomSummaryDto {
   capacity: number;
-  facilities: Record<string, unknown> | null;
-  createdAt: string | null;
+  facilities?: Record<string, unknown>;
+  createdAt: string;
 }
 
 export class RoomResponseBuilder {
@@ -49,8 +49,8 @@ export class RoomResponseBuilder {
       floor: room.floor,
       capacity: room.capacity,
       floorPlanUrl: room.floorPlanUrl,
-      facilities: room.facilities ?? null,
-      createdAt: room.createdAt ? room.createdAt.toISOString() : null,
+      facilities: room.facilities ?? undefined,
+      createdAt: room.createdAt?.toISOString() ?? new Date(0).toISOString(),
     };
   }
 }

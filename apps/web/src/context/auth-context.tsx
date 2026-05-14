@@ -18,16 +18,10 @@ import {
   onForcedLogout,
 } from "@/lib/api/client";
 import { acquireFreshToken } from "@/lib/api/client/auth-session";
-import type { Role, User, LoginRequest, LoginResponse } from "@/types/auth";
-
-// Backend returns uppercase roles (STUDENT, BTC, CHECKIN_STAFF).
-// Normalize to lowercase (student, btc, checkin_staff) for frontend guards.
-function normalizeRole(role: string): Role {
-  return role.toLowerCase() as Role;
-}
+import type { User, LoginRequest, LoginResponse } from "@/types/auth";
 
 function normalizeUser(raw: User): User {
-  return { ...raw, role: normalizeRole(raw.role) };
+  return { ...raw };
 }
 
 // ---------------------------------------------------------------------------

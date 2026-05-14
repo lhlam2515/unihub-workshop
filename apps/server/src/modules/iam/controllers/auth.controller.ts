@@ -118,7 +118,7 @@ export class AuthController {
         result.data.refreshToken!,
         REFRESH_COOKIE_OPTIONS
       );
-      return Result.ok({ ...result.data, refreshToken: undefined });
+      return Result.ok({ ...result.data, refreshToken: null });
     }
 
     return result;

@@ -29,7 +29,10 @@ import { WorkshopsRepository } from "../repositories/workshops.repository";
 import type { CancelWorkshopDto } from "../dto/cancel-workshop.dto";
 import type { CreateWorkshopDto } from "../dto/create-workshop.dto";
 import type { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
-import type { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
+import type {
+  ListAdminWorkshopsQueryDto,
+  ListPublicWorkshopsQueryDto,
+} from "../dto/list-workshops-query.dto";
 import type { UpdateWorkshopDto } from "../dto/update-workshop.dto";
 import type {
   WorkshopSummaryDto,
@@ -60,7 +63,7 @@ export class WorkshopsService {
   // ---------------------------------------------------------------------------
 
   async listPublished(
-    query: ListWorkshopsQueryDto
+    query: ListPublicWorkshopsQueryDto
   ): Promise<Result<CursorPaginationResult<WorkshopSummaryDto>>> {
     // Convert 'day' (YYYY-MM-DD) to dateFrom/dateTo for repository
     let dateFrom: Date | undefined;
@@ -75,7 +78,6 @@ export class WorkshopsService {
     const result = await this.workshopsRepo.findPublished({
       dateFrom,
       dateTo,
-      q: query.q,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -189,7 +191,7 @@ export class WorkshopsService {
       seatsTotal: dto.seatsTotal,
       seatsAvailable: dto.seatsTotal,
       price: dto.price !== undefined ? String(dto.price) : "0",
-      status: "DRAFT",
+      status: dto.status ?? "DRAFT",
       createdBy: userId,
     };
 
@@ -414,7 +416,11 @@ export class WorkshopsService {
       );
     }
 
-    const changes: { roomId?: string; startsAt?: Date; endsAt?: Date } = {};
+    const changes: {
+      roomId?: string | null;
+      startsAt?: Date;
+      endsAt?: Date;
+    } = {};
     if (dto.roomId !== undefined) changes.roomId = dto.roomId;
     if (dto.startsAt !== undefined) changes.startsAt = dto.startsAt;
     if (dto.endsAt !== undefined) changes.endsAt = dto.endsAt;
@@ -546,7 +552,7 @@ export class WorkshopsService {
   }
 
   async listAdmin(
-    query: ListWorkshopsQueryDto
+    query: ListAdminWorkshopsQueryDto
   ): Promise<Result<CursorPaginationResult<WorkshopAdminDetailDto>>> {
     const result = await this.workshopsRepo.listAdmin({
       status: query.status,
@@ -584,22 +590,24 @@ export class WorkshopsService {
 
   async getStats(id: string): Promise<
     Result<{
-      confirmed_count: number;
-      available_seats: number;
-      total_capacity: number;
+      registrations: { total: number; byStatus: Record<string, number> };
+      checkins: { total: number; rate: number };
+      revenue: { amount: number; currency: string };
     }>
   > {
     const workshopResult = await this.workshopsRepo.findById(id);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
-    const workshopRow = workshopResult.data!;
-    const workshop = workshopRow.workshops;
+    if (!workshopResult.data) return Result.fail(workshopErrors.notFound(id));
 
-    const availableSeats = await this.seatCounterService.getCachedSeats(id);
+    const confirmedCount = await this.getConfirmedCount(id);
 
     return Result.ok({
-      confirmed_count: await this.getConfirmedCount(id),
-      available_seats: availableSeats,
-      total_capacity: workshop.seatsTotal,
+      registrations: {
+        total: confirmedCount,
+        byStatus: { CONFIRMED: confirmedCount },
+      },
+      checkins: { total: 0, rate: 0 },
+      revenue: { amount: 0, currency: "VND" },
     });
   }
 

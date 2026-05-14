@@ -2047,7 +2047,7 @@ paths:
             schema:
               type: object
               required:
-              - file_path
+              - filePath
               properties:
                 filePath:
                   type: string
@@ -2846,7 +2846,6 @@ components:
         received:
           description: Raw input value (when safe to expose)
     PaginationMeta:
-    PaginationMeta:
       type: object
       required:
       - limit
@@ -2902,12 +2901,12 @@ components:
       examples:
         student:
           value:
-            accountType: student
+            accountType: STUDENT
             studentId: '21127001'
             password: '...'
         staff:
           value:
-            accountType: staff
+            accountType: STAFF
             email: btc01@unihub.edu.vn
             password: '...'
     LoginResponse:

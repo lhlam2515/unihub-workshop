@@ -100,6 +100,26 @@ export class DeviceTokensRepository {
   }
 
   /**
+   * Updates the lastSeen timestamp of a device token.
+   *
+   * @param deviceTokenId - The device token's UUID.
+   * @returns The updated device token entity.
+   */
+  async updateLastSeen(deviceTokenId: string): Promise<Result<DeviceToken>> {
+    return tryCatch(
+      async () => {
+        const [result] = await this.db
+          .update(this.schema.deviceTokens)
+          .set({ lastSeen: new Date() })
+          .where(eq(this.schema.deviceTokens.deviceTokenId, deviceTokenId))
+          .returning();
+        return result;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
    * Soft-deletes all active device tokens for a given student on a given platform.
    *
    * @param studentId - The student's UUID.

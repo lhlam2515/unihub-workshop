@@ -1,11 +1,11 @@
 export interface CheckinResultDto {
   id: string;
   registrationId: string;
-  checkedInAt: Date;
-  receivedAt: Date;
+  checkedInAt: string;
+  receivedAt: string;
   student?: { code: string; name: string } | null;
   duplicate: boolean;
-  originallyCheckedInAt?: Date | null;
+  originallyCheckedInAt?: string | null;
 }
 
 export class CheckinResultBuilder {
@@ -21,13 +21,14 @@ export class CheckinResultBuilder {
     return {
       id: params.checkinId,
       registrationId: params.registrationId,
-      checkedInAt: params.checkedInAt,
-      receivedAt: params.receivedAt,
+      checkedInAt: params.checkedInAt.toISOString(),
+      receivedAt: params.receivedAt.toISOString(),
       student: params.student
         ? { code: params.student.studentCode, name: params.student.fullName }
         : null,
       duplicate: params.duplicate,
-      originallyCheckedInAt: params.originallyCheckedInAt ?? null,
+      originallyCheckedInAt:
+        params.originallyCheckedInAt?.toISOString() ?? null,
     };
   }
 }

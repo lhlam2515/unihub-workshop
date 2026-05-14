@@ -15,6 +15,7 @@ import type {
   SpeakerSummary,
   WorkshopAdmin,
   WorkshopCreateRequest,
+  WorkshopPatchRequest,
 } from "@/types/workshop";
 
 // ---------------------------------------------------------------------------
@@ -35,18 +36,41 @@ export interface AdminWorkshopFormWidgetProps {
 function toCreateRequest(data: Record<string, unknown>): WorkshopCreateRequest {
   return {
     title: String(data.title ?? ""),
-    description: data.description != null ? String(data.description) : null,
+    description:
+      data.description != null ? String(data.description) : undefined,
     speakerId:
       data.speakerId != null && data.speakerId !== ""
         ? String(data.speakerId)
-        : null,
+        : undefined,
     roomId:
-      data.roomId != null && data.roomId !== "" ? String(data.roomId) : null,
+      data.roomId != null && data.roomId !== ""
+        ? String(data.roomId)
+        : undefined,
     startsAt: String(data.startsAt ?? ""),
     endsAt: String(data.endsAt ?? ""),
     seatsTotal: Number(data.seatsTotal),
     price: Number(data.price),
     status: (data.status as "DRAFT" | "OPEN") ?? "DRAFT",
+  };
+}
+
+function toPatchRequest(data: Record<string, unknown>): WorkshopPatchRequest {
+  return {
+    title: data.title != null ? String(data.title) : undefined,
+    description:
+      data.description != null ? String(data.description) : undefined,
+    speakerId:
+      data.speakerId != null && data.speakerId !== ""
+        ? String(data.speakerId)
+        : undefined,
+    roomId:
+      data.roomId != null && data.roomId !== ""
+        ? String(data.roomId)
+        : undefined,
+    startsAt: data.startsAt != null ? String(data.startsAt) : undefined,
+    endsAt: data.endsAt != null ? String(data.endsAt) : undefined,
+    seatsTotal: data.seatsTotal != null ? Number(data.seatsTotal) : undefined,
+    price: data.price != null ? Number(data.price) : undefined,
   };
 }
 
@@ -75,7 +99,7 @@ export function AdminWorkshopFormWidget({
 
       try {
         if (isEdit && initialData) {
-          const request = toCreateRequest(formData);
+          const request = toPatchRequest(formData);
           const result = await updateWorkshop(initialData.id, request, version);
           if (result.isFailure) {
             if (isApiError(result.error) && result.error.status === 412) {

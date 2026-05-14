@@ -36,7 +36,7 @@ export function RoomInfo({ room }: RoomInfoProps) {
               {room.floor ? ` · Tầng ${room.floor}` : ""}
             </p>
           )}
-          {room.capacity > 0 && (
+          {(room.capacity ?? 0) > 0 && (
             <p className="text-muted-foreground text-sm">
               Sức chứa: {room.capacity} người
             </p>

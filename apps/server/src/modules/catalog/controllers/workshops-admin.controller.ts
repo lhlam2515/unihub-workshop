@@ -9,10 +9,10 @@
  * - POST /admin/workshops — create a new workshop
  * - GET /admin/workshops/:id — get admin detail
  * - PATCH /admin/workshops/:id — update a draft workshop
- * - POST /admin/workshops/:id/publish — publish workshop and init Redis counter
- * - PATCH /admin/workshops/:id/emergency-update — emergency update published workshop
- * - POST /admin/workshops/:id/cancel — cancel workshop and cascade void tickets
- * - GET /admin/workshops/:id/stats — get workshop statistics
+ * - POST /admin/workshops/:workshopId/publish — publish workshop and init Redis counter
+ * - PATCH /admin/workshops/:workshopId/emergency-update — emergency update published workshop
+ * - POST /admin/workshops/:workshopId/cancel — cancel workshop and cascade void tickets
+ * - GET /admin/workshops/:workshopId/stats — get workshop statistics
  */
 
 import {
@@ -25,6 +25,9 @@ import {
   Query,
   UseGuards,
   Headers,
+  HttpCode,
+  HttpStatus,
+  Res,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
@@ -32,15 +35,19 @@ import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
-import { parseIfMatch } from "@/shared/utils/etag.utils";
+import { validationError } from "@/shared/response/errors";
+import { Result } from "@/shared/response/result";
+import { generateETag, parseIfMatch } from "@/shared/utils/etag.utils";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CancelWorkshopDto } from "../dto/cancel-workshop.dto";
 import { CreateWorkshopDto } from "../dto/create-workshop.dto";
 import { EmergencyUpdateWorkshopDto } from "../dto/emergency-update-workshop.dto";
-import { ListWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
+import { ListAdminWorkshopsQueryDto } from "../dto/list-workshops-query.dto";
 import { UpdateWorkshopDto } from "../dto/update-workshop.dto";
 import { WorkshopsService } from "../services/workshops.service";
+
+import type { Response } from "express";
 
 @Controller("admin/workshops")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,6 +55,44 @@ import { WorkshopsService } from "../services/workshops.service";
 @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class WorkshopsAdminController {
   constructor(private readonly workshopsService: WorkshopsService) {}
+
+  private requireIfMatch(ifMatch: string | undefined) {
+    if (!ifMatch) {
+      return Result.fail(
+        validationError([
+          {
+            field: "If-Match",
+            rule: "required",
+            message: "If-Match header is required.",
+          },
+        ])
+      );
+    }
+
+    const expectedVersion = parseIfMatch(ifMatch);
+    if (expectedVersion === null) {
+      return Result.fail(
+        validationError([
+          {
+            field: "If-Match",
+            rule: "format",
+            message: "If-Match header must be a quoted numeric version.",
+          },
+        ])
+      );
+    }
+
+    return Result.ok(expectedVersion);
+  }
+
+  private setETag(
+    response: Response | undefined,
+    result: Result<{ version: number }>
+  ) {
+    if (result.isSuccess) {
+      response?.header("ETag", generateETag(result.data.version));
+    }
+  }
 
   /**
    * Lists all workshops (any status) for admin management.
@@ -60,7 +105,7 @@ export class WorkshopsAdminController {
    * @returns Paginated list of workshops with admin-level detail fields.
    */
   @Get()
-  async listAdmin(@Query() query: ListWorkshopsQueryDto) {
+  async listAdmin(@Query() query: ListAdminWorkshopsQueryDto) {
     return this.workshopsService.listAdmin(query);
   }
 
@@ -75,11 +120,15 @@ export class WorkshopsAdminController {
    * @returns The newly created workshop admin detail DTO.
    */
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   async createWorkshop(
     @Body() dto: CreateWorkshopDto,
-    @CurrentUser() user: JwtPayload
+    @CurrentUser() user: JwtPayload,
+    @Res({ passthrough: true }) response?: Response
   ) {
-    return this.workshopsService.createWorkshop(dto, user.sub);
+    const result = await this.workshopsService.createWorkshop(dto, user.sub);
+    this.setETag(response, result);
+    return result;
   }
 
   /**
@@ -93,9 +142,14 @@ export class WorkshopsAdminController {
    * @param id - The UUID of the workshop.
    * @returns Admin-level workshop detail DTO.
    */
-  @Get(":id")
-  async getAdminDetail(@Param("id") id: string) {
-    return this.workshopsService.getAdminDetail(id);
+  @Get(":workshopId")
+  async getAdminDetail(
+    @Param("workshopId") workshopId: string,
+    @Res({ passthrough: true }) response?: Response
+  ) {
+    const result = await this.workshopsService.getAdminDetail(workshopId);
+    this.setETag(response, result);
+    return result;
   }
 
   /**
@@ -112,20 +166,29 @@ export class WorkshopsAdminController {
    * @param ifMatch - If-Match header for optimistic locking.
    * @returns The updated workshop admin detail DTO.
    */
-  @Patch(":id")
+  @Patch(":workshopId")
   async updateWorkshop(
-    @Param("id") id: string,
+    @Param("workshopId") workshopId: string,
     @Body() dto: UpdateWorkshopDto,
-    @Headers("if-match") ifMatch?: string
+    @Headers("if-match") ifMatch?: string,
+    @Res({ passthrough: true }) response?: Response
   ) {
-    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
-    return this.workshopsService.updateWorkshop(id, dto, expectedVersion);
+    const expectedVersion = this.requireIfMatch(ifMatch);
+    if (expectedVersion.isFailure) return expectedVersion;
+
+    const result = await this.workshopsService.updateWorkshop(
+      workshopId,
+      dto,
+      expectedVersion.data
+    );
+    this.setETag(response, result);
+    return result;
   }
 
   /**
    * Publishes a draft workshop, making it visible and bookable by students.
    *
-   * Route: POST /admin/workshops/:id/publish
+   * Route: POST /admin/workshops/:workshopId/publish
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Transitions status from DRAFT to PUBLISHED and initializes the Redis
    * seat counter with the workshop's capacity.
@@ -133,19 +196,27 @@ export class WorkshopsAdminController {
    * @param id - The UUID of the workshop to publish.
    * @returns The published workshop admin detail DTO.
    */
-  @Post(":id/publish")
+  @Post(":workshopId/publish")
   async publishWorkshop(
-    @Param("id") id: string,
-    @Headers("if-match") ifMatch?: string
+    @Param("workshopId") workshopId: string,
+    @Headers("if-match") ifMatch?: string,
+    @Res({ passthrough: true }) response?: Response
   ) {
-    const expectedVersion = parseIfMatch(ifMatch) ?? undefined;
-    return this.workshopsService.publishWorkshop(id, expectedVersion);
+    const expectedVersion = this.requireIfMatch(ifMatch);
+    if (expectedVersion.isFailure) return expectedVersion;
+
+    const result = await this.workshopsService.publishWorkshop(
+      workshopId,
+      expectedVersion.data
+    );
+    this.setETag(response, result);
+    return result;
   }
 
   /**
    * Updates scheduling fields of a published workshop without re-publishing.
    *
-   * Route: PATCH /admin/workshops/:id/emergency-update
+   * Route: PATCH /admin/workshops/:workshopId/emergency-update
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Allows modifying room, start time, or end time of an already published
    * workshop. Room time conflicts are re-validated against the new schedule.
@@ -154,20 +225,29 @@ export class WorkshopsAdminController {
    * @param body - Emergency update payload (room_id?, starts_at?, ends_at?).
    * @returns The updated workshop admin detail DTO.
    */
-  @Patch(":id/emergency-update")
+  @Patch(":workshopId/emergency-update")
   async emergencyUpdate(
-    @Param("id") id: string,
+    @Param("workshopId") workshopId: string,
     @Body() dto: EmergencyUpdateWorkshopDto,
-    @Headers("if-match") ifMatch?: string
+    @Headers("if-match") ifMatch?: string,
+    @Res({ passthrough: true }) response?: Response
   ) {
-    const expectedVersion = parseIfMatch(ifMatch) ?? 0;
-    return this.workshopsService.emergencyUpdate(id, dto, expectedVersion);
+    const expectedVersion = this.requireIfMatch(ifMatch);
+    if (expectedVersion.isFailure) return expectedVersion;
+
+    const result = await this.workshopsService.emergencyUpdate(
+      workshopId,
+      dto,
+      expectedVersion.data
+    );
+    this.setETag(response, result);
+    return result;
   }
 
   /**
    * Cancels a workshop, transitioning it to CANCELLED status.
    *
-   * Route: POST /admin/workshops/:id/cancel
+   * Route: POST /admin/workshops/:workshopId/cancel
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Transitions status to CANCELLED and removes the Redis seat counter
    * if the workshop was previously PUBLISHED.
@@ -175,20 +255,29 @@ export class WorkshopsAdminController {
    * @param id - The UUID of the workshop to cancel.
    * @returns The cancelled workshop admin detail DTO.
    */
-  @Post(":id/cancel")
+  @Post(":workshopId/cancel")
   async cancelWorkshop(
-    @Param("id") id: string,
+    @Param("workshopId") workshopId: string,
     @Body() dto: CancelWorkshopDto,
-    @Headers("if-match") ifMatch?: string
+    @Headers("if-match") ifMatch?: string,
+    @Res({ passthrough: true }) response?: Response
   ) {
-    const expectedVersion = parseIfMatch(ifMatch) ?? undefined;
-    return this.workshopsService.cancelWorkshop(id, dto, expectedVersion);
+    const expectedVersion = this.requireIfMatch(ifMatch);
+    if (expectedVersion.isFailure) return expectedVersion;
+
+    const result = await this.workshopsService.cancelWorkshop(
+      workshopId,
+      dto,
+      expectedVersion.data
+    );
+    this.setETag(response, result);
+    return result;
   }
 
   /**
    * Retrieves real-time statistics for a specific workshop.
    *
-   * Route: GET /admin/workshops/:id/stats
+   * Route: GET /admin/workshops/:workshopId/stats
    * Security: Requires BTC role (JwtAuthGuard + RolesGuard).
    * Returns confirmed registration count, locked seat count, and remaining
    * available seats sourced from Redis for real-time accuracy.
@@ -196,8 +285,8 @@ export class WorkshopsAdminController {
    * @param id - The UUID of the workshop.
    * @returns Workshop statistics DTO with confirmed_count, locked_count, available_seats, total_capacity.
    */
-  @Get(":id/stats")
-  async getStats(@Param("id") id: string) {
-    return this.workshopsService.getStats(id);
+  @Get(":workshopId/stats")
+  async getStats(@Param("workshopId") workshopId: string) {
+    return this.workshopsService.getStats(workshopId);
   }
 }

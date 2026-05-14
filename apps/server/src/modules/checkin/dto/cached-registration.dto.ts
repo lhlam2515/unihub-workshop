@@ -6,7 +6,7 @@ export interface CachedRegistrationDto {
   studentName: string;
   studentCode: string;
   registrationStatus: string;
-  workshopStartsAt: Date;
+  workshopStartsAt: string;
   workshopTitle: string;
 }
 
@@ -28,7 +28,7 @@ export class CachedRegistrationBuilder {
       studentName: registration.student.fullName,
       studentCode: registration.student.studentId,
       registrationStatus: registration.status,
-      workshopStartsAt: registration.workshop.startsAt,
+      workshopStartsAt: registration.workshop.startsAt.toISOString(),
       workshopTitle: registration.workshop.title,
     };
   }

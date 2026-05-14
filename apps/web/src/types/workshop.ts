@@ -32,9 +32,9 @@ export interface RoomSummary {
 }
 
 export interface Room extends RoomSummary {
-  capacity: number;
-  facilities: Record<string, unknown>;
-  createdAt: string;
+  capacity?: number;
+  facilities?: Record<string, unknown>;
+  createdAt?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ export interface Room extends RoomSummary {
 // ---------------------------------------------------------------------------
 
 export interface SpeakerAdmin extends Speaker {
-  upcomingWorkshopCount: number;
+  upcomingWorkshopCount?: number;
 }
 
 export interface SpeakerCreateRequest {
@@ -55,7 +55,7 @@ export interface SpeakerCreateRequest {
 export type SpeakerUpdateRequest = Partial<SpeakerCreateRequest>;
 
 export interface RoomAdmin extends Room {
-  upcomingWorkshopCount: number;
+  upcomingWorkshopCount?: number;
 }
 
 export interface RoomCreateRequest {
@@ -112,7 +112,7 @@ export interface WorkshopDetail extends WorkshopListItem {
   description: string | null;
   speaker: Speaker | null;
   room: Room | null;
-  summary: AiSummary;
+  summary: AiSummary | null;
   /** Present when the authenticated student has an active registration. */
   myRegistrationId: string | null;
 }
@@ -150,9 +150,12 @@ export interface WorkshopAdmin {
   price: number;
   currency: string;
   status: WorkshopStatus;
+  isRegistered: boolean | null;
   speaker: SpeakerSummary | null;
   room: RoomSummary | null;
   description: string | null;
+  summary: AiSummary | null;
+  myRegistrationId: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -162,7 +165,7 @@ export interface WorkshopAdmin {
 
 export interface WorkshopCreateRequest {
   title: string;
-  description?: string | null;
+  description?: string;
   speakerId?: string | null;
   roomId?: string | null;
   startsAt: string;
@@ -174,9 +177,9 @@ export interface WorkshopCreateRequest {
 
 export interface WorkshopPatchRequest {
   title?: string;
-  description?: string | null;
-  speakerId?: string | null;
-  roomId?: string | null;
+  description?: string;
+  speakerId?: string;
+  roomId?: string;
   startsAt?: string;
   endsAt?: string;
   seatsTotal?: number;

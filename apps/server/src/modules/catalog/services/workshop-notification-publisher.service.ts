@@ -92,7 +92,7 @@ export class WorkshopNotificationPublisher {
    */
   async publishEmergencyUpdate(
     workshop: Workshop,
-    changes: { roomId?: string; startsAt?: Date; endsAt?: Date }
+    changes: { roomId?: string | null; startsAt?: Date; endsAt?: Date }
   ): Promise<void> {
     const event: WorkshopUpdatedEventData = {
       workshopId: workshop.workshopId,

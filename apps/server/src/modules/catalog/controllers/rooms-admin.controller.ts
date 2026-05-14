@@ -18,6 +18,8 @@ import {
   Body,
   Query,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
@@ -57,12 +59,12 @@ export class RoomsAdminController {
    *
    * Security context: Requires BTC role.
    *
-   * @param id - The UUID of the room to retrieve.
+   * @param roomId - The UUID of the room to retrieve.
    * @returns The room DTO, or FailResult (ROOM_NOT_FOUND).
    */
-  @Get(":id")
-  async getRoomById(@Param("id") id: string) {
-    return this.roomsService.getRoomById(id);
+  @Get(":roomId")
+  async getRoomById(@Param("roomId") roomId: string) {
+    return this.roomsService.getRoomById(roomId);
   }
 
   /**
@@ -76,6 +78,7 @@ export class RoomsAdminController {
    * @returns The newly created room DTO.
    */
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   async createRoom(@Body() dto: CreateRoomDto) {
     return this.roomsService.createRoom(dto);
   }
@@ -87,12 +90,15 @@ export class RoomsAdminController {
    *
    * Security context: Requires BTC role.
    *
-   * @param id - The UUID of the room to update.
+   * @param roomId - The UUID of the room to update.
    * @param body - Partial room update payload.
    * @returns The updated room DTO.
    */
-  @Patch(":id")
-  async updateRoom(@Param("id") id: string, @Body() dto: UpdateRoomDto) {
-    return this.roomsService.updateRoom(id, dto);
+  @Patch(":roomId")
+  async updateRoom(
+    @Param("roomId") roomId: string,
+    @Body() dto: UpdateRoomDto
+  ) {
+    return this.roomsService.updateRoom(roomId, dto);
   }
 }

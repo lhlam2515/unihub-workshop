@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Response,
   UseGuards,
 } from "@nestjs/common";
 
@@ -13,11 +14,13 @@ import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { DeviceTokensService } from "../services/device-tokens.service";
 
 import type { CreateDeviceTokenDto } from "../dto/create-device-token.dto";
+import type { Response as ExpressResponse } from "express";
 
 @Controller("device-tokens")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -30,26 +33,38 @@ export class DeviceTokensController {
    * Registers a device token for push notifications for the authenticated student.
    *
    * Business rules:
-   * - Deactivates all existing tokens for the same student+platform before creating the new one.
+   * - If the token already exists for this student, updates lastSeen and returns 200.
+   * - If the token is new, deactivates all existing tokens for the same student+platform
+   *   before creating the new one, and returns 201.
    * - Only STUDENT role can register device tokens.
    *
    * @param createDto - Validated CreateDeviceTokenDto containing token and platform.
    * @param user - Authenticated user's JWT payload (provides student ID).
-   * @returns 201 with the created device token details.
+   * @param response - Express response object to set status code dynamically.
+   * @returns 201 (new) or 200 (upsert) with device token details.
    */
   @Post()
   @Roles("STUDENT")
-  @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() createDto: CreateDeviceTokenDto,
-    @CurrentUser() user: JwtPayload
+    @CurrentUser() user: JwtPayload,
+    @Response({ passthrough: true }) response: ExpressResponse
   ) {
     const result = await this.deviceTokensService.registerToken(
       user.studentId!,
       createDto.token,
       createDto.platform
     );
-    return result;
+
+    if (result.isFailure) return result;
+
+    const { isNew, lastSeen, createdAt, ...token } = result.data;
+    response.status(isNew ? HttpStatus.CREATED : HttpStatus.OK);
+    return Result.ok({
+      ...token,
+      lastSeen: lastSeen.toISOString(),
+      createdAt: createdAt.toISOString(),
+    });
   }
 
   /**

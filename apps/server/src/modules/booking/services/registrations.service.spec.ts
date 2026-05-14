@@ -183,9 +183,10 @@ describe("RegistrationsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.status).toBe("CONFIRMED");
-        expect(result.data.qrCode).toBeTruthy();
-        expect(result.data.nextStep).toBeNull();
+        expect(result.data.registration.status).toBe("CONFIRMED");
+        expect(result.data.registration.qrCode).toBeTruthy();
+        expect(result.data.registration.nextStep).toBeNull();
+        expect(result.data.isReplay).toBe(false);
       }
       expect(seatCounter.invalidateCache).toHaveBeenCalledWith(WORKSHOP_ID);
     });
@@ -197,11 +198,14 @@ describe("RegistrationsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.status).toBe("PENDING");
-        expect(result.data.qrCode).toBeNull();
-        expect(result.data.nextStep).toBeDefined();
-        expect(result.data.nextStep!.action).toBe("CREATE_PAYMENT");
-        expect(result.data.nextStep!.amount).toBe(50000);
+        expect(result.data.registration.status).toBe("PENDING");
+        expect(result.data.registration.qrCode).toBeNull();
+        expect(result.data.registration.nextStep).toBeDefined();
+        expect(result.data.registration.nextStep!.action).toBe(
+          "CREATE_PAYMENT"
+        );
+        expect(result.data.registration.nextStep!.amount).toBe(50000);
+        expect(result.data.isReplay).toBe(false);
       }
       expect(seatLock.acquire).toHaveBeenCalledWith(
         WORKSHOP_ID,
@@ -381,7 +385,8 @@ describe("RegistrationsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data).toEqual(cachedBody);
+        expect(result.data.registration).toEqual(cachedBody);
+        expect(result.data.isReplay).toBe(true);
       }
       // Pipeline should NOT execute
       expect(workshopsService.getPublishedById).not.toHaveBeenCalled();

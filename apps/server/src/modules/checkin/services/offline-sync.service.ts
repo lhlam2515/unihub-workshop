@@ -2,12 +2,13 @@ import { Injectable } from "@nestjs/common";
 
 import { Result } from "@/shared/response/result";
 
+import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
+import { RegistrationsRepository } from "../repositories/registrations.repository";
+
 import type {
   CheckinSyncResponseDto,
   CheckinSyncResultItem,
 } from "../dto/checkin-sync-response.dto";
-import { CheckinRecordsRepository } from "../repositories/checkin-records.repository";
-import { RegistrationsRepository } from "../repositories/registrations.repository";
 
 @Injectable()
 export class OfflineSyncService {
@@ -140,7 +141,7 @@ export class OfflineSyncService {
         localId: item.localId,
         result: "DUPLICATE",
         serverId: existingResult.data.checkinId,
-        firstCheckinAt: existingResult.data.checkedInAt,
+        firstCheckinAt: existingResult.data.checkedInAt.toISOString(),
         firstStaffName: existingResult.data.staffName,
       };
     }

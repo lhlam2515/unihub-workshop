@@ -5,14 +5,14 @@ export interface NextStepInfo {
   endpoint: string;
   amount: number;
   currency: string;
-  expiresAt: Date;
+  expiresAt: string;
 }
 
 export interface RegistrationWorkshopDto {
   id: string;
   title: string;
-  startsAt: Date;
-  endsAt: Date;
+  startsAt: string;
+  endsAt: string;
   seatsTotal: number;
   seatsAvailable: number;
   price: number;
@@ -40,7 +40,7 @@ export interface RegistrationDto {
   workshopId: string;
   status: string;
   qrCode: string | null;
-  registeredAt: Date;
+  registeredAt: string;
   nextStep?: NextStepInfo | null;
 }
 
@@ -76,13 +76,13 @@ export class RegistrationResponseBuilder {
         registration.status === "CONFIRMED" || registration.status === "PAID"
           ? registration.qrCode
           : null,
-      registeredAt: registration.registeredAt,
+      registeredAt: registration.registeredAt.toISOString(),
       nextStep: options?.nextStep ?? null,
       workshop: options?.workshop ?? {
         id: "",
         title: "",
-        startsAt: new Date(),
-        endsAt: new Date(),
+        startsAt: new Date().toISOString(),
+        endsAt: new Date().toISOString(),
         seatsTotal: 0,
         seatsAvailable: 0,
         price: 0,
@@ -110,8 +110,8 @@ export interface RegistrationAdminDto {
     email: string;
   };
   status: string;
-  registeredAt: Date;
-  checkedInAt: Date | null;
+  registeredAt: string;
+  checkedInAt: string | null;
 }
 
 export class RegistrationAdminBuilder {
@@ -134,8 +134,8 @@ export class RegistrationAdminBuilder {
         email: params.studentEmail,
       },
       status: params.status,
-      registeredAt: params.registeredAt,
-      checkedInAt: params.checkedInAt,
+      registeredAt: params.registeredAt.toISOString(),
+      checkedInAt: params.checkedInAt?.toISOString() ?? null,
     };
   }
 }

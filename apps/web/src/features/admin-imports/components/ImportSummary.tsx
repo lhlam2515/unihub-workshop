@@ -13,10 +13,13 @@ export function ImportSummary({ importLog }: ImportSummaryProps) {
       : 0;
 
   function formatDateTime(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "--";
+
     return new Intl.DateTimeFormat("vi-VN", {
       dateStyle: "medium",
       timeStyle: "medium",
-    }).format(new Date(iso));
+    }).format(date);
   }
 
   function formatDuration(ms: number | null): string {

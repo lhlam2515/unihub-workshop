@@ -79,8 +79,8 @@ describe("CheckinStaffAssignmentService", () => {
       ]);
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.user_id).toBe("usr-staff");
-      expect(result.data.workshop_ids).toEqual(["ws-1", "ws-2"]);
+      expect(result.data.userId).toBe("usr-staff");
+      expect(result.data.workshopIds).toEqual(["ws-1", "ws-2"]);
       expect(result.data.warning).toContain("next login");
       expect(mockAssignmentRepo.upsert).toHaveBeenCalledWith("usr-staff", [
         "ws-1",
@@ -163,8 +163,7 @@ describe("CheckinStaffAssignmentService", () => {
       const result = await service.getAssignedWorkshops("usr-staff");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.user_id).toBe("usr-staff");
-      expect(result.data.workshop_ids).toEqual(["ws-1", "ws-2"]);
+      expect(result.data.workshopIds).toEqual(["ws-1", "ws-2"]);
     });
 
     it("returns empty array when no assignment exists", async () => {
@@ -173,7 +172,7 @@ describe("CheckinStaffAssignmentService", () => {
       const result = await service.getAssignedWorkshops("usr-staff");
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.workshop_ids).toEqual([]);
+      expect(result.data.workshopIds).toEqual([]);
     });
 
     it("returns FailResult when assignment lookup fails", async () => {
