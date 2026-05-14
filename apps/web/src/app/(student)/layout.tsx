@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-
 import { PageLoader } from "@/components/PageLoader";
 import ROUTES from "@/constants/routes";
 import { useAuth } from "@/context/auth-context";
@@ -18,7 +17,7 @@ export default function StudentLayout({
   const { user, isLoading, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== "student") {
+    if (!isAuthenticated || user?.role !== "STUDENT") {
       router.replace(ROUTES.LOGIN);
     }
   }, [isAuthenticated, user?.role, router]);

@@ -63,7 +63,7 @@ export function PublicHeaderWidget() {
                     </span>
                   </div>
                 </DropdownMenuLabel>
-                {user?.role === "student" && (
+                {user?.role === "STUDENT" && (
                   <>
                     <DropdownMenuItem asChild>
                       <Link

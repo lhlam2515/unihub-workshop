@@ -24,14 +24,14 @@ export default function AdminLayout({
   useEffect(() => {
     // Admin login page: skip sidebar & role guard
     if (pathname === ROUTES.ADMIN_LOGIN) {
-      if (user?.role === "btc") {
+      if (user?.role === "BTC") {
         router.replace(ROUTES.ADMIN);
       }
       return;
     }
 
     // Other /admin/* paths: must be BTC
-    if (!user || user.role !== "btc") {
+    if (!user || user.role !== "BTC") {
       router.replace(ROUTES.ADMIN_LOGIN);
     }
   }, [pathname, user, router]);
@@ -41,7 +41,7 @@ export default function AdminLayout({
   }
 
   // While redirecting unauthorized users, show loader
-  if (pathname !== ROUTES.ADMIN_LOGIN && (!user || user.role !== "btc")) {
+  if (pathname !== ROUTES.ADMIN_LOGIN && (!user || user.role !== "BTC")) {
     return <PageLoader />;
   }
 

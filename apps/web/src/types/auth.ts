@@ -1,12 +1,12 @@
 /**
  * User roles mirroring the backend RBAC (ADR-05).
  *
- * Values follow the OpenAPI spec:
- * - `student` — regular student browsing & registering
- * - `btc` — organizer (Ban Tổ Chức)
- * - `checkin_staff` — QR scanning staff (mobile-only)
+ * Values follow the OpenAPI spec (uppercase):
+ * - `STUDENT` — regular student browsing & registering
+ * - `BTC` — organizer (Ban Tổ Chức)
+ * - `CHECKIN_STAFF` — QR scanning staff (mobile-only)
  */
-export type Role = "student" | "btc" | "checkin_staff";
+export type Role = "STUDENT" | "BTC" | "CHECKIN_STAFF";
 
 /**
  * Authenticated user profile returned from GET /auth/me and login responses.
