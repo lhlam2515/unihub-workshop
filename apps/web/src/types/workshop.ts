@@ -32,9 +32,9 @@ export interface RoomSummary {
 }
 
 export interface Room extends RoomSummary {
-  capacity: number;
-  facilities: Record<string, unknown>;
-  createdAt: string;
+  capacity?: number;
+  facilities?: Record<string, unknown>;
+  createdAt?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -47,7 +47,7 @@ export function CancelConfirmDialog({
           <DialogTitle>Hủy đăng ký</DialogTitle>
           <DialogDescription>
             Bạn có chắc muốn hủy đăng ký workshop{" "}
-            <strong>{registration?.workshop.title}</strong>?
+            <strong>{registration?.workshop?.title ?? "này"}</strong>?
           </DialogDescription>
         </DialogHeader>
 

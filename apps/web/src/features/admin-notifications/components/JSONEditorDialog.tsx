@@ -85,7 +85,7 @@ export function JSONEditorDialog({
           <Textarea
             value={jsonText}
             onChange={(e) => handleChange(e.target.value)}
-            className="min-h-[200px] font-mono text-xs"
+            className="min-h-50 font-mono text-xs"
             placeholder='{ "key": "value" }'
           />
           {error && <p className="text-xs text-red-500">{error}</p>}

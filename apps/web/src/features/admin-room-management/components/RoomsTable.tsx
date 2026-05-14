@@ -89,7 +89,7 @@ export function RoomsTable({ rooms, skeleton }: RoomsTableProps) {
                   {r.floor != null ? `Tầng ${r.floor}` : "—"}
                 </td>
                 <td className="px-4 py-3 text-slate-600 tabular-nums">
-                  {r.capacity}
+                  {r.capacity ?? "—"}
                 </td>
                 <td className="px-4 py-3">
                   {r.floorPlanUrl ? (

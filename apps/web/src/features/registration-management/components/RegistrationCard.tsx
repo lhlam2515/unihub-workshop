@@ -51,11 +51,15 @@ export function RegistrationCard({
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold">{workshop.title}</h3>
-          <p className="text-muted-foreground mt-0.5 text-sm">
-            {formatTime(workshop.startsAt)} – {formatTime(workshop.endsAt)}
-          </p>
-          {workshop.room && (
+          <h3 className="truncate text-base font-semibold">
+            {workshop?.title ?? "—"}
+          </h3>
+          {workshop && (
+            <p className="text-muted-foreground mt-0.5 text-sm">
+              {formatTime(workshop.startsAt)} – {formatTime(workshop.endsAt)}
+            </p>
+          )}
+          {workshop?.room && (
             <p className="text-muted-foreground text-sm">
               {workshop.room.name}
               {workshop.room.building ? ` — ${workshop.room.building}` : ""}

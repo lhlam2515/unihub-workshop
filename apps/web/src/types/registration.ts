@@ -5,7 +5,8 @@ export type RegistrationStatus = "PENDING" | "CONFIRMED" | "PAID" | "CANCELLED";
 export interface RegistrationListItem {
   id: string;
   workshopId: string;
-  workshop: WorkshopListItem;
+  /** Optional per OpenAPI — API may omit when embedding is disabled. */
+  workshop?: WorkshopListItem;
   status: RegistrationStatus;
   qrCode: string | null;
   registeredAt: string;
