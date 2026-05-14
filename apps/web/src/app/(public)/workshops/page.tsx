@@ -3,8 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
+import { ContentLoader } from "@/components/ContentLoader";
 import { listWorkshops } from "@/features/workshop-browsing/api/catalog.service";
-import type { ApiError } from "@/lib/api/errors";
+import { isApiError } from "@/lib/api/errors";
 import type { PaginationMeta } from "@/lib/api/types";
 import type { WorkshopListItem, WorkshopFilters } from "@/types/workshop";
 import { WorkshopListWidget } from "@/widgets/WorkshopListWidget";
@@ -56,8 +57,8 @@ function WorkshopsContent() {
       if (cancelled) return;
 
       if (result.isFailure) {
-        const err = result.error as ApiError;
-        if (err.status !== 404) setError(err.message);
+        const err = result.error;
+        if (isApiError(err) && err.status !== 404) setError(err.message);
       } else {
         setItems(result.data.items);
         setPagination(result.data.pagination);
@@ -91,7 +92,12 @@ function WorkshopsContent() {
     });
 
     if (result.isFailure) {
-      setError((result.error as ApiError).message ?? "Không thể tải thêm");
+      const err = result.error;
+      setError(
+        isApiError(err)
+          ? (err.message ?? "Không thể tải thêm")
+          : "Không thể tải thêm"
+      );
     } else {
       setItems((prev) => [...prev, ...result.data.items]);
       setPagination(result.data.pagination);
@@ -103,16 +109,18 @@ function WorkshopsContent() {
   const handleRetry = useCallback(() => {
     setLoading(true);
     setError(undefined);
-    listWorkshops(filters).then((result) => {
-      if (result.isFailure) {
-        const err = result.error as ApiError;
-        if (err.status !== 404) setError(err.message);
-      } else {
-        setItems(result.data.items);
-        setPagination(result.data.pagination);
-      }
-      setLoading(false);
-    });
+    listWorkshops(filters)
+      .then((result) => {
+        if (result.isFailure) {
+          const err = result.error;
+          if (isApiError(err) && err.status !== 404) setError(err.message);
+        } else {
+          setItems(result.data.items);
+          setPagination(result.data.pagination);
+        }
+      })
+      .catch(() => setError("Lỗi kết nối, vui lòng thử lại"))
+      .finally(() => setLoading(false));
   }, [filters]);
 
   return (
@@ -132,7 +140,9 @@ function WorkshopsContent() {
 
 export default function WorkshopsPage() {
   return (
-    <Suspense fallback={<div className="p-4">Đang tải...</div>}>
+    <Suspense
+      fallback={<ContentLoader count={6} layout="grid" className="p-4" />}
+    >
       <WorkshopsContent />
     </Suspense>
   );
