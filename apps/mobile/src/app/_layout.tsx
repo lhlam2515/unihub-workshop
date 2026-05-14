@@ -77,41 +77,45 @@ export default function RootLayout() {
     async function bootstrap() {
       // Hydrate memory cache from SecureStore before any API call
       await tokenStore.init();
-
-      // Ensure device_config singleton exists (one-time device ID generation)
-      try {
-        const db = createDatabaseClient();
-        const existing = db
-          .select()
-          .from(deviceConfig)
-          .where(eq(deviceConfig.id, 1))
-          .get();
-        if (!existing) {
-          db.insert(deviceConfig).values({
-            id: 1,
-            deviceId: ExpoCrypto.randomUUID(),
-            appVersion: "0.0.0",
-            initializedAt: Date.now(),
-          });
-        }
-
-        // Purge SYNCED checkin records older than 7 days
-        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        db.delete(checkinQueue)
-          .where(
-            and(
-              inArray(checkinQueue.syncStatus, ["SYNCED"]),
-              lt(checkinQueue.createdAt, cutoff)
-            )
-          )
-          .run();
-      } catch {
-        // Non-critical: device_config is a nice-to-have for tracking
-      }
       setIsReady(true);
     }
     bootstrap();
   }, []);
+
+  // Run device_config init only after migrations are confirmed complete
+  useEffect(() => {
+    if (databaseStatus !== "ready") return;
+
+    try {
+      const db = createDatabaseClient();
+      const existing = db
+        .select()
+        .from(deviceConfig)
+        .where(eq(deviceConfig.id, 1))
+        .get();
+      if (!existing) {
+        db.insert(deviceConfig).values({
+          id: 1,
+          deviceId: ExpoCrypto.randomUUID(),
+          appVersion: "0.0.0",
+          initializedAt: Date.now(),
+        }).run();
+      }
+
+      // Purge SYNCED checkin records older than 7 days
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      db.delete(checkinQueue)
+        .where(
+          and(
+            inArray(checkinQueue.syncStatus, ["SYNCED"]),
+            lt(checkinQueue.createdAt, cutoff)
+          )
+        )
+        .run();
+    } catch {
+      // Non-critical: device_config is a nice-to-have for tracking
+    }
+  }, [databaseStatus]);
 
   const content = isReady ? (
     <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
