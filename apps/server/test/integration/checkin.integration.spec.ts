@@ -98,6 +98,10 @@ const staffUser = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const mockExpressResponse = {
+  status: jest.fn().mockReturnThis(),
+} as unknown as import("express").Response;
+
 function provideMockGuard() {
   return {
     provide: JwtAuthGuard,
@@ -162,7 +166,8 @@ describe("Checkin Module — Integration", () => {
           workshopId: "wid-001",
           checkedInAt: new Date("2026-06-01T10:00:00Z"),
         },
-        staffUser
+        staffUser,
+        mockExpressResponse
       )) as Result<unknown>;
 
       expect(result.isSuccess).toBe(true);
@@ -185,7 +190,8 @@ describe("Checkin Module — Integration", () => {
           workshopId: "wid-001",
           checkedInAt: new Date(),
         },
-        staffUser
+        staffUser,
+        mockExpressResponse
       )) as Result<unknown>;
 
       expect(result.isSuccess).toBe(false);
@@ -203,7 +209,8 @@ describe("Checkin Module — Integration", () => {
           workshopId: "wid-001",
           checkedInAt: new Date(),
         },
-        staffUser
+        staffUser,
+        mockExpressResponse
       )) as Result<unknown>;
 
       expect(result.isSuccess).toBe(false);
@@ -223,7 +230,8 @@ describe("Checkin Module — Integration", () => {
           workshopId: "wid-001",
           checkedInAt: new Date(),
         },
-        staffUser
+        staffUser,
+        mockExpressResponse
       )) as Result<unknown>;
 
       expect(result.isSuccess).toBe(false);
@@ -249,7 +257,8 @@ describe("Checkin Module — Integration", () => {
           workshopId: "wid-001",
           checkedInAt: new Date(),
         },
-        staffUser
+        staffUser,
+        mockExpressResponse
       )) as Result<unknown>;
 
       expect(result.isSuccess).toBe(true);

@@ -5,7 +5,7 @@ export interface CheckinSyncResultItem {
   localId: string;
   result: SyncResultKind;
   serverId?: string | null;
-  firstCheckinAt?: Date | null;
+  firstCheckinAt?: string | null;
   firstStaffName?: string | null;
   reason?: RejectionReason | null;
 }

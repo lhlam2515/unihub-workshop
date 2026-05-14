@@ -1,8 +1,8 @@
 import {
+  Body,
   Controller,
   Get,
   Post,
-  Body,
   Param,
   Query,
   UseGuards,
@@ -10,7 +10,6 @@ import {
   HttpStatus,
   Res,
 } from "@nestjs/common";
-import type { Response } from "express";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
@@ -18,15 +17,17 @@ import { WorkshopScopeGuard } from "@/modules/iam/guards/workshop-scope.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
-import type { JwtPayload } from "@/types/jwt-payload";
 import { Result } from "@/shared/response/result";
+import type { JwtPayload } from "@/types/jwt-payload";
 
+import { CachedRegistrationBuilder } from "../dto/cached-registration.dto";
 import { CheckinCreateRequestDto } from "../dto/checkin-create-request.dto";
 import { CheckinSyncRequestDto } from "../dto/checkin-sync-request.dto";
-import { CachedRegistrationBuilder } from "../dto/cached-registration.dto";
+import { RegistrationsRepository } from "../repositories/registrations.repository";
 import { CheckinService } from "../services/checkin.service";
 import { OfflineSyncService } from "../services/offline-sync.service";
-import { RegistrationsRepository } from "../repositories/registrations.repository";
+
+import type { Response } from "express";
 
 /**
  * Handles online check-in (scan) and offline sync operations.
@@ -46,16 +47,21 @@ export class CheckinController {
    *
    * POST /checkins
    *
+   * Business rules:
+   * - Returns 201 Created for a new (first-time) check-in.
+   * - Returns 200 OK when `duplicate=true` (registration already checked in).
+   *
    * @param body - Scan payload with qrCode, workshopId, checkedInAt.
    * @param user - Authenticated CHECKIN_STAFF payload from JWT.
+   * @param response - Express response used to set dynamic status code.
    * @returns CheckinResultDto with checkin details.
    */
   @Post()
   @UseGuards(WorkshopScopeGuard)
-  @HttpCode(HttpStatus.CREATED)
   async scanQR(
     @Body() body: CheckinCreateRequestDto,
-    @CurrentUser() user: JwtPayload
+    @CurrentUser() user: JwtPayload,
+    @Res({ passthrough: true }) response: Response
   ) {
     const result = await this.checkinService.scanQR(
       body.qrCode,
@@ -64,10 +70,9 @@ export class CheckinController {
       body.checkedInAt
     );
 
-    if (result.isFailure) {
-      return result;
-    }
+    if (result.isFailure) return result;
 
+    response.status(result.data.duplicate ? HttpStatus.OK : HttpStatus.CREATED);
     return result;
   }
 
@@ -126,10 +131,10 @@ export class CheckinPreloadController {
    * @param res - Express response object for X-Total-Count header.
    * @returns Paginated list of CachedRegistrationDto with X-Total-Count header.
    */
-  @Get("workshops/:id/registrations")
+  @Get("workshops/:workshopId/registrations")
   @UseGuards(WorkshopScopeGuard)
   async preloadRegistrations(
-    @Param("id") workshopId: string,
+    @Param("workshopId") workshopId: string,
     @Query("cursor") cursor: string | undefined,
     @Query("limit") limit: string | undefined,
     @Res({ passthrough: true }) res: Response
@@ -165,9 +170,9 @@ export class CheckinPreloadController {
    * @param workshopId - UUID of the workshop to query.
    * @returns CheckinStatusDto with confirmed/checked-in counts.
    */
-  @Get("workshops/:id/status")
+  @Get("workshops/:workshopId/status")
   @UseGuards(WorkshopScopeGuard)
-  async getWorkshopStatus(@Param("id") workshopId: string) {
+  async getWorkshopStatus(@Param("workshopId") workshopId: string) {
     return this.checkinService.getWorkshopCheckinStatus(workshopId);
   }
 }

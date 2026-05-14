@@ -13,7 +13,7 @@ export interface CheckinStatusDto {
     checkinId: string;
     studentName: string;
     studentCode: string;
-    checkedInAt: Date;
+    checkedInAt: string;
     source: string;
   }>;
 }
@@ -45,7 +45,7 @@ export class CheckinStatusBuilder {
         checkinId: r.checkinId,
         studentName: r.student?.fullName ?? "",
         studentCode: r.student?.studentId ?? "",
-        checkedInAt: r.checkedInAt,
+        checkedInAt: r.checkedInAt.toISOString(),
         source: r.source,
       })),
     };
