@@ -26,15 +26,15 @@ describe("RegistrationsController", () => {
     workshopId: "ws-1",
     status: "CONFIRMED",
     qrCode: null,
-    registeredAt: new Date(),
+    registeredAt: new Date().toISOString(),
     confirmedAt: null,
     cancelledAt: null,
     nextStep: null,
     workshop: {
       id: "ws-1",
       title: "Workshop 1",
-      startsAt: new Date(),
-      endsAt: new Date(),
+      startsAt: new Date().toISOString(),
+      endsAt: new Date().toISOString(),
       seatsTotal: 50,
       seatsAvailable: 30,
       price: 0,
@@ -71,18 +71,57 @@ describe("RegistrationsController", () => {
 
   describe("POST /registrations", () => {
     const IDEM_KEY = "idem-key-001";
+    const mockResponse = {
+      status: jest.fn().mockReturnThis(),
+    } as unknown as import("express").Response;
 
     it("calls register with user.sub, dto, and idempotencyKey", async () => {
       const dto = { workshopId: "ws-1" };
       registrationsService.register.mockResolvedValue(
-        Result.ok(mockRegistrationDto)
+        Result.ok({ registration: mockRegistrationDto, isReplay: false })
       );
-      await controller.createRegistration(dto, IDEM_KEY, mockUser);
+      await controller.createRegistration(
+        dto,
+        IDEM_KEY,
+        mockUser,
+        mockResponse
+      );
       expect(registrationsService.register).toHaveBeenCalledWith(
         "stu-001",
         dto,
         IDEM_KEY
       );
+    });
+
+    it("returns 201 for first-time registration", async () => {
+      const dto = { workshopId: "ws-1" };
+      registrationsService.register.mockResolvedValue(
+        Result.ok({ registration: mockRegistrationDto, isReplay: false })
+      );
+      await controller.createRegistration(
+        dto,
+        IDEM_KEY,
+        mockUser,
+        mockResponse
+      );
+      expect(mockResponse.status).toHaveBeenCalledWith(201);
+    });
+
+    it("returns 200 for idempotent replay", async () => {
+      const dto = { workshopId: "ws-1" };
+      registrationsService.register.mockResolvedValue(
+        Result.ok({ registration: mockRegistrationDto, isReplay: true })
+      );
+      const freshResponse = {
+        status: jest.fn().mockReturnThis(),
+      } as unknown as import("express").Response;
+      await controller.createRegistration(
+        dto,
+        IDEM_KEY,
+        mockUser,
+        freshResponse
+      );
+      expect(freshResponse.status).toHaveBeenCalledWith(200);
     });
   });
 

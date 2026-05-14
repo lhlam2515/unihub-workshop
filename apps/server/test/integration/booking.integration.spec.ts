@@ -344,6 +344,10 @@ describe("Booking Module — Integration", () => {
   // RegistrationsController — FR-F04-001 through FR-F04-006
   // -------------------------------------------------------------------------
   describe("RegistrationsController", () => {
+    const mockExpressResponse = {
+      status: jest.fn().mockReturnThis(),
+    } as unknown as import("express").Response;
+
     describe("createRegistration — FR-F04-003, FR-F04-004", () => {
       it("creates a CONFIRMED registration for a free workshop", async () => {
         mockWorkshopsRepo.findById.mockResolvedValue(
@@ -359,7 +363,8 @@ describe("Booking Module — Integration", () => {
         const result = await registrationsController.createRegistration(
           { workshopId: "wid-001" },
           "idem-reg-001",
-          studentUser
+          studentUser,
+          mockExpressResponse
         );
 
         expect(result.isSuccess).toBe(true);
@@ -394,7 +399,8 @@ describe("Booking Module — Integration", () => {
         const result = await registrationsController.createRegistration(
           { workshopId: "wid-001" },
           "idem-reg-001",
-          studentUser
+          studentUser,
+          mockExpressResponse
         );
 
         expect(result.isSuccess).toBe(true);
@@ -424,7 +430,8 @@ describe("Booking Module — Integration", () => {
         const result = await registrationsController.createRegistration(
           { workshopId: "wid-001" },
           "idem-reg-001",
-          studentUser
+          studentUser,
+          mockExpressResponse
         );
 
         expect(result.isSuccess).toBe(false);
@@ -445,7 +452,8 @@ describe("Booking Module — Integration", () => {
         const result = await registrationsController.createRegistration(
           { workshopId: "wid-001" },
           "idem-reg-001",
-          studentUser
+          studentUser,
+          mockExpressResponse
         );
 
         expect(result.isSuccess).toBe(false);
@@ -467,7 +475,8 @@ describe("Booking Module — Integration", () => {
         await registrationsController.createRegistration(
           { workshopId: "wid-001" },
           "idem-reg-001",
-          studentUser
+          studentUser,
+          mockExpressResponse
         );
 
         // Verify the registration is created with jwt.sub, not from body

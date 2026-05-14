@@ -76,7 +76,7 @@ export class RegistrationsService {
     studentId: string,
     dto: CreateRegistrationDto,
     idempotencyKey?: string
-  ): Promise<Result<RegistrationDto>> {
+  ): Promise<Result<{ registration: RegistrationDto; isReplay: boolean }>> {
     if (idempotencyKey) {
       const idemResult = await this.idempotencyMechanic.check(
         idempotencyKey,
@@ -84,9 +84,10 @@ export class RegistrationsService {
       );
       if (idemResult.isFailure) return Result.fail(idemResult.error);
       if (!idemResult.data.proceed && idemResult.data.cachedResponse) {
-        return Result.ok(
-          idemResult.data.cachedResponse.body as RegistrationDto
-        );
+        return Result.ok({
+          registration: idemResult.data.cachedResponse.body as RegistrationDto,
+          isReplay: true,
+        });
       }
     }
 
@@ -104,7 +105,8 @@ export class RegistrationsService {
       }
     }
 
-    return pipeResult;
+    if (pipeResult.isFailure) return Result.fail(pipeResult.error);
+    return Result.ok({ registration: pipeResult.data, isReplay: false });
   }
 
   private async runRegistrationCore(
@@ -262,7 +264,7 @@ export class RegistrationsService {
           endpoint: "/api/v1/payments",
           amount: Number(workshop.price ?? "0"),
           currency: "VND",
-          expiresAt: new Date(Date.now() + PAYMENT_LOCK_TTL_MS),
+          expiresAt: new Date(Date.now() + PAYMENT_LOCK_TTL_MS).toISOString(),
         }
       : undefined;
 
@@ -317,8 +319,8 @@ export class RegistrationsService {
         workshop: {
           id: item.workshopId,
           title: item.workshopTitle,
-          startsAt: item.workshopStartsAt ?? new Date(),
-          endsAt: item.workshopEndsAt ?? new Date(),
+          startsAt: (item.workshopStartsAt ?? new Date()).toISOString(),
+          endsAt: (item.workshopEndsAt ?? new Date()).toISOString(),
           seatsTotal: item.workshopSeatsTotal ?? 0,
           seatsAvailable: item.workshopSeatsAvailable ?? 0,
           price: item.workshopPrice ?? 0,

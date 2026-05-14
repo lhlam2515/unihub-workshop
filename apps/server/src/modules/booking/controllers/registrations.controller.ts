@@ -9,7 +9,10 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Res,
 } from "@nestjs/common";
+
+import type { Response } from "express";
 
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
@@ -22,6 +25,7 @@ import type { JwtPayload } from "@/types/jwt-payload";
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { ListRegistrationsQueryDto } from "../dto/list-registrations-query.dto";
 import { RegistrationsService } from "../services/registrations.service";
+import { Result } from "@/shared/response/result";
 
 @Controller("registrations")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,10 +37,14 @@ export class RegistrationsController {
    *
    * POST /registrations
    *
+   * Returns 201 for first-time registration, 200 for idempotent replay
+   * (same X-Idempotency-Key reused, result already exists).
+   *
    * @param dto - Zod-validated body containing the target workshop_id (UUID).
    * @param idempotencyKey - X-Idempotency-Key header value for safe retry.
    * @param user - JWT payload providing student identity.
-   * @returns HTTP 201 with RegistrationDto on success, or error response.
+   * @param response - Express response used to set dynamic status code.
+   * @returns HTTP 201 with RegistrationDto on first-time, 200 on replay, or error response.
    */
   @RateLimit([
     { tier: "T2", limit: 30, windowMs: 60000 },
@@ -44,17 +52,20 @@ export class RegistrationsController {
   ])
   @Roles("STUDENT")
   @Post()
-  @HttpCode(HttpStatus.CREATED)
   async createRegistration(
     @Body() dto: CreateRegistrationDto,
     @IdempotencyKey() idempotencyKey: string,
-    @CurrentUser() user: JwtPayload
+    @CurrentUser() user: JwtPayload,
+    @Res({ passthrough: true }) response: Response
   ) {
-    return this.registrationsService.register(
+    const result = await this.registrationsService.register(
       user.studentId!,
       dto,
       idempotencyKey
     );
+    if (result.isFailure) return result;
+    response.status(result.data.isReplay ? HttpStatus.OK : HttpStatus.CREATED);
+    return Result.ok(result.data.registration);
   }
 
   /**
@@ -80,25 +91,28 @@ export class RegistrationsController {
   /**
    * Retrieves a single registration by ID with IDOR enforcement.
    *
-   * GET /registrations/{id}
+   * GET /registrations/{registrationId}
    *
    * @param id - Registration UUID.
    * @param user - JWT payload providing student identity.
    * @returns HTTP 200 with RegistrationDto, or 404.
    */
   @Roles("STUDENT")
-  @Get(":id")
+  @Get(":registrationId")
   async getMyRegistration(
-    @Param("id") id: string,
+    @Param("registrationId") registrationId: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.getRegistrationDetail(user.studentId!, id);
+    return this.registrationsService.getRegistrationDetail(
+      user.studentId!,
+      registrationId
+    );
   }
 
   /**
    * Cancels the authenticated student's own registration.
    *
-   * DELETE /registrations/{id}
+   * DELETE /registrations/{registrationId}
    *
    * Releases the reserved seat and seat lock.
    *
@@ -107,12 +121,15 @@ export class RegistrationsController {
    * @returns HTTP 200 with cancelled RegistrationDto.
    */
   @Roles("STUDENT")
-  @Delete(":id")
+  @Delete(":registrationId")
   @HttpCode(HttpStatus.OK)
   async cancelRegistration(
-    @Param("id") id: string,
+    @Param("registrationId") registrationId: string,
     @CurrentUser() user: JwtPayload
   ) {
-    return this.registrationsService.cancelRegistration(user.studentId!, id);
+    return this.registrationsService.cancelRegistration(
+      user.studentId!,
+      registrationId
+    );
   }
 }
