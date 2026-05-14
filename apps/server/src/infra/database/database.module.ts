@@ -16,6 +16,9 @@ const poolProvider = {
   useFactory: (config: ConfigService) => {
     return new Pool({
       connectionString: config.getOrThrow<string>("database.url"),
+      max: 10,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
     });
   },
 };

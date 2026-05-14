@@ -27,6 +27,7 @@ import { PaymentsService } from "@/modules/payment/services/payments.service";
 @Injectable()
 export class PaymentTimeoutCron {
   private readonly logger = new Logger(PaymentTimeoutCron.name);
+  private isRunning = false;
 
   constructor(
     private readonly paymentsRepo: PaymentsRepository,
@@ -50,6 +51,13 @@ export class PaymentTimeoutCron {
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async handlePaymentTimeout(): Promise<void> {
+    if (this.isRunning) {
+      this.logger.warn(
+        "Payment timeout cron skipped: previous run still active"
+      );
+      return;
+    }
+    this.isRunning = true;
     try {
       const overdueResult = await this.paymentsRepo.findPendingOverdue();
       if (overdueResult.isFailure) {
@@ -107,6 +115,8 @@ export class PaymentTimeoutCron {
       );
     } catch (error) {
       this.logger.error("Payment timeout cron failed", error);
+    } finally {
+      this.isRunning = false;
     }
   }
 }

@@ -126,11 +126,14 @@ export class AiSummaryWorker
     promise: Promise<T>,
     timeoutMs: number
   ): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error("LLM_TIMEOUT")), timeoutMs)
-      ),
-    ]);
+    let timerId: NodeJS.Timeout;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timerId = setTimeout(() => reject(new Error("LLM_TIMEOUT")), timeoutMs);
+    });
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timerId!);
+    }
   }
 }

@@ -330,7 +330,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         if (batch.length > 0) keys.push(...batch);
       });
       stream.on("end", () => resolve(keys));
-      stream.on("error", (err: Error) => reject(err));
+      stream.on("error", (err: Error) => {
+        stream.destroy();
+        reject(err);
+      });
     });
   }
 
@@ -466,6 +469,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    * Side effects: Closes the TCP connection to the Redis server.
    */
   async onModuleDestroy() {
+    this.client.removeAllListeners();
+    this.queueClient.removeAllListeners();
+    this.rateLimitClient.removeAllListeners();
     await Promise.all([
       this.client.quit(),
       this.queueClient.quit(),
