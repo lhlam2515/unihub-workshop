@@ -311,7 +311,6 @@ describe("Catalog Module — Integration", () => {
         const result = await publicController.listPublished({
           cursor: undefined,
           limit: 20,
-          hasSeats: false,
           sort: "startsAt",
         });
 
@@ -330,7 +329,6 @@ describe("Catalog Module — Integration", () => {
           day: "2026-06-01",
           cursor: undefined,
           limit: 20,
-          hasSeats: false,
           sort: "startsAt",
         });
 
@@ -350,7 +348,6 @@ describe("Catalog Module — Integration", () => {
         const result = await publicController.listPublished({
           cursor: undefined,
           limit: 20,
-          hasSeats: false,
           sort: "startsAt",
         });
 

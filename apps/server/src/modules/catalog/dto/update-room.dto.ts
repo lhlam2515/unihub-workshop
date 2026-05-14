@@ -9,12 +9,12 @@ import { z } from "zod";
  * capacity must be positive, floor_plan_url must be a valid URL).
  */
 export const UpdateRoomSchema = z.object({
-  name: z.string().min(1).optional(),
-  building: z.string().optional(),
+  name: z.string().min(1).max(100).optional(),
+  building: z.string().max(100).optional(),
   floor: z.number().int().optional(),
   capacity: z.number().int().positive().optional(),
   floorPlanUrl: z.string().url().optional(),
-  facilities: z.array(z.string()).optional(),
+  facilities: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**

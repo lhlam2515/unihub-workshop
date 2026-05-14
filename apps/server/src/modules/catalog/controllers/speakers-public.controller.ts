@@ -8,9 +8,9 @@ import { SpeakersService } from "../services/speakers.service";
 export class SpeakersPublicController {
   constructor(private readonly speakersService: SpeakersService) {}
 
-  @Get(":id")
+  @Get(":speakerId")
   @Public()
-  async getSpeaker(@Param("id") id: string) {
-    return this.speakersService.getSpeakerById(id);
+  async getSpeaker(@Param("speakerId") speakerId: string) {
+    return this.speakersService.getSpeakerById(speakerId);
   }
 }

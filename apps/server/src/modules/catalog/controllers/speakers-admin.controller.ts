@@ -29,8 +29,8 @@ import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { CreateSpeakerDto } from "../dto/create-speaker.dto";
-import { UpdateSpeakerDto } from "../dto/update-speaker.dto";
 import { ListSpeakersQueryDto } from "../dto/list-speakers-query.dto";
+import { UpdateSpeakerDto } from "../dto/update-speaker.dto";
 import { SpeakersService } from "../services/speakers.service";
 
 @Controller("admin/speakers")
@@ -58,16 +58,16 @@ export class SpeakersAdminController {
   /**
    * Retrieves a single speaker by ID (admin view).
    *
-   * GET /admin/speakers/{id}
+   * GET /admin/speakers/{speakerId}
    *
    * Security context: Requires BTC role.
    *
-   * @param id - UUID of the speaker to retrieve.
+   * @param speakerId - UUID of the speaker to retrieve.
    * @returns SpeakerResponseDto, or FailResult (SPEAKER_NOT_FOUND).
    */
-  @Get(":id")
-  async getSpeaker(@Param("id") id: string) {
-    return this.speakersService.getSpeakerById(id);
+  @Get(":speakerId")
+  async getSpeaker(@Param("speakerId") speakerId: string) {
+    return this.speakersService.getSpeakerById(speakerId);
   }
 
   /**
@@ -81,6 +81,7 @@ export class SpeakersAdminController {
    * @returns The newly created speaker DTO.
    */
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   async createSpeaker(@Body() dto: CreateSpeakerDto) {
     return this.speakersService.createSpeaker(dto);
   }
@@ -92,26 +93,29 @@ export class SpeakersAdminController {
    *
    * Security context: Requires BTC role.
    *
-   * @param id - The UUID of the speaker to update.
+   * @param speakerId - The UUID of the speaker to update.
    * @param body - Partial speaker update payload.
    * @returns The updated speaker DTO.
    */
-  @Patch(":id")
-  async updateSpeaker(@Param("id") id: string, @Body() dto: UpdateSpeakerDto) {
-    return this.speakersService.updateSpeaker(id, dto);
+  @Patch(":speakerId")
+  async updateSpeaker(
+    @Param("speakerId") speakerId: string,
+    @Body() dto: UpdateSpeakerDto
+  ) {
+    return this.speakersService.updateSpeaker(speakerId, dto);
   }
 
   /**
    * Deletes a speaker profile.
    *
-   * DELETE /admin/speakers/{id}
+   * DELETE /admin/speakers/{speakerId}
    *
-   * @param id - The UUID of the speaker to delete.
+   * @param speakerId - The UUID of the speaker to delete.
    * @returns 204 No Content on success, or 404 if not found.
    */
-  @Delete(":id")
+  @Delete(":speakerId")
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteSpeaker(@Param("id") id: string) {
-    return this.speakersService.deleteSpeaker(id);
+  async deleteSpeaker(@Param("speakerId") speakerId: string) {
+    return this.speakersService.deleteSpeaker(speakerId);
   }
 }

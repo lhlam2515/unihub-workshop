@@ -10,6 +10,7 @@ export const CreateWorkshopSchema = z.object({
   endsAt: z.coerce.date(),
   seatsTotal: z.number().int().positive().max(1000),
   price: z.number().min(0),
+  status: z.enum(["DRAFT", "OPEN"]).optional(),
 });
 
 export class CreateWorkshopDto extends createZodDto(CreateWorkshopSchema) {}

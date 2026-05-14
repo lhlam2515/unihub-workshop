@@ -8,8 +8,8 @@ import { createZodDto } from "nestjs-zod/dto";
 import { z } from "zod";
 
 export const CreateSpeakerSchema = z.object({
-  fullName: z.string().min(1),
-  title: z.string().optional(),
+  fullName: z.string().min(1).max(255),
+  title: z.string().max(255).optional(),
   bio: z.string().optional(),
   avatarUrl: z.string().url().optional(),
 });

@@ -63,17 +63,13 @@ export class RoomsService {
    * @returns OkResult containing the created room DTO, or FailResult with INTERNAL_ERROR.
    */
   async createRoom(dto: CreateRoomDto): Promise<Result<RoomResponseDto>> {
-    const facilitiesRecord = dto.facilities
-      ? Object.fromEntries(dto.facilities.map((f) => [f, true]))
-      : null;
-
     const data: NewRoom = {
       name: dto.name,
       building: dto.building ?? null,
       floor: dto.floor ?? null,
       capacity: dto.capacity,
       floorPlanUrl: dto.floorPlanUrl ?? null,
-      facilities: facilitiesRecord,
+      facilities: dto.facilities ?? null,
     };
     const result = await this.roomsRepo.create(data);
     if (result.isFailure) return Result.fail(result.error);
@@ -111,9 +107,7 @@ export class RoomsService {
     if (dto.capacity !== undefined) data.capacity = dto.capacity;
     if (dto.floorPlanUrl !== undefined) data.floorPlanUrl = dto.floorPlanUrl;
     if (dto.facilities !== undefined) {
-      data.facilities = Object.fromEntries(
-        dto.facilities.map((f) => [f, true])
-      );
+      data.facilities = dto.facilities;
     }
 
     const result = await this.roomsRepo.update(id, data);

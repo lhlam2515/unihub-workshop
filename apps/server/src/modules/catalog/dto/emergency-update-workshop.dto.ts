@@ -10,7 +10,7 @@ import { z } from "zod";
 
 export const EmergencyUpdateWorkshopSchema = z
   .object({
-    roomId: z.string().uuid().optional(),
+    roomId: z.string().uuid().nullable().optional(),
     startsAt: z.coerce.date().optional(),
     endsAt: z.coerce.date().optional(),
   })

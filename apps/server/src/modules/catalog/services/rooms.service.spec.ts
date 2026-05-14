@@ -31,7 +31,7 @@ const createDto = {
   floor: 2,
   capacity: 50,
   floor_plan_url: undefined,
-  facilities: ["projector", "wifi"],
+  facilities: { projector: true, wifi: true },
 };
 
 const updateDto = { name: "Updated Room" };
@@ -117,7 +117,7 @@ describe("RoomsService", () => {
       );
     });
 
-    it("converts facilities array to JSONB record", async () => {
+    it("passes facilities object to JSONB storage", async () => {
       roomsRepo.create.mockResolvedValue(Result.ok(mockRoomEntity));
 
       await service.createRoom(createDto);
@@ -198,10 +198,10 @@ describe("RoomsService", () => {
       expect(result.isFailure).toBe(true);
     });
 
-    it("converts facilities array to JSONB record on update", async () => {
+    it("passes facilities object to JSONB storage on update", async () => {
       roomsRepo.findById.mockResolvedValue(Result.ok(mockRoomEntity));
       roomsRepo.update.mockResolvedValue(Result.ok(mockRoomEntity));
-      const dto = { facilities: ["wifi"] };
+      const dto = { facilities: { wifi: true } };
 
       await service.updateRoom("r-001", dto);
 

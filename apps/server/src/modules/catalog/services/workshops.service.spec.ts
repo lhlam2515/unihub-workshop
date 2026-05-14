@@ -603,7 +603,6 @@ describe("WorkshopsService", () => {
     const query: any = {
       cursor: undefined,
       limit: 20,
-      hasSeats: false,
       sort: "startsAt",
     };
 
@@ -648,7 +647,6 @@ describe("WorkshopsService", () => {
         expect.objectContaining({
           dateFrom: expect.any(Date),
           dateTo: expect.any(Date),
-          q: undefined,
           cursor: undefined,
           limit: 10,
         })
@@ -751,8 +749,6 @@ describe("WorkshopsService", () => {
     const query: any = {
       cursor: undefined,
       limit: 20,
-      hasSeats: false,
-      sort: "startsAt",
     };
 
     it("returns paginated admin workshop list", async () => {
@@ -841,7 +837,7 @@ describe("WorkshopsService", () => {
   // getStats
   // ---------------------------------------------------------------------------
   describe("getStats", () => {
-    it("returns stats with actual confirmed_count from repository", async () => {
+    it("returns stats with registrations.total from confirmed count", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       workshopsRepo.countConfirmedRegistrations.mockResolvedValue(
         Result.ok(12)
@@ -852,13 +848,14 @@ describe("WorkshopsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.confirmed_count).toBe(12);
-        expect(result.data.available_seats).toBe(18);
-        expect(result.data.total_capacity).toBe(30);
+        expect(result.data.registrations.total).toBe(12);
+        expect(result.data.registrations.byStatus).toEqual({ CONFIRMED: 12 });
+        expect(result.data.checkins).toEqual({ total: 0, rate: 0 });
+        expect(result.data.revenue).toEqual({ amount: 0, currency: "VND" });
       }
     });
 
-    it("returns 0 available seats when cache returns 0", async () => {
+    it("returns zero registrations when confirmed count is 0", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
       workshopsRepo.countConfirmedRegistrations.mockResolvedValue(Result.ok(0));
       seatCounterService.getCachedSeats.mockResolvedValue(0);
@@ -867,7 +864,7 @@ describe("WorkshopsService", () => {
 
       expect(result.isSuccess).toBe(true);
       if (result.isSuccess) {
-        expect(result.data.available_seats).toBe(0);
+        expect(result.data.registrations.total).toBe(0);
       }
     });
 
