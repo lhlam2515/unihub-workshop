@@ -1,9 +1,7 @@
 /**
  * AI Summary Response DTOs
  *
- * Two shapes:
- * - AiSummaryPublicDto: { status, text, updatedAt }
- * - AiSummaryAdminDto: extends with summaryId, workshopId, errorDetail
+ * Shape: { status, text, updatedAt, errorDetail }
  *
  * Maps DB camelCase fields to API camelCase fields matching OpenAPI spec.
  * DB: summaryText, generatedAt, errorMessage → API: text, updatedAt, errorDetail
@@ -12,18 +10,24 @@
 import type { AiSummary } from "@/infra/database/types/async.types";
 
 export interface AiSummaryPublicDto {
-  status: string;
-  text?: string;
-  updatedAt?: string;
+  status: "NONE" | "QUEUED" | "PROCESSING" | "DONE" | "FAILED";
+  text: string | null;
+  updatedAt: string | null;
+  errorDetail: string | null;
 }
 
-export interface AiSummaryAdminDto extends AiSummaryPublicDto {
-  summaryId: string;
-  workshopId: string;
-  errorDetail?: string;
-}
+export type AiSummaryAdminDto = AiSummaryPublicDto;
 
 export class AiSummaryResponseBuilder {
+  static empty(): AiSummaryPublicDto {
+    return {
+      status: "NONE",
+      text: null,
+      updatedAt: null,
+      errorDetail: null,
+    };
+  }
+
   /**
    * Builds a public AI summary DTO with conditional field exposure.
    *
@@ -40,10 +44,10 @@ export class AiSummaryResponseBuilder {
   static fromPublic(summary: AiSummary): AiSummaryPublicDto {
     return {
       status: summary.status,
-      ...(summary.status === "DONE"
-        ? { text: summary.summaryText ?? undefined }
-        : {}),
-      updatedAt: summary.generatedAt?.toISOString() ?? undefined,
+      text: summary.status === "DONE" ? (summary.summaryText ?? null) : null,
+      updatedAt: summary.generatedAt?.toISOString() ?? null,
+      errorDetail:
+        summary.status === "FAILED" ? (summary.errorMessage ?? null) : null,
     };
   }
 
@@ -57,13 +61,6 @@ export class AiSummaryResponseBuilder {
    * @returns AiSummaryAdminDto with full field exposure.
    */
   static fromAdmin(summary: AiSummary): AiSummaryAdminDto {
-    return {
-      summaryId: summary.summaryId,
-      workshopId: summary.workshopId,
-      status: summary.status,
-      text: summary.summaryText ?? undefined,
-      updatedAt: summary.generatedAt?.toISOString() ?? undefined,
-      errorDetail: summary.errorMessage ?? undefined,
-    };
+    return this.fromPublic(summary);
   }
 }

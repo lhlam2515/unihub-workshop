@@ -14,6 +14,7 @@ import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { ListNotificationLogsQueryDto } from "../dto/notification-response.dto";
+import { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
 import { NotificationsService } from "../services/notifications.service";
 
 @Controller("/admin/notifications")
@@ -44,16 +45,14 @@ export class NotificationsAdminController {
   /**
    * Get a single notification log by ID
    *
-   * @param id - Notification log UUID
+   * @param logId - Notification log UUID
    * @returns Full notification log with payload
    */
-  @Get("logs/:id")
-  async getLogById(@Param("id") id: string) {
-    return this.notificationsService.getLogById(id);
+  @Get("logs/:logId")
+  async getLogById(@Param("logId") logId: string) {
+    return this.notificationsService.getLogById(logId);
   }
 }
-
-import { UpdateChannelConfigDto } from "../dto/update-channel-config.dto";
 
 @Controller("/admin/notification-channels")
 @UseGuards(JwtAuthGuard, RolesGuard)

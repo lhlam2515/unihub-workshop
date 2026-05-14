@@ -15,7 +15,7 @@ export interface PaymentResponseDto {
   currency: string;
   status: string;
   gateway: string;
-  gatewayChargeId?: string;
+  gatewayChargeId: string | null;
   qrCode: string | null;
   createdAt: string;
   resolvedAt: string | null;
@@ -24,7 +24,7 @@ export interface PaymentResponseDto {
 export interface CreatePaymentResponseDto {
   paymentId: string;
   redirectUrl: string;
-  paymentDeadline: Date;
+  paymentDeadline: string;
 }
 
 export class PaymentResponseBuilder {
@@ -46,7 +46,7 @@ export class PaymentResponseBuilder {
       currency: payment.currency || "VND",
       status: payment.status,
       gateway: payment.gateway,
-      gatewayChargeId: payment.gatewayTxnId ?? undefined,
+      gatewayChargeId: payment.gatewayTxnId ?? null,
       qrCode: qrCode ?? null,
       createdAt:
         payment.initiatedAt?.toISOString() ?? new Date(0).toISOString(),
@@ -73,7 +73,7 @@ export class PaymentResponseBuilder {
     return {
       paymentId: payment.paymentId,
       redirectUrl: redirectUrl,
-      paymentDeadline: deadline,
+      paymentDeadline: deadline.toISOString(),
     };
   }
 }

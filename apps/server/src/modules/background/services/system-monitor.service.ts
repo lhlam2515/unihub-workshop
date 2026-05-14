@@ -68,8 +68,8 @@ export class SystemMonitorService {
     return Result.ok({
       pendingCount: pendingResult.data,
       timeoutCount: overdueResult.data,
-      lastRun: paymentLastRun,
-      nextRun: nextRun,
+      lastRun: paymentLastRun.toISOString(),
+      nextRun: nextRun.toISOString(),
       jobStatus: "IDLE",
     });
   }
@@ -125,8 +125,9 @@ export class SystemMonitorService {
     return Result.ok({
       totalWorkshops: workshops.length,
       discrepanciesFound: discrepanciesFound,
-      lastRun: reconLastRun,
-      nextRun: nextRun,
+      lastRun: reconLastRun.toISOString(),
+      nextRun: nextRun.toISOString(),
+      lastAlert: null,
     });
   }
 
@@ -138,9 +139,7 @@ export class SystemMonitorService {
    *
    * @returns OkResult with an array of circuit breaker statuses, or FailResult with INTERNAL_ERROR.
    */
-  async getCircuitBreakerStatus(): Promise<
-    Result<CircuitBreakerStatusArrayDto>
-  > {
+  getCircuitBreakerStatus(): Promise<Result<CircuitBreakerStatusArrayDto>> {
     try {
       const statuses: CircuitBreakerStatusDto[] = [];
 
@@ -151,19 +150,22 @@ export class SystemMonitorService {
           gateway: gateway,
           state: state.state,
           failureCount: state.failureCount,
-          openedAt: state.openedAt > 0 ? new Date(state.openedAt) : undefined,
+          openedAt:
+            state.openedAt > 0 ? new Date(state.openedAt).toISOString() : null,
           lastAttempt:
-            state.lastAttempt > 0 ? new Date(state.lastAttempt) : undefined,
+            state.lastAttempt > 0
+              ? new Date(state.lastAttempt).toISOString()
+              : null,
           autoCloseAt:
             state.state === "OPEN" && state.openedAt > 0
-              ? new Date(state.openedAt + 30_000)
-              : undefined,
+              ? new Date(state.openedAt + 30_000).toISOString()
+              : null,
         });
       }
 
-      return Result.ok(statuses);
+      return Promise.resolve(Result.ok(statuses));
     } catch (error) {
-      return Result.fail(systemErrors.internal(error));
+      return Promise.resolve(Result.fail(systemErrors.internal(error)));
     }
   }
 
@@ -184,13 +186,15 @@ export class SystemMonitorService {
    * @param gateway - The payment gateway identifier to reset.
    * @returns OkResult with the updated circuit breaker state, or FailResult with INTERNAL_ERROR.
    */
-  async resetCircuitBreaker(
+  resetCircuitBreaker(
     gateway: string
   ): Promise<Result<CircuitBreakerStatusDto>> {
     if (!KNOWN_GATEWAYS.includes(gateway as (typeof KNOWN_GATEWAYS)[number])) {
-      return Result.fail(
-        systemErrors.internal(
-          `Invalid gateway: ${gateway}. Must be one of: ${KNOWN_GATEWAYS.join(", ")}`
+      return Promise.resolve(
+        Result.fail(
+          systemErrors.internal(
+            `Invalid gateway: ${gateway}. Must be one of: ${KNOWN_GATEWAYS.join(", ")}`
+          )
         )
       );
     }
@@ -198,14 +202,18 @@ export class SystemMonitorService {
     try {
       this.circuitBreaker.reset(gateway);
 
-      return Result.ok({
-        gateway: gateway as CircuitBreakerStatusDto["gateway"],
-        state: "CLOSED",
-        failureCount: 0,
-        lastAttempt: new Date(),
-      });
+      return Promise.resolve(
+        Result.ok({
+          gateway: gateway as CircuitBreakerStatusDto["gateway"],
+          state: "CLOSED",
+          failureCount: 0,
+          openedAt: null,
+          lastAttempt: new Date().toISOString(),
+          autoCloseAt: null,
+        })
+      );
     } catch (error) {
-      return Result.fail(systemErrors.internal(error));
+      return Promise.resolve(Result.fail(systemErrors.internal(error)));
     }
   }
 }

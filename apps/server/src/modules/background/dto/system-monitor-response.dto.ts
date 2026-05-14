@@ -15,8 +15,8 @@ import { z } from "zod";
 export const PaymentTimeoutJobStatusSchema = z.object({
   pendingCount: z.number().int().nonnegative(),
   timeoutCount: z.number().int().nonnegative(),
-  lastRun: z.date(),
-  nextRun: z.date(),
+  lastRun: z.string().datetime(),
+  nextRun: z.string().datetime(),
   jobStatus: z.enum(["RUNNING", "IDLE", "ERROR"]),
 });
 
@@ -32,9 +32,9 @@ export type PaymentTimeoutJobStatusDto = z.infer<
 export const ReconciliationJobStatusSchema = z.object({
   totalWorkshops: z.number().int().nonnegative(),
   discrepanciesFound: z.number().int().nonnegative(),
-  lastRun: z.date(),
-  nextRun: z.date(),
-  lastAlert: z.string().optional(),
+  lastRun: z.string().datetime(),
+  nextRun: z.string().datetime(),
+  lastAlert: z.string().nullable(),
 });
 
 export type ReconciliationJobStatusDto = z.infer<
@@ -50,9 +50,9 @@ export const CircuitBreakerStatusSchema = z.object({
   gateway: z.enum(["VNPAY", "MOMO", "STRIPE", "MOCK"]),
   state: z.enum(["CLOSED", "HALF_OPEN", "OPEN"]),
   failureCount: z.number().int().nonnegative(),
-  openedAt: z.date().optional(),
-  lastAttempt: z.date().optional(),
-  autoCloseAt: z.date().optional(),
+  openedAt: z.string().datetime().nullable(),
+  lastAttempt: z.string().datetime().nullable(),
+  autoCloseAt: z.string().datetime().nullable(),
 });
 
 export type CircuitBreakerStatusDto = z.infer<

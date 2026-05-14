@@ -77,7 +77,7 @@ export class AiSummaryService {
     const result = await this.aiSummariesRepo.findByWorkshopId(workshopId);
     if (result.isFailure) return Result.fail(result.error);
     const summary = result.data;
-    if (!summary) return Result.ok({ status: "NONE" } as AiSummaryAdminDto);
+    if (!summary) return Result.ok(AiSummaryResponseBuilder.empty());
     return Result.ok(AiSummaryResponseBuilder.fromAdmin(summary));
   }
 

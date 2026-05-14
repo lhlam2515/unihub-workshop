@@ -3,7 +3,10 @@ import { Injectable } from "@nestjs/common";
 import { Result } from "@/shared/response/result";
 
 import { notificationErrors } from "../../../shared/response/errors";
-import { NotificationLogResponse } from "../dto/notification-response.dto";
+import {
+  NotificationLogResponse,
+  NotificationChannelConfigResponse,
+} from "../dto/notification-response.dto";
 import { NotificationChannelConfigsRepository } from "../repositories/notification-channel-configs.repository";
 import { NotificationLogsRepository } from "../repositories/notification-logs.repository";
 
@@ -83,10 +86,17 @@ export class NotificationsService {
   /**
    * List all channel configurations
    *
-   * @returns OkResult with all channel configs, or FailResult (INTERNAL_ERROR)
+   * @returns OkResult with all channel configs mapped to API response DTO, or FailResult (INTERNAL_ERROR)
    */
   async listChannelConfigs(): Promise<Result<unknown[]>> {
-    return this.channelConfigsRepo.findAll();
+    const result = await this.channelConfigsRepo.findAll();
+    if (result.isFailure) return Result.fail(result.error);
+
+    return Result.ok(
+      result.data.map((config) =>
+        NotificationChannelConfigResponse.from(config)
+      )
+    );
   }
 
   /**
@@ -94,15 +104,18 @@ export class NotificationsService {
    *
    * @param channelType - Channel type to update
    * @param dto - Update payload with is_active and optional config_json
-   * @returns OkResult with the updated config, or FailResult (INTERNAL_ERROR)
+   * @returns OkResult with the updated config mapped to API response DTO, or FailResult (INTERNAL_ERROR)
    */
   async updateChannelConfig(
     channelType: string,
     dto: UpdateChannelConfigDto
   ): Promise<Result<unknown>> {
-    return this.channelConfigsRepo.update(channelType, {
+    const result = await this.channelConfigsRepo.update(channelType, {
       isActive: dto.isActive,
       configJson: dto.configJson,
     });
+    if (result.isFailure) return Result.fail(result.error);
+
+    return Result.ok(NotificationChannelConfigResponse.from(result.data));
   }
 }

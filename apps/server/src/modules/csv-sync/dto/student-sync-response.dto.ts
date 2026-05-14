@@ -18,7 +18,7 @@ import type { StudentSyncJob, StudentSyncError } from "@/infra/database/types";
  */
 export const ImportLogSchema = z.object({
   id: z.string().uuid(),
-  runAt: z.date(),
+  runAt: z.string().datetime(),
   triggeredBy: z.enum(["CRON", "MANUAL"]),
   status: z.enum(["IN_PROGRESS", "SUCCESS", "FAILED"]),
   totalRows: z.number().int().nonnegative().nullable(),
@@ -45,12 +45,14 @@ export class StudentSyncJobResponse {
     const totalRows = job.totalRows ?? null;
     return {
       id: job.jobId,
-      runAt: job.triggeredAt,
+      runAt: job.triggeredAt.toISOString(),
       triggeredBy: "MANUAL",
       status:
         job.status === "RUNNING"
           ? "IN_PROGRESS"
-          : (job.status as "SUCCESS" | "FAILED"),
+          : job.status === "PARTIAL_FAILURE"
+            ? "FAILED"
+            : job.status,
       totalRows,
       successCount: totalRows !== null ? totalRows - errorRows : null,
       failedCount: errorRows,
@@ -65,7 +67,7 @@ export const StudentSyncErrorSchema = z.object({
   rawData: z.record(z.string(), z.any()),
   errorReason: z.string(),
   errorDetail: z.string(),
-  createdAt: z.date(),
+  createdAt: z.string().datetime(),
 });
 
 export type StudentSyncErrorDto = z.infer<typeof StudentSyncErrorSchema>;
@@ -78,7 +80,7 @@ export class StudentSyncErrorResponse {
       rawData: JSON.parse(error.rawData) as Record<string, unknown>,
       errorReason: error.errorReason,
       errorDetail: error.errorDetail ?? "",
-      createdAt: error.createdAt,
+      createdAt: error.createdAt.toISOString(),
     };
   }
 }
