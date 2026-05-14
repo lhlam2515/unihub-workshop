@@ -2,32 +2,59 @@ import { z } from "zod";
 
 import type { StudentSyncJob, StudentSyncError } from "@/infra/database/types";
 
-export const StudentSyncJobSchema = z.object({
-  jobId: z.string().uuid(),
-  status: z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED"]),
-  totalRows: z.number().int().nonnegative(),
-  processedRows: z.number().int().nonnegative(),
-  failedRows: z.number().int().nonnegative(),
-  errorCount: z.number().int().nonnegative(),
-  startedAt: z.date().optional(),
-  completedAt: z.date().optional(),
-  createdAt: z.date(),
+/**
+ * Matches OpenAPI ImportLog schema.
+ *
+ * Field mapping from DB studentSyncJobs:
+ *   jobId       → id
+ *   triggeredAt → runAt
+ *   status      → RUNNING maps to IN_PROGRESS (DB uses RUNNING, spec uses IN_PROGRESS)
+ *   errorRows   → failedCount
+ *   errorLogUrl → errorFileUrl
+ *
+ * Known gap: DB does not store triggeredBy (CRON vs MANUAL). Hardcoded to
+ * "MANUAL" since the only caller of triggerSync() is the admin REST endpoint.
+ * A DB migration adding a `triggered_by` column is needed to expose CRON jobs correctly.
+ */
+export const ImportLogSchema = z.object({
+  id: z.string().uuid(),
+  runAt: z.date(),
+  triggeredBy: z.enum(["CRON", "MANUAL"]),
+  status: z.enum(["IN_PROGRESS", "SUCCESS", "FAILED"]),
+  totalRows: z.number().int().nonnegative().nullable(),
+  successCount: z.number().int().nonnegative().nullable(),
+  failedCount: z.number().int().nonnegative().nullable(),
+  errorFileUrl: z.string().nullable(),
 });
 
-export type StudentSyncJobDto = z.infer<typeof StudentSyncJobSchema>;
+export type ImportLogDto = z.infer<typeof ImportLogSchema>;
+
+/** Backward-compat aliases — prefer ImportLogDto / ImportLogSchema in new code. */
+export const StudentSyncJobSchema = ImportLogSchema;
+export type StudentSyncJobDto = ImportLogDto;
 
 export class StudentSyncJobResponse {
-  static from(job: StudentSyncJob): StudentSyncJobDto {
+  /**
+   * Maps a StudentSyncJob DB entity to an ImportLogDto matching the OpenAPI ImportLog schema.
+   *
+   * @param job - Raw student sync job entity from the database.
+   * @returns ImportLogDto with spec-compliant field names and status values.
+   */
+  static from(job: StudentSyncJob): ImportLogDto {
+    const errorRows = job.errorRows ?? 0;
+    const totalRows = job.totalRows ?? null;
     return {
-      jobId: job.jobId,
-      status: job.status as "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED",
-      totalRows: job.totalRows ?? 0,
-      processedRows: job.processedRows ?? 0,
-      failedRows: job.errorRows ?? 0,
-      errorCount: job.errorRows ?? 0,
-      startedAt: undefined,
-      completedAt: job.completedAt ?? undefined,
-      createdAt: job.triggeredAt,
+      id: job.jobId,
+      runAt: job.triggeredAt,
+      triggeredBy: "MANUAL",
+      status:
+        job.status === "RUNNING"
+          ? "IN_PROGRESS"
+          : (job.status as "SUCCESS" | "FAILED"),
+      totalRows,
+      successCount: totalRows !== null ? totalRows - errorRows : null,
+      failedCount: errorRows,
+      errorFileUrl: job.errorLogUrl ?? null,
     };
   }
 }

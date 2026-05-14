@@ -1,7 +1,7 @@
 /**
  * Create Payment DTO
  *
- * Validate: { registration_id, gateway: PaymentGateway }
+ * Validate: { registrationId, gateway, returnUrl }
  * Header X-Idempotency-Key extracted by @IdempotencyKey() decorator
  */
 
@@ -11,6 +11,8 @@ import { z } from "zod";
 export const CreatePaymentSchema = z.object({
   registrationId: z.string().uuid(),
   gateway: z.enum(["VNPAY", "MOMO", "STRIPE", "MOCK"]),
+  /** Gateway redirect URL — where the browser lands after payment completion. */
+  returnUrl: z.string().url(),
 });
 
 export class CreatePaymentDto extends createZodDto(CreatePaymentSchema) {}

@@ -1,9 +1,5 @@
 export type SyncResultKind = "OK" | "DUPLICATE" | "REJECTED";
-export type RejectionReason =
-  | "QR_INVALID"
-  | "WORKSHOP_CANCELLED"
-  | "NOT_PAID"
-  | "INTERNAL_ERROR";
+export type RejectionReason = "QR_INVALID" | "WORKSHOP_CANCELLED" | "NOT_PAID";
 
 export interface CheckinSyncResultItem {
   localId: string;

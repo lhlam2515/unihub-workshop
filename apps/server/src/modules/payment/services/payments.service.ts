@@ -351,29 +351,29 @@ export class PaymentsService {
   }
 
   /**
-   * Lists the authenticated student's payments with pagination.
+   * Lists the authenticated student's payments with cursor-based pagination.
    *
    * IDOR is enforced at the repository layer — only payments where
    * student_id matches the JWT subject are returned.
    *
    * @param studentId - The UUID of the student (from JWT, never from request body).
-   * @param query - Optional pagination: page (default 1), limit (default 20).
-   * @returns OkResult with paginated PaymentResponseDto list and total count,
+   * @param query - Optional cursor and limit (default 20).
+   * @returns OkResult with { items, nextCursor, hasMore, limit },
    * or FailResult with INTERNAL_ERROR.
    */
   async getMyPayments(
     studentId: string,
-    query?: { page?: number; limit?: number }
+    query?: { cursor?: string; limit?: number }
   ): Promise<
     Result<{
       items: PaymentResponseDto[];
-      total: number;
-      page: number;
+      nextCursor: string | null;
+      hasMore: boolean;
       limit: number;
     }>
   > {
     const result = await this.paymentsRepo.findMyPayments(studentId, {
-      page: query?.page,
+      cursor: query?.cursor,
       limit: query?.limit,
     });
     if (result.isFailure) return Result.fail(result.error);
@@ -384,9 +384,9 @@ export class PaymentsService {
 
     return Result.ok({
       items,
-      total: result.data.total,
-      page: query?.page ?? 1,
-      limit: query?.limit ?? 20,
+      nextCursor: result.data.nextCursor,
+      hasMore: result.data.hasMore,
+      limit: result.data.limit,
     });
   }
 

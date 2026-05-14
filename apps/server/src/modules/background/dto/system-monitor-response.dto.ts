@@ -47,7 +47,7 @@ export type ReconciliationJobStatusDto = z.infer<
  * Status of a single payment gateway circuit breaker.
  */
 export const CircuitBreakerStatusSchema = z.object({
-  gateway: z.enum(["VNPAY", "MOMO", "STRIPE"]),
+  gateway: z.enum(["VNPAY", "MOMO", "STRIPE", "MOCK"]),
   state: z.enum(["CLOSED", "HALF_OPEN", "OPEN"]),
   failureCount: z.number().int().nonnegative(),
   openedAt: z.date().optional(),

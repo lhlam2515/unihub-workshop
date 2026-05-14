@@ -80,12 +80,14 @@ export class StudentSyncAdminController {
   /**
    * Get the current status and metadata of a sync job
    *
-   * @param jobId - Sync job UUID from URL path
+   * @param importId - Sync job UUID from URL path.
    * @returns OkResult with full job record or FailResult (INTERNAL_ERROR)
    */
-  @Get(":jobId")
-  async getJobStatus(@Param("jobId") jobId: string): Promise<Result<any>> {
-    return this.studentSyncService.getJob(jobId);
+  @Get(":importId")
+  async getJobStatus(
+    @Param("importId") importId: string
+  ): Promise<Result<any>> {
+    return this.studentSyncService.getJob(importId);
   }
 
   /**
@@ -93,17 +95,17 @@ export class StudentSyncAdminController {
    *
    * Results ordered by row_number ASC.
    *
-   * @param jobId - Sync job UUID from URL path
+   * @param importId - Sync job UUID from URL path.
    * @param query - Pagination parameters (page, limit)
    * @returns OkResult with items array and total count
    *         or FailResult (INTERNAL_ERROR)
    */
-  @Get(":jobId/errors")
+  @Get(":importId/errors")
   async getJobErrors(
-    @Param("jobId") jobId: string,
+    @Param("importId") importId: string,
     @Query() query: ListSyncJobErrorsQueryDto
   ): Promise<Result<any>> {
-    return this.studentSyncService.getJobErrors(jobId, {
+    return this.studentSyncService.getJobErrors(importId, {
       page: query.page,
       limit: query.limit,
     });

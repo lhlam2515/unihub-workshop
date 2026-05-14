@@ -34,28 +34,32 @@ export interface RegistrationWorkshopDto {
   isRegistered: boolean | null;
 }
 
+/** Matches OpenAPI Registration schema (detail / create response). */
 export interface RegistrationDto {
   id: string;
-  studentId: string;
   workshopId: string;
   status: string;
   qrCode: string | null;
   registeredAt: Date;
-  confirmedAt?: Date | null;
-  cancelledAt?: Date | null;
   nextStep?: NextStepInfo | null;
+}
+
+/** Matches OpenAPI RegistrationListItem — extends Registration with nested workshop. */
+export interface RegistrationListItemDto extends RegistrationDto {
   workshop: RegistrationWorkshopDto;
 }
 
 export class RegistrationResponseBuilder {
   /**
-   * Maps a Registration database entity to a client-safe RegistrationDto.
+   * Maps a Registration database entity to a RegistrationListItemDto.
    *
-   * Includes qrCode for confirmed/paid registrations and nextStep for pending payment.
+   * Strips internal DB fields (studentId, confirmedAt, cancelledAt) not exposed
+   * in the OpenAPI Registration / RegistrationListItem schemas.
+   * Includes qrCode only when status ∈ {CONFIRMED, PAID}.
    *
    * @param registration - The Registration row from the database.
-   * @param options - Optional payment info and next step details.
-   * @returns A clean RegistrationDto with no internal DB fields exposed.
+   * @param options - Optional nextStep for paid-pending flow and nested workshop data.
+   * @returns RegistrationListItemDto safe for API responses.
    */
   static from(
     registration: Registration,
@@ -63,10 +67,9 @@ export class RegistrationResponseBuilder {
       nextStep?: NextStepInfo | null;
       workshop?: RegistrationWorkshopDto;
     }
-  ): RegistrationDto {
+  ): RegistrationListItemDto {
     return {
       id: registration.registrationId,
-      studentId: registration.studentId,
       workshopId: registration.workshopId,
       status: registration.status,
       qrCode:
@@ -74,8 +77,6 @@ export class RegistrationResponseBuilder {
           ? registration.qrCode
           : null,
       registeredAt: registration.registeredAt,
-      confirmedAt: registration.confirmedAt ?? null,
-      cancelledAt: registration.cancelledAt ?? null,
       nextStep: options?.nextStep ?? null,
       workshop: options?.workshop ?? {
         id: "",
