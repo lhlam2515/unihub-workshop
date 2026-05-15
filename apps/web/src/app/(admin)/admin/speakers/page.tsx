@@ -1,18 +1,19 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { listSpeakers } from "@/lib/api/services/admin";
+import ROUTES from "@/constants/routes";
+import { listSpeakersServer } from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminSpeakerListWidget } from "@/widgets/AdminSpeakerListWidget";
 
-export default function AdminSpeakerListPage() {
-  const { data, error } = useAsyncQuery(["admin-speakers"], () =>
-    listSpeakers()
-  );
+export default async function AdminSpeakersPage() {
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
+
+  const result = await listSpeakersServer(session.accessToken);
+  const speakers = result.isSuccess ? result.data : [];
+  const error = result.isFailure ? String(result.error) : undefined;
 
   return (
-    <AdminSpeakerListWidget
-      initialResult={data ?? null}
-      initialError={error?.message}
-    />
+    <AdminSpeakerListWidget initialResult={speakers} initialError={error} />
   );
 }
