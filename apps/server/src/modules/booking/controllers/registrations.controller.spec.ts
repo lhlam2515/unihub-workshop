@@ -130,7 +130,7 @@ describe("RegistrationsController", () => {
       registrationsService.getMyRegistrations.mockResolvedValue(
         Result.ok({ items: [], nextCursor: null, hasMore: false, limit: 20 })
       );
-      await controller.getMyRegistrations(mockUser, { limit: 20 } as any);
+      await controller.getMyRegistrations(mockUser, { limit: 20 });
       expect(registrationsService.getMyRegistrations).toHaveBeenCalledWith(
         "stu-001",
         expect.objectContaining({})

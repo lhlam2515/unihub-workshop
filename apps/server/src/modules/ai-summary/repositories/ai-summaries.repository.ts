@@ -2,6 +2,7 @@
  * Retrieves and persists AI-generated document summaries with upsert support.
  */
 import { randomUUID } from "node:crypto";
+
 import { Injectable, Inject } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 
