@@ -53,13 +53,13 @@ export class AiSummariesRepository {
    * Creates or updates an AI summary for a workshop using upsert.
    *
    * Business rules:
-   * - If a summary already exists for this workshopId, its status is reset to QUEUED.
+   * - If a summary already exists for this workshopId, its status is reset to QUEUED and documentId is updated.
    * - If not, a new record is inserted with the given documentId.
    *
    * Drizzle operation: Query existing by workshopId, then UPDATE or INSERT.
    *
    * Side effects:
-   * - Inserts a new row or updates the status of an existing row in ai_summaries.
+   * - Inserts a new row or updates the status and documentId of an existing row in ai_summaries.
    *
    * @param documentId - The UUID of the source document.
    * @param workshopId - The UUID of the associated workshop.
@@ -80,7 +80,7 @@ export class AiSummariesRepository {
         if (existing) {
           const [result] = await this.db
             .update(this.schema.aiSummaries)
-            .set({ status: "QUEUED" })
+            .set({ status: "QUEUED", documentId })
             .where(eq(this.schema.aiSummaries.summaryId, existing.summaryId))
             .returning();
           return result;

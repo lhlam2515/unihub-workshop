@@ -145,6 +145,33 @@ describe("AiSummariesRepository", () => {
       expect(mockDb.update).toHaveBeenCalled();
     });
 
+    it("updates both status and documentId when re-uploading", async () => {
+      const existingRecord = { ...mockAiSummary, documentId: "doc-old" };
+      mockChain.limit.mockResolvedValue([existingRecord]);
+      const newDocumentId = "doc-new";
+      mockChain.returning.mockResolvedValue([
+        {
+          ...existingRecord,
+          documentId: newDocumentId,
+          status: "QUEUED",
+        },
+      ]);
+
+      const result = await repo.upsert(newDocumentId, "w-001");
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data.status).toBe("QUEUED");
+        expect(result.data.documentId).toBe(newDocumentId);
+      }
+      // Verify the .set() was called with both status and documentId
+      expect(mockChain.set).toHaveBeenCalledWith({
+        status: "QUEUED",
+        documentId: newDocumentId,
+      });
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
     it("returns FailResult on DB error", async () => {
       mockChain.limit.mockRejectedValue(new Error("DB error"));
 
