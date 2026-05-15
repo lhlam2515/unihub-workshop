@@ -70,7 +70,10 @@ function WorkshopCardRoot({ children, className }: WorkshopCardRootProps) {
     <Card
       data-testid="workshop-card"
       size="sm"
-      className={cn("transition-shadow hover:shadow-lg", className)}
+      className={cn(
+        "flex h-full flex-col transition-shadow hover:shadow-lg",
+        className
+      )}
     >
       {children}
     </Card>
@@ -95,7 +98,10 @@ function Header({ title, status, startsAt, endsAt }: HeaderProps) {
     <CardHeader>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <CardTitle data-testid="workshop-title" className="truncate">
+          <CardTitle
+            data-testid="workshop-title"
+            className="leading-tight break-words"
+          >
             {title}
           </CardTitle>
           <CardDescription>
@@ -127,7 +133,7 @@ interface MetaProps {
 
 function Meta({ speakerName, speakerTitle, speakerAvatarUrl }: MetaProps) {
   return (
-    <CardContent>
+    <CardContent className="mt-auto">
       <div data-testid="workshop-speaker" className="flex items-center gap-2">
         <Avatar size="sm">
           {speakerAvatarUrl && speakerName ? (
