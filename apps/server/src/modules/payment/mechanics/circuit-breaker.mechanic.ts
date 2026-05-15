@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 
 import { paymentErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -11,7 +11,10 @@ const HALF_OPEN_SUCCESS_THRESHOLD = 2;
 
 export interface CircuitState {
   state: "CLOSED" | "OPEN" | "HALF_OPEN";
+  /** Consecutive failures since last success (resets on success). */
   failureCount: number;
+  /** All failures in the current 60s window (never resets on success — only at window boundary). */
+  windowFailureCount: number;
   totalCount: number;
   windowStart: number;
   openedAt: number;
@@ -24,6 +27,7 @@ function createInitialState(): CircuitState {
   return {
     state: "CLOSED",
     failureCount: 0,
+    windowFailureCount: 0,
     totalCount: 0,
     windowStart: Date.now(),
     openedAt: 0,
@@ -35,6 +39,8 @@ function createInitialState(): CircuitState {
 
 @Injectable()
 export class CircuitBreakerMechanic {
+  private readonly logger = new Logger(CircuitBreakerMechanic.name);
+
   /** In-process memory per ADR-07. Single process = no distributed coordination needed. */
   private readonly circuits = new Map<string, CircuitState>();
 
@@ -86,6 +92,9 @@ export class CircuitBreakerMechanic {
       state.state = "HALF_OPEN";
       state.halfOpenSuccessCount = 0;
       state.lastAttempt = now;
+      this.logger.log(
+        `Circuit breaker HALF_OPEN — sending canary for ${gateway}`
+      );
       return Result.ok(true);
     }
 
@@ -115,11 +124,14 @@ export class CircuitBreakerMechanic {
         state.state = "CLOSED";
         state.failureCount = 0;
         state.halfOpenSuccessCount = 0;
+        this.logger.log(`Circuit breaker CLOSED (recovered) for ${gateway}`);
       }
       return;
     }
 
-    // CLOSED — reset failure count
+    // CLOSED — reset consecutive failure counter only.
+    // windowFailureCount is intentionally NOT reset so cumulative failures
+    // in the 60s window continue to accumulate toward the rate threshold (E-02).
     state.failureCount = 0;
   }
 
@@ -141,30 +153,45 @@ export class CircuitBreakerMechanic {
       state.state = "OPEN";
       state.openedAt = Date.now();
       state.halfOpenSuccessCount = 0;
+      this.logger.warn(
+        `Circuit breaker probe FAILED — back to OPEN for ${gateway}`
+      );
       return;
     }
 
     const now = Date.now();
 
-    // Rolling window: reset counters if 60s since windowStart
+    // Rolling window: reset all window counters if 60s since windowStart
     if (now - state.windowStart > FAILURE_WINDOW_MS) {
       state.failureCount = 0;
+      state.windowFailureCount = 0;
       state.totalCount = 0;
       state.windowStart = now;
     }
 
     state.failureCount += 1;
+    state.windowFailureCount += 1;
     state.totalCount += 1;
     state.lastFailureAt = now;
 
-    // Check both conditions: consecutive failures OR rate >= 50%
+    // Check both conditions: consecutive failures OR rate >= 50% in 60s window.
+    // windowFailureCount is used for rate (not failureCount which resets on success)
+    // so interleaved F-S-F-S patterns correctly accumulate toward the threshold (E-02).
     const rateExceeded =
       state.totalCount >= 3 &&
-      state.failureCount / state.totalCount >= FAILURE_RATE_THRESHOLD;
+      state.windowFailureCount / state.totalCount >= FAILURE_RATE_THRESHOLD;
 
     if (state.failureCount >= FAILURE_THRESHOLD || rateExceeded) {
       state.state = "OPEN";
       state.openedAt = now;
+      this.logger.warn(`Circuit breaker OPENED for ${gateway}`, {
+        reason:
+          state.failureCount >= FAILURE_THRESHOLD
+            ? "consecutive_failures"
+            : "rate_exceeded",
+        failureCount: state.failureCount,
+        totalCount: state.totalCount,
+      });
     }
   }
 
