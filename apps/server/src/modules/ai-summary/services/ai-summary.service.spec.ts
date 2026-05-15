@@ -1,7 +1,7 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
-import { StorageService } from "@/infra/storage/storage.service";
 import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
+import { StorageService } from "@/infra/storage/storage.service";
 import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { Result } from "@/shared/response/result";
@@ -368,6 +368,47 @@ describe("AiSummaryService", () => {
         Result.ok("https://cdn.example.com/w.pdf")
       );
       mockWorkshopDocumentsRepo.create.mockResolvedValue(
+        Result.fail({
+          code: "INTERNAL_ERROR",
+          category: "INTERNAL",
+          message: "DB error",
+        })
+      );
+
+      const result = await service.uploadDocument(
+        "w-001",
+        mockFile,
+        "user-001"
+      );
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("INTERNAL_ERROR");
+      expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("returns FailResult when ai_summaries upsert fails", async () => {
+      const mockFile = {
+        originalname: "f.pdf",
+        size: 100,
+        buffer: Buffer.from("x"),
+        mimetype: "application/pdf",
+      } as Express.Multer.File;
+      mockWorkshopsRepo.findById.mockResolvedValue(
+        Result.ok({ workshopId: "w-001" })
+      );
+      mockStorageService.uploadFile.mockResolvedValue(
+        Result.ok("https://cdn.example.com/workshops/w-001/doc-001.pdf")
+      );
+      mockWorkshopDocumentsRepo.create.mockResolvedValue(
+        Result.ok({
+          documentId: "doc-001",
+          workshopId: "w-001",
+          fileUrl: "https://cdn.example.com/workshops/w-001/doc-001.pdf",
+          uploadStatus: "UPLOADED",
+          uploadedBy: "user-001",
+        })
+      );
+      mockAiSummariesRepo.upsert.mockResolvedValue(
         Result.fail({
           code: "INTERNAL_ERROR",
           category: "INTERNAL",

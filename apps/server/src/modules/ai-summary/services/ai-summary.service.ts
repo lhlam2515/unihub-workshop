@@ -79,7 +79,11 @@ export class AiSummaryService {
     if (docResult.isFailure) return Result.fail(docResult.error);
     const { documentId } = docResult.data;
 
-    await this.aiSummariesRepo.upsert(documentId, workshopId);
+    const upsertResult = await this.aiSummariesRepo.upsert(
+      documentId,
+      workshopId
+    );
+    if (upsertResult.isFailure) return Result.fail(upsertResult.error);
 
     await this.aiSummaryQueue.enqueue("ai-summary.process", {
       documentId,
