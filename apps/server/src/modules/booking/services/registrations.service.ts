@@ -373,7 +373,35 @@ export class RegistrationsService {
     );
     if (result.isFailure) return Result.fail(result.error);
 
-    return Result.ok(RegistrationResponseBuilder.from(result.data));
+    const registration = result.data;
+
+    // Compute nextStep for PENDING (paid) registrations so the pay page
+    // has the amount, currency, and deadline to render the payment form.
+    let nextStep: NextStepInfo | null = null;
+    if (registration.status === "PENDING") {
+      const wsResult = await this.workshopsService.getPublishedById(
+        registration.workshopId
+      );
+      if (wsResult.isSuccess) {
+        const workshop = wsResult.data;
+        const isPaid = Number(workshop.price ?? "0") > 0;
+        if (isPaid) {
+          nextStep = {
+            action: "CREATE_PAYMENT" as const,
+            endpoint: "/api/v1/payments",
+            amount: Number(workshop.price ?? "0"),
+            currency: "VND",
+            expiresAt: new Date(
+              registration.registeredAt.getTime() + PAYMENT_LOCK_TTL_MS
+            ).toISOString(),
+          };
+        }
+      }
+    }
+
+    return Result.ok(
+      RegistrationResponseBuilder.from(registration, { nextStep })
+    );
   }
 
   /**
