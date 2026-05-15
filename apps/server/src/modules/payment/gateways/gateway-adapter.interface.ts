@@ -1,13 +1,13 @@
 import type { Result } from "@/shared/response/result";
 
 export interface GatewayInitiateResult {
-  redirect_url: string;
-  gateway_txn_id: string;
+  redirectUrl: string;
+  gatewayTxnId: string;
 }
 
 export interface GatewayStatusResult {
   status: "SUCCEEDED" | "FAILED" | "UNRESOLVED";
-  gateway_txn_id?: string;
+  gatewayTxnId?: string;
 }
 
 export interface IGatewayAdapter {

@@ -14,8 +14,8 @@ describe("PaymentGatewayService", () => {
     gatewayName: "MOCK",
     initiatePayment: jest.fn().mockResolvedValue(
       Result.ok({
-        redirect_url: "https://mock-gateway.test/pay/demo-txn-123",
-        gateway_txn_id: "mock_txn_123_abc123",
+        redirectUrl: "https://mock-gateway.test/pay/demo-txn-123",
+        gatewayTxnId: "mock_txn_123_abc123",
       })
     ),
     verifyHmacSignature: jest.fn().mockResolvedValue(Result.ok(true)),
@@ -68,14 +68,14 @@ describe("PaymentGatewayService", () => {
   });
 
   describe("initiatePayment — FR-F05-003 (gateway call)", () => {
-    it("should return redirect_url and gateway_txn_id for MOCK gateway", async () => {
+    it("should return redirectUrl and gatewayTxnId for MOCK gateway", async () => {
       const result = await service.initiatePayment("MOCK", 50000, {
         registration_id: "reg-001",
       });
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.redirect_url).toContain("mock-gateway.test/pay/");
-      expect(result.data.gateway_txn_id).toContain("mock_txn_");
+      expect(result.data.redirectUrl).toContain("mock-gateway.test/pay/");
+      expect(result.data.gatewayTxnId).toContain("mock_txn_");
     });
 
     it("should return PAYMENT_GATEWAY_ERROR for VNPAY (not yet implemented)", async () => {
