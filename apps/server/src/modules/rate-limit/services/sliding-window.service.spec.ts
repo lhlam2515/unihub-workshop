@@ -160,12 +160,23 @@ describe("SlidingWindowService", () => {
       expect(pipeline.exec).toHaveBeenCalled();
     });
 
-    it("constructs the correct Redis key format", async () => {
+    it("constructs the correct Redis key format for simple identifier", async () => {
       await service.check("T3", "student-uuid");
 
       const pipeline = mockRedis.pipeline();
       expect(pipeline.zremrangebyscore).toHaveBeenCalledWith(
         "rl:tier:T3:student-uuid",
+        expect.any(Number),
+        expect.any(Number)
+      );
+    });
+
+    it("constructs the correct Redis key format for composite identifier (T3 user×resource)", async () => {
+      await service.check("T3", "student-uuid:workshop-uuid");
+
+      const pipeline = mockRedis.pipeline();
+      expect(pipeline.zremrangebyscore).toHaveBeenCalledWith(
+        "rl:tier:T3:student-uuid:workshop-uuid",
         expect.any(Number),
         expect.any(Number)
       );

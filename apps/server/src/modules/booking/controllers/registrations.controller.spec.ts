@@ -1,7 +1,5 @@
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
@@ -59,12 +57,7 @@ describe("RegistrationsController", () => {
       providers: [
         { provide: RegistrationsService, useValue: registrationsService },
       ],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: jest.fn().mockResolvedValue(true) })
-      .overrideGuard(RolesGuard)
-      .useValue({ canActivate: jest.fn().mockResolvedValue(true) })
-      .compile();
+    }).compile();
 
     controller = module.get<RegistrationsController>(RegistrationsController);
   });
