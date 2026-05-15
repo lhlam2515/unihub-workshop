@@ -59,7 +59,10 @@ import type {
   CreatePaymentResponseDto,
   PaymentResponseDto,
 } from "../dto/payment-response.dto";
-import type { PaymentWebhookDto } from "../dto/payment-webhook.dto";
+import type {
+  PaymentWebhookDto,
+  PaymentWebhookDtoType,
+} from "../dto/payment-webhook.dto";
 
 @Injectable()
 export class PaymentsService {
@@ -86,7 +89,8 @@ export class PaymentsService {
    * 5. Seat lock TTL check + workshop price lookup (parallel).
    * 6. Payment INSERT with 15-minute timeout.
    * 7. Gateway adapter call (MOCK returns fake redirect URL).
-   * 8. On gateway success: mark idempotency COMPLETED + record CB success.
+   * 8. MOCK auto-resolve — call handleWebhook internally (no real webhook will fire for MOCK).
+   * 9. On gateway success: mark idempotency COMPLETED + record CB success.
    *    On gateway failure: mark idempotency UNRESOLVED + record CB failure.
    *
    * Business rules:
@@ -104,7 +108,7 @@ export class PaymentsService {
    * @param studentId - The student code (MSSV, TEXT PK from students table, e.g. "21127001").
    * @param dto - CreatePaymentDto with registration_id and gateway.
    * @param idempotencyKey - The X-Idempotency-Key header value.
-   * @returns OkResult with CreatePaymentResponseDto (includes redirect_url and deadline),
+   * @returns OkResult with CreatePaymentResponseDto (includes redirectUrl, deadline, and status),
    * or FailResult with codes:
    * - IDEMPOTENCY_CONFLICT: Another request with this key is in progress.
    * - PAYMENT_GATEWAY_OPEN: Circuit breaker is OPEN.
@@ -197,11 +201,29 @@ export class PaymentsService {
       return Result.fail(gwResult.error);
     }
 
-    // Stage 8: Mark idempotency completed + record CB success
+    // Stage 8: MOCK auto-resolve — no real webhook will fire for mock gateway
+    let resolvedStatus: "INITIATED" | "SUCCEEDED" = "INITIATED";
+    if (dto.gateway === "MOCK") {
+      const mockWebhook: PaymentWebhookDtoType = {
+        gatewayTxnId: gwResult.data.gatewayTxnId,
+        status: "SUCCESS",
+        idempotencyKey,
+      };
+      const mockResult = await this.handleWebhook(
+        "MOCK",
+        mockWebhook as PaymentWebhookDto
+      );
+      if (mockResult.isSuccess) {
+        resolvedStatus = "SUCCEEDED";
+      }
+    }
+
+    // Stage 9: Mark idempotency completed + record CB success
     const responseDto = PaymentResponseBuilder.fromCreate(
       payment,
-      gwResult.data.redirect_url,
-      payment.timeoutAt!
+      gwResult.data.redirectUrl,
+      payment.timeoutAt!,
+      resolvedStatus
     );
     await this.idempotencyMechanic.markCompleted(
       idempotencyKey,

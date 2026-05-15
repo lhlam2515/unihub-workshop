@@ -190,8 +190,8 @@ describe("PaymentsService", () => {
       paymentsRepo.create.mockResolvedValue(Result.ok(mockPayment));
       paymentGatewayService.initiatePayment.mockResolvedValue(
         Result.ok({
-          redirect_url: "https://mock-gateway.test/pay/abc",
-          gateway_txn_id: "txn-001",
+          redirectUrl: "https://mock-gateway.test/pay/abc",
+          gatewayTxnId: "txn-001",
         })
       );
       circuitBreaker.recordSuccess.mockResolvedValue();
@@ -237,6 +237,32 @@ describe("PaymentsService", () => {
         expect.any(Object),
         201
       );
+    });
+
+    // MOCK auto-resolve: payment transitions to SUCCEEDED synchronously
+    it("should return status SUCCEEDED when MOCK gateway auto-resolves internally", async () => {
+      setupInitiateSuccess();
+      // Mocks for the internal handleWebhook call (Stage 8)
+      paymentsRepo.findByIdempotencyKeyWithLock.mockResolvedValue(
+        Result.ok(mockPayment)
+      );
+      paymentsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockPayment, status: "SUCCEEDED" })
+      );
+      registrationsRepo.updateStatus.mockResolvedValue(
+        Result.ok({
+          ...mockRegistration,
+          status: "CONFIRMED",
+          workshopId: WORKSHOP_ID,
+        })
+      );
+
+      const result = await service.initiate(STUDENT_ID, dto, IDEMPOTENCY_KEY);
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.status).toBe("SUCCEEDED");
+      expect(result.data.paymentId).toBe(PAYMENT_ID);
+      expect(result.data.redirectUrl).toBeDefined();
     });
 
     // FR-F05-001: idempotency IN_PROGRESS conflict — detected by lookupExisting (Stage 1)
