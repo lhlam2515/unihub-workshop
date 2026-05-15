@@ -8,32 +8,40 @@ export type ServerSession = {
   accessToken: string;
 };
 
+const SESSION_COOKIE_NAME = "sessionToken";
+
 /**
- * Get the current server session by refreshing the access token from the refresh token cookie.
+ * Get the current server session by reading the client-synced session cookie.
+ *
+ * The access token is set in a cookie by the client-side AuthProvider after
+ * login or silent refresh. This function reads that cookie and validates it
+ * via GET /auth/me.
  *
  * Uses React.cache() to deduplicate requests within a single server render pass.
- * If multiple Server Components call this function, only one request hits /auth/refresh.
  *
- * @returns The server session (user + accessToken) or null if the refresh token is missing or refresh fails.
+ * @returns The server session (user + accessToken) or null if no valid session cookie exists.
  */
 export const getServerSession = cache(
   async (): Promise<ServerSession | null> => {
     const jar = await cookies();
-    const refreshToken = jar.get("refreshToken")?.value;
-    if (!refreshToken) return null;
+    const accessToken = jar.get(SESSION_COOKIE_NAME)?.value;
+    if (!accessToken) return null;
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
-        {
-          method: "POST",
-          headers: { Cookie: `refreshToken=${refreshToken}` },
-          cache: "no-store",
-        }
-      );
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+
       if (!res.ok) return null;
-      const { data } = await res.json();
-      return { user: data.user, accessToken: data.accessToken };
+
+      const envelope = await res.json();
+      if (!envelope.success) return null;
+      return { user: envelope.data as User, accessToken };
     } catch {
       return null;
     }

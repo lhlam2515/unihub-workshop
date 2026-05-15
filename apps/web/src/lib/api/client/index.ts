@@ -14,6 +14,7 @@ import type {
   PaginationMeta,
   RequestOptions,
 } from "@/lib/api/types";
+import { clearSessionToken, setSessionToken } from "@/lib/auth/sync-session";
 
 import { onForcedLogout } from "./auth-session";
 import { API_BASE_URL } from "./config";
@@ -145,6 +146,7 @@ export async function login<TCredentials, TSession>(
   }
 
   tokenStore.set(envelope.data.accessToken);
+  setSessionToken(envelope.data.accessToken);
   return envelope.data;
 }
 
@@ -157,5 +159,6 @@ export async function logout(): Promise<void> {
     await api.post("/auth/logout");
   } finally {
     tokenStore.clear();
+    clearSessionToken();
   }
 }
