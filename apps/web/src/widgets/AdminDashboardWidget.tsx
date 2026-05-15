@@ -3,7 +3,6 @@
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-import { ContentLoader } from "@/components/ContentLoader";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
 import { MetricTile } from "@/components/MetricTile";
 import { PageHeader } from "@/components/PageHeader";
@@ -16,8 +15,7 @@ import type { DashboardOverview } from "@/types/admin";
 // ---------------------------------------------------------------------------
 
 export interface AdminDashboardWidgetProps {
-  initialResult: DashboardOverview | null;
-  initialError?: string;
+  overview: DashboardOverview | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,33 +40,18 @@ function formatCurrency(amount: number): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function AdminDashboardWidget({
-  initialResult,
-  initialError,
-}: AdminDashboardWidgetProps) {
+export function AdminDashboardWidget({ overview }: AdminDashboardWidgetProps) {
   const router = useRouter();
 
-  // Loading
-  if (!initialResult && !initialError) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Tổng quan" description="Đang tải dữ liệu..." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <MetricTile key={i} label="" value="" skeleton />
-          ))}
-        </div>
-        <ContentLoader layout="grid" count={2} />
-      </div>
-    );
-  }
-
-  // Error
-  if (initialError) {
+  // Error / no data
+  if (!overview) {
     return (
       <div className="space-y-6">
         <PageHeader title="Tổng quan" />
-        <ErrorDisplay error={initialError} variant="banner" />
+        <ErrorDisplay
+          error="Không thể tải dữ liệu tổng quan."
+          variant="banner"
+        />
         <button
           onClick={() => router.refresh()}
           className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
@@ -81,7 +64,7 @@ export function AdminDashboardWidget({
   }
 
   // Success
-  const data = initialResult!;
+  const data = overview;
 
   return (
     <div data-testid="stats-overview" className="space-y-6">

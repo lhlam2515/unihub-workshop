@@ -1,31 +1,16 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import dynamic from "next/dynamic";
+import { getAdminDashboardOverviewServer } from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
+import { AdminDashboardWidget } from "@/widgets/AdminDashboardWidget";
+import ROUTES from "@/constants/routes";
 
-import { ContentLoader } from "@/components/ContentLoader";
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { getAdminDashboardOverview } from "@/lib/api/services/admin";
+export default async function AdminDashboardPage() {
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-const AdminDashboardWidget = dynamic(
-  () =>
-    import("@/widgets/AdminDashboardWidget").then((mod) => ({
-      default: mod.AdminDashboardWidget,
-    })),
-  {
-    loading: () => <ContentLoader layout="grid" count={3} />,
-    ssr: false,
-  }
-);
+  const result = await getAdminDashboardOverviewServer(session.accessToken);
+  const overview = result.isFailure ? null : result.data;
 
-export default function AdminDashboardPage() {
-  const { data, error } = useAsyncQuery(["admin-dashboard"], () =>
-    getAdminDashboardOverview()
-  );
-
-  return (
-    <AdminDashboardWidget
-      initialResult={data ?? null}
-      initialError={error?.message}
-    />
-  );
+  return <AdminDashboardWidget overview={overview} />;
 }
