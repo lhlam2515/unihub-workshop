@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 
-import { Injectable, Logger } from "@nestjs/common";
-
+import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
+import type { ITypedMessageQueue } from "@/infra/messaging/messaging.interfaces";
 import { StorageService } from "@/infra/storage/storage.service";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
 import { Result } from "@/shared/response/result";
@@ -9,6 +9,7 @@ import { Result } from "@/shared/response/result";
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
 import { PdfSummaryPipeline } from "../pipeline/pdf-summary.pipeline";
 import { AiSummariesRepository } from "../repositories/ai-summaries.repository";
+import { WorkshopDocumentsRepository } from "../repositories/workshop-documents.repository";
 
 import type { AiSummaryAdminDto } from "../dto/ai-summary-response.dto";
 
@@ -25,8 +26,11 @@ export class AiSummaryService {
   constructor(
     private readonly pipeline: PdfSummaryPipeline,
     private readonly aiSummariesRepo: AiSummariesRepository,
+    private readonly workshopDocumentsRepo: WorkshopDocumentsRepository,
     private readonly storageService: StorageService,
-    private readonly workshopsRepo: WorkshopsRepository
+    private readonly workshopsRepo: WorkshopsRepository,
+    @Inject(MESSAGING_TOKEN.AI_SUMMARY_QUEUE)
+    private readonly aiSummaryQueue: ITypedMessageQueue
   ) {}
 
   // ── Document upload ──────────────────────────────────────────────
@@ -37,29 +41,53 @@ export class AiSummaryService {
    * Business rules:
    * - The workshop must exist in the database.
    * - The file is uploaded to S3-compatible object storage.
-   * - An AI summary record is upserted with QUEUED status for background processing.
+   * - A workshop_documents record is created with the real documentId.
+   * - An ai_summaries record is upserted with QUEUED status for immediate polling.
+   * - A BullMQ job is enqueued with documentId + fileUrl for background processing.
    *
    * Side effects:
    * - Uploads the file buffer to object storage (S3 PutObject).
-   * - Upserts an ai_summaries record with QUEUED status.
+   * - Inserts a row in workshop_documents.
+   * - Upserts a row in ai_summaries with QUEUED status.
+   * - Enqueues a job to AI_SUMMARY_QUEUE.
    *
    * @param workshopId - The UUID of the target workshop.
    * @param file - Express Multer file object with buffer and metadata.
-   * @returns OkResult with { workshopId }, or FailResult (WORKSHOP_NOT_FOUND, INTERNAL_ERROR).
+   * @param uploadedBy - UUID of the BTC user performing the upload.
+   * @returns OkResult with { workshopId, documentId }, or FailResult
+   *   (WORKSHOP_NOT_FOUND, UPLOAD_FAILED, INTERNAL_ERROR).
    */
   async uploadDocument(
     workshopId: string,
-    file: Express.Multer.File
-  ): Promise<Result<{ workshopId: string }>> {
+    file: Express.Multer.File,
+    uploadedBy: string
+  ): Promise<Result<{ workshopId: string; documentId: string }>> {
     const workshopResult = await this.workshopsRepo.findById(workshopId);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
 
     const uploadResult = await this.storageService.uploadFile(file, workshopId);
     if (uploadResult.isFailure) return Result.fail(uploadResult.error);
+    const fileUrl = uploadResult.data;
 
-    await this.aiSummariesRepo.upsert(randomUUID(), workshopId);
+    const docResult = await this.workshopDocumentsRepo.create({
+      workshopId,
+      fileUrl,
+      originalName: file.originalname,
+      fileSizeBytes: file.size,
+      uploadedBy,
+    });
+    if (docResult.isFailure) return Result.fail(docResult.error);
+    const { documentId } = docResult.data;
 
-    return Result.ok({ workshopId });
+    await this.aiSummariesRepo.upsert(documentId, workshopId);
+
+    await this.aiSummaryQueue.enqueue("ai-summary.process", {
+      documentId,
+      workshopId,
+      fileUrl,
+    });
+
+    return Result.ok({ workshopId, documentId });
   }
 
   // ── Get summary ──────────────────────────────────────────────────
