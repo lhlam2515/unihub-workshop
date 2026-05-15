@@ -1,73 +1,33 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/PageHeader";
-import { listMyRegistrations } from "@/features/registration-management/api/registration.service";
-import type { ApiError } from "@/lib/api/errors";
-import type { RegistrationListItem } from "@/types/registration";
+import ROUTES from "@/constants/routes";
+import { getServerSession } from "@/lib/auth/server-session";
+import { listMyRegistrationsServer } from "@/lib/api/server-services/registration";
 import { RegistrationListWidget } from "@/widgets/RegistrationListWidget";
 
-const StudentRegistrationHistoryPage = () => {
-  const [registrations, setRegistrations] = useState<RegistrationListItem[]>(
-    []
-  );
-  const [filter, setFilter] = useState<{ status?: string; upcoming?: boolean }>(
-    {}
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface PageProps {
+  searchParams: Promise<{ status?: string; upcoming?: string }>;
+}
 
-  useEffect(() => {
-    async function load() {
-      const result = await listMyRegistrations();
-      if (result.isSuccess) {
-        setRegistrations(result.data.items);
-      } else {
-        setError(
-          (result.error as ApiError)?.message ?? "Không thể tải danh sách"
-        );
-      }
-      setLoading(false);
-    }
-    load();
-  }, []);
+export default async function StudentRegistrationHistoryPage({
+  searchParams,
+}: PageProps) {
+  const session = await getServerSession();
+  if (!session) redirect(ROUTES.LOGIN);
 
-  const handleFilterChange = async (newFilter: {
-    status?: string;
-    upcoming?: boolean;
-  }) => {
-    setFilter(newFilter);
-    setLoading(true);
-    setError(null);
+  const raw = await searchParams;
+  const params: { status?: string; upcoming?: boolean } = {};
+  if (raw.status) params.status = raw.status;
+  if (raw.upcoming === "true") params.upcoming = true;
 
-    const params: Record<string, string | boolean | number> = {};
-    if (newFilter.status) params.status = newFilter.status;
-    if (newFilter.upcoming) params.upcoming = true;
-
-    const result = await listMyRegistrations(params);
-    if (result.isSuccess) {
-      setRegistrations(result.data.items);
-    } else {
-      setError(
-        (result.error as ApiError)?.message ?? "Không thể tải danh sách"
-      );
-    }
-    setLoading(false);
-  };
+  const result = await listMyRegistrationsServer(params, session.accessToken);
+  const registrations = result.isFailure ? [] : result.data.items;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4">
       <PageHeader title="Đăng ký của tôi" />
-      <RegistrationListWidget
-        registrations={registrations}
-        filter={filter}
-        onFilterChange={handleFilterChange}
-        loading={loading}
-        error={error}
-      />
+      <RegistrationListWidget registrations={registrations} />
     </div>
   );
-};
-
-export default StudentRegistrationHistoryPage;
+}

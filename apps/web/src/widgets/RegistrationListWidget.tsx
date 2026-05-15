@@ -2,12 +2,10 @@
 
 import { Inbox } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { ContentLoader } from "@/components/ContentLoader";
 import { EmptyState } from "@/components/EmptyState";
-import { ErrorDisplay } from "@/components/ErrorDisplay";
 import ROUTES from "@/constants/routes";
 import { cancelRegistration } from "@/features/registration-management/api/registration.service";
 import { CancelConfirmDialog } from "@/features/registration-management/components/CancelConfirmDialog";
@@ -17,43 +15,50 @@ import type { RegistrationListItem } from "@/types/registration";
 
 interface RegistrationListWidgetProps {
   registrations: RegistrationListItem[];
-  filter: { status?: string; upcoming?: boolean };
-  onFilterChange: (filter: { status?: string; upcoming?: boolean }) => void;
-  loading: boolean;
-  error: string | null;
 }
 
 export function RegistrationListWidget({
   registrations,
-  filter,
-  onFilterChange,
-  loading,
-  error,
 }: RegistrationListWidgetProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [cancelTarget, setCancelTarget] = useState<RegistrationListItem | null>(
     null
   );
+
+  const activeFilter = {
+    status: searchParams.get("status") ?? undefined,
+    upcoming: searchParams.get("upcoming") === "true",
+  };
+
+  const handleFilterChange = (newFilter: {
+    status?: string;
+    upcoming?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    if (newFilter.status) params.set("status", newFilter.status);
+    if (newFilter.upcoming) params.set("upcoming", "true");
+    router.push(`${ROUTES.ME_REGISTRATIONS}?${params.toString()}`);
+  };
 
   const handleCancel = async () => {
     if (!cancelTarget) return;
     const result = await cancelRegistration(cancelTarget.id);
     if (result.isSuccess) {
-      // Note: parent page will re-fetch to get fresh state
-      onFilterChange(filter);
+      // Refresh the page to re-fetch registrations from the server
+      router.refresh();
     }
     setCancelTarget(null);
   };
 
   return (
     <div className="space-y-4">
-      <StatusFilterChips activeFilter={filter} onChange={onFilterChange} />
+      <StatusFilterChips
+        activeFilter={activeFilter}
+        onChange={handleFilterChange}
+      />
 
-      {error && <ErrorDisplay error={error} variant="banner" />}
-
-      {loading ? (
-        <ContentLoader count={3} />
-      ) : registrations.length === 0 ? (
+      {registrations.length === 0 ? (
         <EmptyState
           icon={Inbox}
           title="Chưa có đăng ký nào"
