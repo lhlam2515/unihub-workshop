@@ -1,39 +1,42 @@
-"use client";
+import { notFound, redirect } from "next/navigation";
 
-import { useParams, notFound } from "next/navigation";
-
-import { ContentLoader } from "@/components/ContentLoader";
-import { useAsyncQuery } from "@/hooks/use-async-query";
+import ROUTES from "@/constants/routes";
+import { getServerSession } from "@/lib/auth/server-session";
 import {
-  getAdminWorkshop,
-  listSpeakers,
-  listRooms,
-} from "@/lib/api/services/admin";
+  getAdminWorkshopServer,
+  listRoomsServer,
+  listSpeakersServer,
+} from "@/lib/api/server-services/admin";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
-export default function AdminWorkshopEditPage() {
-  const { workshopId } = useParams<{ workshopId: string }>();
+interface PageProps {
+  params: Promise<{ workshopId: string }>;
+}
 
-  const workshopQuery = useAsyncQuery(["admin-workshop", workshopId], () =>
-    getAdminWorkshop(workshopId)
-  );
-  const speakersQuery = useAsyncQuery(["admin-speakers-edit"], () =>
-    listSpeakers()
-  );
-  const roomsQuery = useAsyncQuery(["admin-rooms-edit"], () => listRooms());
+export default async function AdminWorkshopDetailPage({ params }: PageProps) {
+  const { workshopId } = await params;
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-  if (workshopQuery.error) notFound();
-  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
+  const result = await getAdminWorkshopServer(workshopId, session.accessToken);
+  if (result.isFailure) notFound();
+
+  // Fetch speakers and rooms in parallel — degrade gracefully on failure
+  // (matching the current client behavior of defaulting to [])
+  const [speakersResult, roomsResult] = await Promise.all([
+    listSpeakersServer(session.accessToken),
+    listRoomsServer(session.accessToken),
+  ]);
 
   return (
     <div className="space-y-6">
-      <AdminWorkshopEditWidget workshop={workshopQuery.data!} />
+      <AdminWorkshopEditWidget workshop={result.data} />
       <AdminWorkshopFormWidget
         mode="edit"
-        initialData={workshopQuery.data!}
-        speakers={speakersQuery.data ?? []}
-        rooms={roomsQuery.data ?? []}
+        initialData={result.data}
+        speakers={speakersResult.isSuccess ? speakersResult.data : []}
+        rooms={roomsResult.isSuccess ? roomsResult.data : []}
       />
     </div>
   );
