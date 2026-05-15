@@ -2,9 +2,8 @@ import { Test, type TestingModule } from "@nestjs/testing";
 
 import { Result } from "@/shared/response/result";
 
-import { IdempotencyKeysRepository } from "../repositories/idempotency-keys.repository";
-
 import { IdempotencyMechanic } from "./idempotency.mechanic";
+import { IdempotencyKeysRepository } from "../repositories/idempotency-keys.repository";
 
 describe("IdempotencyMechanic", () => {
   let mechanic: IdempotencyMechanic;

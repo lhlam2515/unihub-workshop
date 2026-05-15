@@ -116,7 +116,7 @@ export class CheckinRecordsRepository {
           limit,
           with: { student: true },
         });
-        return results as unknown as CheckinRecordWithStudent[];
+        return results;
       },
       (err) => systemErrors.internal(err)
     );

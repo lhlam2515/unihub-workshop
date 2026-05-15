@@ -11,8 +11,6 @@ import {
   Res,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { WorkshopScopeGuard } from "@/modules/iam/guards/workshop-scope.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
@@ -34,7 +32,6 @@ import type { Response } from "express";
  * Path prefix: /checkins
  */
 @Controller("checkins")
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("CHECKIN_STAFF")
 export class CheckinController {
   constructor(
@@ -109,7 +106,6 @@ export class CheckinController {
  * Path prefix: /checkin
  */
 @Controller("checkin")
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("CHECKIN_STAFF")
 export class CheckinPreloadController {
   constructor(

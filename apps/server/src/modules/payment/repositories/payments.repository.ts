@@ -14,18 +14,19 @@
  */
 import { Injectable, Inject } from "@nestjs/common";
 import { and, desc, eq, lt, sql } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
 import type { DrizzleTransaction } from "@/infra/database/types/drizzle.types";
+import type { PaymentStatus } from "@/infra/database/types/enums.types";
 import type {
   Payment,
   NewPayment,
 } from "@/infra/database/types/transaction.types";
-import type { PaymentStatus } from "@/infra/database/types/enums.types";
 import { lockTimeoutMapper, systemErrors } from "@/shared/response/errors";
 import { Result, tryCatch } from "@/shared/response/result";
+
+import type { SQL } from "drizzle-orm";
 
 @Injectable()
 export class PaymentsRepository {
@@ -199,7 +200,7 @@ export class PaymentsRepository {
         const nextCursor =
           rows.length > 0
             ? Buffer.from(
-                rows[rows.length - 1].initiatedAt!.toISOString()
+                rows[rows.length - 1].initiatedAt.toISOString()
               ).toString("base64")
             : null;
 
@@ -305,7 +306,7 @@ export class PaymentsRepository {
     return tryCatch(
       async () => {
         const rows = await this.db.execute(
-          sql`SELECT pg_try_advisory_lock(${lockId}) as lock_acquired` as SQL<unknown>
+          sql`SELECT pg_try_advisory_lock(${lockId}) as lock_acquired`
         );
         const first = Array.isArray(rows) ? rows[0] : rows;
         return first?.lock_acquired === true;
@@ -327,9 +328,7 @@ export class PaymentsRepository {
   async releaseAdvisoryLock(lockId: number): Promise<Result<void>> {
     return tryCatch(
       async () => {
-        await this.db.execute(
-          sql`SELECT pg_advisory_unlock(${lockId})` as SQL<unknown>
-        );
+        await this.db.execute(sql`SELECT pg_advisory_unlock(${lockId})`);
       },
       (err) => systemErrors.internal(err)
     );

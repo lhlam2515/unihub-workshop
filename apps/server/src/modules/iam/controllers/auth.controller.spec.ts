@@ -1,6 +1,5 @@
 import { Test } from "@nestjs/testing";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
@@ -39,10 +38,7 @@ describe("AuthController", () => {
     const module = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [{ provide: AuthService, useValue: authService }],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: jest.fn().mockResolvedValue(true) })
-      .compile();
+    }).compile();
 
     controller = module.get<AuthController>(AuthController);
   });

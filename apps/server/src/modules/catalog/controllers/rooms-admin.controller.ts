@@ -17,13 +17,10 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
@@ -33,7 +30,6 @@ import { UpdateRoomDto } from "../dto/update-room.dto";
 import { RoomsService } from "../services/rooms.service";
 
 @Controller("admin/rooms")
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
 @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class RoomsAdminController {

@@ -11,18 +11,18 @@ import {
   Res,
 } from "@nestjs/common";
 
-import type { Response } from "express";
-
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import { Result } from "@/shared/response/result";
 import type { JwtPayload } from "@/types/jwt-payload";
 
 import { CreateRegistrationDto } from "../dto/create-registration.dto";
 import { ListRegistrationsQueryDto } from "../dto/list-registrations-query.dto";
 import { RegistrationsService } from "../services/registrations.service";
-import { Result } from "@/shared/response/result";
+
+import type { Response } from "express";
 
 @Controller("registrations")
 export class RegistrationsController {

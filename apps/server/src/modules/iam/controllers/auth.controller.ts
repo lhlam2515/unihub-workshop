@@ -7,10 +7,8 @@ import {
   Post,
   Req,
   Res,
-  UseGuards,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Public } from "@/shared/decorators/public.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
@@ -134,7 +132,6 @@ export class AuthController {
    * Requires valid JWT. Any authenticated role can access.
    */
   @Post("logout")
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
     @CurrentUser() user: JwtPayload,
@@ -169,7 +166,6 @@ export class AuthController {
    * Requires valid JWT. Any authenticated role can access.
    */
   @Get("me")
-  @UseGuards(JwtAuthGuard)
   async getMe(@CurrentUser() user: JwtPayload) {
     return this.authService.getMe(user.sub);
   }

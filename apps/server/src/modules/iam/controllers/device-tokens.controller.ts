@@ -7,11 +7,8 @@ import {
   Param,
   Post,
   Response,
-  UseGuards,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import { Result } from "@/shared/response/result";
@@ -23,7 +20,6 @@ import type { CreateDeviceTokenDto } from "../dto/create-device-token.dto";
 import type { Response as ExpressResponse } from "express";
 
 @Controller("device-tokens")
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class DeviceTokensController {
   constructor(private readonly deviceTokensService: DeviceTokensService) {}
 

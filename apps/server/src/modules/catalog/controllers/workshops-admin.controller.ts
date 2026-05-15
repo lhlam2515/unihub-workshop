@@ -23,15 +23,12 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   Headers,
   HttpCode,
   HttpStatus,
   Res,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
@@ -50,7 +47,6 @@ import { WorkshopsService } from "../services/workshops.service";
 import type { Response } from "express";
 
 @Controller("admin/workshops")
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
 @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class WorkshopsAdminController {

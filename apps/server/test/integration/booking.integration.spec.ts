@@ -514,7 +514,7 @@ describe("Booking Module — Integration", () => {
         await registrationsController.getMyRegistrations(studentUser, {
           status: ["CONFIRMED"],
           limit: 20,
-        } as ListRegistrationsQueryDto);
+        });
 
         expect(mockRegistrationsRepo.findMyRegistrations).toHaveBeenCalledWith(
           "stu-001",

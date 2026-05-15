@@ -1,7 +1,5 @@
-import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Query } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { ListAdminRegistrationsQueryDto } from "../dto/list-admin-registrations-query.dto";
@@ -12,7 +10,6 @@ import { RegistrationsService } from "../services/registrations.service";
  * All routes require JWT authentication and BTC role.
  */
 @Controller("admin/workshops")
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
 export class RegistrationsAdminController {
   constructor(private readonly registrationsService: RegistrationsService) {}
