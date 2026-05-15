@@ -108,6 +108,8 @@ export interface AppError {
   context?: Record<string, unknown>;
   /** Optional original cause preserved for diagnostics. */
   cause?: unknown;
+  /** Seconds the client should wait before retrying (RFC 7231). */
+  retryAfter?: number;
 }
 
 /**
@@ -148,6 +150,8 @@ export interface ApiErrorShape {
   code: ErrorCode;
   message: string;
   fieldErrors?: FieldError[];
+  /** Seconds the client should wait before retrying (RFC 7231). */
+  retryAfter?: number;
 }
 
 /**
