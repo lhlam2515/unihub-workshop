@@ -97,6 +97,46 @@ export class IdempotencyKeysRepository {
   }
 
   /**
+   * Looks up an existing idempotency key by hash without inserting.
+   *
+   * Read-only query used to check existing key state before claiming a new key.
+   * Called before circuit breaker check so CB OPEN never creates a stuck
+   * IN_PROGRESS row for new payment attempts (INV-04).
+   *
+   * Side effects:
+   * - None (read-only).
+   *
+   * @param keyHash - SHA-256 hash of the idempotency key.
+   * @returns OkResult with the row state or null if not found, or FailResult with INTERNAL_ERROR.
+   */
+  async findByHash(keyHash: string): Promise<
+    Result<{
+      status: string;
+      responseBody?: unknown;
+      statusCode?: number;
+    } | null>
+  > {
+    return tryCatch(
+      async () => {
+        const [existing] = await this.db
+          .select()
+          .from(this.schema.idempotencyKeys)
+          .where(eq(this.schema.idempotencyKeys.keyHash, keyHash))
+          .limit(1);
+
+        if (!existing) return null;
+
+        return {
+          status: existing.status,
+          responseBody: existing.responseBody,
+          statusCode: existing.statusCode ?? undefined,
+        };
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
    * Transitions an idempotency key to COMPLETED with the response payload.
    *
    * Only updates rows that are currently IN_PROGRESS to prevent

@@ -92,6 +92,66 @@ export class IdempotencyMechanic {
   }
 
   /**
+   * Looks up an existing idempotency key without claiming it.
+   *
+   * Read-only alternative to check() — does not INSERT for new keys.
+   * Used before circuit breaker check so CB OPEN never leaves a stuck
+   * IN_PROGRESS row for new payment attempts (INV-04 / AC-04).
+   *
+   * Flow:
+   * 1. Hash the key using SHA-256.
+   * 2. SELECT the existing row (no INSERT).
+   * 3. Not found → { found: false } (new key — fall through to CB check).
+   * 4. UNRESOLVED → { found: true, proceed: true } (retry allowed).
+   * 5. COMPLETED → { found: true, proceed: false, cachedResponse }.
+   * 6. IN_PROGRESS → FailResult with IDEMPOTENCY_CONFLICT.
+   *
+   * Business rules:
+   * - Does not modify any state — safe to call before CB check.
+   * - New keys return found: false; the caller must call check() after CB passes
+   *   to INSERT IN_PROGRESS and claim the key.
+   *
+   * Side effects:
+   * - None (read-only).
+   *
+   * @param key - The raw idempotency key from the X-Idempotency-Key header.
+   * @returns OkResult with lookup status, or FailResult with IDEMPOTENCY_CONFLICT or INTERNAL_ERROR.
+   */
+  async lookupExisting(key: string): Promise<
+    Result<{
+      found: boolean;
+      proceed?: boolean;
+      cachedResponse?: { body: unknown; statusCode: number };
+    }>
+  > {
+    const keyHash = crypto.createHash("sha256").update(key).digest("hex");
+
+    const result = await this.repo.findByHash(keyHash);
+    if (result.isFailure) return Result.fail(result.error);
+
+    if (!result.data) {
+      return Result.ok({ found: false });
+    }
+
+    const { status, responseBody, statusCode } = result.data;
+
+    if (status === "UNRESOLVED") {
+      return Result.ok({ found: true, proceed: true });
+    }
+
+    if (status === "COMPLETED") {
+      return Result.ok({
+        found: true,
+        proceed: false,
+        cachedResponse: { body: responseBody, statusCode: statusCode! },
+      });
+    }
+
+    // IN_PROGRESS — concurrent request detected
+    return Result.fail(idempotencyConflict(key));
+  }
+
+  /**
    * Marks the idempotency key as COMPLETED with the response payload.
    *
    * Call this after the operation succeeds so subsequent retries
