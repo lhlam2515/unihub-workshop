@@ -28,8 +28,6 @@ import {
   HttpStatus,
 } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { HmacSignatureGuard } from "@/modules/payment/guards/hmac-signature.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
@@ -43,7 +41,6 @@ import { PaymentWebhookDto } from "../dto/payment-webhook.dto";
 import { PaymentsService } from "../services/payments.service";
 
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("STUDENT")
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
@@ -67,7 +64,12 @@ export class PaymentsController {
    */
   @RateLimit([
     { tier: "T2", limit: 30, windowMs: 60000 },
-    { tier: "T3", limit: 5, windowMs: 60000 },
+    {
+      tier: "T3",
+      limit: 5,
+      windowMs: 60000,
+      resourceIdSource: "body.registrationId",
+    },
   ])
   @Post("payments")
   @HttpCode(HttpStatus.CREATED)
