@@ -37,6 +37,8 @@ describe("RegistrationsService", () => {
     price: null,
     seatsTotal: 50,
     seatsAvailable: 50,
+    startsAt: new Date("2025-06-01T10:00:00Z"),
+    roomId: null,
   } as any;
 
   const mockPaidWorkshop = {
@@ -46,6 +48,8 @@ describe("RegistrationsService", () => {
     price: "50000",
     seatsTotal: 50,
     seatsAvailable: 50,
+    startsAt: new Date("2025-06-01T10:00:00Z"),
+    roomId: null,
   } as any;
 
   const mockRegistration: Registration = {
@@ -101,6 +105,7 @@ describe("RegistrationsService", () => {
           provide: WorkshopsService,
           useValue: {
             getPublishedById: jest.fn(),
+            getRoomNameForWorkshop: jest.fn().mockResolvedValue("Room A"),
             getSeatVersion: jest
               .fn()
               .mockResolvedValue(Result.ok({ version: 1, seatsAvailable: 10 })),
@@ -224,7 +229,13 @@ describe("RegistrationsService", () => {
         userId: STUDENT_ID,
         workshopId: WORKSHOP_ID,
         type: "REGISTRATION_CONFIRMED",
-        payload: { registrationId: REGISTRATION_ID },
+        payload: expect.objectContaining({
+          workshopId: WORKSHOP_ID,
+          workshopTitle: "Free Workshop",
+          startsAt: expect.any(String),
+          location: expect.any(String),
+          qrCode: expect.any(String),
+        }),
       });
     });
 

@@ -486,7 +486,11 @@ export class WorkshopsService {
       userId: workshop.createdBy,
       workshopId: id,
       type: "WORKSHOP_CANCELLED",
-      payload: { title: workshop.title, reason: dto.reason },
+      payload: {
+        workshopTitle: workshop.title,
+        originalStartsAt: workshop.startsAt.toISOString(),
+        reason: dto.reason,
+      },
     });
 
     const roomResult = await this.roomsRepo.findById(workshop.roomId ?? "");
@@ -617,6 +621,23 @@ export class WorkshopsService {
 
   async completePastWorkshops(): Promise<Result<number>> {
     return this.workshopsRepo.completePastOpen();
+  }
+
+  /**
+   * Resolves the room name for a workshop.
+   *
+   * Uses the existing findById JOIN to retrieve room data without
+   * an additional query, returning the room name or null.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns The room name string, or null if no room assigned or lookup fails.
+   */
+  async getRoomNameForWorkshop(workshopId: string): Promise<string | null> {
+    const result = await this.workshopsRepo.findById(workshopId);
+    if (result.isSuccess && result.data?.rooms) {
+      return result.data.rooms.name;
+    }
+    return null;
   }
 
   async getPublishedWorkshopsBasic(): Promise<

@@ -68,6 +68,7 @@ describe("PaymentsService", () => {
     isPaid: true,
     status: "PUBLISHED",
     price: String(AMOUNT),
+    startsAt: new Date("2025-06-01T10:00:00Z"),
   } as any;
 
   const mockRegistrationUpdated = {
@@ -134,6 +135,7 @@ describe("PaymentsService", () => {
           provide: WorkshopsService,
           useValue: {
             getPublishedById: jest.fn(),
+            getRoomNameForWorkshop: jest.fn(),
             incrementSeat: jest.fn(),
           },
         },
@@ -459,6 +461,10 @@ describe("PaymentsService", () => {
         Result.ok(mockRegistrationUpdated)
       );
       seatLock.release.mockResolvedValue(Result.ok(true));
+      workshopsService.getPublishedById.mockResolvedValue(
+        Result.ok(mockWorkshop)
+      );
+      workshopsService.getRoomNameForWorkshop.mockResolvedValue("Room A");
     }
 
     it("should process SUCCESS webhook with ACID transaction (BR-027)", async () => {
@@ -505,6 +511,9 @@ describe("PaymentsService", () => {
       seatLock.release.mockResolvedValue(Result.ok(true));
       seatCounter.invalidateCache.mockResolvedValue(undefined);
       workshopsService.incrementSeat.mockResolvedValue(Result.ok());
+      workshopsService.getPublishedById.mockResolvedValue(
+        Result.ok(mockWorkshop)
+      );
 
       const result = await service.handleWebhook(GATEWAY, failedDto);
 
@@ -594,6 +603,9 @@ describe("PaymentsService", () => {
       seatLock.release.mockResolvedValue(Result.ok(true));
       seatCounter.invalidateCache.mockResolvedValue(undefined);
       workshopsService.incrementSeat.mockResolvedValue(Result.ok());
+      workshopsService.getPublishedById.mockResolvedValue(
+        Result.ok(mockWorkshop)
+      );
 
       const result = await service.expirePayment(PAYMENT_ID);
 

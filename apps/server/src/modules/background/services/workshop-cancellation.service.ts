@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 
 import type { WorkshopCancelledEventData } from "@/infra/messaging/event-contracts";
 import { RegistrationsService } from "@/modules/booking/services/registrations.service";
+import { WorkshopsService } from "@/modules/catalog/services/workshops.service";
 import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 
 /**
@@ -23,6 +24,7 @@ export class WorkshopCancellationService {
 
   constructor(
     private readonly registrationsService: RegistrationsService,
+    private readonly workshopsService: WorkshopsService,
     private readonly notificationLogProducer: NotificationLogProducer
   ) {}
 
@@ -49,7 +51,13 @@ export class WorkshopCancellationService {
       `[CANCEL_WORKSHOP] Voided ${cancelledCount} registrations for workshop "${title}" (${workshopId})`
     );
 
-    // Step 2: Fan-out notification to all affected students (best-effort, per ADR-11)
+    // Step 2: Resolve workshop details for payload enrichment
+    const wsResult = await this.workshopsService.getPublishedById(workshopId);
+    const originalStartsAt = wsResult.isSuccess
+      ? wsResult.data.startsAt.toISOString()
+      : "";
+
+    // Step 3: Fan-out notification to all affected students (best-effort, per ADR-11)
     const { affectedStudentIds } = voidResult.data;
     if (cancelledCount > 0 && affectedStudentIds.length > 0) {
       this.logger.log(
@@ -61,7 +69,11 @@ export class WorkshopCancellationService {
             userId: studentId,
             workshopId,
             type: "WORKSHOP_CANCELLED" as const,
-            payload: { workshopTitle: title, workshopId },
+            payload: {
+              workshopTitle: title,
+              originalStartsAt,
+              reason: "Workshop cancelled by administrator",
+            },
           })),
           100
         )

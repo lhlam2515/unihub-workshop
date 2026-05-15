@@ -107,7 +107,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
     AiSummaryModule,
     CsvSyncModule,
     NotificationModule,
-    // BackgroundModule,
+    BackgroundModule,
   ],
   controllers: [AppController],
   providers: [
