@@ -1,5 +1,7 @@
 import type { Result } from "@/shared/response/result";
 
+import type { NotificationType } from "@/infra/messaging/event-contracts";
+
 /**
  * Strategy contract for notification delivery channels.
  *
@@ -26,12 +28,14 @@ export interface INotificationChannel {
    * `channel_configs.config_json`; each channel parses what it needs.
    *
    * @param recipient - Destination address (email, chat ID, or user ID)
-   * @param payload - Notification template data
+   * @param eventType - The notification event type (e.g. REGISTRATION_CONFIRMED)
+   * @param payload - Event-specific payload per spec (workshopTitle, startsAt, etc.)
    * @param config - Channel-specific provider configuration
    * @returns OkResult on successful delivery, or FailResult on failure
    */
   send(
     recipient: string,
+    eventType: NotificationType,
     payload: Record<string, unknown>,
     config: Record<string, unknown>
   ): Promise<Result<void>>;

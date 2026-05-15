@@ -274,11 +274,21 @@ export class RegistrationsService {
 
     // Create notification log for free workshop registration
     if (!isPaid) {
+      const roomName = await this.workshopsService.getRoomNameForWorkshop(
+        dto.workshopId
+      );
+
       void this.notificationLogProducer.createAndEnqueue({
         userId: studentId,
         workshopId: dto.workshopId,
         type: "REGISTRATION_CONFIRMED",
-        payload: { registrationId: registration.registrationId },
+        payload: {
+          workshopId: dto.workshopId,
+          workshopTitle: workshop.title,
+          startsAt: workshop.startsAt.toISOString(),
+          location: roomName ?? "",
+          qrCode: registration.qrCode,
+        },
       });
     }
 

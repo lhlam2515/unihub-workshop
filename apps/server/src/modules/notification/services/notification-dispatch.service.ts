@@ -2,6 +2,7 @@ import { setTimeout } from "node:timers/promises";
 
 import { Injectable, Logger } from "@nestjs/common";
 
+import type { NotificationType } from "@/infra/messaging/event-contracts";
 import { Result } from "@/shared/response/result";
 
 import { notificationErrors } from "../../../shared/response/errors";
@@ -124,6 +125,7 @@ export class NotificationDispatchService {
     // Channel send with 5-second timeout
     const sendResult = await this.sendWithTimeout(
       channel,
+      log.type,
       recipient,
       log.payload as Record<string, unknown>,
       config.configJson as Record<string, unknown>
@@ -163,12 +165,13 @@ export class NotificationDispatchService {
    */
   private async sendWithTimeout(
     channel: INotificationChannel,
+    eventType: NotificationType,
     recipient: string,
     payload: Record<string, unknown>,
     config: Record<string, unknown>
   ): Promise<Result<void>> {
     const result = await Promise.race([
-      channel.send(recipient, payload, config),
+      channel.send(recipient, eventType, payload, config),
       setTimeout(CHANNEL_TIMEOUT_MS, "TIMEOUT" as const),
     ]);
 

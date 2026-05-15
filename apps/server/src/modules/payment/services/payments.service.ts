@@ -209,10 +209,7 @@ export class PaymentsService {
         status: "SUCCESS",
         idempotencyKey,
       };
-      const mockResult = await this.handleWebhook(
-        "MOCK",
-        mockWebhook as PaymentWebhookDto
-      );
+      const mockResult = await this.handleWebhook("MOCK", mockWebhook);
       if (mockResult.isSuccess) {
         resolvedStatus = "SUCCEEDED";
       }
@@ -366,13 +363,22 @@ export class PaymentsService {
 
     // Post-transaction: Create notification log for completed payment
     if (isSuccess) {
+      const wsResult = await this.workshopsService.getPublishedById(workshopId);
+      const location =
+        await this.workshopsService.getRoomNameForWorkshop(workshopId);
+
       void this.notificationLogProducer.createAndEnqueue({
         userId: payment.studentId,
         workshopId,
         type: "REGISTRATION_CONFIRMED",
         payload: {
-          registrationId: payment.registrationId,
-          paymentId: payment.paymentId,
+          workshopId,
+          workshopTitle: wsResult.isSuccess ? wsResult.data.title : "",
+          startsAt: wsResult.isSuccess
+            ? wsResult.data.startsAt.toISOString()
+            : "",
+          location: location ?? "",
+          qrCode: "",
         },
       });
     }
@@ -573,16 +579,21 @@ export class PaymentsService {
     }
 
     // Create notification log for payment outcome (fire-and-forget)
+    const wsResult = await this.workshopsService.getPublishedById(workshopId);
+    const workshopTitle = wsResult.isSuccess ? wsResult.data.title : "";
+    const isPaymentSuccess = eventType === "payment.success";
+
     void this.notificationLogProducer.createAndEnqueue({
       userId: payment.studentId,
       workshopId,
-      type:
-        eventType === "payment.success" ? "PAYMENT_SUCCESS" : "PAYMENT_FAILED",
+      type: isPaymentSuccess ? "PAYMENT_SUCCESS" : "PAYMENT_FAILED",
       payload: {
-        paymentId: payment.paymentId,
-        registrationId,
+        workshopTitle,
         amount: Number(payment.amount),
-        gateway: payment.gateway,
+        currency: "VND",
+        ...(isPaymentSuccess
+          ? { receiptId: payment.paymentId }
+          : { declineReason: "Payment gateway declined" }),
       },
     });
   }

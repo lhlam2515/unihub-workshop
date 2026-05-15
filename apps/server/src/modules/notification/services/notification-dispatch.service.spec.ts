@@ -48,7 +48,7 @@ const mockLog = {
   type: "REGISTRATION_CONFIRMED",
   channel: "EMAIL" as const,
   status: "PENDING" as const,
-  payload: { recipient: "user@example.com", subject: "Welcome" },
+  payload: { recipient: "user@example.com", workshopTitle: "Workshop 1" },
   sentAt: null,
   errorMessage: null,
   createdAt: new Date(),
@@ -114,6 +114,7 @@ describe("NotificationDispatchService", () => {
       expect(result.isSuccess).toBe(true);
       expect(mockEmailChannel.send).toHaveBeenCalledWith(
         "user@example.com",
+        "REGISTRATION_CONFIRMED",
         mockLog.payload,
         mockConfig.configJson
       );
@@ -256,7 +257,7 @@ describe("NotificationDispatchService", () => {
     it("uses userId as recipient when payload has no recipient field", async () => {
       const logWithoutRecipient = {
         ...mockLog,
-        payload: { subject: "No recipient field" },
+        payload: { workshopTitle: "Workshop 1" },
       };
       mockNotificationLogsRepo.findById.mockResolvedValue(
         Result.ok(logWithoutRecipient)
@@ -274,6 +275,7 @@ describe("NotificationDispatchService", () => {
       expect(result.isSuccess).toBe(true);
       expect(mockEmailChannel.send).toHaveBeenCalledWith(
         "u-001",
+        "REGISTRATION_CONFIRMED",
         logWithoutRecipient.payload,
         mockConfig.configJson
       );

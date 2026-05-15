@@ -589,7 +589,8 @@ describe("WorkshopsService", () => {
         workshopId: "w-001",
         type: "WORKSHOP_CANCELLED",
         payload: {
-          title: "Intro to Testing",
+          workshopTitle: "Intro to Testing",
+          originalStartsAt: expect.any(String),
           reason: "Test cancellation reason for testing",
         },
       });

@@ -75,6 +75,27 @@ export class NotificationChannelConfigsRepository {
   }
 
   /**
+   * Retrieve all active channel configurations.
+   *
+   * Used by NotificationLogProducer to resolve which channels
+   * to fan-out notifications to when no specific channel is requested.
+   *
+   * @returns OkResult with active channel configs, or FailResult (INTERNAL_ERROR)
+   */
+  async findActiveChannels(): Promise<Result<NotificationChannelConfig[]>> {
+    return tryCatch(
+      async () =>
+        this.db
+          .select()
+          .from(this.schema.notificationChannelConfigs)
+          .where(
+            eq(this.schema.notificationChannelConfigs.isActive, true)
+          ) as Promise<NotificationChannelConfig[]>,
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
    * Update a channel configuration
    *
    * Side effects:

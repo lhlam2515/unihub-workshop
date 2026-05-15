@@ -167,6 +167,36 @@ export class NotificationLogsRepository {
   }
 
   /**
+   * Deletes notification log records older than the specified number of days.
+   *
+   * Used by the nightly log retention cron (AC-06) to prevent unbounded
+   * table growth. Runs as a single bulk DELETE with no transaction
+   * wrapping — callers should schedule during low-traffic periods.
+   *
+   * Side effects:
+   * - Permanently removes rows from the notification_logs table.
+   *
+   * @param days - Age threshold in days. Rows with created_at older than
+   *               this are deleted (e.g., 30 days).
+   * @returns OkResult with the count of deleted rows, or FailResult (INTERNAL_ERROR).
+   */
+  async deleteOlderThan(
+    days: number
+  ): Promise<Result<{ deletedCount: number }>> {
+    return tryCatch(
+      async (): Promise<{ deletedCount: number }> => {
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const result = await this.db
+          .delete(this.schema.notificationLogs)
+          .where(lt(this.schema.notificationLogs.createdAt, cutoff))
+          .returning({ id: this.schema.notificationLogs.notificationId });
+        return { deletedCount: result.length };
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
    * Update notification delivery status after an attempt
    *
    * Side effects:
