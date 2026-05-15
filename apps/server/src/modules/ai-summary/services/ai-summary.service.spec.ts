@@ -24,6 +24,7 @@ const mockAiSummariesRepo = {
   upsert: jest.fn(),
   updateStatus: jest.fn(),
   findByDocumentId: jest.fn(),
+  findByWorkshopId: jest.fn(),
 };
 
 const mockStorageService = {
@@ -424,6 +425,110 @@ describe("AiSummaryService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");
+      expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // retryAiSummary — re-enqueues job and resets status to QUEUED
+  // -----------------------------------------------------------------------
+  describe("retryAiSummary", () => {
+    it("resets status to QUEUED and enqueues job when summary is FAILED", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-001",
+          status: "FAILED",
+          documentId: "doc-001",
+          workshopId: "w-001",
+        })
+      );
+      mockWorkshopDocumentsRepo.findById.mockResolvedValue(
+        Result.ok({
+          documentId: "doc-001",
+          fileUrl: "https://cdn.example.com/workshops/w-001/doc-001.pdf",
+          workshopId: "w-001",
+        })
+      );
+      mockAiSummariesRepo.updateStatus.mockResolvedValue(
+        Result.ok({ summaryId: "sum-001", status: "QUEUED" })
+      );
+      mockAiSummaryQueue.enqueue.mockResolvedValue(undefined);
+
+      const result = await service.retryAiSummary("w-001");
+
+      expect(result.isSuccess).toBe(true);
+
+      expect(mockAiSummariesRepo.updateStatus).toHaveBeenCalledWith(
+        "sum-001",
+        "QUEUED"
+      );
+
+      expect(mockAiSummaryQueue.enqueue).toHaveBeenCalledWith(
+        "ai-summary.process",
+        {
+          documentId: "doc-001",
+          workshopId: "w-001",
+          fileUrl: "https://cdn.example.com/workshops/w-001/doc-001.pdf",
+        }
+      );
+    });
+
+    it("returns FailResult with AI_SUMMARY_RETRY_NOT_ALLOWED when status is DONE", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-001",
+          status: "DONE",
+          documentId: "doc-001",
+          workshopId: "w-001",
+        })
+      );
+
+      const result = await service.retryAiSummary("w-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("AI_SUMMARY_RETRY_NOT_ALLOWED");
+      expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("returns FailResult with AI_SUMMARY_RETRY_NOT_ALLOWED when status is QUEUED", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-001",
+          status: "QUEUED",
+          documentId: "doc-001",
+          workshopId: "w-001",
+        })
+      );
+
+      const result = await service.retryAiSummary("w-001");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("AI_SUMMARY_RETRY_NOT_ALLOWED");
+    });
+
+    it("returns OkResult silently when no summary record exists", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
+
+      const result = await service.retryAiSummary("w-001");
+
+      expect(result.isSuccess).toBe(true);
+      expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("returns OkResult silently when document was deleted", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-001",
+          status: "FAILED",
+          documentId: "doc-deleted",
+          workshopId: "w-001",
+        })
+      );
+      mockWorkshopDocumentsRepo.findById.mockResolvedValue(Result.ok(null));
+
+      const result = await service.retryAiSummary("w-001");
+
+      expect(result.isSuccess).toBe(true);
       expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
     });
   });

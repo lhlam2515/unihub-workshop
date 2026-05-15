@@ -4,6 +4,7 @@ import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import type { ITypedMessageQueue } from "@/infra/messaging/messaging.interfaces";
 import { StorageService } from "@/infra/storage/storage.service";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
+import { aiSummaryErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
@@ -164,13 +165,16 @@ export class AiSummaryService {
    *
    * Business rules:
    * - Only summaries with FAILED status are eligible for retry.
-   * - Resets the status to QUEUED to re-trigger the Background module.
+   * - Looks up the associated workshop_documents record to retrieve the fileUrl.
+   * - Resets status to QUEUED and enqueues a new BullMQ job.
    *
    * Side effects:
-   * - Updates the ai_summaries record status from FAILED to QUEUED.
+   * - Updates ai_summaries.status from FAILED to QUEUED.
+   * - Enqueues a job to AI_SUMMARY_QUEUE with documentId + fileUrl.
    *
-   * @param workshopId - The UUID of the workshop.
-   * @returns OkResult with void on success, or FailResult (INTERNAL_ERROR).
+   * @param workshopId - The UUID of the workshop to retry.
+   * @returns OkResult on success, OkResult (silent no-op) if no summary or document exists,
+   *   or FailResult (AI_SUMMARY_RETRY_NOT_ALLOWED, INTERNAL_ERROR).
    */
   async retryAiSummary(workshopId: string): Promise<Result<void>> {
     const summaryResult =
@@ -179,14 +183,26 @@ export class AiSummaryService {
     if (!summaryResult.data) return Result.ok();
 
     if (summaryResult.data.status !== "FAILED") {
-      return Result.ok();
+      return Result.fail(aiSummaryErrors.retryNotAllowed(workshopId));
     }
+
+    const documentResult = await this.workshopDocumentsRepo.findById(
+      summaryResult.data.documentId
+    );
+    if (documentResult.isFailure) return Result.fail(documentResult.error);
+    if (!documentResult.data) return Result.ok();
 
     const updateResult = await this.aiSummariesRepo.updateStatus(
       summaryResult.data.summaryId,
       "QUEUED"
     );
     if (updateResult.isFailure) return Result.fail(updateResult.error);
+
+    await this.aiSummaryQueue.enqueue("ai-summary.process", {
+      documentId: summaryResult.data.documentId,
+      workshopId,
+      fileUrl: documentResult.data.fileUrl,
+    });
 
     return Result.ok();
   }
