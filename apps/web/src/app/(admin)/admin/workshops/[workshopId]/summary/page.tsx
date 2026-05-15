@@ -1,49 +1,42 @@
-"use client";
+import { notFound, redirect } from "next/navigation";
 
-import dynamic from "next/dynamic";
-import { useParams, notFound } from "next/navigation";
-
-import { ContentLoader } from "@/components/ContentLoader";
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { getAdminWorkshop, getAiSummary } from "@/lib/api/services/admin";
+import ROUTES from "@/constants/routes";
+import {
+  getAdminWorkshopServer,
+  getWorkshopSummaryServer,
+} from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
+import { AdminWorkshopSummaryWidget } from "@/widgets/AdminWorkshopSummaryWidget";
 
-const AdminWorkshopSummaryWidget = dynamic(
-  () =>
-    import("@/widgets/AdminWorkshopSummaryWidget").then((mod) => ({
-      default: mod.AdminWorkshopSummaryWidget,
-    })),
-  {
-    loading: () => <ContentLoader count={2} />,
-    ssr: false,
-  }
-);
+interface PageProps {
+  params: Promise<{ workshopId: string }>;
+}
 
-export default function AdminWorkshopSummaryPage() {
-  const { workshopId } = useParams<{ workshopId: string }>();
+export default async function AdminWorkshopSummaryPage({ params }: PageProps) {
+  const { workshopId } = await params;
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-  const workshopQuery = useAsyncQuery(
-    ["admin-workshop-summary", workshopId],
-    () => getAdminWorkshop(workshopId)
-  );
-  const summaryQuery = useAsyncQuery(
-    ["admin-workshop-summary-ai", workshopId],
-    () => getAiSummary(workshopId)
-  );
+  const [workshopResult, summaryResult] = await Promise.all([
+    getAdminWorkshopServer(workshopId, session.accessToken),
+    getWorkshopSummaryServer(workshopId, session.accessToken),
+  ]);
 
-  if (workshopQuery.error) notFound();
-  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
+  if (workshopResult.isFailure) notFound();
 
   return (
     <div className="space-y-6">
       <AdminWorkshopEditWidget
-        workshop={workshopQuery.data!}
+        workshop={workshopResult.data}
         activeTab="summary"
       />
       <AdminWorkshopSummaryWidget
-        workshop={workshopQuery.data!}
-        initialSummary={summaryQuery.data ?? null}
-        initialError={summaryQuery.error?.message}
+        workshop={workshopResult.data}
+        initialSummary={summaryResult.isSuccess ? summaryResult.data : null}
+        initialError={
+          summaryResult.isFailure ? String(summaryResult.error) : undefined
+        }
       />
     </div>
   );

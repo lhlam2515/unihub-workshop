@@ -1,21 +1,21 @@
-"use client";
+import { notFound, redirect } from "next/navigation";
 
-import { useParams, notFound } from "next/navigation";
-
-import { ContentLoader } from "@/components/ContentLoader";
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { getSpeaker } from "@/lib/api/services/admin";
+import ROUTES from "@/constants/routes";
+import { getSpeakerServer } from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminSpeakerFormWidget } from "@/widgets/AdminSpeakerFormWidget";
 
-export default function AdminEditSpeakerPage() {
-  const { speakerId } = useParams<{ speakerId: string }>();
-  const { data, error, isLoading } = useAsyncQuery(
-    ["admin-speaker", speakerId],
-    () => getSpeaker(speakerId)
-  );
+interface PageProps {
+  params: Promise<{ speakerId: string }>;
+}
 
-  if (error) notFound();
-  if (isLoading || !data) return <ContentLoader count={1} />;
+export default async function AdminSpeakerEditPage({ params }: PageProps) {
+  const { speakerId } = await params;
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-  return <AdminSpeakerFormWidget mode="edit" initialData={data} />;
+  const result = await getSpeakerServer(speakerId, session.accessToken);
+  if (result.isFailure) notFound();
+
+  return <AdminSpeakerFormWidget mode="edit" initialData={result.data} />;
 }

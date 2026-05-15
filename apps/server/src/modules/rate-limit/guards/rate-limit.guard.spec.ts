@@ -13,6 +13,7 @@ import type { ExecutionContext } from "@nestjs/common";
 function mockExecutionContext(overrides?: {
   user?: Record<string, unknown> | null;
   ip?: string | null;
+  body?: Record<string, unknown>;
   handler?: (...args: unknown[]) => unknown;
   controller?: new (...args: unknown[]) => unknown;
 }): ExecutionContext {
@@ -24,6 +25,7 @@ function mockExecutionContext(overrides?: {
   if ("user" in (overrides ?? {})) req.user = overrides!.user ?? null;
   if ("ip" in (overrides ?? {})) req.ip = overrides!.ip ?? undefined;
   if (!("ip" in (overrides ?? {}))) req.ip = "127.0.0.1";
+  if ("body" in (overrides ?? {})) req.body = overrides!.body;
 
   return {
     getHandler: () => overrides?.handler ?? (() => undefined),
@@ -226,6 +228,75 @@ describe("RateLimitGuard", () => {
       );
 
       expect(mockSlidingWindow.check).toHaveBeenCalledWith("T1", "unknown");
+    });
+  });
+
+  describe("resourceIdSource", () => {
+    it("appends resourceId to identifier when path resolves to a value", async () => {
+      mockReflector.getAllAndOverride.mockReturnValue([
+        {
+          tier: "T3",
+          limit: 5,
+          windowMs: 60_000,
+          resourceIdSource: "body.workshopId",
+        },
+      ]);
+      mockSlidingWindow.check.mockResolvedValue(
+        Result.ok({ allowed: true, remaining: 4, resetMs: 60_000 })
+      );
+
+      await guard.canActivate(
+        mockExecutionContext({
+          user: { sub: "student-uuid" },
+          body: { workshopId: "workshop-uuid" },
+        })
+      );
+
+      expect(mockSlidingWindow.check).toHaveBeenCalledWith(
+        "T3",
+        "student-uuid:workshop-uuid"
+      );
+    });
+
+    it("falls back to base identifier when resourceIdSource path resolves to undefined", async () => {
+      mockReflector.getAllAndOverride.mockReturnValue([
+        {
+          tier: "T3",
+          limit: 5,
+          windowMs: 60_000,
+          resourceIdSource: "body.workshopId",
+        },
+      ]);
+      mockSlidingWindow.check.mockResolvedValue(
+        Result.ok({ allowed: true, remaining: 4, resetMs: 60_000 })
+      );
+
+      await guard.canActivate(
+        mockExecutionContext({
+          user: { sub: "student-uuid" },
+          body: {},
+        })
+      );
+
+      expect(mockSlidingWindow.check).toHaveBeenCalledWith(
+        "T3",
+        "student-uuid"
+      );
+    });
+
+    it("does not affect identifier when resourceIdSource is absent", async () => {
+      mockReflector.getAllAndOverride.mockReturnValue([
+        { tier: "T2", limit: 30, windowMs: 60_000 },
+      ]);
+      mockSlidingWindow.check.mockResolvedValue(
+        Result.ok({ allowed: true, remaining: 29, resetMs: 60_000 })
+      );
+
+      await guard.canActivate(
+        mockExecutionContext({ user: { sub: "user-uuid" } })
+      );
+
+      expect(mockSlidingWindow.check).toHaveBeenCalledWith("T2", "user-uuid");
     });
   });
 

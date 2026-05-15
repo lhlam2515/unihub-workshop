@@ -1,58 +1,39 @@
-"use client";
+import { notFound, redirect } from "next/navigation";
 
-import { use, useEffect, useState } from "react";
-
-import { getRegistration } from "@/features/registration-detail/api/registration-detail.service";
-import type { ApiError } from "@/lib/api/errors";
-import { getWorkshopDetail } from "@/lib/api/services/catalog";
-import type { Registration } from "@/types/registration";
-import type { WorkshopDetail } from "@/types/workshop";
+import ROUTES from "@/constants/routes";
+import { getWorkshopDetailServer } from "@/lib/api/server-services/catalog";
+import { getRegistrationServer } from "@/lib/api/server-services/registration";
+import { getServerSession } from "@/lib/auth/server-session";
 import { RegistrationDetailWidget } from "@/widgets/RegistrationDetailWidget";
 
-const StudentRegistrationDetailPage = ({
-  params,
-}: {
+interface PageProps {
   params: Promise<{ registrationId: string }>;
-}) => {
-  const { registrationId } = use(params);
+}
 
-  const [registration, setRegistration] = useState<Registration | null>(null);
-  const [workshop, setWorkshop] = useState<WorkshopDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
+export default async function StudentRegistrationDetailPage({
+  params,
+}: PageProps) {
+  const { registrationId } = await params;
+  const session = await getServerSession();
+  if (!session) redirect(ROUTES.LOGIN);
 
-  useEffect(() => {
-    async function load() {
-      const regResult = await getRegistration(registrationId);
-      if (regResult.isFailure) {
-        setError(
-          (regResult.error as ApiError)?.message ?? "Không thể tải thông tin"
-        );
-        setLoading(false);
-        return;
-      }
-      setRegistration(regResult.data);
+  const regResult = await getRegistrationServer(
+    registrationId,
+    session.accessToken
+  );
+  if (regResult.isFailure) notFound();
 
-      const wsResult = await getWorkshopDetail(regResult.data.workshopId);
-      if (wsResult.isSuccess) {
-        setWorkshop(wsResult.data);
-      }
-      setLoading(false);
-    }
-    load();
-  }, [registrationId]);
+  const registration = regResult.data;
+  const wsResult = await getWorkshopDetailServer(registration.workshopId);
+  const workshop = wsResult.isFailure ? null : wsResult.data;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4">
       <RegistrationDetailWidget
         registration={registration}
         workshop={workshop}
-        loading={loading}
-        error={error}
         registrationId={registrationId}
       />
     </div>
   );
-};
-
-export default StudentRegistrationDetailPage;
+}

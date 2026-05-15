@@ -1,66 +1,70 @@
-"use client";
+import { notFound, redirect } from "next/navigation";
 
-import { useParams, useSearchParams, notFound } from "next/navigation";
-import { Suspense } from "react";
-
-import { ContentLoader } from "@/components/ContentLoader";
-import { useAsyncQuery } from "@/hooks/use-async-query";
+import ROUTES from "@/constants/routes";
 import {
-  getAdminWorkshop,
-  getWorkshopRegistrations,
-} from "@/lib/api/services/admin";
+  getAdminWorkshopServer,
+  listAdminWorkshopRegistrationsServer,
+} from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
 import { AdminWorkshopRegistrationsWidget } from "@/widgets/AdminWorkshopRegistrationsWidget";
 
-function RegistrationsContent() {
-  const { workshopId } = useParams<{ workshopId: string }>();
-  const searchParams = useSearchParams();
+interface PageProps {
+  params: Promise<{ workshopId: string }>;
+  searchParams: Promise<{
+    status?: string;
+    cursor?: string;
+    checkedIn?: string;
+    search?: string;
+  }>;
+}
+
+export default async function AdminWorkshopRegistrationsPage({
+  params,
+  searchParams,
+}: PageProps) {
+  const { workshopId } = await params;
+  const raw = await searchParams;
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
   const filters = {
-    status: searchParams.get("status") || undefined,
-    checkedIn: searchParams.get("checkedIn") === "true" ? true : undefined,
-    search: searchParams.get("search") || undefined,
-    cursor: searchParams.get("cursor") || undefined,
+    status: raw.status || undefined,
+    checkedIn: raw.checkedIn === "true" ? true : undefined,
+    search: raw.search || undefined,
+    cursor: raw.cursor || undefined,
   };
 
-  const searchKey = searchParams.toString();
-  const workshopQuery = useAsyncQuery(["admin-workshop-regs", workshopId], () =>
-    getAdminWorkshop(workshopId)
-  );
-  const registrationsQuery = useAsyncQuery(
-    ["admin-workshop-regs-list", workshopId, searchKey],
-    () => getWorkshopRegistrations(workshopId, filters)
-  );
+  const [workshopResult, registrationsResult] = await Promise.all([
+    getAdminWorkshopServer(workshopId, session.accessToken),
+    listAdminWorkshopRegistrationsServer(
+      workshopId,
+      filters,
+      session.accessToken
+    ),
+  ]);
 
-  if (workshopQuery.error) notFound();
-  if (workshopQuery.isLoading) return <ContentLoader count={2} />;
+  if (workshopResult.isFailure) notFound();
 
-  const workshop = workshopQuery.data!;
+  const registrations = registrationsResult.isSuccess
+    ? registrationsResult.data.items
+    : [];
+  const pagination = registrationsResult.isSuccess
+    ? registrationsResult.data.pagination
+    : { limit: 20, nextCursor: null, hasMore: false, total: null };
 
   return (
     <div className="space-y-6">
-      <AdminWorkshopEditWidget workshop={workshop} activeTab="registrations" />
+      <AdminWorkshopEditWidget
+        workshop={workshopResult.data}
+        activeTab="registrations"
+      />
       <AdminWorkshopRegistrationsWidget
-        key={workshop.id}
-        workshop={workshop}
-        initialRegistrations={registrationsQuery.data?.items ?? []}
-        initialPagination={
-          registrationsQuery.data?.pagination ?? {
-            limit: 20,
-            nextCursor: null,
-            hasMore: false,
-            total: null,
-          }
-        }
+        key={workshopResult.data.id}
+        workshop={workshopResult.data}
+        initialRegistrations={registrations}
+        initialPagination={pagination}
       />
     </div>
-  );
-}
-
-export default function AdminWorkshopRegistrationsPage() {
-  return (
-    <Suspense fallback={<div className="p-4">Đang tải...</div>}>
-      <RegistrationsContent />
-    </Suspense>
   );
 }

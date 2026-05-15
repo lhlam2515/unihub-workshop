@@ -17,6 +17,19 @@ export interface RateLimitConfig {
   tier: RateLimitTierName;
   limit: number;
   windowMs: number;
+  /**
+   * Dot-path into the request object to extract a resource-specific identifier.
+   *
+   * When set, the resolved value is appended to the base identifier (JWT sub or
+   * IP) with a colon separator. This enables per-resource rate limiting (e.g. T3
+   * per user×workshop instead of per-user).
+   *
+   * If the path resolves to a falsy value (missing field, null, undefined), the
+   * tier falls back to the base identifier alone — degraded but non-blocking.
+   *
+   * @example "body.workshopId" → identifier = "user-uuid:workshop-uuid"
+   */
+  resourceIdSource?: string;
 }
 
 /** Metadata key used by the @RateLimit decorator and RateLimitGuard. */

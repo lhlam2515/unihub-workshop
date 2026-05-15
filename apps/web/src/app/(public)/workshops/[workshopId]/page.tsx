@@ -1,10 +1,6 @@
-"use client";
+import { notFound } from "next/navigation";
 
-import { useEffect, use, useState } from "react";
-
-import { getWorkshopDetail } from "@/features/workshop-browsing/api/catalog.service";
-import type { ApiError } from "@/lib/api/errors";
-import type { WorkshopDetail } from "@/types/workshop";
+import { getWorkshopDetailServer } from "@/lib/api/server-services/catalog";
 import { WorkshopDetailWidget } from "@/widgets/WorkshopDetailWidget";
 
 interface PageProps {
@@ -12,36 +8,20 @@ interface PageProps {
 }
 
 /**
- * Client page: unwraps params promise, fetches workshop detail, delegates to widget.
+ * Fetches workshop detail on the server and delegates rendering to WorkshopDetailWidget.
+ *
+ * Calls notFound() when the workshop does not exist or is not accessible,
+ * delegating the 404 response to Next.js.
+ *
+ * @param params - Route params promise containing workshopId (UUID).
  */
-export default function WorkshopDetailPage({ params }: PageProps) {
-  const { workshopId } = use(params);
+export default async function WorkshopDetailPage({ params }: PageProps) {
+  const { workshopId } = await params;
+  const result = await getWorkshopDetailServer(workshopId);
 
-  const [workshop, setWorkshop] = useState<WorkshopDetail | null>(null);
-  const [error, setError] = useState<string | undefined>();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getWorkshopDetail(workshopId).then((result) => {
-      if (cancelled) return;
-      if (result.isFailure) {
-        setError((result.error as ApiError).message);
-      } else {
-        setWorkshop(result.data);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workshopId]);
+  if (result.isFailure) notFound();
 
   return (
-    <WorkshopDetailWidget
-      workshopId={workshopId}
-      workshop={workshop}
-      error={error}
-    />
+    <WorkshopDetailWidget workshop={result.data} workshopId={workshopId} />
   );
 }

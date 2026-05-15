@@ -1,7 +1,6 @@
 import { ArrowLeft, CalendarDays, Clock } from "lucide-react";
 import Link from "next/link";
 
-import { ErrorDisplay } from "@/components/ErrorDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import ROUTES from "@/constants/routes";
@@ -14,8 +13,7 @@ import type { WorkshopDetail } from "@/types/workshop";
 
 interface WorkshopDetailWidgetProps {
   workshopId: string;
-  workshop: WorkshopDetail | null;
-  error?: string;
+  workshop: WorkshopDetail;
 }
 
 function formatDateTime(iso: string): { date: string; time: string } {
@@ -48,46 +46,13 @@ function getDuration(start: string, end: string): string {
 /**
  * Workshop detail page orchestrator.
  *
- * Pure presentational widget — receives all data via props.
+ * Dumb orchestrator — receives all data via props from the RSC page layer.
  * Composes SpeakerBio, RoomInfo, AISummaryPanel, SeatsInfo, RegisterButton.
  */
 export function WorkshopDetailWidget({
   workshopId,
   workshop,
-  error,
 }: WorkshopDetailWidgetProps) {
-  // Loading skeleton
-  if (!workshop && !error) {
-    return (
-      <div className="mx-auto max-w-3xl space-y-6 py-8">
-        <div className="bg-muted h-8 w-2/3 animate-pulse rounded" />
-        <div className="bg-muted h-4 w-1/3 animate-pulse rounded" />
-        <div className="space-y-2">
-          <div className="bg-muted h-3 w-full animate-pulse rounded" />
-          <div className="bg-muted h-3 w-5/6 animate-pulse rounded" />
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error && !workshop) {
-    return (
-      <div className="mx-auto max-w-3xl py-8">
-        <ErrorDisplay error={error} variant="banner" />
-        <Link
-          href={ROUTES.WORKSHOPS}
-          className="text-muted-foreground hover:text-foreground mt-4 inline-flex items-center gap-1 text-sm transition-colors"
-        >
-          <ArrowLeft className="size-4" />
-          Quay lại danh sách
-        </Link>
-      </div>
-    );
-  }
-
-  if (!workshop) return null;
-
   const start = formatDateTime(workshop.startsAt);
   const end = formatDateTime(workshop.endsAt);
   const duration = getDuration(workshop.startsAt, workshop.endsAt);
