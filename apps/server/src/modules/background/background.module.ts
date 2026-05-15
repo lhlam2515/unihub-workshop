@@ -12,6 +12,7 @@ import { NotificationModule } from "../notification/notification.module";
 import { PaymentModule } from "../payment/payment.module";
 import { SystemAdminController } from "./controllers/system-admin.controller";
 import { IdempotencyCleanupCron } from "./cron/idempotency-cleanup.cron";
+import { NotificationLogCleanupCron } from "./cron/notification-log-cleanup.cron";
 import { PaymentReconciliationCron } from "./cron/payment-reconciliation.cron";
 import { PaymentTimeoutCron } from "./cron/payment-timeout.cron";
 import { ReconciliationCron } from "./cron/reconciliation.cron";
@@ -61,6 +62,7 @@ import { StudentSyncWorker } from "./workers/student-sync.worker";
     WorkshopAutoCompleteCron,
     // New crons
     IdempotencyCleanupCron,
+    NotificationLogCleanupCron,
     PaymentReconciliationCron,
     StudentSyncSchedulerCron,
     // Services
