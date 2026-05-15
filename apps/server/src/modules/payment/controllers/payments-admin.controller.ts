@@ -1,13 +1,5 @@
-import {
-  Controller,
-  HttpCode,
-  HttpStatus,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, HttpCode, HttpStatus, Post } from "@nestjs/common";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
 import { PaymentReconciliationService } from "../services/payment-reconciliation.service";
@@ -22,7 +14,6 @@ import { PaymentReconciliationService } from "../services/payment-reconciliation
  * - POST /admin/payments/reconcile — Manually trigger payment reconciliation
  */
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
 export class PaymentsAdminController {
   constructor(

@@ -20,7 +20,6 @@ import {
   Post,
   Put,
   Param,
-  UseGuards,
   UseInterceptors,
   UploadedFile,
   ParseFilePipe,
@@ -29,8 +28,6 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 
@@ -43,7 +40,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPE = "application/pdf";
 
 @Controller("admin/workshops/:workshopId/summary")
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("BTC")
 @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class AiSummaryAdminController {
