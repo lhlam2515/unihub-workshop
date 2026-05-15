@@ -910,6 +910,21 @@ export const aiSummaryErrors = {
       context: { modelUsed },
       cause,
     }),
+  /**
+   * Create an error when retrying an AI summary that is not in FAILED status.
+   *
+   * Business rule: only FAILED summaries are eligible for retry.
+   *
+   * @param workshopId - The workshop whose summary retry was rejected.
+   * @returns Business error payload.
+   */
+  retryNotAllowed: (workshopId: string): AppError =>
+    createError({
+      category: "BUSINESS",
+      code: "AI_SUMMARY_RETRY_NOT_ALLOWED",
+      message: "AI summary can only be retried when status is FAILED.",
+      context: { workshopId },
+    }),
 } as const;
 
 /**
