@@ -110,6 +110,7 @@ describe("PaymentsService", () => {
         {
           provide: IdempotencyMechanic,
           useValue: {
+            lookupExisting: jest.fn(),
             check: jest.fn(),
             markCompleted: jest.fn(),
             markUnresolved: jest.fn(),
@@ -177,6 +178,9 @@ describe("PaymentsService", () => {
       seatLock.check.mockResolvedValue(
         Result.ok({ valid: true, remainingSeconds: 500 })
       );
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
+      );
       idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
       workshopsService.getPublishedById.mockResolvedValue(
         Result.ok(mockWorkshop)
@@ -186,8 +190,8 @@ describe("PaymentsService", () => {
       paymentsRepo.create.mockResolvedValue(Result.ok(mockPayment));
       paymentGatewayService.initiatePayment.mockResolvedValue(
         Result.ok({
-          redirect_url: "https://mock-gateway.test/pay/abc",
-          gateway_txn_id: "txn-001",
+          redirectUrl: "https://mock-gateway.test/pay/abc",
+          gatewayTxnId: "txn-001",
         })
       );
       circuitBreaker.recordSuccess.mockResolvedValue();
@@ -235,13 +239,35 @@ describe("PaymentsService", () => {
       );
     });
 
-    // FR-F05-001: idempotency IN_PROGRESS conflict
-    it("should return IDEMPOTENCY_CONFLICT for in-progress key (FR-F05-001)", async () => {
-      registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
-      seatLock.check.mockResolvedValue(
-        Result.ok({ valid: true, remainingSeconds: 500 })
+    // MOCK auto-resolve: payment transitions to SUCCEEDED synchronously
+    it("should return status SUCCEEDED when MOCK gateway auto-resolves internally", async () => {
+      setupInitiateSuccess();
+      // Mocks for the internal handleWebhook call (Stage 8)
+      paymentsRepo.findByIdempotencyKeyWithLock.mockResolvedValue(
+        Result.ok(mockPayment)
       );
-      idempotencyMechanic.check.mockResolvedValue(
+      paymentsRepo.updateStatus.mockResolvedValue(
+        Result.ok({ ...mockPayment, status: "SUCCEEDED" })
+      );
+      registrationsRepo.updateStatus.mockResolvedValue(
+        Result.ok({
+          ...mockRegistration,
+          status: "CONFIRMED",
+          workshopId: WORKSHOP_ID,
+        })
+      );
+
+      const result = await service.initiate(STUDENT_ID, dto, IDEMPOTENCY_KEY);
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.data.status).toBe("SUCCEEDED");
+      expect(result.data.paymentId).toBe(PAYMENT_ID);
+      expect(result.data.redirectUrl).toBeDefined();
+    });
+
+    // FR-F05-001: idempotency IN_PROGRESS conflict — detected by lookupExisting (Stage 1)
+    it("should return IDEMPOTENCY_CONFLICT for in-progress key (FR-F05-001)", async () => {
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
         Result.fail({
           category: "CONFLICT",
           code: "IDEMPOTENCY_CONFLICT",
@@ -255,18 +281,14 @@ describe("PaymentsService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("IDEMPOTENCY_CONFLICT");
+      // INV-04: CB must NOT be called when key is IN_PROGRESS
       expect(circuitBreaker.checkAndAllow).not.toHaveBeenCalled();
     });
 
-    // FR-F05-002: circuit OPEN
+    // FR-F05-002: circuit OPEN — lookupExisting returns not-found (new key), CB rejects
     it("should return PAYMENT_GATEWAY_OPEN when circuit breaker rejects (FR-F05-002)", async () => {
-      registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
-      seatLock.check.mockResolvedValue(
-        Result.ok({ valid: true, remainingSeconds: 500 })
-      );
-      idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
-      workshopsService.getPublishedById.mockResolvedValue(
-        Result.ok(mockWorkshop)
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
       );
       circuitBreaker.checkAndAllow.mockResolvedValue(
         Result.fail(
@@ -278,9 +300,14 @@ describe("PaymentsService", () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("PAYMENT_GATEWAY_OPEN");
+      // INV-04: check() (key claim) must NOT be called when CB is OPEN
+      expect(idempotencyMechanic.check).not.toHaveBeenCalled();
     });
 
     it("should return REGISTRATION_NOT_FOUND for missing registration", async () => {
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
+      );
       idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
       circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(Result.ok(null));
@@ -292,6 +319,9 @@ describe("PaymentsService", () => {
     });
 
     it("should return REGISTRATION_NOT_FOUND for non-owned registration (IDOR)", async () => {
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
+      );
       idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
       circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(
@@ -305,6 +335,9 @@ describe("PaymentsService", () => {
     });
 
     it("should return REGISTRATION_NOT_FOUND for non-PENDING_PAYMENT status", async () => {
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
+      );
       idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
       circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(
@@ -318,6 +351,9 @@ describe("PaymentsService", () => {
     });
 
     it("should return failure when seat lock expired", async () => {
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
+      );
       idempotencyMechanic.check.mockResolvedValue(Result.ok({ proceed: true }));
       circuitBreaker.checkAndAllow.mockResolvedValue(Result.ok(true));
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
@@ -337,6 +373,9 @@ describe("PaymentsService", () => {
     });
 
     it("should return failure when workshop lookup fails", async () => {
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
+      );
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
       seatLock.check.mockResolvedValue(
         Result.ok({ valid: true, remainingSeconds: 500 })
@@ -368,6 +407,9 @@ describe("PaymentsService", () => {
     });
 
     it("should fail when DB transaction lock fails", async () => {
+      idempotencyMechanic.lookupExisting.mockResolvedValue(
+        Result.ok({ found: false })
+      );
       registrationsRepo.findById.mockResolvedValue(Result.ok(mockRegistration));
       seatLock.check.mockResolvedValue(
         Result.ok({ valid: true, remainingSeconds: 500 })

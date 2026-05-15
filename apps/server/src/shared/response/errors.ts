@@ -46,6 +46,8 @@ export interface CreateErrorOptions {
   context?: Record<string, unknown>;
   /** Optional original error preserved for internal diagnostics. */
   cause?: unknown;
+  /** Seconds the client should wait before retrying (RFC 7231). */
+  retryAfter?: number;
 }
 
 /**
@@ -68,6 +70,7 @@ export const createError = (options: CreateErrorOptions): AppError => ({
   fieldErrors: options.fieldErrors,
   context: options.context,
   cause: options.cause,
+  retryAfter: options.retryAfter,
 });
 
 /**
@@ -316,8 +319,9 @@ export const paymentErrors = {
       category: "OVERLOADED",
       code: "PAYMENT_GATEWAY_OPEN",
       message:
-        "Payment service is temporarily unavailable. Your booking is saved - please try again in a few minutes.",
+        "Hệ thống thanh toán tạm thời gián đoạn. Vui lòng thử lại sau ~30 giây.",
       context: { gateway, openedAt },
+      retryAfter: 30,
     }),
   /**
    * Create an error for gateway failures

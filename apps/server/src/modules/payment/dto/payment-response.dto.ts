@@ -25,6 +25,7 @@ export interface CreatePaymentResponseDto {
   paymentId: string;
   redirectUrl: string;
   paymentDeadline: string;
+  status: "INITIATED" | "SUCCEEDED";
 }
 
 export class PaymentResponseBuilder {
@@ -68,12 +69,14 @@ export class PaymentResponseBuilder {
   static fromCreate(
     payment: Payment,
     redirectUrl: string,
-    deadline: Date
+    deadline: Date,
+    status: "INITIATED" | "SUCCEEDED" = "INITIATED"
   ): CreatePaymentResponseDto {
     return {
       paymentId: payment.paymentId,
       redirectUrl: redirectUrl,
       paymentDeadline: deadline.toISOString(),
+      status,
     };
   }
 }

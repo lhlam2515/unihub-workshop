@@ -1,6 +1,10 @@
 import { api } from "@/lib/api/client";
 import { Result } from "@/lib/result";
-import type { Payment, PaymentCreateRequest } from "@/types/registration";
+import type {
+  CreatePaymentResponse,
+  Payment,
+  PaymentCreateRequest,
+} from "@/types/registration";
 
 /**
  * Initiate a payment for a pending registration.
@@ -11,9 +15,9 @@ import type { Payment, PaymentCreateRequest } from "@/types/registration";
 export async function createPayment(
   body: PaymentCreateRequest,
   idempotencyKey: string
-): Promise<Result<Payment>> {
+): Promise<Result<CreatePaymentResponse>> {
   return Result.fromPromise(
-    api.post<Payment>("/payments", body, {
+    api.post<CreatePaymentResponse>("/payments", body, {
       headers: { "X-Idempotency-Key": idempotencyKey },
     })
   );

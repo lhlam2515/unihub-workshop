@@ -188,6 +188,20 @@ describe("CircuitBreakerMechanic", () => {
       expect(state.failureCount).toBe(4);
     });
 
+    it("opens CB when failure rate >= 50% with interleaved successes — E-02", async () => {
+      // spec E-02: "sustained degradation" — gateway alternates success/failure
+      // failureCount resets on success, but windowFailureCount accumulates.
+      // F, S, F: windowFailureCount=2, totalCount=3 → rate=67% >= 50% → OPEN
+      await mechanic.recordFailure(GATEWAY); // consecutive=1, window=1, total=1
+      await mechanic.recordSuccess(GATEWAY); // consecutive=0 (reset), window=1, total=2
+      await mechanic.recordFailure(GATEWAY); // consecutive=1, window=2, total=3 → rate 67% → OPEN
+
+      const state = mechanic.getGatewayState(GATEWAY);
+      expect(state.state).toBe("OPEN");
+      expect(state.failureCount).toBe(1); // consecutive count (not 5)
+      expect(state.windowFailureCount).toBe(2); // cumulative window count triggered rate check
+    });
+
     it("resets failure count after rolling window of 60s", async () => {
       const now = Date.now();
       jest.spyOn(Date, "now").mockReturnValue(now);

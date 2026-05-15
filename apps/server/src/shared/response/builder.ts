@@ -56,6 +56,7 @@ export const sanitizeError = (error: AppError): ApiErrorShape => ({
       ? "An unexpected error occurred. Please try again later."
       : error.message,
   fieldErrors: error.fieldErrors,
+  ...(error.retryAfter !== undefined && { retryAfter: error.retryAfter }),
 });
 
 /**

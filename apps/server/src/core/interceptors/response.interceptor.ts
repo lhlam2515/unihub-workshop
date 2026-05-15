@@ -78,6 +78,11 @@ export class ResponseInterceptor implements NestInterceptor {
         });
 
         response.status(statusCode);
+
+        if (value.isFailure && value.error.retryAfter !== undefined) {
+          response.setHeader("Retry-After", String(value.error.retryAfter));
+        }
+
         return body;
       })
     );

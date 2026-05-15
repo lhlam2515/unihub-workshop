@@ -32,8 +32,8 @@ export class MockGatewayAdapter implements IGatewayAdapter {
   ): Promise<Result<GatewayInitiateResult>> {
     await new Promise((resolve) => setTimeout(resolve, 100));
     return Result.ok({
-      redirect_url: `https://mock-gateway.test/pay/demo-txn-${Date.now()}`,
-      gateway_txn_id: `mock_txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      redirectUrl: `https://mock-gateway.test/pay/demo-txn-${Date.now()}`,
+      gatewayTxnId: `mock_txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     });
   }
 

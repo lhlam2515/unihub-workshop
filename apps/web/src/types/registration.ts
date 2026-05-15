@@ -54,6 +54,13 @@ export interface PaymentCreateRequest {
   returnUrl: string;
 }
 
+export interface CreatePaymentResponse {
+  paymentId: string;
+  redirectUrl: string;
+  paymentDeadline: string;
+  status: "INITIATED" | "SUCCEEDED";
+}
+
 export interface RegistrationAdmin {
   id: string;
   workshopId: string;
