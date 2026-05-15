@@ -1,16 +1,17 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { listRooms } from "@/lib/api/services/admin";
+import ROUTES from "@/constants/routes";
+import { listRoomsServer } from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminRoomListWidget } from "@/widgets/AdminRoomListWidget";
 
-export default function AdminRoomListPage() {
-  const { data, error } = useAsyncQuery(["admin-rooms"], () => listRooms());
+export default async function AdminRoomsPage() {
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-  return (
-    <AdminRoomListWidget
-      initialResult={data ?? null}
-      initialError={error?.message}
-    />
-  );
+  const result = await listRoomsServer(session.accessToken);
+  const rooms = result.isSuccess ? result.data : [];
+  const error = result.isFailure ? String(result.error) : undefined;
+
+  return <AdminRoomListWidget initialResult={rooms} initialError={error} />;
 }
