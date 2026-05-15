@@ -69,9 +69,13 @@ export function PaymentWidget({ registration, workshop }: PaymentWidgetProps) {
     const payment = result.data;
     clearIdempotencyKey(registration.id);
     if (payment.status === "SUCCEEDED") {
-      router.push(`/payment-result?paymentId=${payment.id}&status=succeeded`);
+      router.push(
+        `/payment-result?paymentId=${payment.paymentId}&status=succeeded`
+      );
     } else {
-      router.push(`/payment-result?paymentId=${payment.id}&status=initiated`);
+      router.push(
+        `/payment-result?paymentId=${payment.paymentId}&status=initiated`
+      );
     }
   };
 
