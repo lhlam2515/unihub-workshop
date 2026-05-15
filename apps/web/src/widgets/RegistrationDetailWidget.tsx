@@ -3,8 +3,6 @@
 import { ArrowLeft, Download } from "lucide-react";
 import Link from "next/link";
 
-import { ContentLoader } from "@/components/ContentLoader";
-import { ErrorDisplay } from "@/components/ErrorDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ROUTES from "@/constants/routes";
@@ -14,26 +12,16 @@ import type { Registration } from "@/types/registration";
 import type { WorkshopDetail } from "@/types/workshop";
 
 interface RegistrationDetailWidgetProps {
-  registration: Registration | null;
+  registration: Registration;
   workshop: WorkshopDetail | null;
-  loading: boolean;
-  error?: string;
   registrationId: string;
 }
 
 export function RegistrationDetailWidget({
   registration,
   workshop,
-  loading,
-  error,
   registrationId,
 }: RegistrationDetailWidgetProps) {
-  if (loading) return <ContentLoader count={1} />;
-  if (error) return <ErrorDisplay error={error} variant="banner" />;
-  if (!registration) {
-    return <ErrorDisplay error="Không tìm thấy đăng ký này" variant="banner" />;
-  }
-
   const hasQR =
     registration.qrCode != null &&
     (registration.status === "CONFIRMED" || registration.status === "PAID");

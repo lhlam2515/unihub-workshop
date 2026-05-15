@@ -1,51 +1,78 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { ContentLoader } from "@/components/ContentLoader";
 import { ErrorDisplay } from "@/components/ErrorDisplay";
+import { createPayment } from "@/features/payment-processing/api/payment.service";
 import { GatewaySelector } from "@/features/payment-processing/components/GatewaySelector";
 import { PayButton } from "@/features/payment-processing/components/PayButton";
 import { PaymentSummary } from "@/features/payment-processing/components/PaymentSummary";
-import type { PaymentGateway } from "@/types/registration";
-import type { Registration } from "@/types/registration";
+import {
+  clearIdempotencyKey,
+  generateIdempotencyKey,
+} from "@/features/payment-processing/lib/idempotency";
+import type { PaymentGateway, Registration } from "@/types/registration";
 import type { WorkshopListItem } from "@/types/workshop";
 
 interface PaymentWidgetProps {
-  registration: Registration | null;
+  registration: Registration;
   workshop: WorkshopListItem | null;
-  loading: boolean;
-  error?: string;
-  registrationId: string;
-  submitting: boolean;
-  circuitBreakerOpen: boolean;
-  declinedMessage: string | null;
-  onPay: (gateway: PaymentGateway) => void;
-  onCountdownExpired: () => void;
 }
 
-export function PaymentWidget({
-  registration,
-  workshop,
-  loading,
-  error,
-  submitting,
-  circuitBreakerOpen,
-  declinedMessage,
-  onPay,
-  onCountdownExpired,
-}: PaymentWidgetProps) {
+export function PaymentWidget({ registration, workshop }: PaymentWidgetProps) {
+  const router = useRouter();
   const [gateway, setGateway] = useState<PaymentGateway | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [circuitBreakerOpen, setCircuitBreakerOpen] = useState(false);
+  const [declinedMessage, setDeclinedMessage] = useState<string | null>(null);
 
-  if (loading) return <ContentLoader count={1} />;
-  if (error) return <ErrorDisplay error={error} variant="banner" />;
-  if (!registration || !workshop) {
-    return <ErrorDisplay error="Không tìm thấy thông tin" variant="banner" />;
+  if (!workshop) {
+    return (
+      <ErrorDisplay
+        error="Không tìm thấy thông tin workshop"
+        variant="banner"
+      />
+    );
   }
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!gateway) return;
-    onPay(gateway);
+    setSubmitting(true);
+    setDeclinedMessage(null);
+
+    const idempotencyKey = generateIdempotencyKey(registration.id);
+    const result = await createPayment(
+      {
+        registrationId: registration.id,
+        gateway,
+        returnUrl: `${window.location.origin}/payment-result`,
+      },
+      idempotencyKey
+    );
+
+    if (result.isFailure) {
+      const err = result.error as { code?: string; message?: string };
+      if (err.code === "PAYMENT_GATEWAY_OPEN") {
+        setCircuitBreakerOpen(true);
+      } else {
+        setDeclinedMessage(err.message ?? "Thanh toán thất bại");
+      }
+      setSubmitting(false);
+      return;
+    }
+
+    const payment = result.data;
+    clearIdempotencyKey(registration.id);
+    if (payment.status === "SUCCEEDED") {
+      router.push(`/payment-result?paymentId=${payment.id}&status=succeeded`);
+    } else {
+      router.push(`/payment-result?paymentId=${payment.id}&status=initiated`);
+    }
+  };
+
+  const handleCountdownExpired = () => {
+    router.push("/me/registrations");
   };
 
   return (
@@ -53,7 +80,7 @@ export function PaymentWidget({
       <PaymentSummary
         registration={registration}
         workshop={workshop}
-        onCountdownExpired={onCountdownExpired}
+        onCountdownExpired={handleCountdownExpired}
       />
 
       <div className="space-y-3">
