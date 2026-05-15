@@ -28,8 +28,10 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 
+import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import type { JwtPayload } from "@/types/jwt-payload";
 
 import { AiSummaryService } from "../services/ai-summary.service";
 
@@ -54,6 +56,7 @@ export class AiSummaryAdminController {
    *
    * @param workshopId - The UUID of the target workshop.
    * @param file - Uploaded PDF file (validated by ParseFilePipe).
+   * @param user - JWT payload containing the BTC admin's userId.
    * @returns OkResult with the upload confirmation.
    */
   @Post()
@@ -69,9 +72,10 @@ export class AiSummaryAdminController {
         ],
       })
     )
-    file: Express.Multer.File
+    file: Express.Multer.File,
+    @CurrentUser() user: JwtPayload
   ) {
-    return this.aiSummaryService.uploadDocument(workshopId, file);
+    return this.aiSummaryService.uploadDocument(workshopId, file, user.sub);
   }
 
   /**
