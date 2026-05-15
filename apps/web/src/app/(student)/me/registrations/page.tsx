@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/PageHeader";
 import ROUTES from "@/constants/routes";
-import { getServerSession } from "@/lib/auth/server-session";
 import { listMyRegistrationsServer } from "@/lib/api/server-services/registration";
+import { getServerSession } from "@/lib/auth/server-session";
 import { RegistrationListWidget } from "@/widgets/RegistrationListWidget";
 
 interface PageProps {

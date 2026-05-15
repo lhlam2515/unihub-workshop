@@ -1,8 +1,8 @@
 import { CalendarFold } from "lucide-react";
 import Link from "next/link";
 
-import { EmptyState } from "@/components/EmptyState";
 import { WorkshopCard } from "@/components/cards/WorkshopCard";
+import { EmptyState } from "@/components/EmptyState";
 import ROUTES from "@/constants/routes";
 import { FilterBar } from "@/features/workshop-browsing/components/FilterBar";
 import { listWorkshopsServer } from "@/lib/api/server-services/catalog";

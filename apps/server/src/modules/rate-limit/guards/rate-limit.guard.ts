@@ -45,10 +45,21 @@ export class RateLimitGuard implements CanActivate {
     if (configs.length === 0) return true;
 
     const request = context.switchToHttp().getRequest();
-    const identifier = request.user?.sub ?? request.ip ?? "unknown";
+    const baseIdentifier = request.user?.sub ?? request.ip ?? "unknown";
     const response = context.switchToHttp().getResponse();
 
     for (const cfg of configs) {
+      let identifier = baseIdentifier;
+      if (cfg.resourceIdSource) {
+        const resourceId = cfg.resourceIdSource
+          .split(".")
+          .reduce(
+            (obj: unknown, key: string) =>
+              (obj as Record<string, unknown>)?.[key],
+            request
+          );
+        if (resourceId) identifier = `${baseIdentifier}:${String(resourceId)}`;
+      }
       const result = await this.slidingWindow.check(cfg.tier, identifier);
 
       if (result.isFailure) {

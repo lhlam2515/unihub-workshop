@@ -6,7 +6,6 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
   Res,
@@ -14,8 +13,6 @@ import {
 
 import type { Response } from "express";
 
-import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { IdempotencyKey } from "@/shared/decorators/idempotency-key.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
@@ -28,7 +25,6 @@ import { RegistrationsService } from "../services/registrations.service";
 import { Result } from "@/shared/response/result";
 
 @Controller("registrations")
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class RegistrationsController {
   constructor(private readonly registrationsService: RegistrationsService) {}
 
@@ -48,7 +44,12 @@ export class RegistrationsController {
    */
   @RateLimit([
     { tier: "T2", limit: 30, windowMs: 60000 },
-    { tier: "T3", limit: 5, windowMs: 60000 },
+    {
+      tier: "T3",
+      limit: 5,
+      windowMs: 60000,
+      resourceIdSource: "body.workshopId",
+    },
   ])
   @Roles("STUDENT")
   @Post()

@@ -22,12 +22,12 @@ import ROUTES from "@/constants/routes";
 import { BulkActionBar } from "@/features/admin-workshop-management/components/BulkActionBar";
 import { WorkshopAdminTable } from "@/features/admin-workshop-management/components/WorkshopAdminTable";
 import type { PaginatedResult } from "@/lib/api/client";
-import type { PaginationMeta } from "@/lib/api/types";
 import {
   cancelWorkshop,
   listAdminWorkshops,
   publishWorkshop,
 } from "@/lib/api/services/admin";
+import type { PaginationMeta } from "@/lib/api/types";
 import type {
   AdminWorkshopFilters,
   WorkshopAdmin,

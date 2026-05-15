@@ -1,12 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 
 import ROUTES from "@/constants/routes";
-import { getServerSession } from "@/lib/auth/server-session";
 import {
   getAdminWorkshopServer,
   listRoomsServer,
   listSpeakersServer,
 } from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 

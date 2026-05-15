@@ -1,8 +1,8 @@
 "use client";
 
 import { Search, SlidersHorizontal } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

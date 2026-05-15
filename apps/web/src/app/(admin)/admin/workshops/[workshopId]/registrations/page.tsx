@@ -1,13 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getServerSession } from "@/lib/auth/server-session";
+import ROUTES from "@/constants/routes";
 import {
   getAdminWorkshopServer,
   listAdminWorkshopRegistrationsServer,
 } from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminWorkshopEditWidget } from "@/widgets/AdminWorkshopEditWidget";
 import { AdminWorkshopRegistrationsWidget } from "@/widgets/AdminWorkshopRegistrationsWidget";
-import ROUTES from "@/constants/routes";
 
 interface PageProps {
   params: Promise<{ workshopId: string }>;

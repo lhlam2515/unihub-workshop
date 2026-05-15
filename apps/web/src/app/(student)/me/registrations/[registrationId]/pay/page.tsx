@@ -1,9 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 
 import ROUTES from "@/constants/routes";
-import { getServerSession } from "@/lib/auth/server-session";
 import { getWorkshopDetailServer } from "@/lib/api/server-services/catalog";
 import { getRegistrationServer } from "@/lib/api/server-services/registration";
+import { getServerSession } from "@/lib/auth/server-session";
 import { PaymentWidget } from "@/widgets/PaymentWidget";
 
 interface PageProps {

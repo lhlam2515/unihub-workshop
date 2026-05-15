@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 
 import ROUTES from "@/constants/routes";
-import { getServerSession } from "@/lib/auth/server-session";
 import { listAdminWorkshopsServer } from "@/lib/api/server-services/admin";
-import { AdminWorkshopListWidget } from "@/widgets/AdminWorkshopListWidget";
+import { getServerSession } from "@/lib/auth/server-session";
 import type { AdminWorkshopFilters, WorkshopStatus } from "@/types/workshop";
+import { AdminWorkshopListWidget } from "@/widgets/AdminWorkshopListWidget";
 
 interface PageProps {
   searchParams: Promise<{
