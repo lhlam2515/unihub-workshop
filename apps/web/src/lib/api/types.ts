@@ -85,6 +85,8 @@ export interface ApiErrorShape {
   code: ErrorCode;
   message: string;
   fieldErrors?: FieldError[];
+  /** Seconds the client should wait before retrying (RFC 7231). */
+  retryAfter?: number;
 }
 
 /**

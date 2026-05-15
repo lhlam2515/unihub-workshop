@@ -21,6 +21,9 @@ export class ApiError extends Error {
   /** Optional field-level details for validation errors. */
   public readonly fieldErrors?: FieldError[];
 
+  /** Seconds the client should wait before retrying (RFC 7231). */
+  public readonly retryAfter?: number;
+
   /**
    * Construct an `ApiError` from the server error payload.
    *
@@ -33,6 +36,7 @@ export class ApiError extends Error {
     this.code = payload.code;
     this.status = status;
     this.fieldErrors = payload.fieldErrors;
+    this.retryAfter = payload.retryAfter;
     // Fix prototype chain for `instanceof` checks in transpiled environments
     Object.setPrototypeOf(this, new.target.prototype);
   }
