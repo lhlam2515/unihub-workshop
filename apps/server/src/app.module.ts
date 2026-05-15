@@ -40,8 +40,6 @@ import { RolesGuard } from "./modules/iam/guards/roles.guard";
 import { IamModule } from "./modules/iam/iam.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { PaymentModule } from "./modules/payment/payment.module";
-import { JwtAuthGuard } from "./modules/iam/guards/jwt-auth.guard";
-import { RolesGuard } from "./modules/iam/guards/roles.guard";
 import { RateLimitGuard } from "./modules/rate-limit/guards/rate-limit.guard";
 import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
 
