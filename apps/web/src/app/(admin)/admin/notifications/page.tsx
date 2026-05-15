@@ -1,30 +1,38 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import type { PaginatedResult } from "@/lib/api/client";
+import ROUTES from "@/constants/routes";
 import {
-  listNotificationChannels,
-  listNotificationLogs,
-} from "@/lib/api/services/admin";
-import type { NotificationLog } from "@/types/admin-operations";
+  listNotificationChannelsServer,
+  listNotificationLogsServer,
+} from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminNotificationsWidget } from "@/widgets/AdminNotificationsWidget";
 
-export default function NotificationsPage() {
-  const channelsQuery = useAsyncQuery(["admin-notif-channels"], () =>
-    listNotificationChannels()
-  );
-  const logsQuery = useAsyncQuery(["admin-notif-logs"], () =>
-    listNotificationLogs()
-  );
+export default async function AdminNotificationsPage() {
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-  const error =
-    channelsQuery.error?.message ?? logsQuery.error?.message ?? undefined;
+  const [channelsResult, logsResult] = await Promise.all([
+    listNotificationChannelsServer(session.accessToken),
+    listNotificationLogsServer({}, session.accessToken),
+  ]);
+
+  const initialChannels = channelsResult.isSuccess ? channelsResult.data : null;
+  const initialLogs = logsResult.isSuccess
+    ? { items: logsResult.data.items, pagination: logsResult.data.pagination }
+    : null;
+  const initialError =
+    channelsResult.isFailure || logsResult.isFailure
+      ? String(
+          channelsResult.isFailure ? channelsResult.error : logsResult.error
+        )
+      : undefined;
 
   return (
     <AdminNotificationsWidget
-      initialChannels={channelsQuery.data ?? null}
-      initialLogs={(logsQuery.data as PaginatedResult<NotificationLog>) ?? null}
-      initialError={error}
+      initialChannels={initialChannels}
+      initialLogs={initialLogs}
+      initialError={initialError}
     />
   );
 }

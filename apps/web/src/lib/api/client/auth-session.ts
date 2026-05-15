@@ -10,6 +10,7 @@
 import { API_ROUTES } from "@/constants/api-routes";
 import { ApiError, isRefreshTokenError } from "@/lib/api/errors";
 import type { ApiResponse } from "@/lib/api/types";
+import { setSessionToken } from "@/lib/auth/sync-session";
 
 import { API_BASE_URL } from "./config";
 import { tokenStore } from "./token-store";
@@ -109,6 +110,7 @@ export async function acquireFreshToken(): Promise<string> {
   try {
     const newToken = await refreshAccessToken();
     tokenStore.set(newToken);
+    setSessionToken(newToken);
     flushRefreshQueue(newToken);
     return newToken;
   } catch (err) {

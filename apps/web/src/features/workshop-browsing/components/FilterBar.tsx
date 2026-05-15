@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, SlidersHorizontal } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,14 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { WorkshopFilters } from "@/types/workshop";
 
 import type { ChangeEvent } from "react";
-
-interface FilterBarProps {
-  filters: WorkshopFilters;
-  onChange: (filters: WorkshopFilters) => void;
-}
 
 const SORT_OPTIONS = [
   { value: "starts_at", label: "Thời gian (sớm nhất)" },
@@ -28,15 +23,50 @@ const SORT_OPTIONS = [
   { value: "seats_available", label: "Còn chỗ" },
 ] as const;
 
-export function FilterBar({ filters, onChange }: FilterBarProps) {
-  const [searchValue, setSearchValue] = useState(filters.q ?? "");
+/**
+ * URL-driven filter bar for the public workshops listing page.
+ *
+ * Reads current filter values from `useSearchParams()` and writes updates
+ * back to the URL via `useRouter().replace()`, triggering an RSC re-render
+ * of the parent page with the new params — no callback prop needed.
+ *
+ * Side effects:
+ * - Calls `router.replace()` on every filter change, updating the URL and
+ *   causing the server page to re-fetch with the new query params.
+ */
+export function FilterBar() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const updateFilter = useCallback(
-    (patch: Partial<WorkshopFilters>) => {
-      onChange({ ...filters, ...patch, cursor: undefined });
+  const currentQ = searchParams.get("q") ?? "";
+  const currentDay = searchParams.get("day") ?? "";
+  const currentHasSeats = searchParams.get("hasSeats") === "true";
+  const currentSort = searchParams.get("sort") ?? "starts_at";
+
+  const [searchValue, setSearchValue] = useState(currentQ);
+
+  /**
+   * Builds a new URLSearchParams from the current params merged with the given
+   * patch, then navigates to the updated URL without pushing a history entry.
+   *
+   * @param patch - Partial record of param keys to set or delete (undefined removes the key).
+   */
+  const updateUrl = useCallback(
+    (patch: Record<string, string | undefined>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      // Reset cursor on any filter change
+      params.delete("cursor");
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      }
+      router.replace(`/workshops?${params.toString()}`);
     },
-    [filters, onChange]
+    [router, searchParams]
   );
 
   const handleSearchChange = useCallback(
@@ -46,19 +76,22 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        updateFilter({ q: value || undefined });
+        updateUrl({ q: value || undefined });
       }, 300);
     },
-    [updateFilter]
+    [updateUrl]
   );
 
   const clearFilters = useCallback(() => {
     setSearchValue("");
-    onChange({});
-  }, [onChange]);
+    router.replace("/workshops");
+  }, [router]);
 
   const hasActiveFilters =
-    filters.day || filters.hasSeats || filters.sort || filters.q;
+    currentDay ||
+    currentHasSeats ||
+    (currentSort && currentSort !== "starts_at") ||
+    currentQ;
 
   return (
     <div className="flex flex-col gap-3">
@@ -78,16 +111,18 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
         {/* Day filter */}
         <Input
           type="date"
-          value={filters.day ?? ""}
-          onChange={(e) => updateFilter({ day: e.target.value || undefined })}
+          value={currentDay}
+          onChange={(e) => updateUrl({ day: e.target.value || undefined })}
           className="w-44"
         />
 
         {/* Has seats toggle */}
         <Button
-          variant={filters.hasSeats ? "default" : "outline"}
+          variant={currentHasSeats ? "default" : "outline"}
           size="sm"
-          onClick={() => updateFilter({ hasSeats: !filters.hasSeats })}
+          onClick={() =>
+            updateUrl({ hasSeats: currentHasSeats ? undefined : "true" })
+          }
           className="gap-1.5"
         >
           <SlidersHorizontal className="size-4" />
@@ -96,9 +131,9 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
 
         {/* Sort */}
         <Select
-          value={filters.sort ?? "starts_at"}
+          value={currentSort}
           onValueChange={(value) =>
-            updateFilter({ sort: value === "starts_at" ? undefined : value })
+            updateUrl({ sort: value === "starts_at" ? undefined : value })
           }
         >
           <SelectTrigger className="w-48" aria-label="Sắp xếp">
@@ -118,27 +153,27 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-muted-foreground text-xs">Bộ lọc:</span>
-          {filters.day && (
+          {currentDay && (
             <Badge
               variant="secondary"
               className="cursor-pointer"
-              onClick={() => updateFilter({ day: undefined })}
+              onClick={() => updateUrl({ day: undefined })}
             >
-              {filters.day} &times;
+              {currentDay} &times;
             </Badge>
           )}
-          {filters.hasSeats && (
+          {currentHasSeats && (
             <Badge
               variant="secondary"
               className="cursor-pointer"
-              onClick={() => updateFilter({ hasSeats: undefined })}
+              onClick={() => updateUrl({ hasSeats: undefined })}
             >
               Còn chỗ &times;
             </Badge>
           )}
-          {filters.sort && filters.sort !== "starts_at" && (
+          {currentSort && currentSort !== "starts_at" && (
             <Badge variant="secondary">
-              {SORT_OPTIONS.find((o) => o.value === filters.sort)?.label}
+              {SORT_OPTIONS.find((o) => o.value === currentSort)?.label}
             </Badge>
           )}
           <button

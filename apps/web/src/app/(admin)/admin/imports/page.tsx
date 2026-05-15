@@ -1,41 +1,35 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { listImports } from "@/lib/api/services/admin";
+import ROUTES from "@/constants/routes";
+import { listImportsServer } from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminImportsListWidget } from "@/widgets/AdminImportsListWidget";
 
-function ImportsContent() {
-  const searchParams = useSearchParams();
+interface PageProps {
+  searchParams: Promise<{ status?: string; cursor?: string; limit?: string }>;
+}
+
+export default async function AdminImportsPage({ searchParams }: PageProps) {
+  const raw = await searchParams;
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
   const filters = {
-    status: searchParams.get("status") || undefined,
-    cursor: searchParams.get("cursor") || undefined,
-    limit: searchParams.get("limit")
-      ? Number(searchParams.get("limit"))
-      : undefined,
+    status: raw.status || undefined,
+    cursor: raw.cursor || undefined,
+    limit: raw.limit ? Number(raw.limit) : undefined,
   };
 
-  const searchParamsKey = searchParams.toString();
-  const { data, error } = useAsyncQuery(
-    ["admin-imports", searchParamsKey],
-    () => listImports(filters)
-  );
+  const result = await listImportsServer(filters, session.accessToken);
+  const initialResult = result.isSuccess
+    ? { items: result.data.items, pagination: result.data.pagination }
+    : null;
+  const initialError = result.isFailure ? String(result.error) : undefined;
 
   return (
     <AdminImportsListWidget
-      initialResult={data ?? null}
-      initialError={error?.message}
+      initialResult={initialResult}
+      initialError={initialError}
     />
-  );
-}
-
-export default function ImportsPage() {
-  return (
-    <Suspense fallback={<div className="p-4">Đang tải...</div>}>
-      <ImportsContent />
-    </Suspense>
   );
 }

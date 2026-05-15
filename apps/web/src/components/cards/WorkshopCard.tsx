@@ -1,7 +1,4 @@
-"use client";
-
 import { Clock, MapPin, Ticket, User } from "lucide-react";
-import { memo } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +10,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { WorkshopListItem } from "@/types/workshop";
+import type { WorkshopStatus } from "@/types/workshop";
 
-interface WorkshopCardProps {
-  workshop: WorkshopListItem;
-  onClick?: () => void;
-  className?: string;
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -48,133 +43,194 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-export const WorkshopCard = memo(function WorkshopCard({
-  workshop,
-  onClick,
-  className,
-}: WorkshopCardProps) {
-  const isFull = workshop.seatsAvailable <= 0;
-  const isFree = workshop.price === 0;
-  const isCancelled = workshop.status === "CANCELLED";
+const STATUS_CONFIG: Record<
+  WorkshopStatus,
+  {
+    variant: "secondary" | "default" | "outline" | "destructive";
+    label: string;
+  }
+> = {
+  DRAFT: { variant: "secondary", label: "Bản nháp" },
+  OPEN: { variant: "default", label: "Đang mở" },
+  COMPLETED: { variant: "outline", label: "Hoàn thành" },
+  CANCELLED: { variant: "destructive", label: "Đã hủy" },
+};
 
+// ---------------------------------------------------------------------------
+// Root
+// ---------------------------------------------------------------------------
+
+interface WorkshopCardRootProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+function WorkshopCardRoot({ children, className }: WorkshopCardRootProps) {
   return (
     <Card
       data-testid="workshop-card"
       size="sm"
       className={cn(
-        "cursor-pointer transition-shadow hover:shadow-lg",
-        isCancelled && "opacity-60",
+        "flex h-full flex-col transition-shadow hover:shadow-lg",
         className
       )}
-      onClick={isCancelled ? undefined : onClick}
-      role="button"
-      tabIndex={isCancelled ? -1 : 0}
-      onKeyDown={(e) => {
-        if (!isCancelled && (e.key === "Enter" || e.key === " ") && onClick) {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-      aria-disabled={isCancelled}
     >
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <CardTitle data-testid="workshop-title" className="truncate">
-              {workshop.title}
-            </CardTitle>
-            <CardDescription>
-              <span className="flex items-center gap-1">
-                <Clock className="size-3" />
-                {formatDate(workshop.startsAt)} &middot;{" "}
-                {formatTime(workshop.startsAt)} &ndash;{" "}
-                {formatTime(workshop.endsAt)}
-              </span>
-            </CardDescription>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            {workshop.isRegistered && (
-              <Badge variant="default" className="bg-green-600 text-white">
-                Đã đăng ký
-              </Badge>
-            )}
-            {isCancelled && <Badge variant="destructive">Đã hủy</Badge>}
-            {isFull && !workshop.isRegistered && (
-              <Badge variant="secondary">Hết chỗ</Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        <div className="flex flex-col gap-3">
-          {/* Speaker */}
-          <div
-            data-testid="workshop-speaker"
-            className="flex items-center gap-2"
-          >
-            <Avatar size="sm">
-              {workshop.speaker?.avatarUrl ? (
-                <AvatarImage
-                  src={workshop.speaker.avatarUrl}
-                  alt={workshop.speaker.fullName}
-                />
-              ) : (
-                <AvatarFallback>
-                  {workshop.speaker ? (
-                    getInitials(workshop.speaker.fullName)
-                  ) : (
-                    <User className="size-3" />
-                  )}
-                </AvatarFallback>
-              )}
-            </Avatar>
-            <span className="text-muted-foreground truncate text-xs">
-              {workshop.speaker?.fullName ?? "Đang cập nhật"}
-              {workshop.speaker?.title && (
-                <span className="text-muted-foreground/60">
-                  {" "}
-                  &middot; {workshop.speaker.title}
-                </span>
-              )}
-            </span>
-          </div>
-
-          {/* Room + Seats + Price */}
-          <div className="flex items-center justify-between gap-2">
-            <span
-              data-testid="workshop-room"
-              className="text-muted-foreground flex items-center gap-1 text-xs"
-            >
-              <MapPin className="size-3" />
-              {workshop.room
-                ? `${workshop.room.name}${workshop.room.building ? ` - ${workshop.room.building}` : ""}`
-                : "Đang cập nhật"}
-            </span>
-
-            <div className="flex items-center gap-3">
-              {/* Seats */}
-              <span
-                className={cn(
-                  "flex items-center gap-1 text-xs",
-                  isFull ? "text-destructive" : "text-muted-foreground"
-                )}
-              >
-                <Ticket className="size-3" />
-                {workshop.seatsAvailable}/{workshop.seatsTotal}
-              </span>
-
-              {/* Price */}
-              <span className="text-xs font-medium">
-                {isFree
-                  ? "Miễn phí"
-                  : `${workshop.price.toLocaleString("vi-VN")} ₫`}
-              </span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
+      {children}
     </Card>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Header
+// ---------------------------------------------------------------------------
+
+interface HeaderProps {
+  title: string;
+  status: WorkshopStatus;
+  startsAt: string;
+  endsAt: string;
+}
+
+function Header({ title, status, startsAt, endsAt }: HeaderProps) {
+  const { variant, label } = STATUS_CONFIG[status];
+
+  return (
+    <CardHeader>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <CardTitle
+            data-testid="workshop-title"
+            className="leading-tight break-words"
+          >
+            {title}
+          </CardTitle>
+          <CardDescription>
+            <span className="flex items-center gap-1">
+              <Clock className="size-3" />
+              {formatDate(startsAt)} &middot; {formatTime(startsAt)} &ndash;{" "}
+              {formatTime(endsAt)}
+            </span>
+          </CardDescription>
+        </div>
+
+        <div className="shrink-0">
+          <Badge variant={variant}>{label}</Badge>
+        </div>
+      </div>
+    </CardHeader>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Meta (speaker)
+// ---------------------------------------------------------------------------
+
+interface MetaProps {
+  speakerName?: string | null;
+  speakerTitle?: string | null;
+  speakerAvatarUrl?: string | null;
+}
+
+function Meta({ speakerName, speakerTitle, speakerAvatarUrl }: MetaProps) {
+  return (
+    <CardContent className="mt-auto">
+      <div data-testid="workshop-speaker" className="flex items-center gap-2">
+        <Avatar size="sm">
+          {speakerAvatarUrl && speakerName ? (
+            <AvatarImage src={speakerAvatarUrl} alt={speakerName} />
+          ) : (
+            <AvatarFallback>
+              {speakerName ? (
+                getInitials(speakerName)
+              ) : (
+                <User className="size-3" />
+              )}
+            </AvatarFallback>
+          )}
+        </Avatar>
+        <span className="text-muted-foreground truncate text-xs">
+          {speakerName ?? "Đang cập nhật"}
+          {speakerTitle && (
+            <span className="text-muted-foreground/60">
+              {" "}
+              &middot; {speakerTitle}
+            </span>
+          )}
+        </span>
+      </div>
+    </CardContent>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Footer
+// ---------------------------------------------------------------------------
+
+interface FooterProps {
+  roomName?: string | null;
+  roomBuilding?: string | null;
+  seatsAvailable: number;
+  seatsTotal: number;
+  price: number;
+  children?: React.ReactNode;
+}
+
+function Footer({
+  roomName,
+  roomBuilding,
+  seatsAvailable,
+  seatsTotal,
+  price,
+  children,
+}: FooterProps) {
+  const isFull = seatsAvailable <= 0;
+  const isFree = price === 0;
+
+  const roomLabel = roomName
+    ? `${roomName}${roomBuilding ? ` - ${roomBuilding}` : ""}`
+    : "Đang cập nhật";
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between gap-2">
+        <span
+          data-testid="workshop-room"
+          className="text-muted-foreground flex items-center gap-1 text-xs"
+        >
+          <MapPin className="size-3" />
+          {roomLabel}
+        </span>
+
+        <div className="flex items-center gap-3">
+          {/* Seats */}
+          <span
+            className={cn(
+              "flex items-center gap-1 text-xs",
+              isFull ? "text-destructive" : "text-muted-foreground"
+            )}
+          >
+            <Ticket className="size-3" />
+            {seatsAvailable}/{seatsTotal}
+          </span>
+
+          {/* Price */}
+          <span className="text-xs font-medium">
+            {isFree ? "Miễn phí" : `${price.toLocaleString("vi-VN")} ₫`}
+          </span>
+        </div>
+      </div>
+
+      {children}
+    </CardContent>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+export const WorkshopCard = Object.assign(WorkshopCardRoot, {
+  Header,
+  Meta,
+  Footer,
 });

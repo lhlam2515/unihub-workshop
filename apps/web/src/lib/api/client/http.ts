@@ -60,6 +60,15 @@ async function sendFetch(url: string, init: RequestInit): Promise<Response> {
 export async function parseResponse<T>(
   response: Response
 ): Promise<ApiResponse<T>> {
+  // 204 No Content — empty body (used by logout, delete, etc.)
+  if (response.status === 204) {
+    return {
+      success: true,
+      data: undefined as T,
+      meta: { requestId: "", timestamp: "", apiVersion: "" },
+    } as ApiResponse<T>;
+  }
+
   let envelope: ApiResponse<T>;
 
   try {

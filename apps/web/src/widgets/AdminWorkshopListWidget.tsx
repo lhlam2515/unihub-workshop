@@ -27,6 +27,7 @@ import {
   listAdminWorkshops,
   publishWorkshop,
 } from "@/lib/api/services/admin";
+import type { PaginationMeta } from "@/lib/api/types";
 import type {
   AdminWorkshopFilters,
   WorkshopAdmin,
@@ -39,6 +40,8 @@ import type {
 
 export interface AdminWorkshopListWidgetProps {
   filters: AdminWorkshopFilters;
+  initialWorkshops?: WorkshopAdmin[];
+  initialPagination?: PaginationMeta | null;
 }
 
 const STATUS_OPTIONS = [
@@ -55,19 +58,23 @@ const STATUS_OPTIONS = [
 
 export function AdminWorkshopListWidget({
   filters,
+  initialWorkshops,
+  initialPagination,
 }: AdminWorkshopListWidgetProps) {
   const router = useRouter();
   const requestIdRef = useRef(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [accumulated, setAccumulated] = useState<WorkshopAdmin[]>([]);
+  const [accumulated, setAccumulated] = useState<WorkshopAdmin[]>(
+    initialWorkshops ?? []
+  );
   const [pagination, setPagination] = useState<
     PaginatedResult<WorkshopAdmin>["pagination"] | null
-  >(null);
+  >(initialPagination ?? null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [searchValue, setSearchValue] = useState(filters.q ?? "");
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(!initialWorkshops);
   const [initialError, setInitialError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,6 +82,8 @@ export function AdminWorkshopListWidget({
   }, [filters.q]);
 
   useEffect(() => {
+    if (initialWorkshops !== undefined) return; // SSR data provided, skip initial fetch
+
     let isActive = true;
     const requestId = ++requestIdRef.current;
 

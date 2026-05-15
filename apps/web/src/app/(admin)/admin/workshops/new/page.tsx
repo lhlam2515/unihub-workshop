@@ -1,19 +1,21 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { ContentLoader } from "@/components/ContentLoader";
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { listSpeakers, listRooms } from "@/lib/api/services/admin";
+import ROUTES from "@/constants/routes";
+import {
+  listSpeakersServer,
+  listRoomsServer,
+} from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminWorkshopFormWidget } from "@/widgets/AdminWorkshopFormWidget";
 
-export default function AdminCreateWorkshopPage() {
-  const speakersQuery = useAsyncQuery(["admin-speakers-form"], () =>
-    listSpeakers()
-  );
-  const roomsQuery = useAsyncQuery(["admin-rooms-form"], () => listRooms());
+export default async function AdminCreateWorkshopPage() {
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-  if (speakersQuery.isLoading || roomsQuery.isLoading) {
-    return <ContentLoader count={2} />;
-  }
+  const [speakersResult, roomsResult] = await Promise.all([
+    listSpeakersServer(session.accessToken),
+    listRoomsServer(session.accessToken),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -23,11 +25,10 @@ export default function AdminCreateWorkshopPage() {
           Điền thông tin workshop mới. Có thể lưu nháp hoặc công bố ngay.
         </p>
       </div>
-
       <AdminWorkshopFormWidget
         mode="create"
-        speakers={speakersQuery.data ?? []}
-        rooms={roomsQuery.data ?? []}
+        speakers={speakersResult.isSuccess ? speakersResult.data : []}
+        rooms={roomsResult.isSuccess ? roomsResult.data : []}
       />
     </div>
   );

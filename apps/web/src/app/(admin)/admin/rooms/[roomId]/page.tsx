@@ -1,34 +1,39 @@
-"use client";
+import { notFound, redirect } from "next/navigation";
 
-import { useParams, notFound } from "next/navigation";
-
-import { ContentLoader } from "@/components/ContentLoader";
+import ROUTES from "@/constants/routes";
 import type { WorkshopScheduleEntry } from "@/features/admin-room-management/components/RoomScheduleCalendar";
-import { useAsyncQuery } from "@/hooks/use-async-query";
-import { getRoom, listAdminWorkshops } from "@/lib/api/services/admin";
+import {
+  getRoomServer,
+  listAdminWorkshopsServer,
+} from "@/lib/api/server-services/admin";
+import { getServerSession } from "@/lib/auth/server-session";
 import { AdminRoomEditWidget } from "@/widgets/AdminRoomEditWidget";
 
-export default function AdminRoomEditPage() {
-  const { roomId } = useParams<{ roomId: string }>();
+interface PageProps {
+  params: Promise<{ roomId: string }>;
+}
 
-  const roomQuery = useAsyncQuery(["admin-room", roomId], () =>
-    getRoom(roomId)
-  );
-  const workshopsQuery = useAsyncQuery(["admin-room-schedule", roomId], () =>
-    listAdminWorkshops({ q: roomId })
-  );
+export default async function AdminRoomEditPage({ params }: PageProps) {
+  const { roomId } = await params;
+  const session = await getServerSession();
+  if (!session || session.user.role !== "BTC") redirect(ROUTES.ADMIN_LOGIN);
 
-  if (roomQuery.error) notFound();
-  if (roomQuery.isLoading) return <ContentLoader count={2} />;
+  const [roomResult, workshopsResult] = await Promise.all([
+    getRoomServer(roomId, session.accessToken),
+    listAdminWorkshopsServer({ q: roomId }, session.accessToken),
+  ]);
 
-  const schedule: WorkshopScheduleEntry[] =
-    workshopsQuery.data?.items.map((w) => ({
-      id: w.id,
-      title: w.title,
-      startsAt: w.startsAt,
-      endsAt: w.endsAt,
-      status: w.status,
-    })) ?? [];
+  if (roomResult.isFailure) notFound();
 
-  return <AdminRoomEditWidget room={roomQuery.data!} schedule={schedule} />;
+  const schedule: WorkshopScheduleEntry[] = workshopsResult.isSuccess
+    ? workshopsResult.data.items.map((w) => ({
+        id: w.id,
+        title: w.title,
+        startsAt: w.startsAt,
+        endsAt: w.endsAt,
+        status: w.status,
+      }))
+    : [];
+
+  return <AdminRoomEditWidget room={roomResult.data} schedule={schedule} />;
 }
