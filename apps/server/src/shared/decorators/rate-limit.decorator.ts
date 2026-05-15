@@ -3,14 +3,10 @@ import { SetMetadata } from "@nestjs/common";
 import {
   RATE_LIMIT_KEY,
   RATE_LIMIT_TIERS,
+  type RateLimitConfig,
 } from "@/modules/rate-limit/constants/rate-limit.constants";
-import type { RateLimitTierName } from "@/modules/rate-limit/constants/rate-limit.constants";
 
-export interface RateLimitConfig {
-  tier: RateLimitTierName;
-  limit: number;
-  windowMs: number;
-}
+export type { RateLimitConfig };
 
 /**
  * Decorator that attaches rate-limit tier metadata to a controller method or class.
