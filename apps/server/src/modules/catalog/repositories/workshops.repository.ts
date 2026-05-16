@@ -444,4 +444,89 @@ export class WorkshopsRepository {
         systemErrors.internal(err instanceof Error ? err.message : String(err))
     );
   }
+
+  /**
+   * Counts registrations grouped by status for a workshop.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with a Record mapping status -> count, or FailResult.
+   */
+  async countRegistrationsByStatus(
+    workshopId: string
+  ): Promise<Result<Record<string, number>>> {
+    return tryCatch(
+      async () => {
+        const rows = await this.db
+          .select({
+            status: this.schema.registrations.status,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(this.schema.registrations)
+          .where(eq(this.schema.registrations.workshopId, workshopId))
+          .groupBy(this.schema.registrations.status);
+        const map: Record<string, number> = {};
+        for (const row of rows) {
+          map[row.status] = row.count;
+        }
+        return map;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Counts total check-in records for a workshop.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with the check-in count, or FailResult.
+   */
+  async countCheckinsByWorkshopId(
+    workshopId: string
+  ): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const result = await this.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(this.schema.checkinRecords)
+          .where(eq(this.schema.checkinRecords.workshopId, workshopId));
+        return result[0]?.count ?? 0;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
+   * Sums the amount of SUCCEEDED payments for a workshop.
+   *
+   * Joins through registrations to find all payments belonging
+   * to the workshop, then sums only SUCCEEDED ones.
+   *
+   * @param workshopId - The UUID of the workshop.
+   * @returns OkResult with the total revenue (as number), or FailResult.
+   */
+  async sumPaidRevenueByWorkshop(
+    workshopId: string
+  ): Promise<Result<number>> {
+    return tryCatch(
+      async () => {
+        const result = await this.db
+          .select({
+            total: sql<number>`coalesce(sum(${this.schema.payments.amount}), 0)`,
+          })
+          .from(this.schema.payments)
+          .innerJoin(
+            this.schema.registrations,
+            eq(this.schema.payments.registrationId, this.schema.registrations.registrationId)
+          )
+          .where(
+            and(
+              eq(this.schema.registrations.workshopId, workshopId),
+              eq(this.schema.payments.status, "SUCCEEDED")
+            )
+          );
+        return Number(result[0]?.total ?? 0);
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
 }

@@ -1,135 +1,45 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { LayoutDashboard } from "lucide-react";
 
-import { ErrorDisplay } from "@/components/ErrorDisplay";
-import { MetricTile } from "@/components/MetricTile";
 import { PageHeader } from "@/components/PageHeader";
-import { StatusBreakdown } from "@/features/admin-dashboard/components/StatusBreakdown";
-import { TopWorkshopsTable } from "@/features/admin-dashboard/components/TopWorkshopsTable";
-import type { DashboardOverview } from "@/types/admin";
+
+// ---------------------------------------------------------------------------
+// Coming Soon Placeholder
+// ---------------------------------------------------------------------------
+
+function ComingSoonPlaceholder() {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-white py-20">
+      <LayoutDashboard className="mb-4 h-12 w-12 text-slate-300" />
+      <h3 className="text-lg font-semibold text-slate-700">
+        Trang tổng quan đang được phát triển
+      </h3>
+      <p className="mt-1 text-sm text-slate-500">
+        Các tính năng thống kê và chỉ số sẽ được cập nhật trong phiên bản tiếp
+        theo.
+      </p>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface AdminDashboardWidgetProps {
-  overview: DashboardOverview | null;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTime(iso: string): string {
-  return new Intl.DateTimeFormat("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-  }).format(amount);
+  overview?: never;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function AdminDashboardWidget({ overview }: AdminDashboardWidgetProps) {
-  const router = useRouter();
-
-  // Error / no data
-  if (!overview) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Tổng quan" />
-        <ErrorDisplay
-          error="Không thể tải dữ liệu tổng quan."
-          variant="banner"
-        />
-        <button
-          onClick={() => router.refresh()}
-          className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Thử lại
-        </button>
-      </div>
-    );
-  }
-
-  // Success
-  const data = overview;
-
+export function AdminDashboardWidget({}: AdminDashboardWidgetProps) {
   return (
-    <div data-testid="stats-overview" className="space-y-6">
-      <PageHeader
-        title="Tổng quan"
-        description={`Tổng số workshop: ${data.totalWorkshops}`}
-      />
-
-      {/* Metric tiles */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricTile
-          label="Tổng đăng ký"
-          value={data.totalRegistrations.toLocaleString("vi-VN")}
-        />
-        <MetricTile
-          label="Tỷ lệ lấp đầy trung bình"
-          value={`${(data.avgFillRate * 100).toFixed(1)}%`}
-          trend={{ value: 0, isPositive: true }}
-        />
-        <MetricTile
-          label="Tỷ lệ check-in"
-          value={`${(data.checkinRate * 100).toFixed(1)}%`}
-        />
-        <MetricTile
-          label="Doanh thu"
-          value={formatCurrency(data.paidRevenue.amount)}
-        />
-        <MetricTile label="Workshop" value={data.totalWorkshops} />
-        {data.circuitBreaker && (
-          <div className="flex items-center gap-4 rounded-xl border bg-white p-5">
-            <div className="flex-1">
-              <p className="text-sm text-slate-500">Circuit Breaker</p>
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  data.circuitBreaker.state === "CLOSED"
-                    ? "bg-green-50 text-green-700"
-                    : data.circuitBreaker.state === "HALF_OPEN"
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-red-50 text-red-700"
-                }`}
-              >
-                {data.circuitBreaker.state === "CLOSED"
-                  ? "Bình thường"
-                  : data.circuitBreaker.state === "HALF_OPEN"
-                    ? "Đang phục hồi"
-                    : "Đã ngắt"}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Status breakdown */}
-      <StatusBreakdown breakdown={data.workshopsByStatus} />
-
-      {/* Top workshops */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <TopWorkshopsTable workshops={data.topHighestFillRate} type="highest" />
-        <TopWorkshopsTable workshops={data.topLowestFillRate} type="lowest" />
-      </div>
-
-      {/* Timestamp */}
-      <p className="text-center text-xs text-slate-400">
-        Cập nhật lúc {formatTime(data.updatedAt)}
-      </p>
+    <div className="space-y-6">
+      <PageHeader title="Tổng quan" />
+      <ComingSoonPlaceholder />
     </div>
   );
 }

@@ -28,12 +28,6 @@ function formatDateTime(iso: string): string {
   }).format(date);
 }
 
-function formatDuration(ms: number | null): string {
-  if (ms === null) return "--";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
 function TableSkeleton() {
   return (
     <Table>
@@ -45,13 +39,12 @@ function TableSkeleton() {
           <TableHead>Tổng dòng</TableHead>
           <TableHead>Thành công</TableHead>
           <TableHead>Lỗi</TableHead>
-          <TableHead>Thời lượng</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {Array.from({ length: 5 }, (_, i) => (
           <TableRow key={i}>
-            {Array.from({ length: 7 }, (_, j) => (
+            {Array.from({ length: 6 }, (_, j) => (
               <TableCell key={j}>
                 <Skeleton className="h-4 w-20" />
               </TableCell>
@@ -111,15 +104,14 @@ export function ImportsTable({
             <TableCell>
               <StatusBadge status={row.status} variant="registration" />
             </TableCell>
-            <TableCell className="font-mono text-sm">{row.totalRows}</TableCell>
+            <TableCell className="font-mono text-sm">
+              {row.totalRows ?? "--"}
+            </TableCell>
             <TableCell className="font-mono text-sm text-green-600">
-              {row.successCount}
+              {row.successCount ?? 0}
             </TableCell>
             <TableCell className="font-mono text-sm text-red-600">
-              {row.failedCount > 0 ? row.failedCount : "--"}
-            </TableCell>
-            <TableCell className="text-xs text-slate-500">
-              {formatDuration(row.durationMs)}
+              {row.failedCount != null && row.failedCount > 0 ? row.failedCount : "--"}
             </TableCell>
           </TableRow>
         ))}

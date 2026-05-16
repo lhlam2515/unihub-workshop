@@ -29,10 +29,13 @@ export interface AdminWorkshopEditWidgetProps {
 // ---------------------------------------------------------------------------
 
 function formatDateTime(iso: string): string {
+  if (!iso) return "--";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "--";
   return new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(iso));
+  }).format(date);
 }
 
 // ---------------------------------------------------------------------------

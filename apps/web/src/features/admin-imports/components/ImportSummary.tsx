@@ -7,9 +7,12 @@ interface ImportSummaryProps {
 }
 
 export function ImportSummary({ importLog }: ImportSummaryProps) {
+  const totalRows = importLog.totalRows ?? 0;
+  const successCount = importLog.successCount ?? 0;
+  const failedCount = importLog.failedCount ?? 0;
   const successPercent =
-    importLog.totalRows > 0
-      ? Math.round((importLog.successCount / importLog.totalRows) * 100)
+    totalRows > 0
+      ? Math.round((successCount / totalRows) * 100)
       : 0;
 
   function formatDateTime(iso: string): string {
@@ -20,12 +23,6 @@ export function ImportSummary({ importLog }: ImportSummaryProps) {
       dateStyle: "medium",
       timeStyle: "medium",
     }).format(date);
-  }
-
-  function formatDuration(ms: number | null): string {
-    if (ms === null) return "--";
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
   }
 
   return (
@@ -45,26 +42,16 @@ export function ImportSummary({ importLog }: ImportSummaryProps) {
         <p className="text-sm font-medium">{importLog.status}</p>
       </div>
       <div>
-        <p className="text-xs text-slate-500">Thời lượng</p>
-        <p className="text-sm font-medium">
-          {formatDuration(importLog.durationMs)}
-        </p>
-      </div>
-      <div>
         <p className="text-xs text-slate-500">Tổng dòng</p>
-        <p className="text-lg font-bold">{importLog.totalRows}</p>
+        <p className="text-lg font-bold">{totalRows}</p>
       </div>
       <div>
         <p className="text-xs text-slate-500">Thành công</p>
-        <p className="text-lg font-bold text-green-600">
-          {importLog.successCount}
-        </p>
+        <p className="text-lg font-bold text-green-600">{successCount}</p>
       </div>
       <div>
         <p className="text-xs text-slate-500">Lỗi</p>
-        <p className="text-lg font-bold text-red-600">
-          {importLog.failedCount}
-        </p>
+        <p className="text-lg font-bold text-red-600">{failedCount}</p>
       </div>
       <div>
         <p className="text-xs text-slate-500">Tỉ lệ thành công</p>

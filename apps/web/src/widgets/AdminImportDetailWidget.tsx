@@ -57,14 +57,14 @@ export function AdminImportDetailWidget({
         action={
           <DownloadErrorCSVButton
             importId={importLog.id}
-            hasErrors={importLog.failedCount > 0}
+            hasErrors={(importLog.failedCount ?? 0) > 0}
           />
         }
       />
 
       <ImportSummary importLog={importLog} />
 
-      {errorBreakdown && importLog.failedCount > 0 && (
+      {errorBreakdown && (importLog.failedCount ?? 0) > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Phân tích lỗi</CardTitle>
@@ -72,7 +72,7 @@ export function AdminImportDetailWidget({
           <CardContent>
             <ErrorBreakdown
               breakdown={errorBreakdown}
-              totalErrors={importLog.failedCount}
+              totalErrors={importLog.failedCount ?? 0}
             />
           </CardContent>
         </Card>
