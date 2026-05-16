@@ -1,4 +1,8 @@
-export type ImportStatus = "IN_PROGRESS" | "SUCCESS" | "FAILED";
+export type ImportStatus =
+  | "IN_PROGRESS"
+  | "SUCCESS"
+  | "PARTIAL_FAILURE"
+  | "FAILED";
 export type ImportTriggeredBy = "CRON" | "MANUAL";
 
 export interface ImportLog {
@@ -7,9 +11,11 @@ export interface ImportLog {
   runAt: string;
   triggeredBy: ImportTriggeredBy;
   status: ImportStatus;
-  totalRows: number | null;
-  successCount: number | null;
-  failedCount: number | null;
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
+  durationMs: number | null;
+  filePath: string | null;
   /** Link to download the error CSV; only when failedCount > 0 */
   errorFileUrl: string | null;
 }

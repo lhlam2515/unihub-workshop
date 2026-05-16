@@ -65,6 +65,7 @@ export class StudentSyncJobsRepository {
       totalRows?: number;
       processedRows?: number;
       errorRows?: number;
+      errorLogUrl?: string;
     }
   ): Promise<Result<StudentSyncJob>> {
     return tryCatch(
@@ -83,6 +84,8 @@ export class StudentSyncJobsRepository {
             updates.processedRows = counts.processedRows;
           if (counts.errorRows !== undefined)
             updates.errorRows = counts.errorRows;
+          if (counts.errorLogUrl !== undefined)
+            updates.errorLogUrl = counts.errorLogUrl;
         }
 
         if (isTerminal) {

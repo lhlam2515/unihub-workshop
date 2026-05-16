@@ -1,11 +1,7 @@
-import { Inject } from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { parse, CsvError } from "csv-parse";
 
-import type {
-  NewStudentSyncError,
-  StudentSyncJob,
-} from "@/infra/database/types";
+import type { NewStudentSyncError } from "@/infra/database/types";
 import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
 import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import type { ITypedMessageQueue } from "@/infra/messaging/messaging.interfaces";
@@ -19,6 +15,10 @@ import {
 } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
+import {
+  StudentSyncJobResponse,
+  type ImportLogDto,
+} from "../dto/student-sync-response.dto";
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";
 
@@ -30,8 +30,13 @@ import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.rep
  */
 @Injectable()
 export class StudentSyncService {
-  private static readonly REQUIRED_CSV_HEADERS = [
+  /** At least one of student_code or student_id is required. */
+  private static readonly STUDENT_ID_HEADERS = [
     "student_code",
+    "student_id",
+  ] as const;
+
+  private static readonly REQUIRED_CSV_HEADERS = [
     "email",
     "full_name",
   ] as const;
@@ -44,6 +49,8 @@ export class StudentSyncService {
     INVALID_FORMAT: "INVALID_FORMAT",
     DUPLICATE: "DUPLICATE",
   };
+
+  private readonly logger = new Logger(StudentSyncService.name);
 
   constructor(
     private readonly studentSyncJobsRepo: StudentSyncJobsRepository,
@@ -72,14 +79,23 @@ export class StudentSyncService {
    *          or FailResult with INTERNAL_ERROR when job creation or queue enqueue fails.
    */
   async triggerSync(
-    filePath: string
+    filePath: string,
+    triggeredBy?: "CRON" | "MANUAL"
   ): Promise<Result<{ jobId: string; status: string; triggeredAt: Date }>> {
+    this.logger.log(`Sync triggered: file="${filePath}", by="${triggeredBy}"`);
+
     // Create job record with RUNNING status
     const createResult = await this.studentSyncJobsRepo.create({
       sourceFileName: filePath,
+      triggeredBy: triggeredBy ?? "MANUAL",
     });
 
-    if (createResult.isFailure) return Result.fail(createResult.error);
+    if (createResult.isFailure) {
+      this.logger.warn(
+        `Failed to create sync job for file "${filePath}": ${createResult.error.message}`
+      );
+      return Result.fail(createResult.error);
+    }
 
     const job = createResult.data;
 
@@ -89,7 +105,11 @@ export class StudentSyncService {
         jobId: job.jobId,
         sourceFileName: filePath,
       } satisfies StudentSyncJobData);
+      this.logger.log(`Sync job ${job.jobId} enqueued (file="${filePath}")`);
     } catch (err) {
+      this.logger.error(
+        `Failed to enqueue sync job ${job.jobId}: ${err instanceof Error ? err.message : err}`
+      );
       await this.studentSyncJobsRepo.updateStatus(job.jobId, "FAILED");
       return Result.fail(passthroughOrInternal(err));
     }
@@ -139,78 +159,89 @@ export class StudentSyncService {
       return Result.fail(systemErrors.internal(`Sync job ${jobId} not found`));
     }
 
+    this.logger.log(`Processing job ${jobId}: file="${job.sourceFileName}"`);
+
     // 2. Update status to RUNNING
     await this.studentSyncJobsRepo.updateStatus(jobId, "RUNNING");
 
-    // 3. Parse CSV file
-    const parseResult = await this.parseCSV(job.sourceFileName);
-    if (parseResult.isFailure) {
-      await this.studentSyncJobsRepo.updateStatus(jobId, "FAILED");
-      return Result.fail(parseResult.error);
+    // 3. Stage 2: Scan CSV for duplicate detection (streaming, lightweight)
+    this.logger.log(`[Stage 1] Starting scan for job ${jobId}`);
+    const scanResult = await this.stageScan(job.sourceFileName);
+    if (scanResult.isFailure) {
+      this.logger.warn(
+        `[Stage 1] Scan failed for job ${jobId}: ${scanResult.error.message}`
+      );
+      await this.studentSyncJobsRepo.updateStatus(jobId, "FAILED", {
+        totalRows: 0,
+        processedRows: 0,
+        errorRows: 0,
+      });
+      return Result.fail(scanResult.error);
     }
 
-    const rows = parseResult.data;
-    let processedRows = 0;
-    let errorRows = 0;
-    let totalRows = 0;
-    const errors: NewStudentSyncError[] = [];
+    const { totalRows, lastSeenRow } = scanResult.data;
+    this.logger.log(
+      `[Stage 1] Scan complete: ${totalRows} total rows, ${lastSeenRow.size} unique codes`
+    );
 
-    // 4. Batch-Sequential processing of each row
-    try {
-      for await (const row of rows) {
-        totalRows++;
-        const rowNumber = totalRows;
-
-        // a) Validate row data
-        const validation = this.validateRow(row);
-        if (!validation.valid) {
-          errorRows++;
-          errors.push({
-            jobId,
-            rowNumber,
-            rawData: JSON.stringify(row),
-            errorReason:
-              this.resolveErrorReason(validation.errors?.[0]) ?? "UNKNOWN",
-            errorDetail: validation.errors?.join("; ") ?? null,
-          });
-          continue;
-        }
-
-        // b) Upsert student record
-        const upsertResult = await this.upsertStudent(row);
-        if (upsertResult.isFailure) {
-          errorRows++;
-          errors.push({
-            jobId,
-            rowNumber,
-            rawData: JSON.stringify(row),
-            errorReason: "UNKNOWN",
-            errorDetail: upsertResult.error.message,
-          });
-          continue;
-        }
-
-        processedRows++;
-      }
-    } catch (err) {
+    // 4. Stage 3+4: Re-stream, validate, and batch upsert
+    this.logger.log(`[Stage 2] Starting validate + upsert for job ${jobId}`);
+    const processResult = await this.stageProcess(
+      jobId,
+      job.sourceFileName,
+      lastSeenRow
+    );
+    if (processResult.isFailure) {
+      this.logger.warn(
+        `[Stage 2] Processing failed for job ${jobId}: ${processResult.error.message}`
+      );
       await this.studentSyncJobsRepo.updateStatus(jobId, "FAILED", {
         totalRows,
-        processedRows,
-        errorRows,
+        processedRows: 0,
+        errorRows: 0,
       });
-      return Result.fail(this.normalizeProcessingError(err));
+      return Result.fail(processResult.error);
     }
 
+    const { processedRows, errorRows, errors } = processResult.data;
+    this.logger.log(
+      `[Stage 2] Processing complete: ${processedRows} processed, ${errorRows} errors`
+    );
+
     // 5. Save errors in batch
+    let errorLogUrl: string | undefined;
     if (errors.length > 0) {
+      this.logger.log(
+        `[Stage 3] Saving ${errors.length} error records for job ${jobId}`
+      );
       const errorsResult = await this.studentSyncErrorsRepo.createBatch(errors);
       if (errorsResult.isFailure) {
+        this.logger.warn(
+          `[Stage 3] Failed to save errors: ${errorsResult.error.message}`
+        );
         await this.studentSyncJobsRepo.updateStatus(jobId, "FAILED", {
           totalRows,
           processedRows,
           errorRows,
         });
         return Result.fail(errorsResult.error);
+      }
+
+      // 5a. Write error CSV file to object storage
+      const csvKey = `errors/students_${new Date().toISOString().slice(0, 10)}-${jobId}.csv`;
+      const csvContent = this.buildErrorCsv(errors);
+      const uploadResult = await this.storageService.uploadText(
+        csvKey,
+        csvContent
+      );
+      if (uploadResult.isSuccess) {
+        errorLogUrl = uploadResult.data;
+        this.logger.log(`[Stage 3] Error CSV uploaded: ${errorLogUrl}`);
+      } else {
+        // Error isolation: upload failure does NOT fail the pipeline
+        this.logger.warn(
+          `[Stage 3] Failed to upload error CSV for job ${jobId}: ${uploadResult.error.message}`
+        );
       }
     }
 
@@ -225,6 +256,11 @@ export class StudentSyncService {
       finalStatus = "PARTIAL_FAILURE";
     }
 
+    this.logger.log(
+      `[Finalize] Job ${jobId}: status=${finalStatus}, ` +
+        `total=${totalRows}, ok=${processedRows}, err=${errorRows}`
+    );
+
     const finalizeResult = await this.studentSyncJobsRepo.updateStatus(
       jobId,
       finalStatus,
@@ -232,11 +268,17 @@ export class StudentSyncService {
         totalRows,
         processedRows,
         errorRows,
+        errorLogUrl,
       }
     );
     if (finalizeResult.isFailure) {
+      this.logger.warn(
+        `[Finalize] Failed to update status for job ${jobId}: ${finalizeResult.error.message}`
+      );
       return Result.fail(finalizeResult.error);
     }
+
+    this.logger.log(`Job ${jobId} finished: ${finalStatus}`);
 
     return Result.ok({
       jobId,
@@ -248,13 +290,335 @@ export class StudentSyncService {
   }
 
   /**
+   * Stage 2: Scan CSV for duplicate detection (streaming, lightweight pass).
+   *
+   * Streams through the CSV file once, tracking only student codes and their
+   * last-seen row numbers. Does NOT collect full row data into memory.
+   *
+   * Business rules:
+   * - Duplicate detection uses last-wins: the last occurrence of a student_code
+   *   in the file is the one that will be processed.
+   * - Rows without a student_code (or with empty code) are always included
+   *   in the processing pass (no dedup applied).
+   *
+   * Side effects:
+   * - Fetches the CSV file from Object Storage.
+   * - Logs warnings for each duplicate student_code found.
+   *
+   * @param sourceFileName - Object Storage key of the CSV file.
+   * @returns OkResult with totalRows and lastSeenRow map, or FailResult
+   *          (STORAGE_FILE_NOT_FOUND, STORAGE_DOWNLOAD_FAILED, VALIDATION_FAILED).
+   */
+  private async stageScan(sourceFileName: string): Promise<
+    Result<{
+      totalRows: number;
+      lastSeenRow: Map<string, number>;
+    }>
+  > {
+    this.logger.log(`[Scan] Opening stream: "${sourceFileName}"`);
+
+    const streamResult =
+      await this.storageService.getFileStream(sourceFileName);
+    if (streamResult.isFailure) return Result.fail(streamResult.error);
+
+    const rows = streamResult.data.pipe(
+      parse({
+        columns: (headers: string[]) => {
+          const headerValidation = this.validateCsvHeaders(headers);
+          if (headerValidation.isFailure) {
+            throw headerValidation.error;
+          }
+          return headers;
+        },
+        bom: true,
+        skip_empty_lines: true,
+        trim: true,
+      })
+    ) as AsyncIterable<Record<string, unknown>>;
+
+    const lastSeenRow = new Map<string, number>();
+    let totalRows = 0;
+    const duplicates: Array<{
+      studentCode: string;
+      occurrences: number;
+    }> = [];
+
+    try {
+      for await (const row of rows) {
+        totalRows++;
+        const rawCode = row.student_code ?? row.student_id;
+        if (typeof rawCode === "string" && rawCode.trim().length > 0) {
+          const code = rawCode.trim();
+          if (lastSeenRow.has(code)) {
+            // Track duplicate for logging
+            const existing = duplicates.find((d) => d.studentCode === code);
+            if (existing) {
+              existing.occurrences++;
+            } else {
+              duplicates.push({ studentCode: code, occurrences: 2 });
+            }
+          }
+          lastSeenRow.set(code, totalRows);
+        }
+      }
+    } catch (err) {
+      return Result.fail(this.normalizeProcessingError(err));
+    }
+
+    // Log duplicate warnings
+    for (const dup of duplicates) {
+      this.logger.warn(
+        `Duplicate student_code trong file: ${dup.studentCode} (${dup.occurrences} occurrences, keeping last)`
+      );
+    }
+
+    return Result.ok({ totalRows, lastSeenRow });
+  }
+
+  /**
+   * Stage 3+4: Re-stream CSV, validate rows, and batch upsert.
+   *
+   * Second streaming pass over the CSV file. Validates each row against
+   * business rules, resolves optional linked userId, and collects valid
+   * rows into batches of 500 for bulk upsert.
+   *
+   * Business rules:
+   * - Rows that are not the last occurrence of their student_code are skipped.
+   * - Invalid rows are collected as errors (not quarantined mid-pipeline).
+   * - Upsert is batched in groups of 500 for DB efficiency.
+   * - If a batch upsert fails, falls back to individual upserts per row
+   *   (error isolation per spec INV-02).
+   *
+   * Side effects:
+   * - Fetches the CSV file from Object Storage (second HTTP request).
+   * - Calls StudentsRepository.upsertBatch() for each batch of 500 rows.
+   * - On batch failure, calls StudentsRepository.upsert() individually.
+   *
+   * @param jobId - Sync job UUID for error linking.
+   * @param sourceFileName - Object Storage key of the CSV file.
+   * @param lastSeenRow - Map of student_code → last row number from stageScan.
+   * @returns OkResult with processedRows, errorRows, and errors array, or
+   *          FailResult (STORAGE_FILE_NOT_FOUND, VALIDATION_FAILED).
+   */
+  private async stageProcess(
+    jobId: string,
+    sourceFileName: string,
+    lastSeenRow: Map<string, number>
+  ): Promise<
+    Result<{
+      processedRows: number;
+      errorRows: number;
+      errors: NewStudentSyncError[];
+    }>
+  > {
+    const streamResult =
+      await this.storageService.getFileStream(sourceFileName);
+    if (streamResult.isFailure) return Result.fail(streamResult.error);
+
+    const rows = streamResult.data.pipe(
+      parse({
+        columns: (headers: string[]) => {
+          const headerValidation = this.validateCsvHeaders(headers);
+          if (headerValidation.isFailure) {
+            throw headerValidation.error;
+          }
+          return headers;
+        },
+        bom: true,
+        skip_empty_lines: true,
+        trim: true,
+      })
+    ) as AsyncIterable<Record<string, unknown>>;
+
+    const BATCH_SIZE = 500;
+    let processedRows = 0;
+    let errorRows = 0;
+    let rowNumber = 0;
+    const errors: NewStudentSyncError[] = [];
+    const upsertBatch: Array<{
+      studentId: string;
+      fullName: string;
+      email: string | null;
+      userId?: string | null;
+    }> = [];
+
+    try {
+      for await (const row of rows) {
+        rowNumber++;
+
+        // Skip if this row is a duplicate (not the last occurrence)
+        const rawCode = row.student_code ?? row.student_id;
+        if (typeof rawCode === "string" && rawCode.trim().length > 0) {
+          const code = rawCode.trim();
+          const lastRow = lastSeenRow.get(code);
+          if (lastRow && lastRow !== rowNumber) {
+            // Skip — this is not the last occurrence
+            continue;
+          }
+        }
+
+        // Validate row data
+        const validation = this.validateRow(row);
+        if (!validation.valid) {
+          errorRows++;
+          errors.push({
+            jobId,
+            rowNumber,
+            rawData: JSON.stringify(row),
+            errorReason:
+              this.resolveErrorReason(validation.errors?.[0]) ?? "UNKNOWN",
+            errorDetail: validation.errors?.join("; ") ?? null,
+          });
+          continue;
+        }
+
+        // Resolve optional linked userId
+        const userIdResult = await this.resolveLinkedUserId(row);
+        if (userIdResult.isFailure) {
+          errorRows++;
+          errors.push({
+            jobId,
+            rowNumber,
+            rawData: JSON.stringify(row),
+            errorReason: "UNKNOWN",
+            errorDetail: userIdResult.error.message,
+          });
+          continue;
+        }
+
+        // Add to upsert batch
+        const studentCode =
+          typeof row.student_code === "string"
+            ? row.student_code
+            : typeof row.student_id === "string"
+              ? row.student_id
+              : "";
+        const fullName = typeof row.full_name === "string" ? row.full_name : "";
+        const email = typeof row.email === "string" ? row.email : null;
+
+        upsertBatch.push({
+          studentId: studentCode,
+          fullName,
+          email,
+          userId: userIdResult.data ?? undefined,
+        });
+
+        // Flush batch when full
+        if (upsertBatch.length >= BATCH_SIZE) {
+          const flushResult = await this.flushUpsertBatch(
+            upsertBatch,
+            jobId,
+            rowNumber
+          );
+          processedRows += flushResult.success;
+          errors.push(...flushResult.errors);
+          errorRows += flushResult.errors.length;
+          upsertBatch.length = 0;
+        }
+      }
+
+      // Flush remaining batch
+      if (upsertBatch.length > 0) {
+        const flushResult = await this.flushUpsertBatch(
+          upsertBatch,
+          jobId,
+          rowNumber
+        );
+        processedRows += flushResult.success;
+        errors.push(...flushResult.errors);
+        errorRows += flushResult.errors.length;
+      }
+    } catch (err) {
+      // Flush any remaining batch before failing
+      if (upsertBatch.length > 0) {
+        const flushResult = await this.flushUpsertBatch(
+          upsertBatch,
+          jobId,
+          rowNumber
+        );
+        processedRows += flushResult.success;
+        errors.push(...flushResult.errors);
+        errorRows += flushResult.errors.length;
+      }
+      return Result.fail(this.normalizeProcessingError(err));
+    }
+
+    return Result.ok({ processedRows, errorRows, errors });
+  }
+
+  /**
+   * Flush an upsert batch — try batch upsert first, fall back to individual.
+   *
+   * Business rules:
+   * - Tries StudentsRepository.upsertBatch() first (single SQL statement).
+   * - If the batch fails (transient DB error), falls back to individual
+   *   upserts per row to preserve error isolation (INV-02).
+   *
+   * @param batch - Array of upsert data (at most 500 items).
+   * @param jobId - Sync job UUID for error linking.
+   * @param currentRowNumber - Current row number in the CSV iteration.
+   * @returns Object with success count and errors array.
+   */
+  private async flushUpsertBatch(
+    batch: Array<{
+      studentId: string;
+      fullName: string;
+      email: string | null;
+      userId?: string | null;
+    }>,
+    jobId: string,
+    currentRowNumber: number
+  ): Promise<{ success: number; errors: NewStudentSyncError[] }> {
+    const batchResult = await this.studentsRepo.upsertBatch(batch);
+    if (batchResult.isSuccess) {
+      this.logger.log(`[Batch] Upserted ${batch.length} rows`);
+      return { success: batch.length, errors: [] };
+    }
+
+    // Fallback to individual upserts for error isolation
+    this.logger.warn(
+      `Batch upsert failed for ${batch.length} rows, falling back to individual upserts: ${batchResult.error.message}`
+    );
+
+    let success = 0;
+    const errors: NewStudentSyncError[] = [];
+
+    for (let i = 0; i < batch.length; i++) {
+      const item = batch[i];
+
+      // Recalculate approximate row number
+      const approxRowNumber = currentRowNumber - batch.length + i + 1;
+      const individualResult = await this.studentsRepo.upsert({
+        studentId: item.studentId,
+        fullName: item.fullName,
+        email: item.email ?? undefined,
+        userId: item.userId ?? undefined,
+      });
+
+      if (individualResult.isSuccess) {
+        success++;
+      } else {
+        errors.push({
+          jobId,
+          rowNumber: approxRowNumber,
+          rawData: JSON.stringify(item),
+          errorReason: "UNKNOWN",
+          errorDetail: individualResult.error.message,
+        });
+      }
+    }
+
+    return { success, errors };
+  }
+
+  /**
    * Retrieve the current status and metadata for a sync job
    *
    * @param jobId - Sync job UUID
    * @returns OkResult with the full job record,
    *          or FailResult with INTERNAL_ERROR when job is not found or DB query fails.
    */
-  async getJob(jobId: string): Promise<Result<StudentSyncJob>> {
+  async getJob(jobId: string): Promise<Result<ImportLogDto>> {
     const result = await this.studentSyncJobsRepo.findById(jobId);
 
     if (result.isFailure) return Result.fail(result.error);
@@ -263,7 +627,7 @@ export class StudentSyncService {
       return Result.fail(systemErrors.internal(`Sync job ${jobId} not found`));
     }
 
-    return Result.ok(result.data);
+    return Result.ok(StudentSyncJobResponse.from(result.data));
   }
 
   /**
@@ -301,13 +665,18 @@ export class StudentSyncService {
     limit: number;
   }): Promise<
     Result<{
-      items: StudentSyncJob[];
+      items: ImportLogDto[];
       nextCursor: string | null;
       hasMore: boolean;
       limit: number;
     }>
   > {
-    return this.studentSyncJobsRepo.findMany(filters);
+    const result = await this.studentSyncJobsRepo.findMany(filters);
+    if (result.isFailure) return Result.fail(result.error);
+    return Result.ok({
+      ...result.data,
+      items: result.data.items.map(StudentSyncJobResponse.from),
+    });
   }
 
   /**
@@ -320,39 +689,11 @@ export class StudentSyncService {
    * @param csvUrl - Object Storage URL of the CSV file
    * @returns OkResult with parsed rows, or FailResult
    */
-  private async parseCSV(
-    csvUrl: string
-  ): Promise<Result<AsyncIterable<Record<string, unknown>>>> {
-    const streamResult = await this.storageService.getFileStream(csvUrl);
-
-    if (streamResult.isFailure) {
-      return Result.fail(streamResult.error);
-    }
-
-    const rows = streamResult.data.pipe(
-      parse({
-        columns: (headers: string[]) => {
-          const headerValidation = this.validateCsvHeaders(headers);
-          if (headerValidation.isFailure) {
-            throw headerValidation.error;
-          }
-
-          return headers;
-        },
-        bom: true,
-        skip_empty_lines: true,
-        trim: true,
-      })
-    ) as AsyncIterable<Record<string, unknown>>;
-
-    return Result.ok(rows);
-  }
-
   /**
    * Validate a single CSV row for required fields and format
    *
    * Business rules:
-   * - student_code is required (max 20 chars)
+   * - student_code or student_id is required (pattern: 8 digits, e.g. 23120001)
    * - email is required (must be valid email format)
    * - full_name is required
    *
@@ -365,12 +706,14 @@ export class StudentSyncService {
   } {
     const errors: string[] = [];
 
-    // student_code: required, max 20 chars
-    const studentCode = row.student_code;
+    // student_code/student_id: required, pattern 8 digits
+    const studentCode = row.student_code ?? row.student_id;
     if (typeof studentCode !== "string" || studentCode.trim().length === 0) {
-      errors.push("MISSING_FIELD: student_code is required");
-    } else if (studentCode.length > 20) {
-      errors.push("INVALID_FORMAT: student_code exceeds 20 characters");
+      errors.push("MISSING_FIELD: student_code/student_id is required");
+    } else if (!/^\d{8}$/.test(studentCode.trim())) {
+      errors.push(
+        "INVALID_FORMAT: student_code must match pattern 8 digits (e.g. 23120001)"
+      );
     }
 
     // email: required, valid email format
@@ -407,35 +750,6 @@ export class StudentSyncService {
    * @param row - Validated CSV row data
    * @returns OkResult with the upserted student, or FailResult
    */
-  private async upsertStudent(
-    row: Record<string, unknown>
-  ): Promise<Result<any>> {
-    // Safely extract and narrow types from the unknown row values
-    const studentCode =
-      typeof row.student_code === "string" ? row.student_code : "";
-    const fullName = typeof row.full_name === "string" ? row.full_name : "";
-    const emailEdu = typeof row.email === "string" ? row.email : "";
-    const faculty = typeof row.faculty === "string" ? row.faculty : "";
-    const classYear =
-      typeof row.class_year === "number"
-        ? row.class_year
-        : typeof row.class_year === "string"
-          ? Number(row.class_year)
-          : null;
-
-    const userIdResult = await this.resolveLinkedUserId(row);
-    if (userIdResult.isFailure) {
-      return Result.fail(userIdResult.error);
-    }
-
-    return this.studentsRepo.upsert({
-      studentId: studentCode,
-      fullName,
-      email: emailEdu,
-      userId: userIdResult.data ?? undefined,
-    });
-  }
-
   /**
    * Validate the required CSV headers before row processing begins.
    *
@@ -444,6 +758,24 @@ export class StudentSyncService {
    */
   private validateCsvHeaders(headers: string[]): Result<void> {
     const normalizedHeaders = new Set(headers.map((header) => header.trim()));
+
+    // Check at least one student identifier header
+    const hasStudentId = StudentSyncService.STUDENT_ID_HEADERS.some((h) =>
+      normalizedHeaders.has(h)
+    );
+    if (!hasStudentId) {
+      return Result.fail(
+        validationError([
+          {
+            field: StudentSyncService.STUDENT_ID_HEADERS.join("/"),
+            rule: "required",
+            message: `CSV must contain one of: ${StudentSyncService.STUDENT_ID_HEADERS.join(", ")}.`,
+          },
+        ])
+      );
+    }
+
+    // Check required headers (email, full_name)
     const missingHeaders = StudentSyncService.REQUIRED_CSV_HEADERS.filter(
       (header) => !normalizedHeaders.has(header)
     );
@@ -527,6 +859,54 @@ export class StudentSyncService {
     }
 
     return Result.ok(rawUserId.trim());
+  }
+
+  /**
+   * Build a CSV string from sync error records for the error quarantine file.
+   *
+   * Combines original row data with error metadata (error_reason, row_number).
+   * Uses tab characters inside cells as a simple CSV delimiter (avoids comma
+   * collision with the original CSV which may contain commas in name fields).
+   *
+   * @param errors - Array of sync error records to include in the CSV.
+   * @returns A CSV-formatted string with header + error rows.
+   */
+  private buildErrorCsv(errors: NewStudentSyncError[]): string {
+    // Collect all unique keys from rawData across all error rows
+    const allKeys = new Set<string>();
+    for (const err of errors) {
+      try {
+        const parsed = JSON.parse(err.rawData) as Record<string, unknown>;
+        Object.keys(parsed).forEach((k) => allKeys.add(k));
+      } catch {
+        // skip unparseable rawData
+      }
+    }
+    const originalKeys = [...allKeys];
+
+    const header = [...originalKeys, "error_reason", "row_number"];
+    const escapeCsv = (val: unknown): string => {
+      const str = String(val ?? "");
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const lines = [header.map(escapeCsv).join(",")];
+    for (const err of errors) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(err.rawData) as Record<string, unknown>;
+      } catch {
+        parsed = {};
+      }
+      const row = originalKeys.map((k) => escapeCsv(parsed[k]));
+      row.push(escapeCsv(err.errorReason), String(err.rowNumber));
+      lines.push(row.join(","));
+    }
+
+    return lines.join("\n");
   }
 
   /**

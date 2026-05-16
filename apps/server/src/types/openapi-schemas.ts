@@ -439,10 +439,14 @@ export interface ApiImportLog {
   /** ISO 8601 timestamp of when the job ran */
   runAt: string;
   triggeredBy: "CRON" | "MANUAL";
-  status: "IN_PROGRESS" | "SUCCESS" | "FAILED";
+  status: "IN_PROGRESS" | "SUCCESS" | "PARTIAL_FAILURE" | "FAILED";
   totalRows: number | null;
   successCount: number | null;
   failedCount: number | null;
+  /** Processing duration in milliseconds */
+  durationMs: number | null;
+  /** Path to the source CSV file */
+  filePath: string | null;
   /** Link to download the error CSV; only when failedCount > 0 */
   errorFileUrl: string | null;
 }

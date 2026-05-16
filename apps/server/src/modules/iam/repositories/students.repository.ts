@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -62,6 +62,63 @@ export class StudentsRepository {
   }
 
   /**
+   * Batch-upserts student records by student_id (TEXT PK).
+   *
+   * Designed for the CSV sync batch-upsert pipeline — inserts or updates
+   * multiple student records in a single SQL statement (up to 500 rows
+   * per batch).
+   *
+   * Business rules:
+   * - Uses PostgreSQL `EXCLUDED` pseudo-table to reference per-row values
+   *   in the ON CONFLICT DO UPDATE clause (unlike single-row upsert which
+   *   passes static values).
+   * - `userId` uses `COALESCE(excluded.user_id, students.user_id)` to
+   *   preserve the existing linked user when the batch row has no userId.
+   * - `password_hash` is never overwritten (not included in SET clause).
+   *
+   * Side effects:
+   * - Inserts or updates multiple rows in the students table.
+   *
+   * @param data - Array of student fields to upsert (batch, max 500).
+   * @returns OkResult with the upserted Student records, or FailResult (INTERNAL_ERROR).
+   */
+  async upsertBatch(
+    data: Array<{
+      studentId: string;
+      fullName: string;
+      email: string | null;
+      userId?: string | null;
+    }>
+  ): Promise<Result<Student[]>> {
+    return tryCatch(
+      async (): Promise<Student[]> => {
+        const result = await this.db
+          .insert(this.schema.students)
+          .values(
+            data.map((d) => ({
+              studentId: d.studentId,
+              fullName: d.fullName,
+              email: d.email,
+              userId: d.userId ?? null,
+            }))
+          )
+          .onConflictDoUpdate({
+            target: this.schema.students.studentId,
+            set: {
+              fullName: sql`excluded.full_name`,
+              email: sql`excluded.email`,
+              updatedAt: new Date(),
+              userId: sql`COALESCE(excluded.user_id, students.user_id)`,
+            },
+          })
+          .returning();
+        return result;
+      },
+      (err) => systemErrors.internal(err)
+    );
+  }
+
+  /**
    * Upserts a student record by student_id (TEXT PK).
    *
    * On conflict (same studentId), updates the row. On insert, creates a new record.
@@ -93,6 +150,7 @@ export class StudentsRepository {
             set: {
               fullName: data.fullName,
               email: data.email ?? null,
+              updatedAt: new Date(),
               ...(data.userId ? { userId: data.userId } : {}),
             },
           })
