@@ -20,7 +20,7 @@ interface RegistrationFiltersProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: "", label: "Tất cả trạng thái" },
+  { value: "ALL", label: "Tất cả trạng thái" },
   { value: "PAID", label: "Đã thanh toán" },
   { value: "CONFIRMED", label: "Đã xác nhận" },
   { value: "PENDING", label: "Chờ thanh toán" },
@@ -45,7 +45,9 @@ export function RegistrationFilters({
 
   const handleStatusChange = useCallback(
     (value: string) => {
-      onFilterChange({ ...filters, status: value || undefined });
+      // Radix Select items must not use an empty string as the value.
+      // Use a sentinel value for "all" and map it back to undefined.
+      onFilterChange({ ...filters, status: value === "ALL" ? undefined : value });
     },
     [filters, onFilterChange]
   );
@@ -62,7 +64,7 @@ export function RegistrationFilters({
 
   return (
     <div className="flex flex-wrap gap-3">
-      <Select value={filters.status ?? ""} onValueChange={handleStatusChange}>
+      <Select value={filters.status ?? "ALL"} onValueChange={handleStatusChange}>
         <SelectTrigger className="w-44">
           <SelectValue placeholder="Tất cả trạng thái" />
         </SelectTrigger>
