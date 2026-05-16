@@ -12,7 +12,7 @@
 
 ## 1. Mô tả
 
-Pipeline chạy mỗi đêm lúc 02:00 AM (Asia/Ho_Chi_Minh), đọc file CSV từ thư mục `input/`, validate, và upsert vào bảng `students`. Invalid rows được ghi ra file error riêng — không làm dừng pipeline, không làm mất valid rows.
+Pipeline chạy mỗi đêm lúc 02:00 AM (Asia/Ho_Chi_Minh), liệt kê file CSV từ Object Storage với prefix `students_`, validate, và upsert vào bảng `students`. Invalid rows được ghi ra file error riêng — không làm dừng pipeline, không làm mất valid rows.
 
 Pipeline có 5 stage tuần tự. Stage 4 (Upsert) là idempotent: chạy cùng file nhiều lần cho cùng kết quả.
 
@@ -37,10 +37,10 @@ Trước khi bắt đầu — Concurrent Run Protection:
     → EXIT (không raise error — cron sẽ retry tự động ngày mai)
 
 Tìm file CSV mới nhất:
-  Pattern: students_YYYY-MM-DD.csv trong thư mục input/
-  Ưu tiên: file có ngày gần nhất
+  Pattern: object key khớp prefix `students_` và kết thúc `.csv` trong Object Storage (ví dụ `students_2025-05-16.csv`)
+  Ưu tiên: file có LastModified gần nhất (sort theo S3 metadata)
 
-Nếu không có file:
+Nếu không có file nào:
   INSERT INTO import_logs (..., status='FAILED', triggered_by='CRON')
     với note: "No CSV file found"
   → LOG WARNING, EXIT (hệ thống vẫn chạy với dữ liệu cũ)
@@ -192,11 +192,11 @@ Nếu failed_count = 0:
 ### E-01: Không tìm thấy file CSV
 
 ```
-Điều kiện: Không có file khớp pattern students_YYYY-MM-DD.csv trong input/
+Điều kiện: Không có object nào khớp prefix `students_` trong Object Storage
 Hành vi: Log warning vào import_logs với status='FAILED', note='no_file_found'
          EXIT — không raise exception, không restart
 Hệ thống: Tiếp tục chạy với dữ liệu sinh viên của lần import gần nhất
-Recovery: BTC đặt file vào đúng thư mục, trigger manual qua admin UI
+Recovery: BTC upload file lên Object Storage, trigger manual qua admin UI
 ```
 
 ### E-02: File không đúng format UTF-8
@@ -206,7 +206,7 @@ Recovery: BTC đặt file vào đúng thư mục, trigger manual qua admin UI
 Hành vi: Streaming parser detect encoding error ở byte level
          Row bị quarantine với reason = "encoding_error"
          Pipeline tiếp tục với các row hợp lệ
-Recovery: BTC yêu cầu legacy system re-export với UTF-8, hoặc convert file trước khi đặt vào input/
+Recovery: BTC yêu cầu legacy system re-export với UTF-8, hoặc upload file với đúng UTF-8 encoding
 ```
 
 ### E-03: File rỗng (0 rows data, chỉ có header hoặc empty)
@@ -344,7 +344,7 @@ After 2h, cron trigger lại → chạy lại toàn bộ file.
 Then: tất cả rows được upsert đúng. Không có duplicate.
 
 **AC-06 — No file:**
-Không có file trong input/ lúc 02:00.
+Không có file trong Object Storage lúc 02:00.
 Then: import_logs.status = 'FAILED', note = 'no_file_found'. Hệ thống vẫn chạy bình thường.
 
 **AC-07 — Duplicate in file:**

@@ -25,6 +25,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
 } from "@aws-sdk/client-s3";
 import { Inject, Injectable } from "@nestjs/common";
@@ -267,6 +268,45 @@ export class StorageService {
       ) {
         return Result.fail(storageErrors.fileNotFound(key));
       }
+      return Result.fail(storageErrors.downloadFailed(err));
+    }
+  }
+
+  /**
+   * Lists CSV files from object storage matching the given prefix.
+   *
+   * Returns keys sorted by LastModified descending (most recent first).
+   * Only returns objects ending with ".csv".
+   *
+   * Designed for the CSV sync scheduler — nightly CRON scans for new
+   * student CSV files uploaded to the configured S3 bucket.
+   *
+   * Side effects: Sends a ListObjectsV2 request to the S3 endpoint.
+   *
+   * @param prefix - Object key prefix to filter by (e.g. "students_").
+   * @returns OkResult containing an array of matching object keys,
+   *          or FailResult (STORAGE_DOWNLOAD_FAILED).
+   */
+  async listFiles(prefix: string): Promise<Result<string[]>> {
+    try {
+      const response = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.config.bucketName,
+          Prefix: prefix,
+        })
+      );
+
+      const keys = (response.Contents ?? [])
+        .filter((obj) => obj.Key?.endsWith(".csv"))
+        .sort((a, b) => {
+          const aTime = a.LastModified?.getTime() ?? 0;
+          const bTime = b.LastModified?.getTime() ?? 0;
+          return bTime - aTime;
+        })
+        .map((obj) => obj.Key as string);
+
+      return Result.ok(keys);
+    } catch (err) {
       return Result.fail(storageErrors.downloadFailed(err));
     }
   }
