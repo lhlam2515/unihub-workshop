@@ -185,35 +185,96 @@ describe("AiSummariesRepository", () => {
   // updateStatus
   // ---------------------------------------------------------------------------
   describe("updateStatus", () => {
-    it("updates the status only", async () => {
-      const updated = { ...mockAiSummary, status: "DONE" };
+    it("clears stale errorMessage when transitioning to QUEUED", async () => {
+      const updated = {
+        ...mockAiSummary,
+        status: "QUEUED",
+        errorMessage: null,
+      };
       mockChain.returning.mockResolvedValue([updated]);
 
-      const result = await repo.updateStatus("sum-001", "DONE");
+      await repo.updateStatus("sum-001", "QUEUED");
 
-      expect(result.isSuccess).toBe(true);
-      expect(result.data.status).toBe("DONE");
+      const setArg = mockChain.set.mock.calls[0][0];
+      expect(setArg.status).toBe("QUEUED");
+      // Stale errorMessage from a previous failure must be wiped on retry
+      expect(setArg.errorMessage).toBeNull();
+      // QUEUED must NOT set generatedAt or summaryText
+      expect(setArg.generatedAt).toBeUndefined();
+      expect(setArg.summaryText).toBeUndefined();
     });
 
-    it("updates status and summary text when provided", async () => {
+    it("sets summaryText and generatedAt when status is DONE", async () => {
       const updated = {
         ...mockAiSummary,
         status: "DONE",
         summaryText: "New summary text.",
+        generatedAt: new Date(),
       };
       mockChain.returning.mockResolvedValue([updated]);
 
-      const result = await repo.updateStatus(
-        "sum-001",
-        "DONE",
-        "New summary text."
-      );
+      const before = new Date();
+      const result = await repo.updateStatus("sum-001", "DONE", {
+        summaryText: "New summary text.",
+      });
+      const after = new Date();
 
       expect(result.isSuccess).toBe(true);
-      expect(result.data.status).toBe("DONE");
-      if (result.isSuccess) {
-        expect(result.data.summaryText).toBe("New summary text.");
-      }
+      expect(result.data.summaryText).toBe("New summary text.");
+
+      const setArg = mockChain.set.mock.calls[0][0];
+      expect(setArg.generatedAt).toBeInstanceOf(Date);
+      expect(setArg.generatedAt.getTime()).toBeGreaterThanOrEqual(
+        before.getTime()
+      );
+      expect(setArg.generatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
+      // DONE must clear stale errorMessage from a prior failure
+      expect(setArg.errorMessage).toBeNull();
+    });
+
+    it("clears stale errorMessage when transitioning to DONE", async () => {
+      mockChain.returning.mockResolvedValue([mockAiSummary]);
+
+      await repo.updateStatus("sum-001", "DONE", { summaryText: "text" });
+
+      const setArg = mockChain.set.mock.calls[0][0];
+      expect(setArg.errorMessage).toBeNull();
+    });
+
+    it("persists rawText and modelUsed when status is DONE", async () => {
+      mockChain.returning.mockResolvedValue([mockAiSummary]);
+
+      await repo.updateStatus("sum-001", "DONE", {
+        summaryText: "summary",
+        rawText: "raw extracted content",
+        modelUsed: "deepseek-v4-pro",
+      });
+
+      expect(mockChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawText: "raw extracted content",
+          modelUsed: "deepseek-v4-pro",
+        })
+      );
+    });
+
+    it("routes errorMessage to error_message column when status is FAILED", async () => {
+      const updated = {
+        ...mockAiSummary,
+        status: "FAILED",
+        errorMessage: "AI summarisation timed out.",
+      };
+      mockChain.returning.mockResolvedValue([updated]);
+
+      await repo.updateStatus("sum-001", "FAILED", {
+        errorMessage: "AI summarisation timed out.",
+      });
+
+      const setArg = mockChain.set.mock.calls[0][0];
+      expect(setArg.errorMessage).toBe("AI summarisation timed out.");
+      // FAILED must NOT write to summaryText or generatedAt
+      expect(setArg.summaryText).toBeUndefined();
+      expect(setArg.generatedAt).toBeUndefined();
     });
 
     it("returns FailResult on DB error", async () => {

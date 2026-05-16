@@ -97,29 +97,56 @@ export class AiSummariesRepository {
   }
 
   /**
-   * Updates the processing status of an AI summary, optionally including the final summary text.
+   * Updates the processing status of an AI summary with type-safe column routing.
    *
-   * Drizzle operation: UPDATE ai_summaries SET status, summaryText? WHERE summaryId.
+   * Column routing rules (enforced per status):
+   * - DONE: sets `generated_at = now()`, clears `error_message`, writes to `summary_text`, `raw_text`, `model_used`
+   * - FAILED: writes error detail to `error_message` only (never touches `summary_text`)
+   * - QUEUED: updates `status` and clears `error_message` (removes stale failure detail from prior run)
+   * - PROCESSING: updates `status` only
+   *
+   * Drizzle operation: UPDATE ai_summaries SET ... WHERE summaryId.
    *
    * Side effects:
-   * - Updates the status column and optionally the summary_text column on ai_summaries.
+   * - Updates the status and status-specific columns on ai_summaries.
    *
    * @param id - The UUID of the summary record.
-   * @param status - The new processing status (e.g. "DONE", "FAILED", "QUEUED").
-   * @param summaryText - Optional final summary text to store when processing completes.
+   * @param status - The new processing status.
+   * @param options.summaryText - AI-generated or manual summary text (DONE only).
+   * @param options.errorMessage - Error detail written to `error_message` column (FAILED only).
+   * @param options.rawText - Raw extracted PDF text for audit purposes (DONE only).
+   * @param options.modelUsed - AI model identifier for audit purposes (DONE only).
    * @returns OkResult containing the updated AiSummary record, or FailResult (INTERNAL_ERROR).
    */
   async updateStatus(
     id: string,
     status: SummaryStatus,
-    summaryText?: string
+    options?: {
+      summaryText?: string;
+      errorMessage?: string;
+      rawText?: string;
+      modelUsed?: string;
+    }
   ): Promise<Result<AiSummary>> {
     return tryCatch(
       async () => {
         const updateData: Partial<NewAiSummary> = { status };
-        if (summaryText !== undefined) {
-          updateData.summaryText = summaryText;
+
+        if (status === "DONE") {
+          updateData.generatedAt = new Date();
+          updateData.errorMessage = null;
+          if (options?.summaryText !== undefined)
+            updateData.summaryText = options.summaryText;
+          if (options?.rawText !== undefined)
+            updateData.rawText = options.rawText;
+          if (options?.modelUsed !== undefined)
+            updateData.modelUsed = options.modelUsed;
+        } else if (status === "FAILED" && options?.errorMessage !== undefined) {
+          updateData.errorMessage = options.errorMessage;
+        } else if (status === "QUEUED") {
+          updateData.errorMessage = null;
         }
+
         const [result] = await this.db
           .update(this.schema.aiSummaries)
           .set(updateData)
