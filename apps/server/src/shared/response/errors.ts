@@ -906,7 +906,7 @@ export const aiSummaryErrors = {
     createError({
       category: "EXTERNAL",
       code: "LLM_API_ERROR",
-      message: "AI summarisation service returned an error.",
+      message: `AI summarisation service returned an error: ${cause instanceof Error ? cause.message : (cause ?? "Unknown error")}`,
       context: { modelUsed },
       cause,
     }),

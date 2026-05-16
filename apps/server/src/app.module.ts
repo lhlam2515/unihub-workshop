@@ -5,6 +5,7 @@ import { WinstonModule } from "nest-winston";
 import { ZodValidationPipe } from "nestjs-zod";
 
 import {
+  aiConfig,
   appConfig,
   aiProviderConfig,
   corsConfig,
@@ -69,6 +70,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
       validate: validateEnv,
       load: [
         appConfig,
+        aiConfig,
         jwtConfig,
         dbConfig,
         redisConfig,

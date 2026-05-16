@@ -113,8 +113,8 @@ export class LlmSummaryFilter implements IPipelineFilter<
         ],
       });
 
-      const summaryText =
-        message.content[0]?.type === "text" ? message.content[0].text : "";
+      const textBlock = message.content.find((c) => c.type === "text");
+      const summaryText = textBlock?.type === "text" ? textBlock.text : "";
 
       this.logger.log(`Summary generated: ${summaryText.length} characters`);
 
