@@ -306,7 +306,7 @@ export class WorkshopsService {
         updateResult.data,
         speaker,
         room,
-        updateResult.data.seatsTotal
+        updateResult.data.seatsAvailable
       )
     );
   }
@@ -358,7 +358,7 @@ export class WorkshopsService {
         updateResult.data,
         speaker,
         room,
-        workshop.seatsTotal
+        updateResult.data.seatsAvailable
       )
     );
   }
@@ -452,7 +452,7 @@ export class WorkshopsService {
         updateResult.data,
         speaker,
         room,
-        workshop.seatsTotal
+        updateResult.data.seatsAvailable
       )
     );
   }
@@ -519,7 +519,7 @@ export class WorkshopsService {
         updateResult.data,
         speaker,
         room,
-        workshop.seatsTotal
+        updateResult.data.seatsAvailable
       )
     );
   }
@@ -561,7 +561,7 @@ export class WorkshopsService {
         workshop,
         speaker,
         room,
-        workshop.seatsTotal
+        workshop.seatsAvailable
       )
     );
   }
@@ -587,7 +587,7 @@ export class WorkshopsService {
         row.workshops,
         speaker,
         room,
-        row.workshops.seatsTotal
+        row.workshops.seatsAvailable
       );
     });
 
@@ -614,15 +614,31 @@ export class WorkshopsService {
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
     if (!workshopResult.data) return Result.fail(workshopErrors.notFound(id));
 
-    const confirmedCount = await this.getConfirmedCount(id);
+    const [byStatusResult, checkinResult, revenueResult] = await Promise.all([
+      this.workshopsRepo.countRegistrationsByStatus(id),
+      this.workshopsRepo.countCheckinsByWorkshopId(id),
+      this.workshopsRepo.sumPaidRevenueByWorkshop(id),
+    ]);
+
+    const byStatus = byStatusResult.isSuccess ? byStatusResult.data : {};
+    const checkinTotal = checkinResult.isSuccess ? checkinResult.data : 0;
+    const revenue = revenueResult.isSuccess ? revenueResult.data : 0;
+
+    const totalRegistrations = Object.values(byStatus).reduce(
+      (sum, count) => sum + count,
+      0
+    );
 
     return Result.ok({
       registrations: {
-        total: confirmedCount,
-        byStatus: { CONFIRMED: confirmedCount },
+        total: totalRegistrations,
+        byStatus,
       },
-      checkins: { total: 0, rate: 0 },
-      revenue: { amount: 0, currency: "VND" },
+      checkins: {
+        total: checkinTotal,
+        rate: totalRegistrations > 0 ? checkinTotal / totalRegistrations : 0,
+      },
+      revenue: { amount: revenue, currency: "VND" },
     });
   }
 
@@ -676,23 +692,5 @@ export class WorkshopsService {
     workshopId: string
   ): Promise<Result<{ version: number; seatsAvailable: number } | null>> {
     return this.workshopsRepo.getSeatVersion(workshopId);
-  }
-
-  /**
-   * Counts confirmed registrations for a workshop, falling back to 0 on failure.
-   *
-   * @param workshopId - The UUID of the workshop.
-   * @returns The confirmed registration count, or 0 if the query fails.
-   */
-  private async getConfirmedCount(workshopId: string): Promise<number> {
-    const result =
-      await this.workshopsRepo.countConfirmedRegistrations(workshopId);
-    if (result.isFailure) {
-      console.warn(
-        `[WorkshopsService] Failed to count confirmed registrations for workshop ${workshopId}: ${result.error.message}`
-      );
-      return 0;
-    }
-    return result.data;
   }
 }

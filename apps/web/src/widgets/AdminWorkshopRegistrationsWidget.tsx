@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 
@@ -124,8 +125,19 @@ export function AdminWorkshopRegistrationsWidget({
           <ExportCSVButton workshopId={workshop.id} />
         </div>
 
-        {/* Error */}
-        {error && <ErrorDisplay error={error} variant="inline" />}
+        {/* Error + retry */}
+        {error && (
+          <div className="flex items-center gap-2">
+            <ErrorDisplay error={error} variant="inline" />
+            <button
+              onClick={() => fetchRegistrations(filters)}
+              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Thử lại
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         {isLoading && registrations.length === 0 ? (
@@ -142,6 +154,7 @@ export function AdminWorkshopRegistrationsWidget({
               pagination={pagination}
               onLoadMore={handleLoadMore}
               isLoading={isLoading}
+              currentCount={registrations.length}
             />
           </>
         )}

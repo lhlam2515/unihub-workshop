@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { eq, and, desc, sql, inArray, lt, gte } from "drizzle-orm";
+import { eq, and, desc, or, sql, inArray, lt, gte, isNotNull, isNull } from "drizzle-orm";
 
 import { DATABASE_CONNECTION, DATABASE_SCHEMA } from "@/infra/database";
 import type { DatabaseClient, DatabaseSchema } from "@/infra/database";
@@ -458,7 +458,13 @@ export class RegistrationsRepository {
    */
   async findByWorkshopId(
     workshopId: string,
-    filters?: { status?: string[]; cursor?: string; limit?: number }
+    filters?: {
+      status?: string[];
+      q?: string;
+      checkedIn?: boolean;
+      cursor?: string;
+      limit?: number;
+    }
   ): Promise<
     Result<{
       items: Array<{
@@ -479,13 +485,30 @@ export class RegistrationsRepository {
     return tryCatch(
       async () => {
         const limit = filters?.limit ?? 20;
-        const conditions = [
+        const conditions: any[] = [
           eq(this.schema.registrations.workshopId, workshopId),
         ];
         if (filters?.status && filters.status.length > 0) {
           conditions.push(
             inArray(this.schema.registrations.status, filters.status as any[])
           );
+        }
+
+        if (filters?.q) {
+          const pattern = `%${filters.q}%`;
+          conditions.push(
+            or(
+              sql`${this.schema.students.fullName} ILIKE ${pattern}`,
+              sql`${this.schema.students.email} ILIKE ${pattern}`,
+              sql`${this.schema.students.studentId} ILIKE ${pattern}`
+            )
+          );
+        }
+
+        if (filters?.checkedIn === true) {
+          conditions.push(isNotNull(this.schema.checkinRecords.checkedInAt));
+        } else if (filters?.checkedIn === false) {
+          conditions.push(isNull(this.schema.checkinRecords.checkedInAt));
         }
 
         if (filters?.cursor) {

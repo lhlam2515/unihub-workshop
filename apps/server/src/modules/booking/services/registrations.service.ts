@@ -425,7 +425,13 @@ export class RegistrationsService {
    */
   async getRegistrationsForWorkshop(
     workshopId: string,
-    filters?: { status?: string[]; cursor?: string; limit?: number }
+    filters?: {
+      status?: string[];
+      q?: string;
+      checkedIn?: boolean;
+      cursor?: string;
+      limit?: number;
+    }
   ): Promise<
     Result<{
       items: RegistrationAdminDto[];
