@@ -17,7 +17,7 @@ export type ActionResponse<T = null> = {
   };
 };
 
-const UNKNOWN_ERROR_MESSAGE = "An unexpected error occurred";
+const UNKNOWN_ERROR_MESSAGE = "Đã xảy ra lỗi không mong muốn";
 
 type FailedApiResponse = Extract<ApiResponse<unknown>, { success: false }>;
 
