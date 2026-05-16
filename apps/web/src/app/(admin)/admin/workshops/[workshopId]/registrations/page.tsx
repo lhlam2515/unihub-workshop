@@ -64,6 +64,11 @@ export default async function AdminWorkshopRegistrationsPage({
         workshop={workshopResult.data}
         initialRegistrations={registrations}
         initialPagination={pagination}
+        initialFilters={{
+          status: raw.status || undefined,
+          checkedIn: raw.checkedIn === "true" ? true : undefined,
+          search: raw.search || undefined,
+        }}
       />
     </div>
   );
