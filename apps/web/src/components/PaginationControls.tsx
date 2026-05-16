@@ -7,12 +7,14 @@ interface PaginationControlsProps {
   pagination: PaginationMeta;
   onLoadMore: () => void;
   isLoading?: boolean;
+  currentCount?: number;
 }
 
 export const PaginationControls = memo(function PaginationControls({
   pagination,
   onLoadMore,
   isLoading = false,
+  currentCount,
 }: PaginationControlsProps) {
   if (!pagination.hasMore) return null;
 
@@ -20,7 +22,7 @@ export const PaginationControls = memo(function PaginationControls({
     <div className="flex flex-col items-center gap-2 py-6">
       {pagination.total !== null && (
         <p className="text-muted-foreground text-xs">
-          Đã hiển thị {pagination.limit} / {pagination.total}
+          Đã hiển thị {currentCount ?? pagination.limit} / {pagination.total}
         </p>
       )}
       <button

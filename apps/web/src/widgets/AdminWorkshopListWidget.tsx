@@ -168,8 +168,10 @@ export function AdminWorkshopListWidget({
   const handleBulkPublish = useCallback(async () => {
     setBulkLoading(true);
     for (const id of selectedIds) {
+      const ws = accumulated.find((w) => w.id === id);
+      if (!ws) continue;
       try {
-        await publishWorkshop(id, 0);
+        await publishWorkshop(id, ws.version);
       } catch {
         // Per-item failure handled by toast (future enhancement)
       }
@@ -177,16 +179,18 @@ export function AdminWorkshopListWidget({
     setBulkLoading(false);
     setSelectedIds(new Set());
     router.refresh();
-  }, [selectedIds, router]);
+  }, [selectedIds, accumulated, router]);
 
   const handleBulkCancel = useCallback(async () => {
     setBulkLoading(true);
     for (const id of selectedIds) {
+      const ws = accumulated.find((w) => w.id === id);
+      if (!ws) continue;
       try {
         await cancelWorkshop(
           id,
-          { reason: "Bulk cancel", notifyRegistered: true },
-          0
+          { reason: "Hủy hàng loạt", notifyRegistered: true },
+          ws.version
         );
       } catch {
         // Per-item failure handled by toast (future enhancement)
@@ -195,7 +199,7 @@ export function AdminWorkshopListWidget({
     setBulkLoading(false);
     setSelectedIds(new Set());
     router.refresh();
-  }, [selectedIds, router]);
+  }, [selectedIds, accumulated, router]);
 
   // ---- Derived state ----
 
@@ -335,6 +339,7 @@ export function AdminWorkshopListWidget({
               }}
               onLoadMore={handleLoadMore}
               isLoading={isLoadingMore}
+              currentCount={accumulated.length}
             />
           )}
         </>
