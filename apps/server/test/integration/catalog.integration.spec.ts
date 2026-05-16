@@ -749,7 +749,13 @@ describe("Catalog Module — Integration", () => {
 
         const result = await aiSummaryAdminController.uploadDocument(
           "wid-001",
-          mockFile()
+          mockFile(),
+          {
+            sub: "user-001",
+            role: "BTC",
+            jti: "jti-001",
+            allowed_workshop_ids: [],
+          }
         );
 
         expect(result.isSuccess).toBe(true);
@@ -764,7 +770,13 @@ describe("Catalog Module — Integration", () => {
 
         const result = await aiSummaryAdminController.uploadDocument(
           "wid-nonexistent",
-          mockFile()
+          mockFile(),
+          {
+            sub: "user-001",
+            role: "BTC",
+            jti: "jti-001",
+            allowed_workshop_ids: [],
+          }
         );
 
         expect(result.isSuccess).toBe(false);

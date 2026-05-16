@@ -55,7 +55,9 @@ export class LlmSummaryFilter implements IPipelineFilter<
     );
 
     if (apiKey) {
-      this.anthropic = new Anthropic({ apiKey, baseURL });
+      // Set SDK timeout to 35s — slightly below the worker's 40s Promise.race so the
+      // SDK cancels the request before the outer timer fires, giving a cleaner error path.
+      this.anthropic = new Anthropic({ apiKey, baseURL, timeout: 35_000 });
       this.logger.log(
         `LLM summary filter initialised with model: ${this.model}`
       );
@@ -96,7 +98,7 @@ export class LlmSummaryFilter implements IPipelineFilter<
     try {
       const message = await this.anthropic.messages.create({
         model: this.model,
-        max_tokens: 1024,
+        max_tokens: 4096,
         system:
           "You are a workshop content summariser for a university platform. " +
           "Summarise the following workshop document in Vietnamese, focusing on: " +
@@ -111,8 +113,8 @@ export class LlmSummaryFilter implements IPipelineFilter<
         ],
       });
 
-      const summaryText =
-        message.content[0]?.type === "text" ? message.content[0].text : "";
+      const textBlock = message.content.find((c) => c.type === "text");
+      const summaryText = textBlock?.type === "text" ? textBlock.text : "";
 
       this.logger.log(`Summary generated: ${summaryText.length} characters`);
 

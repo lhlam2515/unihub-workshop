@@ -8,6 +8,8 @@ import type {
   Speaker,
   Room,
 } from "@/infra/database/types/event-core.types";
+import { AiSummaryResponseBuilder } from "@/modules/ai-summary/dto/ai-summary-response.dto";
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import type { CursorPaginationResult } from "@/shared/pagination/cursor-pagination.helper";
 import {
@@ -55,7 +57,8 @@ export class WorkshopsService {
     private readonly speakersRepo: SpeakersRepository,
     private readonly roomsRepo: RoomsRepository,
     private readonly notificationPublisher: WorkshopNotificationPublisher,
-    private readonly notificationLogProducer: NotificationLogProducer
+    private readonly notificationLogProducer: NotificationLogProducer,
+    private readonly aiSummariesRepo: AiSummariesRepository
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -154,12 +157,20 @@ export class WorkshopsService {
       ? RoomResponseBuilder.from(workshopRow.rooms)
       : null;
 
+    // Fetch AI summary — degrade gracefully on failure
+    const summaryResult = await this.aiSummariesRepo.findByWorkshopId(id);
+    const summary =
+      summaryResult.isSuccess && summaryResult.data
+        ? AiSummaryResponseBuilder.fromPublic(summaryResult.data)
+        : null;
+
     return Result.ok(
       WorkshopResponseBuilder.fromDetail(
         workshop,
         speaker,
         room,
-        availableSeats
+        availableSeats,
+        summary
       )
     );
   }

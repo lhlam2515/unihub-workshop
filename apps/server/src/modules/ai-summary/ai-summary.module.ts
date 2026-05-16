@@ -15,6 +15,7 @@ import { PersistResultFilter } from "./pipeline/persist-result.filter";
 import { TextCleaningFilter } from "./pipeline/text-cleaning.filter";
 import { UpsertRecordFilter } from "./pipeline/upsert-record.filter";
 import { AiSummariesRepository } from "./repositories/ai-summaries.repository";
+import { WorkshopDocumentsRepository } from "./repositories/workshop-documents.repository";
 import { AiSummaryService } from "./services/ai-summary.service";
 
 @Module({
@@ -32,6 +33,7 @@ import { AiSummaryService } from "./services/ai-summary.service";
     AiSummaryService,
     // Repositories
     AiSummariesRepository,
+    WorkshopDocumentsRepository,
     // Pipeline (Pipe-and-Filter)
     UpsertRecordFilter,
     PdfExtractionFilter,

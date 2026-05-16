@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 
+import { AiSummariesRepository } from "@/modules/ai-summary/repositories/ai-summaries.repository";
 import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
@@ -90,6 +91,7 @@ describe("WorkshopsService", () => {
   let roomsRepo: jest.Mocked<RoomsRepository>;
   let notificationPublisher: jest.Mocked<WorkshopNotificationPublisher>;
   let notificationLogProducer: jest.Mocked<NotificationLogProducer>;
+  let aiSummariesRepo: jest.Mocked<AiSummariesRepository>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -145,6 +147,12 @@ describe("WorkshopsService", () => {
             createAndEnqueue: jest.fn(),
           },
         },
+        {
+          provide: AiSummariesRepository,
+          useValue: {
+            findByWorkshopId: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -156,6 +164,7 @@ describe("WorkshopsService", () => {
     roomsRepo = module.get(RoomsRepository);
     notificationPublisher = module.get(WorkshopNotificationPublisher);
     notificationLogProducer = module.get(NotificationLogProducer);
+    aiSummariesRepo = module.get(AiSummariesRepository);
   });
 
   afterEach(() => {
@@ -659,9 +668,23 @@ describe("WorkshopsService", () => {
   // getPublicDetail
   // ---------------------------------------------------------------------------
   describe("getPublicDetail", () => {
-    it("returns detail for an open workshop (FR-F02-007)", async () => {
+    it("returns detail for an open workshop with AI summary (FR-F02-007)", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       seatCounterService.getCachedSeats.mockResolvedValue(25);
+      aiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-001",
+          documentId: "doc-001",
+          workshopId: "w-001",
+          status: "DONE",
+          summaryText: "AI generated summary content",
+          rawText: null,
+          modelUsed: "deepseek-v4-pro",
+          errorMessage: null,
+          generatedAt: new Date("2026-05-16T10:00:00Z"),
+          createdAt: new Date("2026-05-16T09:00:00Z"),
+        })
+      );
 
       const result = await service.getPublicDetail("w-001");
 
@@ -671,6 +694,38 @@ describe("WorkshopsService", () => {
         expect(result.data.seatsAvailable).toBe(25);
         expect(result.data.speaker?.fullName).toBe("John Doe");
         expect(result.data.room?.name).toBe("Room A");
+        expect(result.data.summary).not.toBeNull();
+        expect(result.data.summary?.status).toBe("DONE");
+        expect(result.data.summary?.text).toBe("AI generated summary content");
+      }
+      expect(aiSummariesRepo.findByWorkshopId).toHaveBeenCalledWith("w-001");
+    });
+
+    it("returns summary=null when no summary exists", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      seatCounterService.getCachedSeats.mockResolvedValue(25);
+      aiSummariesRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
+
+      const result = await service.getPublicDetail("w-001");
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data.summary).toBeNull();
+      }
+    });
+
+    it("returns summary=null when repository fails", async () => {
+      workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
+      seatCounterService.getCachedSeats.mockResolvedValue(25);
+      aiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.fail({ code: "INTERNAL_ERROR" } as never)
+      );
+
+      const result = await service.getPublicDetail("w-001");
+
+      expect(result.isSuccess).toBe(true);
+      if (result.isSuccess) {
+        expect(result.data.summary).toBeNull();
       }
     });
 
@@ -702,6 +757,7 @@ describe("WorkshopsService", () => {
       };
       workshopsRepo.findById.mockResolvedValue(Result.ok(rowWithoutRefs));
       seatCounterService.getCachedSeats.mockResolvedValue(30);
+      aiSummariesRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
 
       const result = await service.getPublicDetail("w-001");
 
@@ -710,6 +766,7 @@ describe("WorkshopsService", () => {
         expect(result.data.id).toBe("w-001");
         expect(result.data.speaker).toBeNull();
         expect(result.data.room).toBeNull();
+        expect(result.data.summary).toBeNull();
       }
     });
   });

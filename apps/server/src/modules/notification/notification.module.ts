@@ -37,6 +37,7 @@ import { NotificationsService } from "./services/notifications.service";
     NotificationsService,
     NotificationDispatchService,
     NotificationLogProducer,
+    NotificationLogsRepository,
   ],
 })
 export class NotificationModule {}

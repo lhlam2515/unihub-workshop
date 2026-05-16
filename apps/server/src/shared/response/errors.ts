@@ -906,9 +906,39 @@ export const aiSummaryErrors = {
     createError({
       category: "EXTERNAL",
       code: "LLM_API_ERROR",
-      message: "AI summarisation service returned an error.",
+      message: `AI summarisation service returned an error: ${cause instanceof Error ? cause.message : (cause ?? "Unknown error")}`,
       context: { modelUsed },
       cause,
+    }),
+  /**
+   * Create an error when retrying an AI summary that is not in FAILED status.
+   *
+   * Business rule: only FAILED summaries are eligible for retry.
+   *
+   * @param workshopId - The workshop whose summary retry was rejected.
+   * @returns Business error payload.
+   */
+  retryNotAllowed: (workshopId: string): AppError =>
+    createError({
+      category: "BUSINESS",
+      code: "AI_SUMMARY_RETRY_NOT_ALLOWED",
+      message: "AI summary can only be retried when status is FAILED.",
+      context: { workshopId },
+    }),
+  /**
+   * Create an error when manual summary override is attempted but no
+   * workshop document exists to satisfy the FK constraint.
+   *
+   * @param workshopId - The workshop that has no uploaded documents.
+   * @returns Business error payload.
+   */
+  noDocumentFound: (workshopId: string): AppError =>
+    createError({
+      category: "BUSINESS",
+      code: "AI_SUMMARY_NO_DOCUMENT",
+      message:
+        "No workshop document found. Please upload a PDF before setting the summary.",
+      context: { workshopId },
     }),
 } as const;
 

@@ -28,9 +28,12 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 
+import { CurrentUser } from "@/shared/decorators/current-user.decorator";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
+import type { JwtPayload } from "@/types/jwt-payload";
 
+import { UpdateSummaryDto } from "../dto/update-summary.dto";
 import { AiSummaryService } from "../services/ai-summary.service";
 
 /** Maximum allowed file size: 10 MB. */
@@ -50,10 +53,11 @@ export class AiSummaryAdminController {
    *
    * Route: POST /admin/workshops/:workshopId/summary
    * Expects a multipart/form-data request with a `file` field containing
-   * a PDF document. The file is validated (PDF MIME type, max 50 MB).
+   * a PDF document. The file is validated (PDF MIME type, max 10 MB).
    *
    * @param workshopId - The UUID of the target workshop.
    * @param file - Uploaded PDF file (validated by ParseFilePipe).
+   * @param user - JWT payload containing the BTC admin's userId.
    * @returns OkResult with the upload confirmation.
    */
   @Post()
@@ -69,9 +73,10 @@ export class AiSummaryAdminController {
         ],
       })
     )
-    file: Express.Multer.File
+    file: Express.Multer.File,
+    @CurrentUser() user: JwtPayload
   ) {
-    return this.aiSummaryService.uploadDocument(workshopId, file);
+    return this.aiSummaryService.uploadDocument(workshopId, file, user.sub);
   }
 
   /**
@@ -102,9 +107,9 @@ export class AiSummaryAdminController {
   @Put()
   async updateSummary(
     @Param("workshopId") workshopId: string,
-    @Body("text") text: string
+    @Body() body: UpdateSummaryDto
   ) {
-    return this.aiSummaryService.updateSummaryText(workshopId, text);
+    return this.aiSummaryService.updateSummaryText(workshopId, body.text);
   }
 
   /**
