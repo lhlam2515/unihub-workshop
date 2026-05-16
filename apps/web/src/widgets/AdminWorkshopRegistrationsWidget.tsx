@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 
 import { ContentLoader } from "@/components/ContentLoader";
@@ -24,6 +25,7 @@ export interface AdminWorkshopRegistrationsWidgetProps {
   workshop: WorkshopAdmin;
   initialRegistrations: RegistrationAdmin[];
   initialPagination: PaginationMeta;
+  initialFilters: Filters;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,8 +36,11 @@ export function AdminWorkshopRegistrationsWidget({
   workshop,
   initialRegistrations,
   initialPagination,
+  initialFilters,
 }: AdminWorkshopRegistrationsWidgetProps) {
-  const [filters, setFilters] = useState<Filters>({});
+  const router = useRouter();
+  const pathname = usePathname();
+  const [filters, setFilters] = useState<Filters>(initialFilters);
   const [registrations, setRegistrations] =
     useState<RegistrationAdmin[]>(initialRegistrations);
   const [pagination, setPagination] =
@@ -84,8 +89,15 @@ export function AdminWorkshopRegistrationsWidget({
     (newFilters: Filters) => {
       setFilters(newFilters);
       fetchRegistrations(newFilters);
+
+      const params = new URLSearchParams();
+      if (newFilters.status) params.set("status", newFilters.status);
+      if (newFilters.checkedIn) params.set("checkedIn", "true");
+      if (newFilters.search) params.set("search", newFilters.search);
+      const qs = params.toString();
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`);
     },
-    [fetchRegistrations]
+    [fetchRegistrations, router, pathname]
   );
 
   const handleLoadMore = useCallback(() => {

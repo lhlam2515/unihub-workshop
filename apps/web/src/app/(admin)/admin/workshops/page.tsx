@@ -35,8 +35,15 @@ export default async function AdminWorkshopListPage({
   const initialWorkshops = result.isFailure ? [] : result.data.items;
   const initialPagination = result.isFailure ? null : result.data.pagination;
 
+  const widgetKey = JSON.stringify({
+    status: filters.status,
+    day: filters.day,
+    q: filters.q,
+  });
+
   return (
     <AdminWorkshopListWidget
+      key={widgetKey}
       filters={filters}
       initialWorkshops={initialWorkshops}
       initialPagination={initialPagination}
