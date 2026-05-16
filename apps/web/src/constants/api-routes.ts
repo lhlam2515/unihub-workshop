@@ -81,6 +81,8 @@ export const API_ROUTES = {
       LIST: path("/admin/imports"),
       DETAIL: (importId: string) => path(`/admin/imports/${importId}`),
       ERRORS: (importId: string) => path(`/admin/imports/${importId}/errors`),
+      ERRORS_DOWNLOAD: (importId: string) =>
+        path(`/admin/imports/${importId}/errors/download`),
       TRIGGER: path("/admin/imports/trigger"),
     },
 

@@ -106,7 +106,7 @@ export function ImportsTable({
               {formatDateTime(row.runAt)}
             </TableCell>
             <TableCell className="text-sm capitalize">
-              {row.triggeredBy === "cron" ? "Tự động" : "Thủ công"}
+              {row.triggeredBy === "CRON" ? "Tự động" : "Thủ công"}
             </TableCell>
             <TableCell>
               <StatusBadge status={row.status} variant="registration" />

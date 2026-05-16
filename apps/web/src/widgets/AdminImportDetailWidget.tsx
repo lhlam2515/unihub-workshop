@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DownloadErrorCSVButton } from "@/features/admin-imports/components/DownloadErrorCSVButton";
 import { ErrorBreakdown } from "@/features/admin-imports/components/ErrorBreakdown";
 import { ImportSummary } from "@/features/admin-imports/components/ImportSummary";
-import type { ImportLog } from "@/types/admin-operations";
+import type { ImportLog, ImportLogDetail } from "@/types/admin-operations";
 
 export interface AdminImportDetailWidgetProps {
   initialResult: ImportLog | null;
@@ -48,9 +48,7 @@ export function AdminImportDetailWidget({
   }
 
   // ---- Success ----
-  const errorBreakdown = (
-    importLog as ImportLog & { errorBreakdown?: Record<string, number> }
-  ).errorBreakdown;
+  const errorBreakdown = (importLog as ImportLogDetail).errorBreakdown;
 
   return (
     <div className="space-y-6">

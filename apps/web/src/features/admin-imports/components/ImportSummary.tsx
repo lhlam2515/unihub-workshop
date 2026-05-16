@@ -37,7 +37,7 @@ export function ImportSummary({ importLog }: ImportSummaryProps) {
       <div>
         <p className="text-xs text-slate-500">Người kích hoạt</p>
         <p className="text-sm font-medium capitalize">
-          {importLog.triggeredBy === "cron" ? "Tự động" : "Thủ công"}
+          {importLog.triggeredBy === "CRON" ? "Tự động" : "Thủ công"}
         </p>
       </div>
       <div>

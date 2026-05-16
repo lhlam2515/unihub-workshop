@@ -349,7 +349,7 @@ export async function downloadImportErrors(
 ): Promise<Result<void>> {
   return Result.fromPromise(
     (async () => {
-      const url = `${API_BASE_URL}${API_ROUTES.ADMIN.IMPORTS.ERRORS(importId)}`;
+      const url = `${API_BASE_URL}${API_ROUTES.ADMIN.IMPORTS.ERRORS_DOWNLOAD(importId)}`;
       const res = await fetch(url, {
         credentials: "include",
         headers: {

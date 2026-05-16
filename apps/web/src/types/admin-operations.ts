@@ -1,5 +1,9 @@
-export type ImportStatus = "IN_PROGRESS" | "SUCCESS" | "FAILED";
-export type ImportTriggeredBy = "cron" | "manual";
+export type ImportStatus =
+  | "IN_PROGRESS"
+  | "SUCCESS"
+  | "PARTIAL_FAILURE"
+  | "FAILED";
+export type ImportTriggeredBy = "CRON" | "MANUAL";
 
 export interface ImportLog {
   id: string;
@@ -11,7 +15,7 @@ export interface ImportLog {
   failedCount: number;
   durationMs: number | null;
   filePath: string | null;
-  errorFilePath: string | null;
+  errorFileUrl: string | null;
 }
 
 export type ChannelType = "EMAIL" | "IN_APP" | "TELEGRAM";
