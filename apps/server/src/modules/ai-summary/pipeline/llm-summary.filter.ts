@@ -55,7 +55,9 @@ export class LlmSummaryFilter implements IPipelineFilter<
     );
 
     if (apiKey) {
-      this.anthropic = new Anthropic({ apiKey, baseURL });
+      // Set SDK timeout to 35s — slightly below the worker's 40s Promise.race so the
+      // SDK cancels the request before the outer timer fires, giving a cleaner error path.
+      this.anthropic = new Anthropic({ apiKey, baseURL, timeout: 35_000 });
       this.logger.log(
         `LLM summary filter initialised with model: ${this.model}`
       );

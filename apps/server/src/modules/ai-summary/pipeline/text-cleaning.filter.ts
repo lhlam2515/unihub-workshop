@@ -78,8 +78,10 @@ export class TextCleaningFilter implements IPipelineFilter<
     // Normalise Windows-style line endings
     cleaned = cleaned.replace(/\r\n/g, "\n");
 
-    // Strip non-printable characters (preserve alphanumeric, spaces, common punctuation)
-    cleaned = cleaned.replace(/[^\w\s.,!?;:'"()\-–—/@$%#&*\n]/g, "");
+    // Strip non-printable characters while preserving Unicode letters, digits,
+    // whitespace, and common punctuation. \p{L}\p{N} covers all Unicode scripts
+    // including Vietnamese diacritics — \w would only match ASCII [a-zA-Z0-9_].
+    cleaned = cleaned.replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—/@$%#&*\n]/gu, "");
 
     // Truncate to maximum length
     if (cleaned.length > this.MAX_TEXT_LENGTH) {

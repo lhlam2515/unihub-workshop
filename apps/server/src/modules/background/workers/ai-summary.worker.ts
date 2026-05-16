@@ -81,7 +81,17 @@ export class AiSummaryWorker
           `AI summary failed for document ${documentId}: ${result.error.message}`,
           { code: result.error.code }
         );
-        // Throw to trigger BullMQ retry (3 attempts with exponential backoff)
+
+        // LLM_TIMEOUT from the filter is a terminal failure — processDocument already
+        // called markFailed, so we just return without re-throwing (no BullMQ retry).
+        if (result.error.code === "LLM_TIMEOUT") {
+          this.logger.warn(
+            `LLM timeout (filter-detected) for document ${documentId}, no retry`
+          );
+          return;
+        }
+
+        // All other failures trigger BullMQ's exponential backoff retry (3 attempts).
         throw new Error(result.error.message);
       }
 

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { PDFParse } from "pdf-parse";
 
 import { StorageService } from "@/infra/storage/storage.service";
 import { aiSummaryErrors } from "@/shared/response/errors";
@@ -53,13 +54,19 @@ export class PdfExtractionFilter implements IPipelineFilter<
     // Extract text via pdf-parse
     const extractResult = await tryCatch(
       async () => {
-        const { PDFParse } = await import("pdf-parse");
         const pdf = new PDFParse({ data: bufferResult.data });
         try {
           const result = await pdf.getText();
           return result.text;
         } finally {
-          pdf.destroy();
+          // Await destroy to release WASM workers and file descriptors.
+          // Suppress errors — the text is already extracted; cleanup failures
+          // must not mask the result or leak as unhandled rejections.
+          try {
+            await pdf.destroy();
+          } catch {
+            /* noop */
+          }
         }
       },
       (err) => aiSummaryErrors.pdfExtractionFailed(err)
