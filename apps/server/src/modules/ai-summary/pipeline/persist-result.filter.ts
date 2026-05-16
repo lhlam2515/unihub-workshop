@@ -50,7 +50,11 @@ export class PersistResultFilter implements IPipelineFilter<
     const updateResult = await this.aiSummariesRepo.updateStatus(
       context.summaryId,
       "DONE",
-      context.summaryText
+      {
+        summaryText: context.summaryText,
+        rawText: context.rawText,
+        modelUsed: context.modelUsed,
+      }
     );
 
     if (updateResult.isFailure) {

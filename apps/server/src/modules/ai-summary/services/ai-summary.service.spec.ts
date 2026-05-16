@@ -1,3 +1,8 @@
+// Factory function prevents pdf-parse from being evaluated (jest.mock without a
+// factory still loads the module to auto-mock it, which triggers pdfjs-dist →
+// @napi-rs/canvas native bindings and leaves a GC handle that blocks Jest from exiting).
+jest.mock("pdf-parse", () => ({ PDFParse: jest.fn() }));
+
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
@@ -150,7 +155,7 @@ describe("AiSummaryService", () => {
       expect(mockAiSummariesRepo.updateStatus).toHaveBeenCalledWith(
         "sum-001",
         "FAILED",
-        expect.any(String)
+        expect.objectContaining({ errorMessage: expect.any(String) })
       );
     });
 
@@ -213,7 +218,10 @@ describe("AiSummaryService", () => {
       expect(mockAiSummariesRepo.updateStatus).toHaveBeenCalledWith(
         "sum-001",
         "FAILED",
-        "LLM_TIMEOUT"
+        {
+          errorMessage:
+            "AI summarisation timed out. The document may be too long.",
+        }
       );
     });
 
@@ -298,7 +306,7 @@ describe("AiSummaryService", () => {
       );
     });
 
-    it("returns FailResult when workshop does not exist", async () => {
+    it("returns FailResult when workshop findById returns DB error", async () => {
       const mockFile = {
         originalname: "f.pdf",
         size: 100,
@@ -307,9 +315,9 @@ describe("AiSummaryService", () => {
       } as Express.Multer.File;
       mockWorkshopsRepo.findById.mockResolvedValue(
         Result.fail({
-          code: "WORKSHOP_NOT_FOUND",
-          category: "NOT_FOUND",
-          message: "Not found",
+          code: "INTERNAL_ERROR",
+          category: "INTERNAL",
+          message: "DB error",
         })
       );
 
@@ -320,7 +328,30 @@ describe("AiSummaryService", () => {
       );
 
       expect(result.isFailure).toBe(true);
+      expect(mockStorageService.uploadFile).not.toHaveBeenCalled();
+      expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("returns WORKSHOP_NOT_FOUND when workshop findById returns null — no file uploaded", async () => {
+      const mockFile = {
+        originalname: "f.pdf",
+        size: 100,
+        buffer: Buffer.from("x"),
+        mimetype: "application/pdf",
+      } as Express.Multer.File;
+      // findById returns OkResult<null> — workshop not in DB, no DB error
+      mockWorkshopsRepo.findById.mockResolvedValue(Result.ok(null));
+
+      const result = await service.uploadDocument(
+        "w-999",
+        mockFile,
+        "user-001"
+      );
+
+      expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("WORKSHOP_NOT_FOUND");
+      // Critical: file must NOT be uploaded before validation completes
+      expect(mockStorageService.uploadFile).not.toHaveBeenCalled();
       expect(mockWorkshopDocumentsRepo.create).not.toHaveBeenCalled();
       expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
     });
@@ -530,6 +561,117 @@ describe("AiSummaryService", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(mockAiSummaryQueue.enqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // updateSummaryText — manual override
+  // -----------------------------------------------------------------------
+  describe("updateSummaryText", () => {
+    it("updates status to DONE with new text when a summary record already exists", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-001",
+          status: "FAILED",
+          documentId: "doc-001",
+          workshopId: "w-001",
+          summaryText: null,
+          errorMessage: "old error",
+        })
+      );
+      mockAiSummariesRepo.updateStatus.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-001",
+          status: "DONE",
+          summaryText: "Manual summary text",
+          generatedAt: new Date("2026-05-16"),
+          errorMessage: null,
+        })
+      );
+
+      const result = await service.updateSummaryText(
+        "w-001",
+        "Manual summary text"
+      );
+
+      expect(result.isSuccess).toBe(true);
+      expect(mockAiSummariesRepo.updateStatus).toHaveBeenCalledWith(
+        "sum-001",
+        "DONE",
+        { summaryText: "Manual summary text" }
+      );
+    });
+
+    it("creates a new summary using an existing document when none exists yet", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
+      mockWorkshopDocumentsRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok([
+          {
+            documentId: "doc-001",
+            workshopId: "w-001",
+            fileUrl: "https://cdn.example.com/doc-001.pdf",
+          },
+        ])
+      );
+      mockAiSummariesRepo.upsert.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-new",
+          status: "QUEUED",
+          documentId: "doc-001",
+        })
+      );
+      mockAiSummariesRepo.updateStatus.mockResolvedValue(
+        Result.ok({
+          summaryId: "sum-new",
+          status: "DONE",
+          summaryText: "First manual text",
+          generatedAt: new Date("2026-05-16"),
+        })
+      );
+
+      const result = await service.updateSummaryText(
+        "w-001",
+        "First manual text"
+      );
+
+      expect(result.isSuccess).toBe(true);
+      expect(mockAiSummariesRepo.upsert).toHaveBeenCalledWith(
+        "doc-001",
+        "w-001"
+      );
+      expect(mockAiSummariesRepo.updateStatus).toHaveBeenCalledWith(
+        "sum-new",
+        "DONE",
+        { summaryText: "First manual text" }
+      );
+    });
+
+    it("returns AI_SUMMARY_NO_DOCUMENT when no summary and no documents exist", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(Result.ok(null));
+      mockWorkshopDocumentsRepo.findByWorkshopId.mockResolvedValue(
+        Result.ok([])
+      );
+
+      const result = await service.updateSummaryText("w-001", "Some text");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("AI_SUMMARY_NO_DOCUMENT");
+      expect(mockAiSummariesRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it("returns FailResult when findByWorkshopId (summary lookup) fails", async () => {
+      mockAiSummariesRepo.findByWorkshopId.mockResolvedValue(
+        Result.fail({
+          code: "INTERNAL_ERROR" as const,
+          category: "INTERNAL" as const,
+          message: "DB connection lost",
+        })
+      );
+
+      const result = await service.updateSummaryText("w-001", "text");
+
+      expect(result.isFailure).toBe(true);
+      expect(result.error.code).toBe("INTERNAL_ERROR");
     });
   });
 });

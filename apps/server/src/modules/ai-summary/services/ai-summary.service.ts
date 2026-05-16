@@ -4,7 +4,7 @@ import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import type { ITypedMessageQueue } from "@/infra/messaging/messaging.interfaces";
 import { StorageService } from "@/infra/storage/storage.service";
 import { WorkshopsRepository } from "@/modules/catalog/repositories/workshops.repository";
-import { aiSummaryErrors } from "@/shared/response/errors";
+import { aiSummaryErrors, workshopErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
 import { AiSummaryResponseBuilder } from "../dto/ai-summary-response.dto";
@@ -65,6 +65,8 @@ export class AiSummaryService {
   ): Promise<Result<{ workshopId: string; documentId: string }>> {
     const workshopResult = await this.workshopsRepo.findById(workshopId);
     if (workshopResult.isFailure) return Result.fail(workshopResult.error);
+    if (!workshopResult.data)
+      return Result.fail(workshopErrors.notFound(workshopId));
 
     const uploadResult = await this.storageService.uploadFile(file, workshopId);
     if (uploadResult.isFailure) return Result.fail(uploadResult.error);
@@ -142,20 +144,36 @@ export class AiSummaryService {
       const updated = await this.aiSummariesRepo.updateStatus(
         existing.data.summaryId,
         "DONE",
-        text
+        { summaryText: text }
       );
       if (updated.isFailure) return Result.fail(updated.error);
       return Result.ok(AiSummaryResponseBuilder.fromAdmin(updated.data));
     }
 
-    // No existing summary — create one. DocumentId is auto-generated
-    // to satisfy FK constraint until DB migration makes it nullable.
-    const created = await this.aiSummariesRepo.createByWorkshopId(
-      workshopId,
-      text
+    // No existing summary — need a real documentId to satisfy the FK constraint
+    // (ai_summaries.document_id is NOT NULL until a migration makes it nullable).
+    const docsResult =
+      await this.workshopDocumentsRepo.findByWorkshopId(workshopId);
+    if (docsResult.isFailure) return Result.fail(docsResult.error);
+
+    if (!docsResult.data || docsResult.data.length === 0) {
+      return Result.fail(aiSummaryErrors.noDocumentFound(workshopId));
+    }
+
+    const latestDoc = docsResult.data[docsResult.data.length - 1];
+    const upsertResult = await this.aiSummariesRepo.upsert(
+      latestDoc.documentId,
+      workshopId
     );
-    if (created.isFailure) return Result.fail(created.error);
-    return Result.ok(AiSummaryResponseBuilder.fromAdmin(created.data));
+    if (upsertResult.isFailure) return Result.fail(upsertResult.error);
+
+    const updated = await this.aiSummariesRepo.updateStatus(
+      upsertResult.data.summaryId,
+      "DONE",
+      { summaryText: text }
+    );
+    if (updated.isFailure) return Result.fail(updated.error);
+    return Result.ok(AiSummaryResponseBuilder.fromAdmin(updated.data));
   }
 
   // ── Retry after failure ──────────────────────────────────────────
@@ -255,7 +273,10 @@ export class AiSummaryService {
     this.logger.warn(
       `LLM timeout for document ${documentId}, marking as FAILED`
     );
-    await this.markFailed(documentId, "LLM_TIMEOUT");
+    await this.markFailed(
+      documentId,
+      aiSummaryErrors.llmTimeout("worker-timeout").message
+    );
     return Result.ok();
   }
 
@@ -278,7 +299,7 @@ export class AiSummaryService {
     const updateResult = await this.aiSummariesRepo.updateStatus(
       summaryResult.data.summaryId,
       "FAILED",
-      errorMessage
+      { errorMessage }
     );
 
     if (updateResult.isFailure) {
