@@ -47,7 +47,7 @@ export class LlmSummaryFilter implements IPipelineFilter<
     const apiKey = configService.get<string>("ai.deepseekApiKey");
     this.model = configService.get<string>(
       "ai.summaryModel",
-      "deepseek-v4-pro"
+      "deepseek-v4-flash"
     );
     const baseURL = configService.get<string>(
       "ai.baseUrl",
@@ -98,17 +98,17 @@ export class LlmSummaryFilter implements IPipelineFilter<
     try {
       const message = await this.anthropic.messages.create({
         model: this.model,
-        max_tokens: 4096,
+        max_tokens: 8192,
         system:
-          "You are a workshop content summariser for a university platform. " +
-          "Summarise the following workshop document in Vietnamese, focusing on: " +
-          "key topics covered, practical examples, and learning outcomes. " +
-          "Format the summary as a concise paragraph of 3-5 sentences. " +
-          "Use clear, academic-style Vietnamese.",
+          "Bạn là công cụ tóm tắt nội dung workshop cho nền tảng quản lý sự kiện đại học. " +
+          "Hãy tóm tắt tài liệu workshop sau bằng tiếng Việt, tập trung vào: " +
+          "các chủ đề chính được đề cập, ví dụ thực tiễn và kết quả học tập. " +
+          "Trình bày tóm tắt dưới dạng một đoạn văn ngắn gọn từ 3 đến 5 câu. " +
+          "Sử dụng tiếng Việt rõ ràng, mang tính học thuật.",
         messages: [
           {
             role: "user",
-            content: `Please summarise the following workshop document:\n\n${context.cleanedText}`,
+            content: `Hãy tóm tắt tài liệu workshop sau:\n\n${context.cleanedText}`,
           },
         ],
       });
