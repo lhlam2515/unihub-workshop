@@ -520,27 +520,27 @@ SQLite schema và sync flow → `specs/checkin-offline.md`.
 
 ### 1. Quyết định
 
-**Async AI Summary** qua BullMQ (ADR-10). Provider: OpenAI GPT-4o-mini, abstracted qua interface để dễ swap:
+**Async AI Summary** qua BullMQ (ADR-10). Provider: DeepSeek API qua `@anthropic-ai/sdk` (API-compatible, baseURL `https://api.deepseek.com/anthropic`), model configurable qua env `AI_SUMMARY_MODEL` (default: `deepseek-v4-flash`). API key: env `DEEPSEEK_API_KEY`.
 
-```typescript
-interface AIProvider {
-  summarize(text: string, maxTokens: number): Promise<string>;
-}
-```
+Storage: Bảng riêng `workshop_documents` (lưu file info) + `ai_summaries` (lưu summary state, 5 status: `NONE`/`QUEUED`/`PROCESSING`/`DONE`/`FAILED`). File PDF upload lên Cloudflare R2 (S3-compatible).
 
-Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thái: `NONE`/`QUEUED`/`PROCESSING`/`DONE`/`FAILED`) trên bảng `workshops` — không tách bảng riêng (1-1 với workshop).
+Pipeline: Pipe-and-Filter 5 stages — UpsertRecord → PdfExtraction → TextCleaning → LlmSummary → PersistResult.
 
-3-stage async flow và failure handling → `specs/ai-summary.md`.
+5-stage Pipe-and-Filter pipeline, 40s timeout, 3-retry exponential backoff (10s/20s/40s), failure handling → `specs/ai-summary.md`.
 
 ### 2. Lý do chọn
 
-**Async qua queue (không inline):** AI summary mất 30s–2 phút — block HTTP response là UX tệ và risk timeout reverse proxy. 202 Accepted + polling là pattern chuẩn cho long-running task.
+**Async qua queue (không inline):** AI summary mất vài phút — block HTTP response là UX tệ. 202 Accepted + polling là pattern chuẩn cho long-running task.
 
-**Provider abstraction:** API key có thể bị giới hạn — cần dễ swap sang Claude hoặc Ollama. Interface đơn giản, không phụ thuộc vào feature riêng của provider.
+**DeepSeek qua Anthropic SDK:** API-compatible với Anthropic Messages API, không cần SDK khác. Chất lượng tương đương GPT-4o-mini nhưng cost thấp hơn. Configurable qua env (dễ swap sang OpenAI, Ollama nếu cần).
 
-**Truncate text 50,000 chars thay vì reject:** PDF dài không phải lỗi user. Tóm tắt phần đầu vẫn hữu ích. 50K chars ≈ 12K tokens — vừa context window model rẻ.
+**Pipe-and-Filter cho clarity:** 5 stage rõ ràng giảm coupling giữa PDF extraction, text cleaning, LLM call, và persistence. Mỗi filter độc lập, testable.
 
-**`summary_status` enum 5 giá trị:** Cho phép frontend hiển thị progress chính xác. Nếu chỉ `done`/`not done`, user không phân biệt "đang xử lý" với "chưa upload PDF".
+**Truncate text 8,000 chars thay vì reject:** PDF dài không phải lỗi user. Tóm tắt phần đầu vẫn hữu ích. 8K chars ≈ 2K tokens — vừa context window, timeout 40s, output 8192 tokens.
+
+**Tách bảng `workshop_documents` + `ai_summaries`:** 1-N mapping — workshop có thể có nhiều document versions. `ai_summaries` lưu state riêng, version lock tránh race concurrent uploads.
+
+**LLM timeout = terminal failure:** 40s là deadline cứng. Timeout → không retry (vấn đề không phải transient). SDK timeout 35s < outer timer 40s để cleanup gracefully.
 
 **AI summary không trong critical path:** Workshop vẫn hoạt động đầy đủ khi không có summary. Provider down → chỉ feature này bị ảnh hưởng.
 
@@ -554,11 +554,11 @@ Storage: `workshops.summary_text` và `workshops.summary_status` (5 trạng thá
 
 ### 4. Phương án đã cân nhắc nhưng không chọn
 
-**Local LLM (Ollama):** Privacy-friendly nhưng đòi GPU — không có sẵn trên Docker Compose dev. Chất lượng thấp hơn với model nhỏ.
+**OpenAI GPT-4o-mini:** Chất lượng cao nhưng cost cao hơn DeepSeek. DeepSeek-v4-flash cho hiệu suất/cost tốt hơn cho task tóm tắt.
 
-**Inline trong upload handler:** HTTP timeout sau 30s, AI có thể mất 2 phút.
+**Local LLM (Ollama):** Privacy-friendly nhưng đòi GPU, chất lượng thấp model nhỏ, không có production availability.
 
-**Anthropic Claude thay vì OpenAI:** Chất lượng tương đương. OpenAI có SDK ecosystem rộng hơn cho Node.js/Python — nhưng `AIProvider` interface cho phép swap.
+**Inline trong upload handler:** HTTP timeout sau 30s, AI mất vài phút → UX tệ.
 
 ---
 

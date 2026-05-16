@@ -35,121 +35,92 @@ Validation upload:
   Workshop phải tồn tại và status != 'CANCELLED'
 
 Xử lý:
-  1. Lưu file: /uploads/workshops/{workshop_id}.pdf
-     (Overwrite nếu đã có — BTC re-upload khi cần update)
+  1. Upload file: PutObject đến Cloudflare R2
+     Key: workshops/{workshop_id}/{uuid}-{sanitizedName}.pdf
 
-  2. UPDATE workshops
-       SET pdf_url        = '/uploads/workshops/{workshop_id}.pdf',
-           summary_status = 'QUEUED',
-           summary_text   = NULL   -- reset summary cũ nếu có
-     WHERE id = :workshop_id;
+  2. INSERT workshop_documents (file_url, original_name, file_size_bytes, upload_status='UPLOADED')
+     UPSERT ai_summaries (status='QUEUED')
 
-  3. addJob Queue: ai-summary * { workshop_id: :workshop_id }
+  3. addJob Queue: ai-summary { documentId, workshopId, fileUrl }
 
   4. Trả ngay:
      202 Accepted {
-       "message": "PDF đã được upload. Tóm tắt đang được xử lý.",
-       "polling_url": "/workshops/:id",
-       "expected_wait_seconds": 60
+       "workshopId": "...",
+       "documentId": "..."
      }
 ```
 
 ### Stage 2 — Worker (Async)
 
 ```
-Consumer group: ai-workers
-Consumer name:  ai-summary-worker-1
+@Processor(AI_SUMMARY_QUEUE) { concurrency: 1 }
 
-@Processor GROUP ai-workers ai-summary-worker-1
-  COUNT 1 BLOCK 5000
-  STREAMS Queue: ai-summary >
-
-FOR EACH message { workshop_id }:
-
-  -- Fetch workshop info (fresh read)
-  SELECT id, pdf_url, summary_status FROM workshops WHERE id = :workshop_id;
-
-  IF summary_status NOT IN ('QUEUED'):
-    -- Đã được xử lý bởi run trước hoặc bị cancel
-    auto-ack + CONTINUE
-
-  -- Mark processing
-  UPDATE workshops
-    SET summary_status = 'PROCESSING'
-  WHERE id = :workshop_id;
+FOR EACH job { documentId, workshopId, fileUrl }:
 
   TRY:
-    -- Step A: Extract text từ PDF
-    text = parsePDF('/uploads/workshops/{workshop_id}.pdf')
-             -- Timeout 30 giây
-             -- Dùng: pdf-parse (Node.js) hoặc PyPDF2 (Python)
+    -- Promise.race wrapper: outer timeout 40s
+    
+    -- Stage 1: Upsert record
+    UPDATE ai_summaries SET status='PENDING' WHERE document_id=:documentId
+    
+    -- Stage 2: Extract text từ PDF
+    buffer = fetchFile(fileUrl)  -- Cloudflare R2 GetObject
+    text = extractTextFromPdf(buffer)  -- pdf-parse library
 
     IF text.length < 100:
       -- PDF là image scan, không có text layer
       THROW Error('PDF_NO_TEXT')
 
-    IF text.length > 50_000:
-      text = text.substring(0, 50_000)  -- truncate, log warning
-      LOG WARNING: "PDF truncated: {workshop_id}, original length: {text.length}"
+    -- Stage 3: Clean text
+    IF text.length > 8_000:
+      text = text.substring(0, 8_000)  -- truncate
+      LOG WARNING: "PDF truncated: {documentId}"
+    
+    cleanedText = normalizeWhitespace(text)
 
-    -- Step B: Gọi AI provider
-    summary = aiProvider.summarize(text, maxTokens=300)
-                -- Timeout 2 phút
-                -- Provider: OpenAI GPT-4o-mini (hoặc swap qua AIProvider interface)
-                -- Prompt: "Tóm tắt ngắn gọn nội dung sau trong 3-5 câu, bằng tiếng Việt: {text}"
+    -- Stage 4: Gọi AI provider via Anthropic SDK
+    -- SDK timeout: 35s (< outer 40s)
+    -- baseURL: https://api.deepseek.com/anthropic
+    -- model: deepseek-v4-flash (env AI_SUMMARY_MODEL)
+    -- System prompt: tiếng Việt (academic style, 3-5 sentences)
+    
+    message = anthropic.messages.create({
+      model: AI_SUMMARY_MODEL,
+      max_tokens: 8192,
+      system: "Bạn là công cụ tóm tắt nội dung workshop cho nền tảng quản lý sự kiện đại học...",
+      messages: [{ role: "user", content: `Hãy tóm tắt tài liệu workshop sau:\n\n${cleanedText}` }]
+    })
+    
+    summary = extractTextBlock(message.content)
 
-    -- Step C: Lưu kết quả
-    UPDATE workshops
-      SET summary_text   = :summary,
-          summary_status = 'DONE',
-          updated_at     = now()
-    WHERE id = :workshop_id;
+    -- Stage 5: Lưu kết quả
+    UPDATE ai_summaries
+      SET status='DONE', summary_text=:summary, model_used='deepseek-v4-flash', generated_at=now()
+    WHERE document_id=:documentId;
 
-    auto-ack Queue: ai-summary ai-workers {message_id}
+    auto-ack job
 
   CATCH Error('PDF_NO_TEXT'):
-    UPDATE workshops
-      SET summary_status = 'FAILED',
-          summary_text   = NULL
-    WHERE id = :workshop_id;
-    -- Lưu failure reason cho frontend display
-    addJob Queue: ai-summary-dlq * {
-      workshop_id:   :workshop_id,
-      failure_reason: 'pdf_no_text',
-      timestamp:      now()
-    }
-    auto-ack Queue: ai-summary ai-workers {message_id}
+    UPDATE ai_summaries
+      SET status='FAILED', error_message='pdf_no_text'
+    WHERE document_id=:documentId;
+    auto-ack job (không retry — vấn đề data)
 
-  CATCH timeout/network/provider_error:
-    retry_count = getRetryCount(message) + 1
-    
+  CATCH LLM_TIMEOUT (outer Promise.race 40s timeout):
+    UPDATE ai_summaries
+      SET status='FAILED', error_message='LLM_TIMEOUT'
+    WHERE document_id=:documentId;
+    auto-ack job (không retry — terminal failure)
+
+  CATCH timeout/network/provider_error (non-timeout):
+    -- BullMQ auto-retry: 3 attempts với exponential backoff
+    -- Backoff: 10s, 20s, 40s (configured in queue defaultJobOptions)
     IF retry_count < 3:
-      -- Re-queue với exponential backoff
-      backoff = 30 * (2 ^ (retry_count - 1))   -- 30s, 60s, 120s
-      addJob Queue: ai-summary * {
-        workshop_id:  :workshop_id,
-        retry_count:  retry_count,
-        retry_after:  now() + backoff
-      }
-      UPDATE workshops SET summary_status = 'QUEUED' WHERE id = :workshop_id;
+      Worker throws error → BullMQ re-queue với backoff
     ELSE:
-      -- 3 lần đều fail — DLQ
-      UPDATE workshops
-        SET summary_status = 'FAILED'
-      WHERE id = :workshop_id;
-      addJob Queue: ai-summary-dlq * {
-        workshop_id:   :workshop_id,
-        failure_reason: 'max_retries_exceeded',
-        last_error:     err.message,
-        timestamp:      now()
-      }
-      addJob Queue: notification * {
-        event_type: 'ai_summary_failed',
-        user_id:    <btc_users>,
-        payload:    { workshop_id, workshop_title }
-      }
-
-    auto-ack Queue: ai-summary ai-workers {message_id}
+      UPDATE ai_summaries SET status='FAILED', error_message=err.message WHERE document_id=:documentId
+      addJob Queue: notification { event_type: 'ai_summary_failed', ... }
+```
 ```
 
 ### Stage 3 — Frontend Polling
@@ -161,26 +132,30 @@ Response includes:
     "id": "...",
     "title": "...",
     ...
-    "summary_status": "none" | "queued" | "processing" | "done" | "failed",
-    "summary_text":   "..." | null
+    "summary": {
+      "status": "none" | "queued" | "processing" | "done" | "failed",
+      "text": "..." | null,  -- only if status='done'
+      "updatedAt": "...",
+      "errorDetail": "..." | null  -- only if status='failed'
+    }
   }
 
 Frontend polling logic:
-  IF summary_status IN ('QUEUED', 'PROCESSING'):
+  IF summary.status IN ('QUEUED', 'PROCESSING'):
     Poll GET /workshops/:id mỗi 5 giây
     Hiển thị: "⏳ Đang tạo tóm tắt tự động..."
 
-  IF summary_status = 'DONE':
+  IF summary.status = 'DONE':
     Dừng polling
-    Hiển thị: summary_text
+    Hiển thị: summary.text
 
-  IF summary_status = 'FAILED':
+  IF summary.status = 'FAILED':
     Dừng polling
     Hiển thị: "⚠️ Không thể tạo tóm tắt tự động"
     Nếu user là BTC: Hiển thị button "Thử lại"
-                      POST /admin/workshops/:id/summary/retry → re-queue vào stream
+                      POST /admin/workshops/:id/summary/retry → re-queue vào AI_SUMMARY_QUEUE
 
-  IF summary_status = 'NONE':
+  IF summary.status = 'NONE':
     Không hiển thị gì (PDF chưa được upload)
 
 Max polling duration: 10 phút (600s / 5s interval = 120 polls)
@@ -200,13 +175,13 @@ Hành vi: summary_status = 'FAILED'. DLQ với reason='pdf_no_text'
 UI: "⚠️ PDF không chứa văn bản có thể đọc. Vui lòng upload PDF với text layer."
 ```
 
-### E-02: AI provider timeout (> 2 phút)
+### E-02: LLM call exceeds 40 giây timeout
 
 ```
-Điều kiện: OpenAI API không trả response sau 120 giây
-Hành vi: retry_count += 1
-         Nếu < 3: re-queue với backoff 30s/60s/120s, status = 'QUEUED'
-         Nếu = 3: status = 'FAILED', DLQ, BTC notification
+Điều kiện: Anthropic SDK call không trả response sau 35s, hoặc outer Promise.race timeout 40s
+Hành vi: Update ai_summaries status='FAILED', error_message='LLM_TIMEOUT'
+         Auto-ack job (không retry — timeout là terminal failure)
+         Lý do: LLM timeout thường không phải transient — service đang overloaded hoặc fail
 ```
 
 ### E-03: AI provider down hoàn toàn (3 retries đều fail)
@@ -218,23 +193,23 @@ Hành vi: summary_status = 'FAILED'. BTC nhận notification.
          Workshop vẫn hoạt động đầy đủ — chỉ không có AI summary.
 ```
 
-### E-04: PDF quá dài (> 50,000 chars sau extract)
+### E-04: PDF quá dài (> 8,000 chars sau extract)
 
 ```
-Điều kiện: text.length > 50,000
-Hành vi: Truncate input, log warning, tiếp tục gọi AI với 50,000 chars đầu
+Điều kiện: text.length > 8,000
+Hành vi: Truncate input, log warning, tiếp tục gọi AI với 8,000 chars đầu
          Summary được tạo từ phần đầu PDF (thường là phần quan trọng nhất)
          Không phải lỗi — là expected truncation
 ```
 
-### E-05: Worker crash sau @Processor, trước auto-ack
+### E-05: Worker crash sau job accept, trước auto-ack
 
 ```
-Điều kiện: Process crash khi đang gọi AI API (Step B)
-Hành vi: Message ở lại pending jobs
-         stalled job detection sau 10 phút → worker reclaim message
-         Re-process: UPDATE summary_status = 'PROCESSING' lại
-         Nếu AI call đã thành công nhưng UPDATE chưa commit → AI gọi lại
+Điều kiện: Process crash khi đang gọi LLM API (Stage 4)
+Hành vi: Job ở lại active pool
+         BullMQ stalled detection (default 30s) → worker reclaim job
+         Re-process: pipeline chạy lại từ đầu
+         Nếu LLM call đã thành công nhưng UPDATE chưa commit → LLM gọi lại
          Acceptable: AI summary là idempotent — cùng text → cùng summary
 ```
 
@@ -250,16 +225,16 @@ Recovery: BTC phải trigger lại thủ công qua admin UI cho từng workshop
 Note: Production cần Redis AOF appendfsync=everysec để tránh case này
 ```
 
-### E-07: Concurrent uploads — BTC upload PDF mới khi đang processing
+### E-07: Concurrent uploads — BTC upload document mới khi đang processing
 
 ```
-Điều kiện: BTC upload PDF mới khi summary_status = 'PROCESSING'
-Hành vi: Stage 1 overwrite file, set summary_status = 'QUEUED', addJob mới
-         Worker đang processing sẽ:
-           - Hoàn thành với PDF cũ → UPDATE summary_text với summary cũ
-           - Worker mới sẽ process PDF mới → overwrite summary_text với summary mới
-         Có thể race condition: last writer wins
-Note: Acceptable cho đồ án. Production cần version lock (workshop.pdf_version counter).
+Điều điều kiện: BTC upload document mới khi ai_summary.status = 'PROCESSING'
+Hành vi: Stage 1 insert workshop_documents mới, upsert ai_summaries status='QUEUED'
+         Worker đang processing old document sẽ:
+           - Hoàn thành với document cũ → UPDATE ai_summaries status='DONE' của cũ
+           - Job mới xử lý document mới → tạo ai_summary mới
+         Không có race: ai_summaries có unique constraint trên document_id
+Note: Tách bảng giải quyết race — mỗi document có summary record riêng.
 ```
 
 ---
@@ -273,14 +248,12 @@ KHÔNG bao giờ block waiting for AI provider.
 **INV-02 — Workshop Functional Without Summary:**
 `summary_text = NULL` và `summary_status = 'NONE'/'FAILED'` KHÔNG ảnh hưởng đến registration, check-in, hoặc bất kỳ luồng nghiệp vụ nào.
 
-**INV-03 — AIProvider Interface:**
-Code chỉ gọi `aiProvider.summarize(text, maxTokens)`.
-Không gọi OpenAI SDK trực tiếp trong worker — phải qua interface.
-Swap provider = swap implementation, không sửa worker logic.
+**INV-03 — Anthropic SDK qua DeepSeek Endpoint:**
+LlmSummaryFilter dùng `@anthropic-ai/sdk` với baseURL `https://api.deepseek.com/anthropic`.
+Configurable qua env: `AI_SUMMARY_MODEL`, `DEEPSEEK_API_KEY`.
 
-**INV-04 — Max 300 Output Tokens:**
-`maxTokens = 300` không được thay đổi mà không có cost review.
-Input truncate ở 50,000 chars ≈ 12,000 tokens — vừa context window model rẻ.
+**INV-04 — Max 8192 Output Tokens:**
+`max_tokens = 8192` cho LLM call. Input truncate ở 8,000 chars ≈ 2,000 tokens — vừa context window, timeout 40s, output 8192 tokens.
 
 **INV-05 — summary_status Enum:**
 Chỉ 5 giá trị hợp lệ: `none`, `queued`, `processing`, `done`, `failed`.
@@ -307,15 +280,15 @@ GET /workshops/:id returns summary_text.
 After upload: GET /workshops/:id → summary_status='QUEUED' → poll.
 After worker done: GET /workshops/:id → summary_status='DONE' → stop poll, show summary.
 
-**AC-04 — Retry on provider timeout:**
-AI provider timeout 2 lần.
-Then: After attempt 1: status='QUEUED', re-queued with 30s delay.
-After attempt 2: status='QUEUED', re-queued with 60s delay.
+**AC-04 — Retry on transient errors:**
+AI provider network error (non-timeout) trên attempt 1 và 2.
+Then: After attempt 1: job re-queued with 10s delay.
+After attempt 2: job re-queued with 20s delay.
 After attempt 3 (success): status='DONE'.
 
-**AC-05 — Max retries exceeded → DLQ + notification:**
-AI provider timeout 3 lần.
-Then: status='FAILED'. DLQ có 1 message. BTC nhận notification.
+**AC-05 — Max retries exceeded → FAILED + notification:**
+AI provider network error 3 lần (không timeout).
+Then: status='FAILED', error_message set. BTC nhận notification.
 Workshop vẫn accessible, không có summary.
 
 **AC-06 — PDF no text → immediate fail:**
