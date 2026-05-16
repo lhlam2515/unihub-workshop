@@ -1,7 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 
 import { chainAsync, Result } from "@/shared/response/result";
-import type { AppError } from "@/shared/response/types";
 
 import { LlmSummaryFilter } from "./llm-summary.filter";
 import { PdfExtractionFilter } from "./pdf-extraction.filter";
@@ -19,7 +18,7 @@ import type { PdfPipelineContext } from "./pipeline-context";
  * sequential processing chain using the Pipe-and-Filter architecture.
  *
  * Pipeline stages:
- *   1. UpsertRecordFilter  — upserts a PENDING ai_summaries record
+ *   1. UpsertRecordFilter  — upserts a QUEUED ai_summaries record
  *   2. PdfExtractionFilter — downloads PDF and extracts raw text via pdf-parse
  *   3. TextCleaningFilter  — normalises whitespace, strips noise, truncates
  *   4. LlmSummaryFilter    — calls DeepSeek API via Anthropic SDK
@@ -102,18 +101,5 @@ export class PdfSummaryPipeline {
 
     this.logger.log(`Pipeline completed for document ${documentId}`);
     return result4;
-  }
-
-  /**
-   * Returns the error from the pipeline failure for caller-side handling.
-   *
-   * Extracts the first failure from a chain of results. If the pipeline
-   * completed successfully, returns undefined.
-   *
-   * @param finalResult - The terminal result of execute().
-   * @returns The first AppError if the pipeline failed, or undefined.
-   */
-  getError(finalResult: Result<PdfPipelineContext>): AppError | undefined {
-    return finalResult.isFailure ? finalResult.error : undefined;
   }
 }

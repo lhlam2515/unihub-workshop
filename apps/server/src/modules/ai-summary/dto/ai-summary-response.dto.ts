@@ -52,13 +52,15 @@ export class AiSummaryResponseBuilder {
   }
 
   /**
-   * Builds an admin AI summary DTO with full field visibility.
+   * Builds an admin AI summary DTO.
    *
-   * Always includes all fields regardless of status, including errorDetail
-   * for debugging failed summarization jobs.
+   * Currently identical to the public view — errorDetail is only populated
+   * when status === 'FAILED'. Exposed as a distinct method to allow the
+   * admin contract to diverge from the public one in the future without
+   * touching the public endpoint.
    *
    * @param summary - Raw AI summary entity from the database.
-   * @returns AiSummaryAdminDto with full field exposure.
+   * @returns AiSummaryAdminDto with the same field exposure as the public DTO.
    */
   static fromAdmin(summary: AiSummary): AiSummaryAdminDto {
     return this.fromPublic(summary);

@@ -925,6 +925,21 @@ export const aiSummaryErrors = {
       message: "AI summary can only be retried when status is FAILED.",
       context: { workshopId },
     }),
+  /**
+   * Create an error when manual summary override is attempted but no
+   * workshop document exists to satisfy the FK constraint.
+   *
+   * @param workshopId - The workshop that has no uploaded documents.
+   * @returns Business error payload.
+   */
+  noDocumentFound: (workshopId: string): AppError =>
+    createError({
+      category: "BUSINESS",
+      code: "AI_SUMMARY_NO_DOCUMENT",
+      message:
+        "No workshop document found. Please upload a PDF before setting the summary.",
+      context: { workshopId },
+    }),
 } as const;
 
 /**

@@ -14,7 +14,7 @@ import type { IPipelineFilter } from "./pipeline-filter.interface";
  *
  * Business rules:
  * - Uses ON CONFLICT DO UPDATE to handle retries — if a summary already
- *   exists for this document, its status is reset to PENDING.
+ *   exists for this document, its status is reset to QUEUED.
  * - Enforces the one-summary-per-document constraint at the DB level.
  *
  * Side effects:
