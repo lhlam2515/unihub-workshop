@@ -136,6 +136,10 @@ export const studentSyncJobs = pgTable(
       .timestamp("triggered_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    triggeredBy: t
+      .varchar("triggered_by", { length: 10 })
+      .notNull()
+      .default("MANUAL"),
     sourceFileName: t.varchar("source_file_name", { length: 500 }).notNull(),
     status: syncJobStatusEnum("status").notNull().default("RUNNING"),
     totalRows: t.integer("total_rows"),
@@ -148,6 +152,10 @@ export const studentSyncJobs = pgTable(
     check(
       "chk_sync_rows",
       sql`(${table.processedRows} IS NULL OR ${table.processedRows} >= 0) AND (${table.errorRows} IS NULL OR ${table.errorRows} >= 0)`
+    ),
+    check(
+      "chk_triggered_by",
+      sql`${table.triggeredBy} IN ('CRON', 'MANUAL')`
     ),
     index("idx_sync_job_status").on(table.status),
     index("idx_sync_job_triggered").on(table.triggeredAt.desc()),

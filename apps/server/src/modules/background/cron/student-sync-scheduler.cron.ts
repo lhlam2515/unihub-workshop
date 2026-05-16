@@ -49,7 +49,8 @@ export class StudentSyncSchedulerCron {
 
       const latestFile = files[0];
       const result = await this.studentSyncService.triggerSync(
-        path.join(CSV_INPUT_DIR, latestFile)
+        path.join(CSV_INPUT_DIR, latestFile),
+        "CRON"
       );
 
       if (result.isSuccess) {

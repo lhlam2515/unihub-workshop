@@ -93,6 +93,7 @@ export class StudentsRepository {
             set: {
               fullName: data.fullName,
               email: data.email ?? null,
+              updatedAt: new Date(),
               ...(data.userId ? { userId: data.userId } : {}),
             },
           })

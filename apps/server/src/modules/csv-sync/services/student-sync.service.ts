@@ -1,11 +1,7 @@
-import { Inject } from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { parse, CsvError } from "csv-parse";
 
-import type {
-  NewStudentSyncError,
-  StudentSyncJob,
-} from "@/infra/database/types";
+import type { NewStudentSyncError } from "@/infra/database/types";
 import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
 import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import type { ITypedMessageQueue } from "@/infra/messaging/messaging.interfaces";
@@ -19,6 +15,10 @@ import {
 } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
+import {
+  StudentSyncJobResponse,
+  type ImportLogDto,
+} from "../dto/student-sync-response.dto";
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";
 
@@ -30,8 +30,13 @@ import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.rep
  */
 @Injectable()
 export class StudentSyncService {
-  private static readonly REQUIRED_CSV_HEADERS = [
+  /** At least one of student_code or student_id is required. */
+  private static readonly STUDENT_ID_HEADERS = [
     "student_code",
+    "student_id",
+  ] as const;
+
+  private static readonly REQUIRED_CSV_HEADERS = [
     "email",
     "full_name",
   ] as const;
@@ -44,6 +49,8 @@ export class StudentSyncService {
     INVALID_FORMAT: "INVALID_FORMAT",
     DUPLICATE: "DUPLICATE",
   };
+
+  private readonly logger = new Logger(StudentSyncService.name);
 
   constructor(
     private readonly studentSyncJobsRepo: StudentSyncJobsRepository,
@@ -72,11 +79,13 @@ export class StudentSyncService {
    *          or FailResult with INTERNAL_ERROR when job creation or queue enqueue fails.
    */
   async triggerSync(
-    filePath: string
+    filePath: string,
+    triggeredBy?: "CRON" | "MANUAL"
   ): Promise<Result<{ jobId: string; status: string; triggeredAt: Date }>> {
     // Create job record with RUNNING status
     const createResult = await this.studentSyncJobsRepo.create({
       sourceFileName: filePath,
+      triggeredBy: triggeredBy ?? "MANUAL",
     });
 
     if (createResult.isFailure) return Result.fail(createResult.error);
@@ -154,13 +163,65 @@ export class StudentSyncService {
     let errorRows = 0;
     let totalRows = 0;
     const errors: NewStudentSyncError[] = [];
+    const seen = new Map<string, number>();
+    const duplicates: Array<{
+      studentCode: string;
+      occurrences: number;
+      keptRow: number;
+    }> = [];
 
-    // 4. Batch-Sequential processing of each row
+    // 4. Collect all rows into memory for duplicate detection
     try {
+      const allRows: Array<{
+        row: Record<string, unknown>;
+        rowNumber: number;
+      }> = [];
       for await (const row of rows) {
         totalRows++;
-        const rowNumber = totalRows;
+        allRows.push({ row, rowNumber: totalRows });
+      }
 
+      // 4a. Detect duplicates by student_code (last-wins)
+      const deduped: Array<{
+        row: Record<string, unknown>;
+        rowNumber: number;
+      }> = [];
+      for (let i = allRows.length - 1; i >= 0; i--) {
+        const { row, rowNumber } = allRows[i];
+        // Only dedup rows that have a valid student_code
+        const rawCode = row.student_code ?? row.student_id;
+        if (typeof rawCode === "string" && rawCode.trim().length > 0) {
+          const code = rawCode.trim();
+          if (!seen.has(code)) {
+            seen.set(code, rowNumber);
+            deduped.unshift({ row, rowNumber });
+          } else {
+            const prev = duplicates.find((d) => d.studentCode === code);
+            if (prev) {
+              prev.occurrences++;
+              prev.keptRow = i + 1;
+            } else {
+              duplicates.push({
+                studentCode: code,
+                occurrences: 2,
+                keptRow: i + 1,
+              });
+            }
+          }
+        } else {
+          deduped.unshift({ row, rowNumber });
+        }
+      }
+
+      // Log duplicate warnings
+      for (const dup of duplicates) {
+        this.logger.warn(
+          `Duplicate student_code trong file: ${dup.studentCode} (${dup.occurrences} occurrences, keeping last at row ${dup.keptRow})`
+        );
+      }
+
+      // 4b. Batch-Sequential processing of each deduplicated row
+      for (const { row, rowNumber } of deduped) {
         // a) Validate row data
         const validation = this.validateRow(row);
         if (!validation.valid) {
@@ -202,6 +263,7 @@ export class StudentSyncService {
     }
 
     // 5. Save errors in batch
+    let errorLogUrl: string | undefined;
     if (errors.length > 0) {
       const errorsResult = await this.studentSyncErrorsRepo.createBatch(errors);
       if (errorsResult.isFailure) {
@@ -211,6 +273,22 @@ export class StudentSyncService {
           errorRows,
         });
         return Result.fail(errorsResult.error);
+      }
+
+      // 5a. Write error CSV file to object storage
+      const csvKey = `errors/students_${new Date().toISOString().slice(0, 10)}-${jobId}.csv`;
+      const csvContent = this.buildErrorCsv(errors);
+      const uploadResult = await this.storageService.uploadText(
+        csvKey,
+        csvContent
+      );
+      if (uploadResult.isSuccess) {
+        errorLogUrl = uploadResult.data;
+      } else {
+        // Error isolation: upload failure does NOT fail the pipeline
+        this.logger.warn(
+          `Failed to upload error CSV for job ${jobId}: ${uploadResult.error.message}`
+        );
       }
     }
 
@@ -232,6 +310,7 @@ export class StudentSyncService {
         totalRows,
         processedRows,
         errorRows,
+        errorLogUrl,
       }
     );
     if (finalizeResult.isFailure) {
@@ -254,7 +333,7 @@ export class StudentSyncService {
    * @returns OkResult with the full job record,
    *          or FailResult with INTERNAL_ERROR when job is not found or DB query fails.
    */
-  async getJob(jobId: string): Promise<Result<StudentSyncJob>> {
+  async getJob(jobId: string): Promise<Result<ImportLogDto>> {
     const result = await this.studentSyncJobsRepo.findById(jobId);
 
     if (result.isFailure) return Result.fail(result.error);
@@ -263,7 +342,7 @@ export class StudentSyncService {
       return Result.fail(systemErrors.internal(`Sync job ${jobId} not found`));
     }
 
-    return Result.ok(result.data);
+    return Result.ok(StudentSyncJobResponse.from(result.data));
   }
 
   /**
@@ -301,13 +380,18 @@ export class StudentSyncService {
     limit: number;
   }): Promise<
     Result<{
-      items: StudentSyncJob[];
+      items: ImportLogDto[];
       nextCursor: string | null;
       hasMore: boolean;
       limit: number;
     }>
   > {
-    return this.studentSyncJobsRepo.findMany(filters);
+    const result = await this.studentSyncJobsRepo.findMany(filters);
+    if (result.isFailure) return Result.fail(result.error);
+    return Result.ok({
+      ...result.data,
+      items: result.data.items.map(StudentSyncJobResponse.from),
+    });
   }
 
   /**
@@ -352,7 +436,7 @@ export class StudentSyncService {
    * Validate a single CSV row for required fields and format
    *
    * Business rules:
-   * - student_code is required (max 20 chars)
+   * - student_code or student_id is required (pattern: SV + 8 digits, e.g. SV12345678)
    * - email is required (must be valid email format)
    * - full_name is required
    *
@@ -365,12 +449,14 @@ export class StudentSyncService {
   } {
     const errors: string[] = [];
 
-    // student_code: required, max 20 chars
-    const studentCode = row.student_code;
+    // student_code/student_id: required, pattern SV + 8 digits
+    const studentCode = row.student_code ?? row.student_id;
     if (typeof studentCode !== "string" || studentCode.trim().length === 0) {
-      errors.push("MISSING_FIELD: student_code is required");
-    } else if (studentCode.length > 20) {
-      errors.push("INVALID_FORMAT: student_code exceeds 20 characters");
+      errors.push("MISSING_FIELD: student_code/student_id is required");
+    } else if (!/^SV\d{8}$/.test(studentCode.trim())) {
+      errors.push(
+        "INVALID_FORMAT: student_code must match pattern SV + 8 digits (e.g. SV12345678)"
+      );
     }
 
     // email: required, valid email format
@@ -411,8 +497,13 @@ export class StudentSyncService {
     row: Record<string, unknown>
   ): Promise<Result<any>> {
     // Safely extract and narrow types from the unknown row values
+    // Accept either student_code or student_id as the unique identifier
     const studentCode =
-      typeof row.student_code === "string" ? row.student_code : "";
+      typeof row.student_code === "string"
+        ? row.student_code
+        : typeof row.student_id === "string"
+          ? row.student_id
+          : "";
     const fullName = typeof row.full_name === "string" ? row.full_name : "";
     const emailEdu = typeof row.email === "string" ? row.email : "";
     const faculty = typeof row.faculty === "string" ? row.faculty : "";
@@ -444,6 +535,24 @@ export class StudentSyncService {
    */
   private validateCsvHeaders(headers: string[]): Result<void> {
     const normalizedHeaders = new Set(headers.map((header) => header.trim()));
+
+    // Check at least one student identifier header
+    const hasStudentId = StudentSyncService.STUDENT_ID_HEADERS.some((h) =>
+      normalizedHeaders.has(h)
+    );
+    if (!hasStudentId) {
+      return Result.fail(
+        validationError([
+          {
+            field: StudentSyncService.STUDENT_ID_HEADERS.join("/"),
+            rule: "required",
+            message: `CSV must contain one of: ${StudentSyncService.STUDENT_ID_HEADERS.join(", ")}.`,
+          },
+        ])
+      );
+    }
+
+    // Check required headers (email, full_name)
     const missingHeaders = StudentSyncService.REQUIRED_CSV_HEADERS.filter(
       (header) => !normalizedHeaders.has(header)
     );
@@ -527,6 +636,54 @@ export class StudentSyncService {
     }
 
     return Result.ok(rawUserId.trim());
+  }
+
+  /**
+   * Build a CSV string from sync error records for the error quarantine file.
+   *
+   * Combines original row data with error metadata (error_reason, row_number).
+   * Uses tab characters inside cells as a simple CSV delimiter (avoids comma
+   * collision with the original CSV which may contain commas in name fields).
+   *
+   * @param errors - Array of sync error records to include in the CSV.
+   * @returns A CSV-formatted string with header + error rows.
+   */
+  private buildErrorCsv(errors: NewStudentSyncError[]): string {
+    // Collect all unique keys from rawData across all error rows
+    const allKeys = new Set<string>();
+    for (const err of errors) {
+      try {
+        const parsed = JSON.parse(err.rawData) as Record<string, unknown>;
+        Object.keys(parsed).forEach((k) => allKeys.add(k));
+      } catch {
+        // skip unparseable rawData
+      }
+    }
+    const originalKeys = [...allKeys];
+
+    const header = [...originalKeys, "error_reason", "row_number"];
+    const escapeCsv = (val: unknown): string => {
+      const str = String(val ?? "");
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const lines = [header.map(escapeCsv).join(",")];
+    for (const err of errors) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(err.rawData) as Record<string, unknown>;
+      } catch {
+        parsed = {};
+      }
+      const row = originalKeys.map((k) => escapeCsv(parsed[k]));
+      row.push(escapeCsv(err.errorReason), String(err.rowNumber));
+      lines.push(row.join(","));
+    }
+
+    return lines.join("\n");
   }
 
   /**

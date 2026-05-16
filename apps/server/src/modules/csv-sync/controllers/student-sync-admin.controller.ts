@@ -4,11 +4,14 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
   Query,
+  Res,
 } from "@nestjs/common";
 
+import { StorageService } from "@/infra/storage/storage.service";
 import { RateLimit } from "@/shared/decorators/rate-limit.decorator";
 import { Roles } from "@/shared/decorators/roles.decorator";
 import { Result } from "@/shared/response/result";
@@ -19,6 +22,8 @@ import {
   TriggerStudentSyncDto,
 } from "../dto/trigger-student-sync.dto";
 import { StudentSyncService } from "../services/student-sync.service";
+
+import type { Response } from "express";
 
 /**
  * StudentSyncAdminController
@@ -37,7 +42,10 @@ import { StudentSyncService } from "../services/student-sync.service";
 @Roles("BTC")
 @RateLimit([{ tier: "T2", limit: 30, windowMs: 60000 }])
 export class StudentSyncAdminController {
-  constructor(private readonly studentSyncService: StudentSyncService) {}
+  constructor(
+    private readonly studentSyncService: StudentSyncService,
+    private readonly storageService: StorageService
+  ) {}
 
   /**
    * Trigger a new student data sync job from a CSV file
@@ -52,7 +60,7 @@ export class StudentSyncAdminController {
   @Post("trigger")
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerSync(@Body() dto: TriggerStudentSyncDto): Promise<Result<any>> {
-    return this.studentSyncService.triggerSync(dto.filePath);
+    return this.studentSyncService.triggerSync(dto.filePath, "MANUAL");
   }
 
   /**
@@ -105,5 +113,45 @@ export class StudentSyncAdminController {
       page: query.page,
       limit: query.limit,
     });
+  }
+
+  /**
+   * Download the error CSV file for a sync job
+   *
+   * Returns the raw CSV file stored in object storage, or 204 No Content
+   * when the job has no error file (no errors or file not uploaded).
+   *
+   * @param importId - Sync job UUID from URL path.
+   * @param res - Express response object for streaming the file.
+   */
+  @Get(":importId/errors/download")
+  @HttpCode(HttpStatus.OK)
+  async downloadErrorFile(
+    @Param("importId") importId: string,
+    @Res() res: Response
+  ): Promise<void> {
+    const jobResult = await this.studentSyncService.getJob(importId);
+
+    if (jobResult.isFailure || !jobResult.data) {
+      throw new NotFoundException("Sync job not found");
+    }
+
+    const errorFileUrl = jobResult.data.errorFileUrl;
+    if (!errorFileUrl) {
+      res.status(HttpStatus.NO_CONTENT).end();
+      return;
+    }
+
+    const streamResult = await this.storageService.getFileStream(errorFileUrl);
+    if (streamResult.isFailure) {
+      throw new NotFoundException("Error file not found");
+    }
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="errors-${importId}.csv"`
+    );
+    streamResult.data.pipe(res);
   }
 }

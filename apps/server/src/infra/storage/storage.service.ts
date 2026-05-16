@@ -99,6 +99,46 @@ export class StorageService {
   }
 
   /**
+   * Uploads a text/CSV payload to object storage.
+   *
+   * Designed for the CSV sync error quarantine pipeline — writes the
+   * error CSV file so BTC users can download it via the admin UI.
+   *
+   * Business rules:
+   * - The caller is responsible for providing a unique, deterministic key.
+   *   No UUID prefix is added (unlike uploadFile which auto-generates one).
+   * - Content is encoded as UTF-8.
+   *
+   * Side effects:
+   * - Writes the text content to the configured S3 bucket.
+   *
+   * @param key - Object storage key (e.g. "errors/students_2025-05-06.csv").
+   * @param content - Text/CSV content as a UTF-8 string.
+   * @param contentType - MIME type (defaults to "text/csv; charset=utf-8").
+   * @returns OkResult containing the full public URL, or FailResult (UPLOAD_FAILED).
+   */
+  async uploadText(
+    key: string,
+    content: string,
+    contentType = "text/csv; charset=utf-8"
+  ): Promise<Result<string>> {
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.config.bucketName,
+          Key: key,
+          Body: Buffer.from(content, "utf-8"),
+          ContentType: contentType,
+        })
+      );
+
+      return Result.ok(`${this.config.publicUrl}/${key}`);
+    } catch (err) {
+      return Result.fail(storageErrors.uploadFailed(err));
+    }
+  }
+
+  /**
    * Deletes a file from object storage by its public URL.
    *
    * Business rules:

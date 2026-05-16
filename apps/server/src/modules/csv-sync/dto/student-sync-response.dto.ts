@@ -8,22 +8,20 @@ import type { StudentSyncJob, StudentSyncError } from "@/infra/database/types";
  * Field mapping from DB studentSyncJobs:
  *   jobId       → id
  *   triggeredAt → runAt
- *   status      → RUNNING maps to IN_PROGRESS (DB uses RUNNING, spec uses IN_PROGRESS)
+ *   status      → RUNNING maps to IN_PROGRESS, PARTIAL_FAILURE maps as-is
  *   errorRows   → failedCount
  *   errorLogUrl → errorFileUrl
- *
- * Known gap: DB does not store triggeredBy (CRON vs MANUAL). Hardcoded to
- * "MANUAL" since the only caller of triggerSync() is the admin REST endpoint.
- * A DB migration adding a `triggered_by` column is needed to expose CRON jobs correctly.
  */
 export const ImportLogSchema = z.object({
   id: z.string().uuid(),
   runAt: z.string().datetime(),
   triggeredBy: z.enum(["CRON", "MANUAL"]),
-  status: z.enum(["IN_PROGRESS", "SUCCESS", "FAILED"]),
+  status: z.enum(["IN_PROGRESS", "SUCCESS", "PARTIAL_FAILURE", "FAILED"]),
   totalRows: z.number().int().nonnegative().nullable(),
   successCount: z.number().int().nonnegative().nullable(),
   failedCount: z.number().int().nonnegative().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  filePath: z.string().nullable(),
   errorFileUrl: z.string().nullable(),
 });
 
@@ -46,16 +44,15 @@ export class StudentSyncJobResponse {
     return {
       id: job.jobId,
       runAt: job.triggeredAt.toISOString(),
-      triggeredBy: "MANUAL",
-      status:
-        job.status === "RUNNING"
-          ? "IN_PROGRESS"
-          : job.status === "PARTIAL_FAILURE"
-            ? "FAILED"
-            : job.status,
+      triggeredBy: job.triggeredBy === "CRON" ? "CRON" : "MANUAL",
+      status: job.status === "RUNNING" ? "IN_PROGRESS" : job.status,
       totalRows,
       successCount: totalRows !== null ? totalRows - errorRows : null,
       failedCount: errorRows,
+      durationMs: job.completedAt
+        ? job.completedAt.getTime() - job.triggeredAt.getTime()
+        : null,
+      filePath: job.sourceFileName ?? null,
       errorFileUrl: job.errorLogUrl ?? null,
     };
   }
