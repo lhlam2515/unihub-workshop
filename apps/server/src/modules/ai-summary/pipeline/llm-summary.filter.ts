@@ -98,7 +98,7 @@ export class LlmSummaryFilter implements IPipelineFilter<
     try {
       const message = await this.anthropic.messages.create({
         model: this.model,
-        max_tokens: 1024,
+        max_tokens: 4096,
         system:
           "You are a workshop content summariser for a university platform. " +
           "Summarise the following workshop document in Vietnamese, focusing on: " +
