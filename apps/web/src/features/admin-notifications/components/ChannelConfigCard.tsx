@@ -14,13 +14,13 @@ import type {
 
 const CHANNEL_ICONS: Record<ChannelType, typeof Mail> = {
   EMAIL: Mail,
-  IN_APP: Bell,
+  APP: Bell,
   TELEGRAM: Send,
 };
 
 const CHANNEL_LABELS: Record<ChannelType, string> = {
   EMAIL: "Email",
-  IN_APP: "Trong ứng dụng",
+  APP: "Trong ứng dụng",
   TELEGRAM: "Telegram",
 };
 
@@ -90,7 +90,7 @@ export function ChannelConfigCard({
             {new Intl.DateTimeFormat("vi-VN", {
               dateStyle: "medium",
               timeStyle: "short",
-            }).format(new Date(channel.lastUpdatedAt))}
+            }).format(new Date(channel.updatedAt))}
           </p>
         </div>
       </CardContent>

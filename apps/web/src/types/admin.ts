@@ -1,4 +1,5 @@
 import type { WorkshopStatus } from "./workshop";
+import type { CircuitBreakerState } from "./admin-operations";
 
 export interface TopWorkshopItem {
   id: string;
@@ -6,13 +7,6 @@ export interface TopWorkshopItem {
   fillRate: number;
   registrations: number;
   seatsTotal: number;
-}
-
-export interface CircuitBreakerState {
-  paymentGateway: string;
-  state: "CLOSED" | "OPEN" | "HALF_OPEN";
-  failureCount: number;
-  lastFailureAt: string | null;
 }
 
 export interface DashboardOverview {
