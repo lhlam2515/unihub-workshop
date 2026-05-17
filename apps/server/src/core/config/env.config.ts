@@ -74,6 +74,9 @@ export const envSchema = z.object({
 
   // CORS
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+
+  // Student Sync
+  STUDENT_DEFAULT_PASSWORD: z.string().default("123456789"),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
@@ -165,6 +168,10 @@ export const aiConfig = registerAs("ai", () => ({
 export const gatewayConfig = registerAs("gateway", () => ({
   baseUrl: process.env.GATEWAY_BASE_URL,
   apiKey: process.env.GATEWAY_API_KEY,
+}));
+
+export const studentSyncConfig = registerAs("studentSync", () => ({
+  defaultPassword: process.env.STUDENT_DEFAULT_PASSWORD ?? "123456789",
 }));
 
 export const aiProviderConfig = registerAs("aiProvider", () => ({

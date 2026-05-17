@@ -13,7 +13,6 @@ import {
   deviceTokens,
   staff,
   students,
-  users,
 } from "./identity.schema";
 import {
   checkinRecords,
@@ -26,14 +25,6 @@ import {
 // Identity
 // ---------------------------------------------------------------------------
 
-export const usersRelations = relations(users, ({ one, many }) => ({
-  checkinScans: many(checkinRecords, { relationName: "checkin_staff" }),
-  uploadedDocuments: many(workshopDocuments, {
-    relationName: "document_uploader",
-  }),
-  staffAssignments: one(checkinStaffAssignments),
-}));
-
 export const staffRelations = relations(staff, ({ many }) => ({
   createdWorkshops: many(workshops, { relationName: "workshop_creator" }),
 }));
@@ -41,18 +32,14 @@ export const staffRelations = relations(staff, ({ many }) => ({
 export const checkinStaffAssignmentsRelations = relations(
   checkinStaffAssignments,
   ({ one }) => ({
-    user: one(users, {
-      fields: [checkinStaffAssignments.userId],
-      references: [users.userId],
+    staff: one(staff, {
+      fields: [checkinStaffAssignments.staffId],
+      references: [staff.staffId],
     }),
   })
 );
 
-export const studentsRelations = relations(students, ({ one, many }) => ({
-  user: one(users, {
-    fields: [students.userId],
-    references: [users.userId],
-  }),
+export const studentsRelations = relations(students, ({ many }) => ({
   registrations: many(registrations),
   payments: many(payments),
   checkinRecords: many(checkinRecords),
@@ -152,9 +139,9 @@ export const checkinRecordsRelations = relations(checkinRecords, ({ one }) => ({
     fields: [checkinRecords.workshopId],
     references: [workshops.workshopId],
   }),
-  checkedInBy: one(users, {
+  checkedInBy: one(staff, {
     fields: [checkinRecords.checkedInBy],
-    references: [users.userId],
+    references: [staff.staffId],
     relationName: "checkin_staff",
   }),
 }));
@@ -180,9 +167,9 @@ export const workshopDocumentsRelations = relations(
       fields: [workshopDocuments.workshopId],
       references: [workshops.workshopId],
     }),
-    uploadedBy: one(users, {
+    uploadedBy: one(staff, {
       fields: [workshopDocuments.uploadedBy],
-      references: [users.userId],
+      references: [staff.staffId],
       relationName: "document_uploader",
     }),
     summary: one(aiSummaries),

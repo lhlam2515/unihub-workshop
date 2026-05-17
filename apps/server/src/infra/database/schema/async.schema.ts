@@ -11,7 +11,7 @@ import {
   syncJobStatusEnum,
 } from "./enums.schema";
 import { workshops } from "./event-core.schema";
-import { users } from "./identity.schema";
+import { staff } from "./identity.schema";
 
 export const notificationChannelConfigs = pgTable(
   "notification_channel_configs",
@@ -83,7 +83,7 @@ export const workshopDocuments = pgTable(
     uploadedBy: t
       .uuid("uploaded_by")
       .notNull()
-      .references(() => users.userId),
+      .references(() => staff.staffId),
     uploadedAt: t
       .timestamp("uploaded_at", { withTimezone: true })
       .notNull()
@@ -153,10 +153,7 @@ export const studentSyncJobs = pgTable(
       "chk_sync_rows",
       sql`(${table.processedRows} IS NULL OR ${table.processedRows} >= 0) AND (${table.errorRows} IS NULL OR ${table.errorRows} >= 0)`
     ),
-    check(
-      "chk_triggered_by",
-      sql`${table.triggeredBy} IN ('CRON', 'MANUAL')`
-    ),
+    check("chk_triggered_by", sql`${table.triggeredBy} IN ('CRON', 'MANUAL')`),
     index("idx_sync_job_status").on(table.status),
     index("idx_sync_job_triggered").on(table.triggeredAt.desc()),
   ]

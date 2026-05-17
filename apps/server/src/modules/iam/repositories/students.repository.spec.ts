@@ -61,7 +61,6 @@ describe("StudentsRepository", () => {
     mockSchema = {
       students: {
         studentId: "students.student_id",
-        userId: "students.user_id",
         studentCode: "students.student_code",
         fullName: "students.full_name",
         faculty: "students.faculty",
@@ -87,63 +86,12 @@ describe("StudentsRepository", () => {
   });
 
   // -------------------------------------------------------------------------
-  // findByUserId
-  // -------------------------------------------------------------------------
-  describe("findByUserId", () => {
-    it("returns OkResult with student when found", async () => {
-      const student = {
-        studentId: "stu-1",
-        userId: "usr-1",
-        studentCode: "20210001",
-        fullName: "John Doe",
-        faculty: "Engineering",
-        classYear: 2021,
-        emailEdu: "john@edu.test",
-        lastSyncedAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      setupDbResolve([student]);
-
-      const result = await repository.findByUserId("usr-1");
-
-      expect(result.isSuccess).toBe(true);
-      expect(result.isFailure).toBe(false);
-      expect(result.data).toEqual(student);
-      expect(mockDb.select).toHaveBeenCalled();
-      expect(mockDb.from).toHaveBeenCalledWith(mockSchema.students);
-      expect(mockDb.where).toHaveBeenCalled();
-      expect(mockDb.limit).toHaveBeenCalledWith(1);
-    });
-
-    it("returns OkResult with null when no profile exists", async () => {
-      setupDbResolve([]);
-
-      const result = await repository.findByUserId("usr-nonexistent");
-
-      expect(result.isSuccess).toBe(true);
-      expect(result.data).toBeNull();
-    });
-
-    it("returns FailResult when DB query fails", async () => {
-      const dbError = new Error("Connection lost");
-      setupDbReject(dbError);
-
-      const result = await repository.findByUserId("usr-1");
-
-      expect(result.isFailure).toBe(true);
-      expect(result.error).toEqual(systemErrors.internal(dbError));
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // findById
   // -------------------------------------------------------------------------
   describe("findById", () => {
     it("returns OkResult with student when found by code", async () => {
       const student = {
         studentId: "stu-2",
-        userId: "usr-2",
         studentCode: "20210002",
         fullName: "Jane Doe",
         faculty: "Science",
@@ -186,10 +134,9 @@ describe("StudentsRepository", () => {
   // upsert
   // -------------------------------------------------------------------------
   describe("upsert", () => {
-    it("upserts a student and links the user when userId is provided", async () => {
+    it("upserts a student", async () => {
       const student = {
         studentId: "20210003",
-        userId: "usr-3",
         fullName: "Alice Doe",
         email: "alice@edu.test",
       };
@@ -199,57 +146,24 @@ describe("StudentsRepository", () => {
         studentId: "20210003",
         fullName: "Alice Doe",
         email: "alice@edu.test",
-        userId: "usr-3",
       });
 
       expect(result.isSuccess).toBe(true);
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
           studentId: "20210003",
-          userId: "usr-3",
         })
       );
       const [upsertArgs] = mockDb.onConflictDoUpdate.mock.calls as Array<
         [
           {
             target: unknown;
-            set: { userId?: string; fullName?: string };
+            set: { fullName?: string };
           },
         ]
       >;
 
       expect(upsertArgs[0].target).toBe(mockSchema.students.studentId);
-      expect(upsertArgs[0].set.userId).toBe("usr-3");
-    });
-
-    it("upserts a student without linking a user when userId is omitted", async () => {
-      const student = {
-        studentId: "20210004",
-        userId: null,
-        fullName: "Bob Doe",
-        email: "bob@edu.test",
-      };
-      setupDbResolve([student]);
-
-      const result = await repository.upsert({
-        studentId: "20210004",
-        fullName: "Bob Doe",
-        email: "bob@edu.test",
-      });
-
-      expect(result.isSuccess).toBe(true);
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.not.objectContaining({ userId: expect.anything() })
-      );
-      const [upsertArgs] = mockDb.onConflictDoUpdate.mock.calls as Array<
-        [
-          {
-            target: unknown;
-            set: Record<string, unknown>;
-          },
-        ]
-      >;
-      expect(upsertArgs[0].set.userId).toBeUndefined();
     });
   });
 });

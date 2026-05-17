@@ -10,16 +10,7 @@ import {
   deviceTokens,
   staff,
   students,
-  users,
 } from "@/infra/database/schema";
-
-export const usersSelectSchema = createSelectSchema(users);
-export const usersInsertSchema = createInsertSchema(users);
-export const usersUpdateSchema = createUpdateSchema(users);
-
-export type User = z.infer<typeof usersSelectSchema>;
-export type NewUser = z.infer<typeof usersInsertSchema>;
-export type UserUpdate = z.infer<typeof usersUpdateSchema>;
 
 export const studentsSelectSchema = createSelectSchema(students);
 export const studentsInsertSchema = createInsertSchema(students);
@@ -58,21 +49,3 @@ export type CheckinStaffAssignment = z.infer<
 export type NewCheckinStaffAssignment = z.infer<
   typeof checkinStaffAssignmentsInsertSchema
 >;
-
-/**
- * Enriched user row produced by admin queries that LEFT JOIN students / staff
- * to resolve fullName and studentId alongside the core users fields.
- */
-export interface UserWithProfile {
-  userId: string;
-  email: string;
-  role: string;
-  status: string;
-  createdAt: Date;
-  /** Resolved from students.full_name (STUDENT) or staff.full_name (BTC/CHECKIN_STAFF). */
-  fullName: string | null;
-  /** students.student_id — present only for STUDENT role users. */
-  studentId: string | null;
-  /** staff.staff_id — present only for BTC and CHECKIN_STAFF role users. */
-  staffId: string | null;
-}

@@ -158,8 +158,8 @@ export class AuthController {
   /**
    * GET /auth/me
    *
-   * Returns the authenticated user's profile with role-specific fields:
-   * - STUDENT: includes student_code, full_name, faculty.
+   * Returns the authenticated identity's profile with role-specific fields:
+   * - STUDENT: includes student_code, full_name.
    * - CHECKIN_STAFF: includes allowed_workshop_ids.
    * - BTC: base fields only.
    *
@@ -167,6 +167,6 @@ export class AuthController {
    */
   @Get("me")
   async getMe(@CurrentUser() user: JwtPayload) {
-    return this.authService.getMe(user.sub);
+    return this.authService.getMe(user.sub, user.role);
   }
 }

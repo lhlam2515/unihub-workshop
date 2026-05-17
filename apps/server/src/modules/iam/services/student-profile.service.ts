@@ -10,15 +10,14 @@ export class StudentProfileService {
   constructor(private readonly studentsRepo: StudentsRepository) {}
 
   /**
-   * Retrieves a student's profile by their linked user ID.
+   * Retrieves a student's profile by their student ID (MSSV).
    *
-   * Composes the STUDENT-specific fields (student_code, full_name, faculty) for
-   * the GET /auth/me endpoint.
-   *
-   * @param userId - The user's system ID (foreign key in students table).
-   * @returns OkResult containing the student entity, or null if no profile exists.
+   * @param studentId - The student's unique code (MSSV, TEXT PK).
+   * @returns OkResult containing the student entity, or null if not found.
    */
-  async getProfileByUserId(userId: string): Promise<Result<Student | null>> {
-    return this.studentsRepo.findByUserId(userId);
+  async getProfileByStudentId(
+    studentId: string
+  ): Promise<Result<Student | null>> {
+    return this.studentsRepo.findById(studentId);
   }
 }

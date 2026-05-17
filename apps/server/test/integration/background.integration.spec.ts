@@ -33,7 +33,6 @@ import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.ser
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { RolesGuard } from "@/modules/iam/guards/roles.guard";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
-import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import { TokenService } from "@/modules/iam/services/token.service";
 import {
   NotificationChannelsController,
@@ -108,13 +107,7 @@ const mockStudentsRepo = {
   create: jest.fn(),
 };
 
-const mockUsersRepo = {
-  findById: jest.fn(),
-};
-
-const mockStorageService = {
-  getFileStream: jest.fn(),
-};
+const mockStorageService = {};
 
 const mockPaymentsService = {
   countPending: jest.fn(),
@@ -226,7 +219,6 @@ describe("Background Module — Integration", () => {
         { provide: getQueueToken(NOTIFICATION_QUEUE), useValue: mockQueue },
         { provide: getQueueToken(STUDENT_SYNC_QUEUE), useValue: mockQueue },
         { provide: StudentsRepository, useValue: mockStudentsRepo },
-        { provide: UsersRepository, useValue: mockUsersRepo },
         { provide: StorageService, useValue: mockStorageService },
         { provide: PaymentsService, useValue: mockPaymentsService },
         { provide: WorkshopsService, useValue: mockWorkshopsService },

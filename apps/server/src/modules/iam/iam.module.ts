@@ -3,7 +3,7 @@
  *
  * Handles:
  * - Authentication (login, refresh, logout)
- * - User management (admin operations)
+ * - Staff management (admin operations)
  * - Token lifecycle management
  * - Device token management
  * - Checkin staff assignments
@@ -17,26 +17,26 @@ import { RedisModule } from "@/infra/redis/redis.module";
 import { AuthController } from "./controllers/auth.controller";
 import { CheckinStaffAdminController } from "./controllers/checkin-staff-admin.controller";
 import { DeviceTokensController } from "./controllers/device-tokens.controller";
-import { UsersAdminController } from "./controllers/users-admin.controller";
+import { StaffAdminController } from "./controllers/staff-admin.controller";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RolesGuard } from "./guards/roles.guard";
 import { WorkshopScopeGuard } from "./guards/workshop-scope.guard";
 import { CheckinStaffAssignmentsRepository } from "./repositories/checkin-staff-assignments.repository";
 import { DeviceTokensRepository } from "./repositories/device-tokens.repository";
+import { StaffRepository } from "./repositories/staff.repository";
 import { StudentsRepository } from "./repositories/students.repository";
-import { UsersRepository } from "./repositories/users.repository";
 import { AuthService } from "./services/auth.service";
 import { CheckinStaffAssignmentService } from "./services/checkin-staff-assignment.service";
 import { DeviceTokensService } from "./services/device-tokens.service";
+import { StaffAdminService } from "./services/staff-admin.service";
 import { StudentProfileService } from "./services/student-profile.service";
 import { TokenService } from "./services/token.service";
-import { UsersService } from "./services/users.service";
 
 @Module({
   imports: [DatabaseModule, RedisModule],
   controllers: [
     AuthController,
-    UsersAdminController,
+    StaffAdminController,
     CheckinStaffAdminController,
     DeviceTokensController,
   ],
@@ -44,12 +44,12 @@ import { UsersService } from "./services/users.service";
     // Services
     AuthService,
     TokenService,
-    UsersService,
+    StaffAdminService,
     StudentProfileService,
     CheckinStaffAssignmentService,
     DeviceTokensService,
     // Repositories
-    UsersRepository,
+    StaffRepository,
     StudentsRepository,
     CheckinStaffAssignmentsRepository,
     DeviceTokensRepository,
@@ -61,9 +61,9 @@ import { UsersService } from "./services/users.service";
   exports: [
     AuthService,
     TokenService,
-    UsersService,
+    StaffAdminService,
+    StaffRepository,
     StudentsRepository,
-    UsersRepository,
     // Guards
     JwtAuthGuard,
     RolesGuard,

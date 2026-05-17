@@ -12,6 +12,12 @@ import type { JwtPayload, UserRole } from "@/types/jwt-payload";
 export const ACCESS_EXPIRY = { WEB: 900, MOBILE: 28800 } as const;
 const REFRESH_EXPIRY_SECONDS = 604_800;
 
+export interface RefreshTokenPayload {
+  sub: string;
+  jti: string;
+  type: "STUDENT" | "STAFF";
+}
+
 @Injectable()
 export class TokenService {
   constructor(
@@ -26,8 +32,9 @@ export class TokenService {
    * - WEB tokens expire in 15 minutes; MOBILE tokens expire in 8 hours.
    * - CHECKIN_STAFF tokens include the staff's assigned workshop IDs.
    * - Each token carries a unique `jti` for blacklist-based revocation.
+   * - `sub` is the identityId: studentId (TEXT MSSV) for STUDENT or staffId (UUID) for STAFF.
    *
-   * @param payload.userId - The user's system ID embedded as `sub`.
+   * @param payload.identityId - The identity's ID embedded as `sub`.
    * @param payload.role - RBAC role used by RolesGuard for authorization.
    * @param payload.allowedWorkshopIds - Workshop IDs attached only for CHECKIN_STAFF.
    * @param platform - Determines the token's `exp` claim (WEB 900s, MOBILE 28800s).
@@ -35,7 +42,7 @@ export class TokenService {
    */
   signAccessToken(
     payload: {
-      userId: string;
+      identityId: string;
       role: UserRole;
       allowedWorkshopIds?: string[];
       studentId?: string;
@@ -45,7 +52,7 @@ export class TokenService {
   ): Promise<string> {
     const jti = randomUUID();
     const jwtPayload: Record<string, unknown> = {
-      sub: payload.userId,
+      sub: payload.identityId,
       role: payload.role,
       jti,
       allowed_workshop_ids: payload.allowedWorkshopIds ?? [],
@@ -68,17 +75,22 @@ export class TokenService {
    * Signs a JWT refresh token with a 7-day expiry using RS256.
    *
    * Business rules:
-   * - Signed with the RSA private key (same keypair as access tokens).
+   * - Contains the identity's ID (`sub`), a unique `jti`, and a `type` discriminator.
+   * - `type` determines whether `sub` references a studentId (STUDENT) or staffId (STAFF).
    * - Consumed refresh tokens are blacklisted in Redis (rotation).
    *
-   * @param userId - The user's system ID embedded as `sub`.
+   * @param identityId - The identity's ID (studentId or staffId) embedded as `sub`.
+   * @param type - "STUDENT" or "STAFF" to discriminate `sub` at refresh time.
    * @returns The signed JWT string.
    */
-  signRefreshToken(userId: string): Promise<string> {
+  signRefreshToken(
+    identityId: string,
+    type: "STUDENT" | "STAFF"
+  ): Promise<string> {
     const jti = randomUUID();
     return Promise.resolve(
       jwt.sign(
-        { sub: userId, jti },
+        { sub: identityId, jti, type },
         this.config.getOrThrow<string>("jwt.privateKey"),
         { algorithm: "RS256", expiresIn: REFRESH_EXPIRY_SECONDS }
       )
@@ -157,11 +169,9 @@ export class TokenService {
    * Verifies a JWT refresh token's signature and expiration using RS256.
    *
    * @param token - The raw JWT string from the refresh request.
-   * @returns OkResult containing `{ sub, jti }`, or FailResult with REFRESH_TOKEN_INVALID.
+   * @returns OkResult containing `{ sub, jti, type }`, or FailResult with REFRESH_TOKEN_INVALID.
    */
-  verifyRefreshToken(
-    token: string
-  ): Promise<Result<{ sub: string; jti: string }>> {
+  verifyRefreshToken(token: string): Promise<Result<RefreshTokenPayload>> {
     if (!token) {
       return Promise.resolve(Result.fail(authErrors.refreshTokenInvalid()));
     }
@@ -170,7 +180,7 @@ export class TokenService {
         Promise.resolve(
           jwt.verify(token, this.config.getOrThrow<string>("jwt.publicKey"), {
             algorithms: ["RS256"],
-          }) as { sub: string; jti: string }
+          }) as RefreshTokenPayload
         ),
       (err) => authErrors.refreshTokenInvalid(err)
     );

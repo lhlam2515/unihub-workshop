@@ -1,9 +1,9 @@
 /**
  * Union of RBAC roles enforced by the system.
  *
- * Mirrors the `user_role` PostgreSQL enum defined in `src/database/schema/enums.schema.ts`.
- * Defined here (rather than imported from database/) to respect the ESLint boundary
- * rule: `shared` may only import from `shared`.
+ * Mirrors the `staff_role` (for staff) enum. STUDENT role is implied for
+ * student authentication. Defined here rather than imported from database/
+ * to respect the ESLint boundary rule: `shared` may only import from `shared`.
  */
 export type UserRole = "STUDENT" | "BTC" | "CHECKIN_STAFF";
 
@@ -26,8 +26,8 @@ export interface JwtPayload {
   /** Workshop IDs this check-in staff member is authorized to access. Empty array for non-staff roles. */
   allowed_workshop_ids: string[];
   /**
-   * Student code (MSSV) from the legacy system — only present for STUDENT role.
-   * This is the TEXT primary key of the `students` table, NOT the system UUID.
+   * Student code (MSSV) — present only for STUDENT role.
+   * This is the TEXT primary key of the `students` table.
    * Used for IDOR-enforced student lookups in registrations, payments, and device tokens.
    *
    * Example: "21127001"
@@ -36,7 +36,6 @@ export interface JwtPayload {
   /**
    * Staff UUID from the `staff` table — present for BTC and CHECKIN_STAFF roles.
    * Required when setting `created_by` on workshops (FK references `staff.staff_id`).
-   * Distinct from `sub` which references `users.user_id`.
    */
   staffId?: string;
 }

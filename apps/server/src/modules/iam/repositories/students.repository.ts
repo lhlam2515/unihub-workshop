@@ -18,31 +18,9 @@ export class StudentsRepository {
   ) {}
 
   /**
-   * Looks up a student profile by the linked user ID.
+   * Looks up a student by their institutional student ID (TEXT PK).
    *
-   * Used by AuthService.getMe to compose STUDENT-specific response fields.
-   *
-   * @param userId - The user's system ID (foreign key on students.user_id).
-   * @returns The student entity or null if no profile exists.
-   */
-  async findByUserId(userId: string): Promise<Result<Student | null>> {
-    return tryCatch(
-      async () => {
-        const [result] = await this.db
-          .select()
-          .from(this.schema.students)
-          .where(eq(this.schema.students.userId, userId))
-          .limit(1);
-        return result ?? null;
-      },
-      (err) => systemErrors.internal(err)
-    );
-  }
-
-  /**
-   * Looks up a student profile by their institutional student ID (TEXT PK).
-   *
-   * Used during CSV-based student data synchronization.
+   * Used during login and CSV sync operations.
    *
    * @param studentId - The student's unique code (e.g., "20210001").
    * @returns The student entity or null if not found.
@@ -64,20 +42,13 @@ export class StudentsRepository {
   /**
    * Batch-upserts student records by student_id (TEXT PK).
    *
-   * Designed for the CSV sync batch-upsert pipeline — inserts or updates
-   * multiple student records in a single SQL statement (up to 500 rows
-   * per batch).
+   * Designed for the CSV sync batch-upsert pipeline.
    *
    * Business rules:
-   * - Uses PostgreSQL `EXCLUDED` pseudo-table to reference per-row values
-   *   in the ON CONFLICT DO UPDATE clause (unlike single-row upsert which
-   *   passes static values).
-   * - `userId` uses `COALESCE(excluded.user_id, students.user_id)` to
-   *   preserve the existing linked user when the batch row has no userId.
-   * - `password_hash` is never overwritten (not included in SET clause).
+   * - When provided, passwordHash is set on INSERT for new student accounts.
+   * - On CONFLICT, passwordHash is never overwritten (not in SET clause).
    *
-   * Side effects:
-   * - Inserts or updates multiple rows in the students table.
+   * Side effects: Inserts or updates multiple rows in the students table.
    *
    * @param data - Array of student fields to upsert (batch, max 500).
    * @returns OkResult with the upserted Student records, or FailResult (INTERNAL_ERROR).
@@ -87,7 +58,7 @@ export class StudentsRepository {
       studentId: string;
       fullName: string;
       email: string | null;
-      userId?: string | null;
+      passwordHash?: string;
     }>
   ): Promise<Result<Student[]>> {
     return tryCatch(
@@ -99,7 +70,7 @@ export class StudentsRepository {
               studentId: d.studentId,
               fullName: d.fullName,
               email: d.email,
-              userId: d.userId ?? null,
+              passwordHash: d.passwordHash ?? "",
             }))
           )
           .onConflictDoUpdate({
@@ -108,7 +79,6 @@ export class StudentsRepository {
               fullName: sql`excluded.full_name`,
               email: sql`excluded.email`,
               updatedAt: new Date(),
-              userId: sql`COALESCE(excluded.user_id, students.user_id)`,
             },
           })
           .returning();
@@ -121,10 +91,7 @@ export class StudentsRepository {
   /**
    * Upserts a student record by student_id (TEXT PK).
    *
-   * On conflict (same studentId), updates the row. On insert, creates a new record.
-   *
-   * Side effects:
-   * - Inserts or updates a row in the students table.
+   * Side effects: Inserts or updates a row in the students table.
    *
    * @param data - Student fields to upsert.
    * @returns OkResult with the upserted Student record, or FailResult (INTERNAL_ERROR).
@@ -133,7 +100,7 @@ export class StudentsRepository {
     studentId: string;
     fullName: string;
     email?: string;
-    userId?: string;
+    passwordHash?: string;
   }): Promise<Result<Student>> {
     return tryCatch(
       async () => {
@@ -143,7 +110,7 @@ export class StudentsRepository {
             studentId: data.studentId,
             fullName: data.fullName,
             email: data.email ?? null,
-            ...(data.userId ? { userId: data.userId } : {}),
+            passwordHash: data.passwordHash ?? "",
           })
           .onConflictDoUpdate({
             target: this.schema.students.studentId,
@@ -151,7 +118,6 @@ export class StudentsRepository {
               fullName: data.fullName,
               email: data.email ?? null,
               updatedAt: new Date(),
-              ...(data.userId ? { userId: data.userId } : {}),
             },
           })
           .returning();

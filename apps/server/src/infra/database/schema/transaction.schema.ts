@@ -16,7 +16,7 @@ import {
   ticketStatusEnum,
 } from "./enums.schema";
 import { workshops } from "./event-core.schema";
-import { students, users } from "./identity.schema";
+import { students, staff } from "./identity.schema";
 
 // ---------------------------------------------------------------------------
 // Registrations
@@ -161,7 +161,7 @@ export const checkinRecords = pgTable(
     checkedInBy: t
       .uuid("checked_in_by")
       .notNull()
-      .references(() => users.userId),
+      .references(() => staff.staffId),
     source: checkinSourceEnum("source").notNull().default("ONLINE"),
     deviceId: t.varchar("device_id", { length: 100 }),
   }),

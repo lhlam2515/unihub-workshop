@@ -54,7 +54,7 @@ export class AiSummaryService {
    *
    * @param workshopId - The UUID of the target workshop.
    * @param file - Express Multer file object with buffer and metadata.
-   * @param uploadedBy - UUID of the BTC user performing the upload.
+   * @param uploadedBy - UUID of the BTC staff performing the upload.
    * @returns OkResult with { workshopId, documentId }, or FailResult
    *   (WORKSHOP_NOT_FOUND, UPLOAD_FAILED, INTERNAL_ERROR).
    */

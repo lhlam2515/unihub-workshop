@@ -3,7 +3,7 @@ import { Test, type TestingModule } from "@nestjs/testing";
 import { STUDENT_SYNC_QUEUE } from "@/infra/messaging/messaging.constants";
 import { RedisService } from "@/infra/redis/redis.service";
 import { StudentSyncService } from "@/modules/csv-sync/services/student-sync.service";
-import { UsersService } from "@/modules/iam/services/users.service";
+import { StaffAdminService } from "@/modules/iam/services/staff-admin.service";
 import { NotificationLogProducer } from "@/modules/notification/services/notification-log-producer.service";
 import { Result } from "@/shared/response/result";
 
@@ -22,8 +22,8 @@ const mockRedisService = {
   del: jest.fn(),
 };
 
-const mockUsersService = {
-  listUsers: jest.fn(),
+const mockStaffAdminService = {
+  listStaff: jest.fn(),
 };
 
 const mockNotificationLogProducer = {
@@ -75,7 +75,7 @@ describe("StudentSyncWorker", () => {
         StudentSyncWorker,
         { provide: StudentSyncService, useValue: mockStudentSyncService },
         { provide: RedisService, useValue: mockRedisService },
-        { provide: UsersService, useValue: mockUsersService },
+        { provide: StaffAdminService, useValue: mockStaffAdminService },
         {
           provide: NotificationLogProducer,
           useValue: mockNotificationLogProducer,
@@ -110,13 +110,27 @@ describe("StudentSyncWorker", () => {
   it("notifies BTC users when errors are present", async () => {
     mockRedisService.setNx.mockResolvedValue(true);
     mockStudentSyncService.processJob.mockResolvedValue(partialFailureResult);
-    mockUsersService.listUsers.mockResolvedValue(
+    mockStaffAdminService.listStaff.mockResolvedValue(
       Result.ok({
         items: [
-          { userId: "btc-1", email: "btc1@test.com" },
-          { userId: "btc-2", email: "btc2@test.com" },
+          {
+            staffId: "btc-1",
+            email: "btc1@test.com",
+            fullName: "BTC 1",
+            role: "BTC",
+            isActive: true,
+            createdAt: new Date(),
+          },
+          {
+            staffId: "btc-2",
+            email: "btc2@test.com",
+            fullName: "BTC 2",
+            role: "BTC",
+            isActive: true,
+            createdAt: new Date(),
+          },
         ],
-        pagination: { limit: 100, nextCursor: null, hasMore: false },
+        total: 2,
       })
     );
     mockNotificationLogProducer.batchCreateAndEnqueue.mockResolvedValue(
@@ -204,10 +218,10 @@ describe("StudentSyncWorker", () => {
   it("logs warning when no BTC users found", async () => {
     mockRedisService.setNx.mockResolvedValue(true);
     mockStudentSyncService.processJob.mockResolvedValue(partialFailureResult);
-    mockUsersService.listUsers.mockResolvedValue(
+    mockStaffAdminService.listStaff.mockResolvedValue(
       Result.ok({
         items: [],
-        pagination: { limit: 100, nextCursor: null, hasMore: false },
+        total: 0,
       })
     );
 
@@ -221,10 +235,19 @@ describe("StudentSyncWorker", () => {
   it("does not throw when notification creation fails", async () => {
     mockRedisService.setNx.mockResolvedValue(true);
     mockStudentSyncService.processJob.mockResolvedValue(partialFailureResult);
-    mockUsersService.listUsers.mockResolvedValue(
+    mockStaffAdminService.listStaff.mockResolvedValue(
       Result.ok({
-        items: [{ userId: "btc-1", email: "btc1@test.com" }],
-        pagination: { limit: 100, nextCursor: null, hasMore: false },
+        items: [
+          {
+            staffId: "btc-1",
+            email: "btc1@test.com",
+            fullName: "BTC 1",
+            role: "BTC",
+            isActive: true,
+            createdAt: new Date(),
+          },
+        ],
+        total: 1,
       })
     );
     mockNotificationLogProducer.batchCreateAndEnqueue.mockRejectedValue(
@@ -234,10 +257,10 @@ describe("StudentSyncWorker", () => {
     await expect(worker.handle(samplePayload)).resolves.toBeUndefined();
   });
 
-  it("does not throw when listUsers call fails", async () => {
+  it("does not throw when listStaff call fails", async () => {
     mockRedisService.setNx.mockResolvedValue(true);
     mockStudentSyncService.processJob.mockResolvedValue(partialFailureResult);
-    mockUsersService.listUsers.mockResolvedValue(
+    mockStaffAdminService.listStaff.mockResolvedValue(
       Result.fail({ code: "INTERNAL_ERROR", message: "DB down" } as any)
     );
 

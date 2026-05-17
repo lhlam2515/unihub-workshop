@@ -20,16 +20,16 @@ import bcrypt from "bcrypt";
 import { RedisService } from "@/infra/redis/redis.service";
 import { AuthController } from "@/modules/iam/controllers/auth.controller";
 import { CheckinStaffAdminController } from "@/modules/iam/controllers/checkin-staff-admin.controller";
-import { UsersAdminController } from "@/modules/iam/controllers/users-admin.controller";
+import { StaffAdminController } from "@/modules/iam/controllers/staff-admin.controller";
 import { JwtAuthGuard } from "@/modules/iam/guards/jwt-auth.guard";
 import { CheckinStaffAssignmentsRepository } from "@/modules/iam/repositories/checkin-staff-assignments.repository";
+import { StaffRepository } from "@/modules/iam/repositories/staff.repository";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
-import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import { AuthService } from "@/modules/iam/services/auth.service";
 import { CheckinStaffAssignmentService } from "@/modules/iam/services/checkin-staff-assignment.service";
+import { StaffAdminService } from "@/modules/iam/services/staff-admin.service";
 import { StudentProfileService } from "@/modules/iam/services/student-profile.service";
 import { TokenService } from "@/modules/iam/services/token.service";
-import { UsersService } from "@/modules/iam/services/users.service";
 import { authErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -39,7 +39,7 @@ import type { Request, Response } from "express";
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockUsersRepo = {
+const mockStaffRepo = {
   findByEmail: jest.fn(),
   findById: jest.fn(),
   list: jest.fn(),
@@ -56,17 +56,12 @@ const mockTokenService = {
   extractRefreshTokenJti: jest.fn(),
 };
 
-const mockStudentProfileService = {
-  getProfileByUserId: jest.fn(),
-};
-
 const mockAssignmentsRepo = {
-  findByUserId: jest.fn(),
+  findByStaffId: jest.fn(),
   upsert: jest.fn(),
 };
 
 const mockStudentsRepo = {
-  findByUserId: jest.fn(),
   findById: jest.fn(),
 };
 
@@ -82,30 +77,33 @@ const mockRedisService = {
 
 const hashedPassword = bcrypt.hashSync("password123", 10);
 
-const activeUser = {
-  userId: "usr-001",
+const activeStaff = {
+  staffId: "usr-001",
   email: "student@university.edu",
+  fullName: "Staff User",
   passwordHash: hashedPassword,
-  role: "STUDENT",
-  status: "ACTIVE",
+  role: "STAFF",
+  isActive: true,
+  createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
-const suspendedUser = {
-  ...activeUser,
-  userId: "usr-002",
-  status: "SUSPENDED",
+const suspendedStaff = {
+  ...activeStaff,
+  staffId: "usr-002",
+  isActive: false,
 };
 
-const checkinStaffUser = {
-  ...activeUser,
-  userId: "usr-003",
+const checkinStaffRecord = {
+  ...activeStaff,
+  staffId: "usr-003",
   email: "staff@university.edu",
   role: "CHECKIN_STAFF",
 };
 
-const organizerUser = {
-  ...activeUser,
-  userId: "usr-004",
+const organizerRecord = {
+  ...activeStaff,
+  staffId: "usr-004",
   email: "organizer@university.edu",
   role: "BTC",
 };
@@ -113,7 +111,14 @@ const organizerUser = {
 const studentProfile = {
   studentId: "STU001",
   fullName: "John Doe",
-  userId: "usr-001",
+  email: "john@edu.test",
+  passwordHash: hashedPassword,
+  studentCode: "STU001",
+  faculty: "Engineering",
+  classYear: 2021,
+  lastSyncedAt: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
 const mockAccessToken =
@@ -140,7 +145,7 @@ const OLD_ENV = process.env;
 
 describe("IAM Module — Integration", () => {
   let authController: AuthController;
-  let usersAdminController: UsersAdminController;
+  let staffAdminController: StaffAdminController;
   let checkinStaffAdminController: CheckinStaffAdminController;
   let mockResponse: Response;
   let mockRequest: Request;
@@ -173,18 +178,17 @@ describe("IAM Module — Integration", () => {
     const module = await Test.createTestingModule({
       controllers: [
         AuthController,
-        UsersAdminController,
+        StaffAdminController,
         CheckinStaffAdminController,
       ],
       providers: [
         AuthService,
-        UsersService,
         TokenService,
         CheckinStaffAssignmentService,
+        StaffAdminService,
         StudentProfileService,
-        { provide: UsersRepository, useValue: mockUsersRepo },
+        { provide: StaffRepository, useValue: mockStaffRepo },
         { provide: TokenService, useValue: mockTokenService },
-        { provide: StudentProfileService, useValue: mockStudentProfileService },
         {
           provide: CheckinStaffAssignmentsRepository,
           useValue: mockAssignmentsRepo,
@@ -196,8 +200,8 @@ describe("IAM Module — Integration", () => {
     }).compile();
 
     authController = module.get<AuthController>(AuthController);
-    usersAdminController =
-      module.get<UsersAdminController>(UsersAdminController);
+    staffAdminController =
+      module.get<StaffAdminController>(StaffAdminController);
     checkinStaffAdminController = module.get<CheckinStaffAdminController>(
       CheckinStaffAdminController
     );
@@ -207,12 +211,9 @@ describe("IAM Module — Integration", () => {
   // AuthController — POST /auth/login — FR-F01-001
   // -------------------------------------------------------------------------
   describe("AuthController.login — FR-F01-001", () => {
-    it("returns access token for valid credentials (WEB platform)", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
-      mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
-
+    it("returns access token for valid STUDENT credentials (WEB platform)", async () => {
       mockStudentsRepo.findById.mockResolvedValue(Result.ok(studentProfile));
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
+      mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
 
       const result = await authController.login(
         {
@@ -225,16 +226,14 @@ describe("IAM Module — Integration", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.accessToken).toBe(mockAccessToken);
-      // WEB: refreshToken may be omitted for cookie flow
       expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: "usr-001", role: "STUDENT" }),
+        expect.objectContaining({ identityId: "STU001", role: "STUDENT" }),
         "WEB"
       );
     });
 
     it("returns access token with longer expiry for MOBILE platform", async () => {
       mockStudentsRepo.findById.mockResolvedValue(Result.ok(studentProfile));
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(mockRefreshToken);
 
@@ -249,7 +248,6 @@ describe("IAM Module — Integration", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.accessToken).toBe(mockAccessToken);
-      // MOBILE: refresh token returned in body
       expect(result.data.refreshToken).toBe(mockRefreshToken);
       expect(mockTokenService.signAccessToken).toHaveBeenCalledWith(
         expect.anything(),
@@ -258,7 +256,7 @@ describe("IAM Module — Integration", () => {
     });
 
     it("returns INVALID_CREDENTIALS for wrong password", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(activeUser));
+      mockStaffRepo.findByEmail.mockResolvedValue(Result.ok(activeStaff));
 
       const result = await authController.login(
         {
@@ -274,7 +272,7 @@ describe("IAM Module — Integration", () => {
     });
 
     it("returns INVALID_CREDENTIALS for inactive user (prevents enumeration)", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(suspendedUser));
+      mockStaffRepo.findByEmail.mockResolvedValue(Result.ok(suspendedStaff));
 
       const result = await authController.login(
         {
@@ -290,7 +288,7 @@ describe("IAM Module — Integration", () => {
     });
 
     it("returns INVALID_CREDENTIALS when email not found (prevents enumeration)", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(
+      mockStaffRepo.findByEmail.mockResolvedValue(
         Result.fail({
           category: "NOT_FOUND",
           code: "USER_NOT_FOUND",
@@ -312,8 +310,10 @@ describe("IAM Module — Integration", () => {
     });
 
     it("embeds allowedWorkshopIds for CHECKIN_STAFF — FR-F01-002", async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(Result.ok(checkinStaffUser));
-      mockAssignmentsRepo.findByUserId.mockResolvedValue(
+      mockStaffRepo.findByEmail.mockResolvedValue(
+        Result.ok(checkinStaffRecord)
+      );
+      mockAssignmentsRepo.findByStaffId.mockResolvedValue(
         Result.ok({ workshopIds: ["wid-A", "wid-B"] })
       );
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
@@ -343,12 +343,9 @@ describe("IAM Module — Integration", () => {
   describe("AuthController.refresh — FR-F01-003", () => {
     it("issues new tokens for a valid refresh token", async () => {
       mockTokenService.verifyRefreshToken.mockResolvedValue(
-        Result.ok({ sub: "usr-001", jti: "old-jti" })
+        Result.ok({ sub: "usr-001", jti: "old-jti", type: "STAFF" })
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
-      mockStudentsRepo.findByUserId.mockResolvedValue(
-        Result.ok(studentProfile)
-      );
+      mockStaffRepo.findById.mockResolvedValue(Result.ok(activeStaff));
       mockTokenService.signAccessToken.mockResolvedValue(mockAccessToken);
       mockTokenService.signRefreshToken.mockResolvedValue(mockRefreshToken);
 
@@ -383,11 +380,11 @@ describe("IAM Module — Integration", () => {
       expect(result.error.code).toBe("REFRESH_TOKEN_INVALID");
     });
 
-    it("returns REFRESH_TOKEN_INVALID when user is suspended", async () => {
+    it("returns REFRESH_TOKEN_INVALID when staff is inactive", async () => {
       mockTokenService.verifyRefreshToken.mockResolvedValue(
-        Result.ok({ sub: "usr-002", jti: "jti-002" })
+        Result.ok({ sub: "usr-002", jti: "jti-002", type: "STAFF" })
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(suspendedUser));
+      mockStaffRepo.findById.mockResolvedValue(Result.ok(suspendedStaff));
 
       const result = await authController.refresh(
         { refreshToken: "valid-refresh-token" },
@@ -452,13 +449,10 @@ describe("IAM Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("AuthController.getMe", () => {
     it("returns STUDENT profile with studentCode, fullName, faculty", async () => {
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
-      mockStudentProfileService.getProfileByUserId.mockResolvedValue(
-        Result.ok(studentProfile)
-      );
+      mockStudentsRepo.findById.mockResolvedValue(Result.ok(studentProfile));
 
       const result = await authController.getMe({
-        sub: "usr-001",
+        sub: "STU001",
         role: "STUDENT",
         jti: "jti-001",
         allowed_workshop_ids: [],
@@ -466,13 +460,11 @@ describe("IAM Module — Integration", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.role).toBe("STUDENT");
-      // studentCode not exposed in AuthMeResponseDto
       expect(result.data.fullName).toBe("John Doe");
-      // faculty not exposed in AuthMeResponseDto
     });
 
-    it("returns ORGANIZER profile without student profile", async () => {
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(organizerUser));
+    it("returns BTC profile without student profile", async () => {
+      mockStaffRepo.findById.mockResolvedValue(Result.ok(organizerRecord));
 
       const result = await authController.getMe({
         sub: "usr-004",
@@ -483,12 +475,11 @@ describe("IAM Module — Integration", () => {
 
       expect(result.isSuccess).toBe(true);
       expect(result.data.role).toBe("BTC");
-      // studentCode not exposed in AuthMeResponseDto
     });
 
     it("returns CHECKIN_STAFF profile with allowedWorkshopIds", async () => {
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(checkinStaffUser));
-      mockAssignmentsRepo.findByUserId.mockResolvedValue(
+      mockStaffRepo.findById.mockResolvedValue(Result.ok(checkinStaffRecord));
+      mockAssignmentsRepo.findByStaffId.mockResolvedValue(
         Result.ok({ workshopIds: ["wid-A", "wid-B"] })
       );
 
@@ -503,12 +494,12 @@ describe("IAM Module — Integration", () => {
       expect(result.data.allowedWorkshopIds).toEqual(["wid-A", "wid-B"]);
     });
 
-    it("returns USER_NOT_FOUND for non-existent user", async () => {
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
+    it("returns USER_NOT_FOUND for non-existent staff", async () => {
+      mockStaffRepo.findById.mockResolvedValue(Result.ok(null));
 
       const result = await authController.getMe({
         sub: "usr-nonexistent",
-        role: "STUDENT",
+        role: "BTC",
         jti: "jti-001",
         allowed_workshop_ids: [],
       });
@@ -519,33 +510,29 @@ describe("IAM Module — Integration", () => {
   });
 
   // -------------------------------------------------------------------------
-  // UsersAdminController
+  // StaffAdminController
   // -------------------------------------------------------------------------
-  describe("UsersAdminController", () => {
+  describe("StaffAdminController", () => {
     beforeEach(() => {
-      // Re-mock for UsersService
-      mockUsersRepo.list.mockResolvedValue(
-        Result.ok({ items: [activeUser], total: 1 })
+      mockStaffRepo.list.mockResolvedValue(
+        Result.ok({ items: [activeStaff], total: 1 })
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
-      mockUsersRepo.updateStatus.mockResolvedValue(Result.ok(activeUser));
-      mockTokenService.revokeAllUserTokens = jest
-        .fn()
-        .mockResolvedValue(undefined);
+      mockStaffRepo.findById.mockResolvedValue(Result.ok(activeStaff));
+      mockStaffRepo.updateStatus.mockResolvedValue(Result.ok(activeStaff));
     });
 
-    describe("listUsers", () => {
-      it("returns paginated user list", async () => {
-        const result = await usersAdminController.listUsers({
-          role: "STUDENT",
+    describe("listStaff", () => {
+      it("returns paginated staff list", async () => {
+        const result = await staffAdminController.listStaff({
+          role: "BTC",
           page: 1,
           limit: 20,
         } as any);
 
         expect(result.isSuccess).toBe(true);
         expect(result.data.items).toHaveLength(1);
-        expect(mockUsersRepo.list).toHaveBeenCalledWith(
-          "STUDENT",
+        expect(mockStaffRepo.list).toHaveBeenCalledWith(
+          "BTC",
           undefined,
           1,
           20
@@ -553,31 +540,18 @@ describe("IAM Module — Integration", () => {
       });
     });
 
-    describe("updateUserStatus", () => {
-      it("updates user status and blacklists admin token", async () => {
-        mockUsersRepo.findById.mockResolvedValue(Result.ok(activeUser));
+    describe("updateStaffStatus", () => {
+      it("updates staff status and sets Redis suspension flag", async () => {
+        mockStaffRepo.findById.mockResolvedValue(Result.ok(activeStaff));
 
-        const result = await usersAdminController.updateUserStatus("usr-001", {
-          status: "SUSPENDED",
+        const result = await staffAdminController.updateStaffStatus("usr-001", {
+          isActive: false,
         });
 
         expect(result.isSuccess).toBe(true);
-        expect(mockUsersRepo.updateStatus).toHaveBeenCalledWith(
+        expect(mockStaffRepo.updateStatus).toHaveBeenCalledWith(
           "usr-001",
-          "SUSPENDED"
-        );
-      });
-    });
-
-    describe("revokeUserTokens", () => {
-      it("revokes all tokens for a user by setting Redis suspension flag", async () => {
-        const result = await usersAdminController.revokeUserTokens("usr-001");
-
-        expect(result.isSuccess).toBe(true);
-        expect(mockRedisService.set).toHaveBeenCalledWith(
-          "user:suspended:usr-001",
-          "true",
-          604800
+          false
         );
       });
     });
@@ -588,11 +562,11 @@ describe("IAM Module — Integration", () => {
   // -------------------------------------------------------------------------
   describe("CheckinStaffAdminController", () => {
     beforeEach(() => {
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(checkinStaffUser));
+      mockStaffRepo.findById.mockResolvedValue(Result.ok(checkinStaffRecord));
       mockAssignmentsRepo.upsert = jest
         .fn()
         .mockResolvedValue(Result.ok({ workshopIds: ["wid-A"] }));
-      mockAssignmentsRepo.findByUserId = jest
+      mockAssignmentsRepo.findByStaffId = jest
         .fn()
         .mockResolvedValue(Result.ok(["wid-A"]));
     });
@@ -618,7 +592,7 @@ describe("IAM Module — Integration", () => {
           await checkinStaffAdminController.getAssignedWorkshops("usr-003");
 
         expect(result.isSuccess).toBe(true);
-        expect(mockAssignmentsRepo.findByUserId).toHaveBeenCalledWith(
+        expect(mockAssignmentsRepo.findByStaffId).toHaveBeenCalledWith(
           "usr-003"
         );
       });

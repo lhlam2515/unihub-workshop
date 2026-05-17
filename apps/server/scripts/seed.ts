@@ -72,7 +72,6 @@ async function clearAll() {
   await db.delete(schema.checkinStaffAssignments);
   await db.delete(schema.deviceTokens);
   await db.delete(schema.students);
-  await db.delete(schema.users);
   await db.delete(schema.staff);
   console.log("✓ Cleared all tables");
 }
@@ -177,73 +176,27 @@ async function seedIdentity(passwordHash: string) {
     },
   ]);
 
-  // ── Users for staff (backward-compat auth) ────────────────────────────────
-  const btcUserId = crypto.randomUUID();
-  const checkin1UserId = crypto.randomUUID();
-  const checkin2UserId = crypto.randomUUID();
-
-  await db.insert(schema.users).values([
-    {
-      userId: btcUserId,
-      email: "btc.admin@unihub.edu.vn",
-      passwordHash,
-      role: "BTC",
-      status: "ACTIVE",
-    },
-    {
-      userId: checkin1UserId,
-      email: "checkin1@unihub.edu.vn",
-      passwordHash,
-      role: "CHECKIN_STAFF",
-      status: "ACTIVE",
-    },
-    {
-      userId: checkin2UserId,
-      email: "checkin2@unihub.edu.vn",
-      passwordHash,
-      role: "CHECKIN_STAFF",
-      status: "ACTIVE",
-    },
-  ]);
-
   // ── 500 Students ──────────────────────────────────────────────────────────
   const studentIds: string[] = [];
-  const studentUserIds: string[] = [];
-  const userRows: (typeof schema.users.$inferInsert)[] = [];
   const studentRows: (typeof schema.students.$inferInsert)[] = [];
 
   for (let i = 0; i < 500; i++) {
     const mssv = `23127${String(i + 1).padStart(3, "0")}`;
-    const userId = crypto.randomUUID();
     const lastName = LAST_NAMES[i % LAST_NAMES.length];
     const firstName = FIRST_NAMES[i % FIRST_NAMES.length];
     const email = `sv${mssv}@student.edu.vn`;
 
     studentIds.push(mssv);
-    studentUserIds.push(userId);
-    userRows.push({
-      userId,
-      email,
-      passwordHash,
-      role: "STUDENT",
-      status: "ACTIVE",
-    });
     studentRows.push({
       studentId: mssv,
       email,
       fullName: `${lastName} ${firstName}`,
       passwordHash,
-      userId,
     });
   }
 
   // Bulk insert in batches of 100 to stay under query size limits
   const STUDENT_BATCH = 100;
-  for (let b = 0; b < Math.ceil(userRows.length / STUDENT_BATCH); b++) {
-    await db
-      .insert(schema.users)
-      .values(userRows.slice(b * STUDENT_BATCH, (b + 1) * STUDENT_BATCH));
-  }
   for (let b = 0; b < Math.ceil(studentRows.length / STUDENT_BATCH); b++) {
     await db
       .insert(schema.students)
@@ -251,23 +204,22 @@ async function seedIdentity(passwordHash: string) {
   }
 
   // ── Device tokens (first 20 students) ────────────────────────────────────
-  const deviceTokenRows = studentIds.slice(0, 20).map((studentId, i) => ({
-    deviceTokenId: crypto.randomUUID(),
-    studentId,
-    token: `device_token_sv_${studentId}`,
-    platform: (i % 2 === 0 ? "ANDROID" : "IOS") as "ANDROID" | "IOS",
-    isActive: true,
-  }));
+  const deviceTokenRows: (typeof schema.deviceTokens.$inferInsert)[] =
+    studentIds.slice(0, 20).map((studentId, i) => ({
+      deviceTokenId: crypto.randomUUID(),
+      studentId,
+      token: `device_token_sv_${studentId}`,
+      platform: i % 2 === 0 ? "ANDROID" : "IOS",
+      isActive: true,
+    }));
   await db.insert(schema.deviceTokens).values(deviceTokenRows);
 
   console.log(`✓ Identity: 3 staff, 500 students, 20 device tokens`);
   return {
     btcStaffId,
-    btcUserId,
-    checkin1UserId,
-    checkin2UserId,
+    checkin1StaffId,
+    checkin2StaffId,
     studentIds,
-    studentUserIds,
   };
 }
 
@@ -791,7 +743,7 @@ async function seedPaymentsAndTickets(
 
   for (let i = 0; i < registrations.length; i++) {
     const reg = registrations[i];
-    const price = priceMap.get(reg.workshopId as string) ?? 0;
+    const price = priceMap.get(reg.workshopId) ?? 0;
     const isPaidWorkshop = price > 0;
 
     // Payments: only for paid workshops, skip CONFIRMED (free-workshop path)
@@ -810,14 +762,14 @@ async function seedPaymentsAndTickets(
       paymentRows.push({
         paymentId: crypto.randomUUID(),
         registrationId: reg.registrationId,
-        studentId: reg.studentId as string,
+        studentId: reg.studentId,
         amount: String(price),
         currency: "VND",
         gateway: "MOCK",
         status: payStatus,
         idempotencyKey: crypto.randomUUID(),
         gatewayTxnId: `MOCK_TXN_${i}`,
-        initiatedAt: reg.registeredAt as Date,
+        initiatedAt: reg.registeredAt,
         completedAt: reg.confirmedAt ?? null,
         timeoutAt: null,
         rawGatewayResponse: null,
@@ -831,7 +783,7 @@ async function seedPaymentsAndTickets(
         registrationId: reg.registrationId,
         qrToken: qrToken(),
         status: "ACTIVE",
-        issuedAt: (reg.confirmedAt ?? reg.registeredAt) as Date,
+        issuedAt: reg.confirmedAt ?? reg.registeredAt,
         voidedAt: null,
       });
     }
@@ -881,7 +833,7 @@ async function seedCheckins(
 
   const eligible = registrations.filter(
     (r) =>
-      completedIds.has(r.workshopId as string) &&
+      completedIds.has(r.workshopId) &&
       (r.status === "CONFIRMED" || r.status === "PAID")
   );
 
@@ -891,7 +843,7 @@ async function seedCheckins(
 
   for (let i = 0; i < eligible.length; i++) {
     const reg = eligible[i];
-    const startsAt = startsByWorkshopId.get(reg.workshopId as string)!;
+    const startsAt = startsByWorkshopId.get(reg.workshopId)!;
     const checkedInAt = addSeconds(startsAt, randomInt(0, 1800));
     const checkedInBy = i % 2 === 0 ? checkin1UserId : checkin2UserId;
     const deviceId = i % 2 === 0 ? "DEVICE_001" : "DEVICE_002";
@@ -901,8 +853,8 @@ async function seedCheckins(
       checkinRows.push({
         checkinId: crypto.randomUUID(),
         registrationId: reg.registrationId,
-        studentId: reg.studentId as string,
-        workshopId: reg.workshopId as string,
+        studentId: reg.studentId,
+        workshopId: reg.workshopId,
         checkedInAt,
         syncedAt: null,
         checkedInBy,
@@ -917,7 +869,7 @@ async function seedCheckins(
           qrToken:
             qrByRegId.get(reg.registrationId) ??
             crypto.randomBytes(32).toString("hex"),
-          workshopId: reg.workshopId as string,
+          workshopId: reg.workshopId,
           checkedInAt,
           deviceId,
           checkedInBy,
@@ -933,11 +885,11 @@ async function seedCheckins(
   // Add 1 PENDING offline queue entry (not yet synced)
   if (eligible.length > 0) {
     const last = eligible[eligible.length - 1];
-    const lastStartsAt = startsByWorkshopId.get(last.workshopId as string)!;
+    const lastStartsAt = startsByWorkshopId.get(last.workshopId)!;
     offlineRows.push({
       localId: crypto.randomUUID(),
       qrToken: crypto.randomBytes(32).toString("hex"),
-      workshopId: last.workshopId as string,
+      workshopId: last.workshopId,
       checkedInAt: addSeconds(lastStartsAt, randomInt(0, 1800)),
       deviceId: "DEVICE_001",
       checkedInBy: checkin1UserId,
@@ -965,23 +917,23 @@ async function seedCheckins(
 
 async function seedSupplementary(
   workshops: WorkshopRow[],
-  studentUserIds: string[],
-  checkin1UserId: string,
-  checkin2UserId: string,
-  btcUserId: string
+  studentIds: string[],
+  checkin1StaffId: string,
+  checkin2StaffId: string,
+  btcStaffId: string
 ) {
   const allWorkshopIds = workshops.map((w) => w.workshopId);
 
-  // checkinStaffAssignments: UNIQUE(userId) — one row per checkin staff user
+  // checkinStaffAssignments: UNIQUE(staffId) — one row per checkin staff
   await db.insert(schema.checkinStaffAssignments).values([
     {
       assignmentId: crypto.randomUUID(),
-      userId: checkin1UserId,
+      staffId: checkin1StaffId,
       workshopIds: allWorkshopIds,
     },
     {
       assignmentId: crypto.randomUUID(),
-      userId: checkin2UserId,
+      staffId: checkin2StaffId,
       workshopIds: allWorkshopIds,
     },
   ]);
@@ -1064,7 +1016,7 @@ async function seedSupplementary(
   ];
   const notifRows = Array.from({ length: 30 }, (_, i) => ({
     notificationId: crypto.randomUUID(),
-    userId: studentUserIds[i % studentUserIds.length],
+    userId: studentIds[i % studentIds.length],
     workshopId: workshops[i % workshops.length].workshopId,
     type: notifTypes[i % notifTypes.length],
     channel: channels[i % channels.length],
@@ -1094,7 +1046,7 @@ async function seedSupplementary(
       originalName: "workshop_intro_ktvkt.pdf",
       fileSizeBytes: 524288,
       uploadStatus: "PROCESSED",
-      uploadedBy: btcUserId,
+      uploadedBy: btcStaffId,
     },
     {
       documentId: doc2Id,
@@ -1103,7 +1055,7 @@ async function seedSupplementary(
       originalName: "speaker_slides_uiux.pdf",
       fileSizeBytes: 1_048_576,
       uploadStatus: "PROCESSED",
-      uploadedBy: btcUserId,
+      uploadedBy: btcStaffId,
     },
   ]);
 
@@ -1162,15 +1114,15 @@ async function main() {
     workshops,
     registrations,
     tickets,
-    identity.checkin1UserId,
-    identity.checkin2UserId
+    identity.checkin1StaffId,
+    identity.checkin2StaffId
   );
   await seedSupplementary(
     workshops,
-    identity.studentUserIds,
-    identity.checkin1UserId,
-    identity.checkin2UserId,
-    identity.btcUserId
+    identity.studentIds,
+    identity.checkin1StaffId,
+    identity.checkin2StaffId,
+    identity.btcStaffId
   );
   console.log("✅ Seed complete");
 }

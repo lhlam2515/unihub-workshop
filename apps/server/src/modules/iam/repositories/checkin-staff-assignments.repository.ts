@@ -18,20 +18,20 @@ export class CheckinStaffAssignmentsRepository {
   ) {}
 
   /**
-   * Looks up a check-in staff member's workshop assignment by user ID.
+   * Looks up a check-in staff member's workshop assignment by staff ID.
    *
-   * @param userId - The CHECKIN_STAFF user's UUID.
+   * @param staffId - The CHECKIN_STAFF staff UUID.
    * @returns The assignment record (containing workshop_ids array) or null.
    */
-  async findByUserId(
-    userId: string
+  async findByStaffId(
+    staffId: string
   ): Promise<Result<CheckinStaffAssignment | null>> {
     return tryCatch(
       async () => {
         const [result] = await this.db
           .select()
           .from(this.schema.checkinStaffAssignments)
-          .where(eq(this.schema.checkinStaffAssignments.userId, userId))
+          .where(eq(this.schema.checkinStaffAssignments.staffId, staffId))
           .limit(1);
         return result ?? null;
       },
@@ -43,26 +43,26 @@ export class CheckinStaffAssignmentsRepository {
    * Creates or replaces a check-in staff member's workshop assignment.
    *
    * Business rules:
-   * - Uses ON CONFLICT DO UPDATE on the unique user_id constraint.
+   * - Uses ON CONFLICT DO UPDATE on the unique staff_id constraint.
    * - Replaces the entire workshop_ids array (not a merge operation).
    *
    * Side effects: Inserts or updates a row in checkin_staff_assignments.
    *
-   * @param userId - The CHECKIN_STAFF user's UUID.
+   * @param staffId - The CHECKIN_STAFF staff UUID.
    * @param workshopIds - Array of workshop UUIDs to assign (replaces existing).
    * @returns The created or updated assignment record.
    */
   async upsert(
-    userId: string,
+    staffId: string,
     workshopIds: string[]
   ): Promise<Result<CheckinStaffAssignment>> {
     return tryCatch(
       async () => {
         const [result] = await this.db
           .insert(this.schema.checkinStaffAssignments)
-          .values({ userId, workshopIds })
+          .values({ staffId, workshopIds })
           .onConflictDoUpdate({
-            target: this.schema.checkinStaffAssignments.userId,
+            target: this.schema.checkinStaffAssignments.staffId,
             set: { workshopIds, updatedAt: new Date() },
           })
           .returning();

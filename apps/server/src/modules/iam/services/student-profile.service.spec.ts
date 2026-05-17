@@ -11,7 +11,6 @@ describe("StudentProfileService", () => {
 
   const mockStudent = {
     studentId: "stu-1",
-    userId: "usr-1",
     studentCode: "20210001",
     fullName: "John Doe",
     faculty: "Engineering",
@@ -24,7 +23,7 @@ describe("StudentProfileService", () => {
 
   beforeEach(async () => {
     mockStudentsRepo = {
-      findByUserId: jest.fn(),
+      findById: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -38,29 +37,29 @@ describe("StudentProfileService", () => {
   });
 
   // -------------------------------------------------------------------------
-  // getProfileByUserId
+  // getProfileByStudentId
   // -------------------------------------------------------------------------
-  describe("getProfileByUserId", () => {
+  describe("getProfileByStudentId", () => {
     it("returns OkResult with student when profile exists", async () => {
-      mockStudentsRepo.findByUserId.mockResolvedValue(Result.ok(mockStudent));
+      mockStudentsRepo.findById.mockResolvedValue(Result.ok(mockStudent));
 
-      const result = await service.getProfileByUserId("usr-1");
+      const result = await service.getProfileByStudentId("stu-1");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toEqual(mockStudent);
     });
 
     it("returns OkResult with null when no profile exists", async () => {
-      mockStudentsRepo.findByUserId.mockResolvedValue(Result.ok(null));
+      mockStudentsRepo.findById.mockResolvedValue(Result.ok(null));
 
-      const result = await service.getProfileByUserId("usr-nonexistent");
+      const result = await service.getProfileByStudentId("stu-nonexistent");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBeNull();
     });
 
     it("returns FailResult when repository query fails", async () => {
-      mockStudentsRepo.findByUserId.mockResolvedValue(
+      mockStudentsRepo.findById.mockResolvedValue(
         Result.fail({
           category: "INTERNAL",
           code: "INTERNAL_ERROR",
@@ -68,7 +67,7 @@ describe("StudentProfileService", () => {
         })
       );
 
-      const result = await service.getProfileByUserId("usr-1");
+      const result = await service.getProfileByStudentId("stu-1");
 
       expect(result.isFailure).toBe(true);
       expect(result.error.code).toBe("INTERNAL_ERROR");

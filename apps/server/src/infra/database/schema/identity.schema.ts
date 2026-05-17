@@ -1,21 +1,21 @@
 import { sql } from "drizzle-orm";
 import { index, pgTable, unique } from "drizzle-orm/pg-core";
 
-import {
-  platformEnum,
-  staffRoleEnum,
-  userRoleEnum,
-  userStatusEnum,
-} from "./enums.schema";
+import { platformEnum, staffRoleEnum } from "./enums.schema";
 
+/**
+ * Staff workshop assignments — maps check-in staff to their authorized workshops.
+ *
+ * REF: ADR-04, ADR-11.
+ */
 export const checkinStaffAssignments = pgTable(
   "checkin_staff_assignments",
   (t) => ({
     assignmentId: t.uuid("assignment_id").primaryKey().defaultRandom(),
-    userId: t
-      .uuid("user_id")
+    staffId: t
+      .uuid("staff_id")
       .notNull()
-      .references(() => users.userId, { onDelete: "cascade" }),
+      .references(() => staff.staffId, { onDelete: "cascade" }),
     workshopIds: t
       .jsonb("workshop_ids")
       .$type<string[]>()
@@ -31,33 +31,8 @@ export const checkinStaffAssignments = pgTable(
       .defaultNow(),
   }),
   (table) => [
-    unique("uq_checkin_staff_assignments_user").on(table.userId),
-    index("idx_checkin_staff_assignments_user").on(table.userId),
-  ]
-);
-
-// Kept for backward compat with auth flow. New code should use `staff` table.
-export const users = pgTable(
-  "users",
-  (t) => ({
-    userId: t.uuid("user_id").primaryKey().defaultRandom(),
-    email: t.varchar("email", { length: 255 }).notNull(),
-    passwordHash: t.varchar("password_hash", { length: 255 }).notNull(),
-    role: userRoleEnum("role").notNull(),
-    status: userStatusEnum("status").notNull().default("PENDING_VERIFICATION"),
-    createdAt: t
-      .timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: t
-      .timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  }),
-  (table) => [
-    unique("uq_users_email").on(table.email),
-    index("idx_users_email").on(table.email),
-    index("idx_users_role").on(table.role),
+    unique("uq_checkin_staff_assignments_staff").on(table.staffId),
+    index("idx_checkin_staff_assignments_staff").on(table.staffId),
   ]
 );
 
@@ -66,6 +41,7 @@ export const users = pgTable(
  *
  * REF: ADR-02, ADR-12, `02_storage-strategy.md` L45-48.
  * TEXT PK enables CSV ON CONFLICT upsert without a separate code → UUID lookup.
+ * passwordHash is the direct auth source for STUDENT role (migrated from users table).
  */
 export const students = pgTable(
   "students",
@@ -73,21 +49,13 @@ export const students = pgTable(
     studentId: t.text("student_id").primaryKey(),
     email: t.text("email"),
     fullName: t.text("full_name").notNull(),
-    passwordHash: t.text("password_hash"),
-    // userId allows backward-compat auth linkage; will be removed
-    // once STUDENT auth migrates from `users` table to `students` directly.
-    userId: t
-      .uuid("user_id")
-      .references(() => users.userId, { onDelete: "set null" }),
+    passwordHash: t.text("password_hash").notNull(),
     updatedAt: t
       .timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   }),
-  (table) => [
-    index("idx_students_email").on(table.email),
-    index("idx_students_user_id").on(table.userId),
-  ]
+  (table) => [index("idx_students_email").on(table.email)]
 );
 
 /**
@@ -95,7 +63,7 @@ export const students = pgTable(
  *
  * REF: ADR-02 Section 4, `02_storage-strategy.md` L49-53.
  * Staff have a UUID PK (managed identity) and a dedicated lifecycle separate
- * from students. The `users` table is retained for auth backward compatibility.
+ * from students. The legacy `users` table has been removed — auth uses staff directly.
  */
 export const staff = pgTable(
   "staff",
