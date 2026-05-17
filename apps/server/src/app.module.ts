@@ -16,6 +16,7 @@ import {
   paymentConfig,
   r2Config,
   redisConfig,
+  studentSyncConfig,
   validateEnv,
 } from "@/core/config/env.config";
 import { createWinstonLoggerOptions } from "@/core/config/logger.config";
@@ -80,6 +81,7 @@ import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
         corsConfig,
         gatewayConfig,
         aiProviderConfig,
+        studentSyncConfig,
       ],
     }),
     WinstonModule.forRoot(createWinstonLoggerOptions()),
