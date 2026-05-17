@@ -47,7 +47,7 @@ describe("CheckinStaffAssignmentsRepository", () => {
     mockSchema = {
       checkinStaffAssignments: {
         assignmentId: "checkin_staff_assignments.assignment_id",
-        userId: "checkin_staff_assignments.user_id",
+        staffId: "checkin_staff_assignments.staff_id",
         workshopIds: "checkin_staff_assignments.workshop_ids",
         createdAt: "checkin_staff_assignments.created_at",
         updatedAt: "checkin_staff_assignments.updated_at",
@@ -70,20 +70,20 @@ describe("CheckinStaffAssignmentsRepository", () => {
   });
 
   // -------------------------------------------------------------------------
-  // findByUserId
+  // findByStaffId
   // -------------------------------------------------------------------------
-  describe("findByUserId", () => {
+  describe("findByStaffId", () => {
     it("returns OkResult with assignment when found", async () => {
       const assignment = {
         assignmentId: "assign-1",
-        userId: "usr-staff-1",
+        staffId: "usr-staff-1",
         workshopIds: ["ws-1", "ws-2"],
         createdAt: new Date(),
         updatedAt: new Date(),
       };
       setupDbResolve([assignment]);
 
-      const result = await repository.findByUserId("usr-staff-1");
+      const result = await repository.findByStaffId("usr-staff-1");
 
       expect(result.isSuccess).toBe(true);
       expect(result.isFailure).toBe(false);
@@ -99,7 +99,7 @@ describe("CheckinStaffAssignmentsRepository", () => {
     it("returns OkResult with null when no assignment exists", async () => {
       setupDbResolve([]);
 
-      const result = await repository.findByUserId("usr-nonexistent");
+      const result = await repository.findByStaffId("usr-nonexistent");
 
       expect(result.isSuccess).toBe(true);
       expect(result.data).toBeNull();
@@ -109,7 +109,7 @@ describe("CheckinStaffAssignmentsRepository", () => {
       const dbError = new Error("Connection lost");
       setupDbReject(dbError);
 
-      const result = await repository.findByUserId("usr-staff-1");
+      const result = await repository.findByStaffId("usr-staff-1");
 
       expect(result.isFailure).toBe(true);
       expect(result.error).toEqual(systemErrors.internal(dbError));
@@ -123,7 +123,7 @@ describe("CheckinStaffAssignmentsRepository", () => {
     it("returns OkResult with created assignment on insert", async () => {
       const newAssignment = {
         assignmentId: "assign-new",
-        userId: "usr-staff-2",
+        staffId: "usr-staff-2",
         workshopIds: ["ws-3"],
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -138,7 +138,7 @@ describe("CheckinStaffAssignmentsRepository", () => {
         mockSchema.checkinStaffAssignments
       );
       expect(mockDb.values).toHaveBeenCalledWith({
-        userId: "usr-staff-2",
+        staffId: "usr-staff-2",
         workshopIds: ["ws-3"],
       });
     });
@@ -146,7 +146,7 @@ describe("CheckinStaffAssignmentsRepository", () => {
     it("returns OkResult with updated assignment on conflict", async () => {
       const updatedAssignment = {
         assignmentId: "assign-1",
-        userId: "usr-staff-1",
+        staffId: "usr-staff-1",
         workshopIds: ["ws-1", "ws-2", "ws-3"],
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -163,7 +163,7 @@ describe("CheckinStaffAssignmentsRepository", () => {
       expect(result.data).toEqual(updatedAssignment);
       expect(mockDb.insert).toHaveBeenCalled();
       expect(mockDb.values).toHaveBeenCalledWith({
-        userId: "usr-staff-1",
+        staffId: "usr-staff-1",
         workshopIds: ["ws-1", "ws-2", "ws-3"],
       });
     });

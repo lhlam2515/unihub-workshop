@@ -6,7 +6,6 @@ import { BullMQAdapter } from "@/infra/messaging/bullmq.adapter";
 import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import { StorageService } from "@/infra/storage/storage.service";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
-import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import { storageErrors, systemErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
@@ -33,10 +32,6 @@ const mockStudentSyncErrorsRepo = {
 const mockStudentsRepo = {
   upsert: jest.fn(),
   upsertBatch: jest.fn(),
-};
-
-const mockUsersRepo = {
-  findById: jest.fn(),
 };
 
 const mockStorageService = {
@@ -87,7 +82,6 @@ describe("StudentSyncService", () => {
       Result.ok("https://storage.example.com/errors/test.csv")
     );
     mockStudentSyncErrorsRepo.createBatch.mockResolvedValue(Result.ok([]));
-    mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
     adapter = new BullMQAdapter(mockQueue as any);
     jest.spyOn(adapter, "enqueue");
 
@@ -105,10 +99,6 @@ describe("StudentSyncService", () => {
         {
           provide: StudentsRepository,
           useValue: mockStudentsRepo,
-        },
-        {
-          provide: UsersRepository,
-          useValue: mockUsersRepo,
         },
         {
           provide: StorageService,
@@ -192,7 +182,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "student_code,email,full_name,faculty,class_year",
         "23120001,stu001@university.edu,John Doe,Engineering,2024",
@@ -236,7 +225,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "student_code,email,full_name,faculty,class_year",
         "23120001,stu001@university.edu,John Doe,Engineering,2024",
@@ -280,7 +268,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "student_code,email,full_name,faculty,class_year",
         ",bad-email,Missing Code,Engineering,2024",
@@ -389,7 +376,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "student_code,email,full_name,faculty,class_year",
         "23120001,stu001@university.edu,John Doe,Engineering,2024",
@@ -424,7 +410,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "student_code,email,full_name,faculty,class_year",
         "23120001,stu001@university.edu,John Doe,Engineering,2024",
@@ -450,7 +435,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "student_code,email,full_name,faculty,class_year",
         "23120001,stu001@university.edu,John Doe,Engineering,2024",
@@ -500,7 +484,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "﻿student_code,email,full_name,faculty,class_year",
         "23120001,stu001@university.edu,John Doe,Engineering,2024",
@@ -523,7 +506,6 @@ describe("StudentSyncService", () => {
       mockStudentSyncJobsRepo.findById.mockResolvedValue(
         Result.ok(mockJobRecord)
       );
-      mockUsersRepo.findById.mockResolvedValue(Result.ok(null));
       mockCsvData([
         "student_code,email,full_name,faculty,class_year",
         "23120001,stu001@university.edu,John Doe,Engineering,2024",
@@ -543,42 +525,6 @@ describe("StudentSyncService", () => {
       expect(result.data.totalRows).toBe(2);
       expect(result.data.processedRows).toBe(2);
       expect(result.data.errorRows).toBe(0);
-    });
-
-    it("links a student record to an existing user when user_id is present", async () => {
-      mockStudentSyncJobsRepo.findById.mockResolvedValue(
-        Result.ok(mockJobRecord)
-      );
-      mockUsersRepo.findById.mockResolvedValue(
-        Result.ok({ userId: "11111111-1111-4111-8111-111111111111" })
-      );
-      mockCsvData([
-        "student_code,email,full_name,faculty,class_year,user_id",
-        "23120001,stu001@university.edu,John Doe,Engineering,2024,11111111-1111-4111-8111-111111111111",
-      ]);
-      mockStudentsRepo.upsertBatch.mockResolvedValue(
-        Result.ok([{ studentCode: "23120001" }])
-      );
-      mockStudentSyncJobsRepo.updateStatus.mockResolvedValue(
-        Result.ok({ ...mockJobRecord, status: "SUCCESS" })
-      );
-
-      const result = await service.processJob("job-001");
-
-      expect(result.isSuccess).toBe(true);
-      expect(mockUsersRepo.findById).toHaveBeenCalledWith(
-        "11111111-1111-4111-8111-111111111111"
-      );
-      expect(mockStudentsRepo.upsertBatch).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            studentId: "23120001",
-            fullName: "John Doe",
-            email: "stu001@university.edu",
-            userId: "11111111-1111-4111-8111-111111111111",
-          }),
-        ])
-      );
     });
   });
 

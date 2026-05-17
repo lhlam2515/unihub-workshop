@@ -82,7 +82,7 @@ describe("TokenService", () => {
   describe("signAccessToken", () => {
     it("signs a WEB token with 900s expiry", async () => {
       const token = await tokenService.signAccessToken(
-        { userId: "usr-1", role: "STUDENT" },
+        { identityId: "usr-1", role: "STUDENT" },
         "WEB"
       );
 
@@ -105,7 +105,7 @@ describe("TokenService", () => {
 
     it("signs a MOBILE token with 28800s expiry", async () => {
       const token = await tokenService.signAccessToken(
-        { userId: "usr-2", role: "BTC" },
+        { identityId: "usr-2", role: "BTC" },
         "MOBILE"
       );
 
@@ -122,7 +122,7 @@ describe("TokenService", () => {
     it("includes allowedWorkshopIds for CHECKIN_STAFF", async () => {
       const token = await tokenService.signAccessToken(
         {
-          userId: "usr-staff",
+          identityId: "usr-staff",
           role: "CHECKIN_STAFF",
           allowedWorkshopIds: ["ws-1", "ws-2"],
         },
@@ -137,11 +137,11 @@ describe("TokenService", () => {
 
     it("generates a unique jti per call", async () => {
       const token1 = await tokenService.signAccessToken(
-        { userId: "usr-1", role: "STUDENT" },
+        { identityId: "usr-1", role: "STUDENT" },
         "WEB"
       );
       const token2 = await tokenService.signAccessToken(
-        { userId: "usr-1", role: "STUDENT" },
+        { identityId: "usr-1", role: "STUDENT" },
         "WEB"
       );
 
@@ -156,13 +156,14 @@ describe("TokenService", () => {
   // -------------------------------------------------------------------------
   describe("signRefreshToken", () => {
     it("signs a refresh token with 7-day expiry", async () => {
-      const token = await tokenService.signRefreshToken("usr-1");
+      const token = await tokenService.signRefreshToken("usr-1", "STUDENT");
 
       expect(token).toBeDefined();
       const decoded = jwt.verify(token, publicKey, {
         algorithms: ["RS256"],
       }) as Record<string, unknown>;
       expect(decoded.sub).toBe("usr-1");
+      expect(decoded.type).toBe("STUDENT");
       expect(decoded.jti).toBeDefined();
       const expDelta = (decoded.exp as number) - Math.floor(Date.now() / 1000);
       expect(expDelta).toBeGreaterThan(604700);
@@ -170,8 +171,8 @@ describe("TokenService", () => {
     });
 
     it("generates a unique jti per call", async () => {
-      const token1 = await tokenService.signRefreshToken("usr-1");
-      const token2 = await tokenService.signRefreshToken("usr-1");
+      const token1 = await tokenService.signRefreshToken("usr-1", "STUDENT");
+      const token2 = await tokenService.signRefreshToken("usr-1", "STUDENT");
 
       const decoded1 = jwt.decode(token1) as Record<string, unknown>;
       const decoded2 = jwt.decode(token2) as Record<string, unknown>;
@@ -185,7 +186,7 @@ describe("TokenService", () => {
   describe("verifyAccessToken", () => {
     it("returns OkResult with payload for a valid token", async () => {
       const token = await tokenService.signAccessToken(
-        { userId: "usr-1", role: "STUDENT" },
+        { identityId: "usr-1", role: "STUDENT" },
         "WEB"
       );
 
@@ -239,7 +240,10 @@ describe("TokenService", () => {
   // -------------------------------------------------------------------------
   describe("verifyRefreshToken", () => {
     it("returns OkResult with sub and jti for a valid refresh token", async () => {
-      const refreshToken = await tokenService.signRefreshToken("usr-1");
+      const refreshToken = await tokenService.signRefreshToken(
+        "usr-1",
+        "STUDENT"
+      );
 
       const result = await tokenService.verifyRefreshToken(refreshToken);
 

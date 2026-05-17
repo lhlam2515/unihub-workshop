@@ -112,6 +112,9 @@ describe("WorkshopsService", () => {
             incrementSeat: jest.fn(),
             getSeatVersion: jest.fn(),
             countConfirmedRegistrations: jest.fn(),
+            countRegistrationsByStatus: jest.fn(),
+            countCheckinsByWorkshopId: jest.fn(),
+            sumPaidRevenueByWorkshop: jest.fn(),
           },
         },
         {
@@ -895,6 +898,14 @@ describe("WorkshopsService", () => {
   // getStats
   // ---------------------------------------------------------------------------
   describe("getStats", () => {
+    beforeEach(() => {
+      workshopsRepo.countRegistrationsByStatus.mockResolvedValue(
+        Result.ok({ CONFIRMED: 12 })
+      );
+      workshopsRepo.countCheckinsByWorkshopId.mockResolvedValue(Result.ok(0));
+      workshopsRepo.sumPaidRevenueByWorkshop.mockResolvedValue(Result.ok(0));
+    });
+
     it("returns stats with registrations.total from confirmed count", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockOpenRow));
       workshopsRepo.countConfirmedRegistrations.mockResolvedValue(
@@ -915,6 +926,7 @@ describe("WorkshopsService", () => {
 
     it("returns zero registrations when confirmed count is 0", async () => {
       workshopsRepo.findById.mockResolvedValue(Result.ok(mockWorkshopRow));
+      workshopsRepo.countRegistrationsByStatus.mockResolvedValue(Result.ok({}));
       workshopsRepo.countConfirmedRegistrations.mockResolvedValue(Result.ok(0));
       seatCounterService.getCachedSeats.mockResolvedValue(0);
 

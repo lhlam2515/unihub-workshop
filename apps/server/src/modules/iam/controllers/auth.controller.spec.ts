@@ -162,7 +162,7 @@ describe("AuthController", () => {
     it("calls authService.getMe with user sub", async () => {
       authService.getMe.mockResolvedValue(Result.ok({} as any));
       await controller.getMe(mockUser);
-      expect(authService.getMe).toHaveBeenCalledWith("usr-1");
+      expect(authService.getMe).toHaveBeenCalledWith("usr-1", "STUDENT");
     });
   });
 });
