@@ -7,7 +7,6 @@ import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import type { ITypedMessageQueue } from "@/infra/messaging/messaging.interfaces";
 import { StorageService } from "@/infra/storage/storage.service";
 import { StudentsRepository } from "@/modules/iam/repositories/students.repository";
-import { UsersRepository } from "@/modules/iam/repositories/users.repository";
 import {
   passthroughOrInternal,
   systemErrors,
@@ -56,7 +55,6 @@ export class StudentSyncService {
     private readonly studentSyncJobsRepo: StudentSyncJobsRepository,
     private readonly studentSyncErrorsRepo: StudentSyncErrorsRepository,
     private readonly studentsRepo: StudentsRepository,
-    private readonly usersRepo: UsersRepository,
     private readonly storageService: StorageService,
     @Inject(MESSAGING_TOKEN.STUDENT_SYNC_QUEUE)
     private readonly queue: ITypedMessageQueue
@@ -439,7 +437,6 @@ export class StudentSyncService {
       studentId: string;
       fullName: string;
       email: string | null;
-      userId?: string | null;
     }> = [];
 
     try {
@@ -472,20 +469,6 @@ export class StudentSyncService {
           continue;
         }
 
-        // Resolve optional linked userId
-        const userIdResult = await this.resolveLinkedUserId(row);
-        if (userIdResult.isFailure) {
-          errorRows++;
-          errors.push({
-            jobId,
-            rowNumber,
-            rawData: JSON.stringify(row),
-            errorReason: "UNKNOWN",
-            errorDetail: userIdResult.error.message,
-          });
-          continue;
-        }
-
         // Add to upsert batch
         const studentCode =
           typeof row.student_code === "string"
@@ -500,7 +483,6 @@ export class StudentSyncService {
           studentId: studentCode,
           fullName,
           email,
-          userId: userIdResult.data ?? undefined,
         });
 
         // Flush batch when full
@@ -564,7 +546,6 @@ export class StudentSyncService {
       studentId: string;
       fullName: string;
       email: string | null;
-      userId?: string | null;
     }>,
     jobId: string,
     currentRowNumber: number
@@ -592,7 +573,6 @@ export class StudentSyncService {
         studentId: item.studentId,
         fullName: item.fullName,
         email: item.email ?? undefined,
-        userId: item.userId ?? undefined,
       });
 
       if (individualResult.isSuccess) {
@@ -793,72 +773,6 @@ export class StudentSyncService {
     }
 
     return Result.ok();
-  }
-
-  /**
-   * Resolves an optional linked user from the CSV row.
-   *
-   * @param row - Parsed CSV row data.
-   * @returns OkResult with a linked user UUID when present, or null when absent.
-   */
-  private async resolveLinkedUserId(
-    row: Record<string, unknown>
-  ): Promise<Result<string | null>> {
-    const rawUserId = row.user_id;
-
-    if (rawUserId === undefined || rawUserId === null || rawUserId === "") {
-      return Result.ok(null);
-    }
-
-    if (typeof rawUserId !== "string") {
-      return Result.fail(
-        validationError([
-          {
-            field: "user_id",
-            rule: "format",
-            message: "CSV field user_id must be a string UUID.",
-            received: rawUserId,
-          },
-        ])
-      );
-    }
-
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        rawUserId.trim()
-      )
-    ) {
-      return Result.fail(
-        validationError([
-          {
-            field: "user_id",
-            rule: "format",
-            message: "CSV field user_id must be a valid UUID.",
-            received: rawUserId,
-          },
-        ])
-      );
-    }
-
-    const userResult = await this.usersRepo.findById(rawUserId.trim());
-    if (userResult.isFailure) {
-      return Result.fail(userResult.error);
-    }
-
-    if (!userResult.data) {
-      return Result.fail(
-        validationError([
-          {
-            field: "user_id",
-            rule: "not_found",
-            message: `User ${rawUserId} was not found.`,
-            received: rawUserId,
-          },
-        ])
-      );
-    }
-
-    return Result.ok(rawUserId.trim());
   }
 
   /**

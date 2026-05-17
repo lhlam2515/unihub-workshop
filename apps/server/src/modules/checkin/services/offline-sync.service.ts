@@ -31,7 +31,7 @@ export class OfflineSyncService {
    * - Inserts records into `checkin_records` with source=OFFLINE_SYNC for valid items.
    *
    * @param items - Array of sync items with local_id, qr_code, workshop_id, checked_in_at.
-   * @param staffUserId - UUID of the CHECKIN_STAFF who performed the scans.
+   * @param staffId - UUID of the CHECKIN_STAFF who performed the scans.
    * @returns OkResult with per-item array of sync results.
    */
   async processSyncBatch(
@@ -41,12 +41,12 @@ export class OfflineSyncService {
       workshopId: string;
       checkedInAt: Date;
     }>,
-    staffUserId: string
+    staffId: string
   ): Promise<Result<CheckinSyncResponseDto>> {
     const results: CheckinSyncResultItem[] = [];
 
     for (const item of items) {
-      const result = await this.processItem(item, staffUserId);
+      const result = await this.processItem(item, staffId);
       results.push(result);
     }
 
@@ -60,7 +60,7 @@ export class OfflineSyncService {
       workshopId: string;
       checkedInAt: Date;
     },
-    staffUserId: string
+    staffId: string
   ): Promise<CheckinSyncResultItem> {
     const regResult = await this.registrationsRepo.findByQRCode(item.qrCode);
     if (regResult.isFailure) {
@@ -109,7 +109,7 @@ export class OfflineSyncService {
       studentId: registration.studentId,
       workshopId: item.workshopId,
       checkedInAt: item.checkedInAt,
-      checkedInBy: staffUserId,
+      checkedInBy: staffId,
       source: "OFFLINE_SYNC",
       deviceId: undefined,
       syncedAt: new Date(),

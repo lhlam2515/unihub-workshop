@@ -35,7 +35,7 @@ export class CheckinService {
    *
    * @param qrCode - The scanned QR code (UUID v4).
    * @param workshopId - UUID of the workshop where the scan is occurring.
-   * @param staffUserId - UUID of the CHECKIN_STAFF performing the scan.
+   * @param staffId - UUID of the CHECKIN_STAFF performing the scan.
    * @param checkedInAt - Timestamp of the scan from the device.
    * @returns OkResult with CheckinResultDto, or FailResult (QR_INVALID, REGISTRATION_NOT_ACTIVE,
    *   WORKSHOP_CANCELLED, WRONG_WORKSHOP, TICKET_ALREADY_CHECKEDIN).
@@ -43,7 +43,7 @@ export class CheckinService {
   async scanQR(
     qrCode: string,
     workshopId: string,
-    staffUserId: string,
+    staffId: string,
     checkedInAt: Date
   ): Promise<Result<CheckinResultDto>> {
     const regResult = await this.registrationsRepo.findByQRCode(qrCode);
@@ -83,7 +83,7 @@ export class CheckinService {
       studentId: registration.studentId,
       workshopId,
       checkedInAt,
-      checkedInBy: staffUserId,
+      checkedInBy: staffId,
       source: "ONLINE",
     });
 
