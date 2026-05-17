@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 
 import { Test, type TestingModule } from "@nestjs/testing";
 
+import { studentSyncConfig } from "@/core/config/env.config";
 import { BullMQAdapter } from "@/infra/messaging/bullmq.adapter";
 import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
 import { StorageService } from "@/infra/storage/storage.service";
@@ -105,6 +106,10 @@ describe("StudentSyncService", () => {
           useValue: mockStorageService,
         },
         { provide: MESSAGING_TOKEN.STUDENT_SYNC_QUEUE, useValue: adapter },
+        {
+          provide: studentSyncConfig.KEY,
+          useValue: { defaultPassword: "123456789" },
+        },
       ],
     }).compile();
 
@@ -206,6 +211,7 @@ describe("StudentSyncService", () => {
             studentId: "23120001",
             fullName: "John Doe",
             email: "stu001@university.edu",
+            passwordHash: expect.any(String),
           }),
         ])
       );

@@ -45,7 +45,8 @@ export class StudentsRepository {
    * Designed for the CSV sync batch-upsert pipeline.
    *
    * Business rules:
-   * - passwordHash is never overwritten by CSV sync (not included in SET clause).
+   * - When provided, passwordHash is set on INSERT for new student accounts.
+   * - On CONFLICT, passwordHash is never overwritten (not in SET clause).
    *
    * Side effects: Inserts or updates multiple rows in the students table.
    *
@@ -57,6 +58,7 @@ export class StudentsRepository {
       studentId: string;
       fullName: string;
       email: string | null;
+      passwordHash?: string;
     }>
   ): Promise<Result<Student[]>> {
     return tryCatch(
@@ -68,7 +70,7 @@ export class StudentsRepository {
               studentId: d.studentId,
               fullName: d.fullName,
               email: d.email,
-              passwordHash: "",
+              passwordHash: d.passwordHash ?? "",
             }))
           )
           .onConflictDoUpdate({

@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import bcrypt from "bcrypt";
 import { parse, CsvError } from "csv-parse";
 
+import { studentSyncConfig } from "@/core/config/env.config";
 import type { NewStudentSyncError } from "@/infra/database/types";
 import type { StudentSyncJobData } from "@/infra/messaging/event-contracts";
 import { MESSAGING_TOKEN } from "@/infra/messaging/messaging.constants";
@@ -20,6 +22,8 @@ import {
 } from "../dto/student-sync-response.dto";
 import { StudentSyncErrorsRepository } from "../repositories/student-sync-errors.repository";
 import { StudentSyncJobsRepository } from "../repositories/student-sync-jobs.repository";
+
+import type { ConfigType } from "@nestjs/config";
 
 /**
  * StudentSyncService
@@ -51,14 +55,24 @@ export class StudentSyncService {
 
   private readonly logger = new Logger(StudentSyncService.name);
 
+  /** Bcrypt hash of the default password (from STUDENT_DEFAULT_PASSWORD env). */
+  private readonly defaultPasswordHash: string;
+
   constructor(
     private readonly studentSyncJobsRepo: StudentSyncJobsRepository,
     private readonly studentSyncErrorsRepo: StudentSyncErrorsRepository,
     private readonly studentsRepo: StudentsRepository,
     private readonly storageService: StorageService,
     @Inject(MESSAGING_TOKEN.STUDENT_SYNC_QUEUE)
-    private readonly queue: ITypedMessageQueue
-  ) {}
+    private readonly queue: ITypedMessageQueue,
+    @Inject(studentSyncConfig.KEY)
+    private readonly syncConfig: ConfigType<typeof studentSyncConfig>
+  ) {
+    this.defaultPasswordHash = bcrypt.hashSync(
+      this.syncConfig.defaultPassword,
+      10
+    );
+  }
 
   /**
    * Create a sync job record and enqueue it for background processing
@@ -437,6 +451,7 @@ export class StudentSyncService {
       studentId: string;
       fullName: string;
       email: string | null;
+      passwordHash: string;
     }> = [];
 
     try {
@@ -483,6 +498,7 @@ export class StudentSyncService {
           studentId: studentCode,
           fullName,
           email,
+          passwordHash: this.defaultPasswordHash,
         });
 
         // Flush batch when full
@@ -546,6 +562,7 @@ export class StudentSyncService {
       studentId: string;
       fullName: string;
       email: string | null;
+      passwordHash?: string;
     }>,
     jobId: string,
     currentRowNumber: number
@@ -573,6 +590,7 @@ export class StudentSyncService {
         studentId: item.studentId,
         fullName: item.fullName,
         email: item.email ?? undefined,
+        passwordHash: item.passwordHash,
       });
 
       if (individualResult.isSuccess) {
