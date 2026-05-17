@@ -522,23 +522,6 @@ export interface ApiReconciliationJobStatus {
   lastAlert: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// User Admin
-// ---------------------------------------------------------------------------
-
-/** Corresponds to OpenAPI UserResponse */
-export interface ApiUserResponse {
-  userId: string;
-  email: string;
-  role: "STUDENT" | "BTC" | "CHECKIN_STAFF";
-  status: "ACTIVE" | "SUSPENDED";
-  createdAt: string;
-}
-
-export interface ApiUpdateUserStatusRequest {
-  status: "ACTIVE" | "SUSPENDED";
-}
-
 export interface ApiAssignWorkshopsRequest {
   workshopIds: string[];
 }
