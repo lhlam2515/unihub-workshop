@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1778261689006,
-      "tag": "0000_warm_robin_chapel",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1778912077876,
-      "tag": "0001_past_lucky_pierre",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1779030344134,
-      "tag": "0002_good_kingpin",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1779037334671,
-      "tag": "0003_skinny_dazzler",
+      "when": 1779041157288,
+      "tag": "0000_small_frog_thor",
       "breakpoints": true
     }
   ]

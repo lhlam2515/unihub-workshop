@@ -52,5 +52,8 @@ yarn-error.log*
 .claude/worktrees/
 .worktrees/
 
-# Generated data files
-data/
+# Generated data files (CSV exports, downloaded files)
+data/**
+!data/README.md
+!data/setup.sh
+!data/schema.sql

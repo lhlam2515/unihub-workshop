@@ -3,9 +3,12 @@ import { defineConfig } from "drizzle-kit";
 
 dotenv.config();
 
-const DATABASE_URL = process.env.DATABASE_MIGRATION_URL;
+const DATABASE_URL =
+  process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  throw new Error("DATABASE_MIGRATION_URL environment variable is not set");
+  throw new Error(
+    "DATABASE_MIGRATION_URL (or DATABASE_URL) environment variable is not set"
+  );
 }
 
 export default defineConfig({

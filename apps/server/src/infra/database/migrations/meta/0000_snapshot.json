@@ -1,5 +1,5 @@
 {
-  "id": "ed851748-1bef-41f9-a09c-53cdfe692f2b",
+  "id": "400776e4-11f8-4fb4-bbbd-f804a2a92547",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -458,6 +458,13 @@
           "notNull": true,
           "default": "now()"
         },
+        "triggered_by": {
+          "name": "triggered_by",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'MANUAL'"
+        },
         "source_file_name": {
           "name": "source_file_name",
           "type": "varchar(500)",
@@ -545,6 +552,10 @@
         "chk_sync_rows": {
           "name": "chk_sync_rows",
           "value": "(\"student_sync_jobs\".\"processed_rows\" IS NULL OR \"student_sync_jobs\".\"processed_rows\" >= 0) AND (\"student_sync_jobs\".\"error_rows\" IS NULL OR \"student_sync_jobs\".\"error_rows\" >= 0)"
+        },
+        "chk_triggered_by": {
+          "name": "chk_triggered_by",
+          "value": "\"student_sync_jobs\".\"triggered_by\" IN ('CRON', 'MANUAL')"
         }
       },
       "isRLSEnabled": false
@@ -644,15 +655,15 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "workshop_documents_uploaded_by_users_user_id_fk": {
-          "name": "workshop_documents_uploaded_by_users_user_id_fk",
+        "workshop_documents_uploaded_by_staff_staff_id_fk": {
+          "name": "workshop_documents_uploaded_by_staff_staff_id_fk",
           "tableFrom": "workshop_documents",
-          "tableTo": "users",
+          "tableTo": "staff",
           "columnsFrom": [
             "uploaded_by"
           ],
           "columnsTo": [
-            "user_id"
+            "staff_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -811,97 +822,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.workshop_slots": {
-      "name": "workshop_slots",
-      "schema": "",
-      "columns": {
-        "slot_id": {
-          "name": "slot_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "workshop_id": {
-          "name": "workshop_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "total_capacity": {
-          "name": "total_capacity",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "locked_count": {
-          "name": "locked_count",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "confirmed_count": {
-          "name": "confirmed_count",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "version": {
-          "name": "version",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "workshop_slots_workshop_id_workshops_workshop_id_fk": {
-          "name": "workshop_slots_workshop_id_workshops_workshop_id_fk",
-          "tableFrom": "workshop_slots",
-          "tableTo": "workshops",
-          "columnsFrom": [
-            "workshop_id"
-          ],
-          "columnsTo": [
-            "workshop_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uq_workshop_slots_workshop": {
-          "name": "uq_workshop_slots_workshop",
-          "nullsNotDistinct": false,
-          "columns": [
-            "workshop_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "chk_slot_capacity": {
-          "name": "chk_slot_capacity",
-          "value": "\"workshop_slots\".\"total_capacity\" > 0"
-        },
-        "chk_slot_counts": {
-          "name": "chk_slot_counts",
-          "value": "\"workshop_slots\".\"locked_count\" >= 0 AND \"workshop_slots\".\"confirmed_count\" >= 0 AND (\"workshop_slots\".\"locked_count\" + \"workshop_slots\".\"confirmed_count\") <= \"workshop_slots\".\"total_capacity\""
-        }
-      },
       "isRLSEnabled": false
     },
     "public.workshops": {
@@ -1255,8 +1175,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "user_id": {
-          "name": "user_id",
+        "staff_id": {
+          "name": "staff_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -1284,11 +1204,11 @@
         }
       },
       "indexes": {
-        "idx_checkin_staff_assignments_user": {
-          "name": "idx_checkin_staff_assignments_user",
+        "idx_checkin_staff_assignments_staff": {
+          "name": "idx_checkin_staff_assignments_staff",
           "columns": [
             {
-              "expression": "user_id",
+              "expression": "staff_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1301,15 +1221,15 @@
         }
       },
       "foreignKeys": {
-        "checkin_staff_assignments_user_id_users_user_id_fk": {
-          "name": "checkin_staff_assignments_user_id_users_user_id_fk",
+        "checkin_staff_assignments_staff_id_staff_staff_id_fk": {
+          "name": "checkin_staff_assignments_staff_id_staff_staff_id_fk",
           "tableFrom": "checkin_staff_assignments",
-          "tableTo": "users",
+          "tableTo": "staff",
           "columnsFrom": [
-            "user_id"
+            "staff_id"
           ],
           "columnsTo": [
-            "user_id"
+            "staff_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -1317,11 +1237,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "uq_checkin_staff_assignments_user": {
-          "name": "uq_checkin_staff_assignments_user",
+        "uq_checkin_staff_assignments_staff": {
+          "name": "uq_checkin_staff_assignments_staff",
           "nullsNotDistinct": false,
           "columns": [
-            "user_id"
+            "staff_id"
           ]
         }
       },
@@ -1568,13 +1488,7 @@
           "name": "password_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "updated_at": {
           "name": "updated_at",
@@ -1599,140 +1513,11 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "idx_students_user_id": {
-          "name": "idx_students_user_id",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "students_user_id_users_user_id_fk": {
-          "name": "students_user_id_users_user_id_fk",
-          "tableFrom": "students",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.users": {
-      "name": "users",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "email": {
-          "name": "email",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "password_hash": {
-          "name": "password_hash",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "user_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "user_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'PENDING_VERIFICATION'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_users_email": {
-          "name": "idx_users_email",
-          "columns": [
-            {
-              "expression": "email",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_users_role": {
-          "name": "idx_users_role",
-          "columns": [
-            {
-              "expression": "role",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uq_users_email": {
-          "name": "uq_users_email",
-          "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1887,15 +1672,15 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "checkin_records_checked_in_by_users_user_id_fk": {
-          "name": "checkin_records_checked_in_by_users_user_id_fk",
+        "checkin_records_checked_in_by_staff_staff_id_fk": {
+          "name": "checkin_records_checked_in_by_staff_staff_id_fk",
           "tableFrom": "checkin_records",
-          "tableTo": "users",
+          "tableTo": "staff",
           "columnsFrom": [
             "checked_in_by"
           ],
           "columnsTo": [
-            "user_id"
+            "staff_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -1912,75 +1697,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.offline_checkin_queue": {
-      "name": "offline_checkin_queue",
-      "schema": "",
-      "columns": {
-        "local_id": {
-          "name": "local_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "qr_token": {
-          "name": "qr_token",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "workshop_id": {
-          "name": "workshop_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "checked_in_at": {
-          "name": "checked_in_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "checked_in_by": {
-          "name": "checked_in_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sync_status": {
-          "name": "sync_status",
-          "type": "offline_sync_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'PENDING'"
-        },
-        "synced_at": {
-          "name": "synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "conflict_reason": {
-          "name": "conflict_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2393,124 +2109,6 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
-    },
-    "public.tickets": {
-      "name": "tickets",
-      "schema": "",
-      "columns": {
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "registration_id": {
-          "name": "registration_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "qr_token": {
-          "name": "qr_token",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "ticket_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ACTIVE'"
-        },
-        "issued_at": {
-          "name": "issued_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "voided_at": {
-          "name": "voided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "idx_tickets_qr_token": {
-          "name": "idx_tickets_qr_token",
-          "columns": [
-            {
-              "expression": "qr_token",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_tickets_status": {
-          "name": "idx_tickets_status",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "tickets_registration_id_registrations_registration_id_fk": {
-          "name": "tickets_registration_id_registrations_registration_id_fk",
-          "tableFrom": "tickets",
-          "tableTo": "registrations",
-          "columnsFrom": [
-            "registration_id"
-          ],
-          "columnsTo": [
-            "registration_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uq_tickets_registration": {
-          "name": "uq_tickets_registration",
-          "nullsNotDistinct": false,
-          "columns": [
-            "registration_id"
-          ]
-        },
-        "uq_tickets_qr_token": {
-          "name": "uq_tickets_qr_token",
-          "nullsNotDistinct": false,
-          "columns": [
-            "qr_token"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "chk_tickets_void": {
-          "name": "chk_tickets_void",
-          "value": "(\"tickets\".\"status\" = 'ACTIVE' AND \"tickets\".\"voided_at\" IS NULL) OR (\"tickets\".\"status\" = 'VOID' AND \"tickets\".\"voided_at\" IS NOT NULL)"
-        }
-      },
-      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -2565,15 +2163,6 @@
         "PAYMENT_FAILED_RECONCILED",
         "CHECKIN_REMINDER",
         "CSV_IMPORT_COMPLETED_WITH_ERRORS"
-      ]
-    },
-    "public.offline_sync_status": {
-      "name": "offline_sync_status",
-      "schema": "public",
-      "values": [
-        "PENDING",
-        "SYNCED",
-        "CONFLICT"
       ]
     },
     "public.payment_gateway": {
@@ -2651,32 +2240,6 @@
         "SUCCESS",
         "PARTIAL_FAILURE",
         "FAILED"
-      ]
-    },
-    "public.ticket_status": {
-      "name": "ticket_status",
-      "schema": "public",
-      "values": [
-        "ACTIVE",
-        "VOID"
-      ]
-    },
-    "public.user_role": {
-      "name": "user_role",
-      "schema": "public",
-      "values": [
-        "STUDENT",
-        "BTC",
-        "CHECKIN_STAFF"
-      ]
-    },
-    "public.user_status": {
-      "name": "user_status",
-      "schema": "public",
-      "values": [
-        "ACTIVE",
-        "SUSPENDED",
-        "PENDING_VERIFICATION"
       ]
     },
     "public.workshop_status": {

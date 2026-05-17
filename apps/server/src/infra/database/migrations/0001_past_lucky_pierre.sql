@@ -1,2 +1,0 @@
-ALTER TABLE "student_sync_jobs" ADD COLUMN "triggered_by" varchar(10) DEFAULT 'MANUAL' NOT NULL;--> statement-breakpoint
-ALTER TABLE "student_sync_jobs" ADD CONSTRAINT "chk_triggered_by" CHECK ("student_sync_jobs"."triggered_by" IN ('CRON', 'MANUAL'));

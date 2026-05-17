@@ -3,7 +3,6 @@ CREATE TYPE "public"."document_upload_status" AS ENUM('UPLOADED', 'PROCESSING', 
 CREATE TYPE "public"."notification_channel" AS ENUM('APP', 'EMAIL', 'TELEGRAM');--> statement-breakpoint
 CREATE TYPE "public"."notification_status" AS ENUM('PENDING', 'SENT', 'FAILED', 'TIMEOUT');--> statement-breakpoint
 CREATE TYPE "public"."notification_type" AS ENUM('REGISTRATION_CONFIRMED', 'REGISTRATION_CANCELLED', 'WORKSHOP_UPDATED', 'WORKSHOP_CANCELLED', 'PAYMENT_SUCCESS', 'PAYMENT_FAILED', 'PAYMENT_CONFIRMED_LATE', 'PAYMENT_FAILED_RECONCILED', 'CHECKIN_REMINDER', 'CSV_IMPORT_COMPLETED_WITH_ERRORS');--> statement-breakpoint
-CREATE TYPE "public"."offline_sync_status" AS ENUM('PENDING', 'SYNCED', 'CONFLICT');--> statement-breakpoint
 CREATE TYPE "public"."payment_gateway" AS ENUM('VNPAY', 'STRIPE', 'MOMO', 'MOCK');--> statement-breakpoint
 CREATE TYPE "public"."payment_status" AS ENUM('INITIATED', 'SUCCEEDED', 'FAILED', 'UNRESOLVED');--> statement-breakpoint
 CREATE TYPE "public"."platform" AS ENUM('IOS', 'ANDROID');--> statement-breakpoint
@@ -12,9 +11,6 @@ CREATE TYPE "public"."staff_role" AS ENUM('BTC', 'CHECKIN_STAFF');--> statement-
 CREATE TYPE "public"."summary_status" AS ENUM('NONE', 'QUEUED', 'PROCESSING', 'DONE', 'FAILED');--> statement-breakpoint
 CREATE TYPE "public"."sync_error_reason" AS ENUM('DUPLICATE', 'INVALID_FORMAT', 'MISSING_FIELD', 'UNKNOWN');--> statement-breakpoint
 CREATE TYPE "public"."sync_job_status" AS ENUM('RUNNING', 'SUCCESS', 'PARTIAL_FAILURE', 'FAILED');--> statement-breakpoint
-CREATE TYPE "public"."ticket_status" AS ENUM('ACTIVE', 'VOID');--> statement-breakpoint
-CREATE TYPE "public"."user_role" AS ENUM('STUDENT', 'BTC', 'CHECKIN_STAFF');--> statement-breakpoint
-CREATE TYPE "public"."user_status" AS ENUM('ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION');--> statement-breakpoint
 CREATE TYPE "public"."workshop_status" AS ENUM('DRAFT', 'OPEN', 'CANCELLED', 'COMPLETED');--> statement-breakpoint
 CREATE TYPE "public"."idempotency_status" AS ENUM('IN_PROGRESS', 'COMPLETED', 'UNRESOLVED');--> statement-breakpoint
 CREATE TABLE "ai_summaries" (
@@ -67,6 +63,7 @@ CREATE TABLE "student_sync_errors" (
 CREATE TABLE "student_sync_jobs" (
 	"job_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"triggered_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"triggered_by" varchar(10) DEFAULT 'MANUAL' NOT NULL,
 	"source_file_name" varchar(500) NOT NULL,
 	"status" "sync_job_status" DEFAULT 'RUNNING' NOT NULL,
 	"total_rows" integer,
@@ -74,7 +71,8 @@ CREATE TABLE "student_sync_jobs" (
 	"error_rows" integer DEFAULT 0,
 	"completed_at" timestamp with time zone,
 	"error_log_url" varchar(1000),
-	CONSTRAINT "chk_sync_rows" CHECK (("student_sync_jobs"."processed_rows" IS NULL OR "student_sync_jobs"."processed_rows" >= 0) AND ("student_sync_jobs"."error_rows" IS NULL OR "student_sync_jobs"."error_rows" >= 0))
+	CONSTRAINT "chk_sync_rows" CHECK (("student_sync_jobs"."processed_rows" IS NULL OR "student_sync_jobs"."processed_rows" >= 0) AND ("student_sync_jobs"."error_rows" IS NULL OR "student_sync_jobs"."error_rows" >= 0)),
+	CONSTRAINT "chk_triggered_by" CHECK ("student_sync_jobs"."triggered_by" IN ('CRON', 'MANUAL'))
 );
 --> statement-breakpoint
 CREATE TABLE "workshop_documents" (
@@ -112,19 +110,6 @@ CREATE TABLE "speakers" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "workshop_slots" (
-	"slot_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"workshop_id" uuid NOT NULL,
-	"total_capacity" smallint NOT NULL,
-	"locked_count" smallint DEFAULT 0 NOT NULL,
-	"confirmed_count" smallint DEFAULT 0 NOT NULL,
-	"version" bigint DEFAULT 0 NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "uq_workshop_slots_workshop" UNIQUE("workshop_id"),
-	CONSTRAINT "chk_slot_capacity" CHECK ("workshop_slots"."total_capacity" > 0),
-	CONSTRAINT "chk_slot_counts" CHECK ("workshop_slots"."locked_count" >= 0 AND "workshop_slots"."confirmed_count" >= 0 AND ("workshop_slots"."locked_count" + "workshop_slots"."confirmed_count") <= "workshop_slots"."total_capacity")
-);
---> statement-breakpoint
 CREATE TABLE "workshops" (
 	"workshop_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" varchar(500) NOT NULL,
@@ -160,11 +145,11 @@ CREATE TABLE "idempotency_keys" (
 --> statement-breakpoint
 CREATE TABLE "checkin_staff_assignments" (
 	"assignment_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
+	"staff_id" uuid NOT NULL,
 	"workshop_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "uq_checkin_staff_assignments_user" UNIQUE("user_id")
+	CONSTRAINT "uq_checkin_staff_assignments_staff" UNIQUE("staff_id")
 );
 --> statement-breakpoint
 CREATE TABLE "device_tokens" (
@@ -193,20 +178,8 @@ CREATE TABLE "students" (
 	"student_id" text PRIMARY KEY NOT NULL,
 	"email" text,
 	"full_name" text NOT NULL,
-	"password_hash" text,
-	"user_id" uuid,
+	"password_hash" text NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "users" (
-	"user_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"email" varchar(255) NOT NULL,
-	"password_hash" varchar(255) NOT NULL,
-	"role" "user_role" NOT NULL,
-	"status" "user_status" DEFAULT 'PENDING_VERIFICATION' NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "uq_users_email" UNIQUE("email")
 );
 --> statement-breakpoint
 CREATE TABLE "checkin_records" (
@@ -220,18 +193,6 @@ CREATE TABLE "checkin_records" (
 	"source" "checkin_source" DEFAULT 'ONLINE' NOT NULL,
 	"device_id" varchar(100),
 	CONSTRAINT "uq_checkin_registration_workshop" UNIQUE("registration_id","workshop_id")
-);
---> statement-breakpoint
-CREATE TABLE "offline_checkin_queue" (
-	"local_id" uuid PRIMARY KEY NOT NULL,
-	"qr_token" varchar(255) NOT NULL,
-	"workshop_id" uuid NOT NULL,
-	"checked_in_at" timestamp with time zone NOT NULL,
-	"device_id" varchar(100) NOT NULL,
-	"checked_in_by" uuid NOT NULL,
-	"sync_status" "offline_sync_status" DEFAULT 'PENDING' NOT NULL,
-	"synced_at" timestamp with time zone,
-	"conflict_reason" text
 );
 --> statement-breakpoint
 CREATE TABLE "payments" (
@@ -266,40 +227,25 @@ CREATE TABLE "registrations" (
 	CONSTRAINT "registrations_qr_code_unique" UNIQUE("qr_code")
 );
 --> statement-breakpoint
-CREATE TABLE "tickets" (
-	"ticket_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"registration_id" uuid NOT NULL,
-	"qr_token" varchar(255) NOT NULL,
-	"status" "ticket_status" DEFAULT 'ACTIVE' NOT NULL,
-	"issued_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"voided_at" timestamp with time zone,
-	CONSTRAINT "uq_tickets_registration" UNIQUE("registration_id"),
-	CONSTRAINT "uq_tickets_qr_token" UNIQUE("qr_token"),
-	CONSTRAINT "chk_tickets_void" CHECK (("tickets"."status" = 'ACTIVE' AND "tickets"."voided_at" IS NULL) OR ("tickets"."status" = 'VOID' AND "tickets"."voided_at" IS NOT NULL))
-);
---> statement-breakpoint
 ALTER TABLE "ai_summaries" ADD CONSTRAINT "ai_summaries_document_id_workshop_documents_document_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."workshop_documents"("document_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ai_summaries" ADD CONSTRAINT "ai_summaries_workshop_id_workshops_workshop_id_fk" FOREIGN KEY ("workshop_id") REFERENCES "public"."workshops"("workshop_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notification_logs" ADD CONSTRAINT "notification_logs_workshop_id_workshops_workshop_id_fk" FOREIGN KEY ("workshop_id") REFERENCES "public"."workshops"("workshop_id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "student_sync_errors" ADD CONSTRAINT "student_sync_errors_job_id_student_sync_jobs_job_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."student_sync_jobs"("job_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workshop_documents" ADD CONSTRAINT "workshop_documents_workshop_id_workshops_workshop_id_fk" FOREIGN KEY ("workshop_id") REFERENCES "public"."workshops"("workshop_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "workshop_documents" ADD CONSTRAINT "workshop_documents_uploaded_by_users_user_id_fk" FOREIGN KEY ("uploaded_by") REFERENCES "public"."users"("user_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "workshop_slots" ADD CONSTRAINT "workshop_slots_workshop_id_workshops_workshop_id_fk" FOREIGN KEY ("workshop_id") REFERENCES "public"."workshops"("workshop_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workshop_documents" ADD CONSTRAINT "workshop_documents_uploaded_by_staff_staff_id_fk" FOREIGN KEY ("uploaded_by") REFERENCES "public"."staff"("staff_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workshops" ADD CONSTRAINT "workshops_speaker_id_speakers_speaker_id_fk" FOREIGN KEY ("speaker_id") REFERENCES "public"."speakers"("speaker_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workshops" ADD CONSTRAINT "workshops_room_id_rooms_room_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."rooms"("room_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workshops" ADD CONSTRAINT "workshops_created_by_staff_staff_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."staff"("staff_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "checkin_staff_assignments" ADD CONSTRAINT "checkin_staff_assignments_user_id_users_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "checkin_staff_assignments" ADD CONSTRAINT "checkin_staff_assignments_staff_id_staff_staff_id_fk" FOREIGN KEY ("staff_id") REFERENCES "public"."staff"("staff_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "device_tokens" ADD CONSTRAINT "device_tokens_student_id_students_student_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("student_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "students" ADD CONSTRAINT "students_user_id_users_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("user_id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "checkin_records" ADD CONSTRAINT "checkin_records_registration_id_registrations_registration_id_fk" FOREIGN KEY ("registration_id") REFERENCES "public"."registrations"("registration_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "checkin_records" ADD CONSTRAINT "checkin_records_student_id_students_student_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("student_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "checkin_records" ADD CONSTRAINT "checkin_records_workshop_id_workshops_workshop_id_fk" FOREIGN KEY ("workshop_id") REFERENCES "public"."workshops"("workshop_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "checkin_records" ADD CONSTRAINT "checkin_records_checked_in_by_users_user_id_fk" FOREIGN KEY ("checked_in_by") REFERENCES "public"."users"("user_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "checkin_records" ADD CONSTRAINT "checkin_records_checked_in_by_staff_staff_id_fk" FOREIGN KEY ("checked_in_by") REFERENCES "public"."staff"("staff_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "payments" ADD CONSTRAINT "payments_registration_id_registrations_registration_id_fk" FOREIGN KEY ("registration_id") REFERENCES "public"."registrations"("registration_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "payments" ADD CONSTRAINT "payments_student_id_students_student_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("student_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "registrations" ADD CONSTRAINT "registrations_student_id_students_student_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("student_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "registrations" ADD CONSTRAINT "registrations_workshop_id_workshops_workshop_id_fk" FOREIGN KEY ("workshop_id") REFERENCES "public"."workshops"("workshop_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tickets" ADD CONSTRAINT "tickets_registration_id_registrations_registration_id_fk" FOREIGN KEY ("registration_id") REFERENCES "public"."registrations"("registration_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_summary_workshop_id" ON "ai_summaries" USING btree ("workshop_id");--> statement-breakpoint
 CREATE INDEX "idx_summary_status" ON "ai_summaries" USING btree ("status") WHERE "ai_summaries"."status" IN ('QUEUED', 'PROCESSING');--> statement-breakpoint
 CREATE INDEX "idx_notif_user_id" ON "notification_logs" USING btree ("user_id");--> statement-breakpoint
@@ -315,15 +261,12 @@ CREATE INDEX "idx_workshops_room" ON "workshops" USING btree ("room_id","starts_
 CREATE INDEX "idx_workshops_speaker_id" ON "workshops" USING btree ("speaker_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_workshops_room_time_slot" ON "workshops" USING btree ("room_id","starts_at","ends_at");--> statement-breakpoint
 CREATE INDEX "idx_idempotency_stale" ON "idempotency_keys" USING btree ("status","locked_until");--> statement-breakpoint
-CREATE INDEX "idx_checkin_staff_assignments_user" ON "checkin_staff_assignments" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_checkin_staff_assignments_staff" ON "checkin_staff_assignments" USING btree ("staff_id");--> statement-breakpoint
 CREATE INDEX "idx_device_tokens_student" ON "device_tokens" USING btree ("student_id") WHERE "device_tokens"."is_active" = true;--> statement-breakpoint
 CREATE INDEX "idx_device_tokens_token" ON "device_tokens" USING btree ("token");--> statement-breakpoint
 CREATE INDEX "idx_staff_role" ON "staff" USING btree ("role") WHERE "staff"."is_active" = true;--> statement-breakpoint
 CREATE INDEX "idx_staff_email" ON "staff" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "idx_students_email" ON "students" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "idx_students_user_id" ON "students" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "idx_users_email" ON "users" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "idx_users_role" ON "users" USING btree ("role");--> statement-breakpoint
 CREATE INDEX "idx_checkin_workshop_id" ON "checkin_records" USING btree ("workshop_id");--> statement-breakpoint
 CREATE INDEX "idx_checkin_student_id" ON "checkin_records" USING btree ("student_id");--> statement-breakpoint
 CREATE INDEX "idx_checkin_source" ON "checkin_records" USING btree ("source") WHERE "checkin_records"."source" = 'OFFLINE_SYNC';--> statement-breakpoint
@@ -336,6 +279,4 @@ CREATE UNIQUE INDEX "uq_registrations_student_workshop_active" ON "registrations
 CREATE INDEX "idx_registrations_student_id" ON "registrations" USING btree ("student_id");--> statement-breakpoint
 CREATE INDEX "idx_registrations_workshop_id" ON "registrations" USING btree ("workshop_id");--> statement-breakpoint
 CREATE INDEX "idx_registrations_status" ON "registrations" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "idx_registrations_qr_code" ON "registrations" USING btree ("qr_code");--> statement-breakpoint
-CREATE INDEX "idx_tickets_qr_token" ON "tickets" USING btree ("qr_token");--> statement-breakpoint
-CREATE INDEX "idx_tickets_status" ON "tickets" USING btree ("status");
+CREATE INDEX "idx_registrations_qr_code" ON "registrations" USING btree ("qr_code");
