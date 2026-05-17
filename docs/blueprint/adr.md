@@ -6,7 +6,7 @@
 >
 > **Tài liệu liên quan:**
 >
-> - Schema SQL đầy đủ → `data/schema.sql`
+> - Schema SQL đầy đủ → `schemas/server.sql`
 > - Cơ chế hoạt động chi tiết (Rate Limiting, CB, Idempotency) → `design/04_safety-mechanism.md`
 > - Enforcement authentication/authorization → `access-control.md`
 > - Luồng nghiệp vụ và AC → `specs/`
@@ -19,7 +19,7 @@
 
 **PostgreSQL** làm primary database duy nhất — source of truth cho mọi trạng thái nghiệp vụ. **Redis** làm lớp phụ trợ cho ba mục đích cụ thể: cache `seats_available` (TTL ngắn), sliding window counters cho Rate Limiting (volatile), và BullMQ cho async job queue. Redis không bao giờ là source of truth.
 
-Schema đầy đủ → `data/schema.sql`.
+Schema đầy đủ → `schemas/server.sql`.
 
 ### 2. Lý do chọn
 

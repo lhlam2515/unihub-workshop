@@ -2,7 +2,7 @@
 
 > **Redis là lớp phụ trợ (cache, rate limiting, message queue).**
 > **PostgreSQL là sole source of truth cho mọi dữ liệu persistent.**
-> (xem design.md dòng 14, ADR-02 Section 1)
+> (xem adr.md dòng 14, ADR-02 Section 1)
 
 ---
 
@@ -41,7 +41,7 @@ Cmd:  GET / SET EX 60 / DEL
 ## 2. Rate Limiting (Sliding Window Counter — ADR-06)
 
 **Thuật toán:** Sliding Window Counter với Redis Sorted Set.
-**Loại cũ (Token Bucket) đã bị reject** — xem design.md ADR-06 Section 4: Token Bucket cho phép burst, Sliding Window phù hợp hơn cho registration flow.
+**Loại cũ (Token Bucket) đã bị reject** — xem adr.md ADR-06 Section 4: Token Bucket cho phép burst, Sliding Window phù hợp hơn cho registration flow.
 
 **Pipeline (MULTI/EXEC):**
 
@@ -81,9 +81,9 @@ Circuit Breaker state được lưu **in-process memory** (process variable), kh
 - Threshold: 5 failures trong 60s → OPEN (hoặc failure rate ≥ 50%)
 - Cool-down: 30s → HALF-OPEN (thăm dò)
 - **Restart process = reset CB về CLOSED** — đây là correctness guarantee, không phải limitation
-  (xem design.md ADR-07 Section 5: "gateway có thể đã hồi phục trong lúc restart")
+  (xem adr.md ADR-07 Section 5: "gateway có thể đã hồi phục trong lúc restart")
 
-**Tại sao không Redis:** Modular Monolith single-process (ADR-01). Tất cả request qua cùng CB instance. Không cần distributed state coordination. (design.md dòng 577-581).
+**Tại sao không Redis:** Modular Monolith single-process (ADR-01). Tất cả request qua cùng CB instance. Không cần distributed state coordination. (adr.md dòng 577-581).
 
 ---
 

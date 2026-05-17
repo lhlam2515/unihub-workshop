@@ -8,7 +8,7 @@
 -- BẢNG 1: cached_registrations
 -- Mục đích: Mirror danh sách registration có qr_code từ server.
 --           Server không có entity tickets riêng — qr_code nằm
---           trực tiếp trên registrations (xem design.md ADR-02).
+--           trực tiếp trên registrations (xem adr.md ADR-02).
 -- Nguồn:    GET /checkin/workshops/{id}/registrations (khi online)
 -- Dùng để: Tra cứu qr_code khi offline — phải cực nhanh.
 --
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS cached_registrations (
     student_id          TEXT NOT NULL,
 
     -- Trạng thái đăng ký.
-    -- Gap fix (M2): thêm 'CONFIRMED' để mirror server schema (design.md ADR-02).
+    -- Gap fix (M2): thêm 'CONFIRMED' để mirror server schema (adr.md ADR-02).
     -- Server hiện có 4 states: pending / confirmed / paid / cancelled.
     -- App chỉ pre-load 'PAID' và 'CONFIRMED' (xem filter comment ở trên).
     -- Giữ 'PENDING' và 'CANCELLED' trong CHECK để app có thể detect nếu server

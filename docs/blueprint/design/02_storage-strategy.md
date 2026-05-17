@@ -36,7 +36,7 @@ Hệ thống UniHub Workshop đối mặt với hai thái cực dữ liệu: m�
 
 ### 2. Thiết kế Schema cho các Entity chính (Core Schema)
 
-Dưới đây là cấu trúc các thực thể chính theo `design.md` ADR-02 và `data/schema.sql`. Tất cả các bảng sử dụng UUID làm Khóa chính (PK) để tăng tính bảo mật, che giấu số lượng bản ghi thực tế và dễ dàng mở rộng phân tán.
+Dưới đây là cấu trúc các thực thể chính theo `design.md` ADR-02 và `database/postgres.sql`. Tất cả các bảng sử dụng UUID làm Khóa chính (PK) để tăng tính bảo mật, che giấu số lượng bản ghi thực tế và dễ dàng mở rộng phân tán.
 
 #### Vùng Dữ liệu Bền vững (PostgreSQL — Core Tables)
 
@@ -191,7 +191,7 @@ Redis đóng **3 vai trò** độc lập, mỗi vai trò trên một logical dat
    - **Key:** `token:blacklist:{jti}`
    - **TTL:** Thời gian còn lại của JWT
    - **Hành vi:** Revoke JWT trước hạn (ví dụ: admin kick user). Deferred đến Stage 5.
-   - **⚠️ Yêu cầu bắt buộc khi implement Stage 5:** Token Blacklist **phải** dùng DB1 (`noeviction`), **không phải DB0** (`allkeys-lru`). DB0 với policy `allkeys-lru` có thể evict key chưa hết TTL dưới memory pressure — token đã revoke sẽ pass validation như token hợp lệ (security breach). Với `noeviction`, Redis trả OOM error thay vì silent evict — fail-loud thay vì fail-silent. Xem chi tiết tại `redis-keys.md` Section 4.
+   - **⚠️ Yêu cầu bắt buộc khi implement Stage 5:** Token Blacklist **phải** dùng DB1 (`noeviction`), **không phải DB0** (`allkeys-lru`). DB0 với policy `allkeys-lru` có thể evict key chưa hết TTL dưới memory pressure — token đã revoke sẽ pass validation như token hợp lệ (security breach). Với `noeviction`, Redis trả OOM error thay vì silent evict — fail-loud thay vì fail-silent. Xem chi tiết tại `database/redis.md` Section 4.
 
 2. **Circuit Breaker (In-memory, KHÔNG Redis — ADR-07)**
    - Circuit breaker state được lưu **in-process memory** (process variable), không phải Redis.
