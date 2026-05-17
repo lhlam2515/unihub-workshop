@@ -7,7 +7,6 @@ import {
   notificationChannelEnum,
   notificationStatusEnum,
   notificationTypeEnum,
-  offlineSyncStatusEnum,
   paymentGatewayEnum,
   paymentStatusEnum,
   platformEnum,
@@ -15,7 +14,6 @@ import {
   staffRoleEnum,
   syncErrorReasonEnum,
   syncJobStatusEnum,
-  ticketStatusEnum,
   workshopStatusEnum,
 } from "@/infra/database/schema";
 
@@ -25,7 +23,6 @@ export const workshopStatusSchema = z.enum(workshopStatusEnum.enumValues);
 export const registrationStatusSchema = z.enum(
   registrationStatusEnum.enumValues
 );
-export const ticketStatusSchema = z.enum(ticketStatusEnum.enumValues);
 export const paymentStatusSchema = z.enum(paymentStatusEnum.enumValues);
 export const paymentGatewaySchema = z.enum(paymentGatewayEnum.enumValues);
 export const notificationTypeSchema = z.enum(notificationTypeEnum.enumValues);
@@ -47,7 +44,6 @@ export type StaffRole = z.infer<typeof staffRoleSchema>;
 export type Platform = z.infer<typeof platformSchema>;
 export type WorkshopStatus = z.infer<typeof workshopStatusSchema>;
 export type RegistrationStatus = z.infer<typeof registrationStatusSchema>;
-export type TicketStatus = z.infer<typeof ticketStatusSchema>;
 export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
 export type PaymentGateway = z.infer<typeof paymentGatewaySchema>;
 export type NotificationType = z.infer<typeof notificationTypeSchema>;
@@ -58,6 +54,3 @@ export type SyncJobStatus = z.infer<typeof syncJobStatusSchema>;
 export type SyncErrorReason = z.infer<typeof syncErrorReasonSchema>;
 export type SummaryStatus = z.infer<typeof summaryStatusSchema>;
 export type DocumentUploadStatus = z.infer<typeof documentUploadStatusSchema>;
-
-export const offlineSyncStatusSchema = z.enum(offlineSyncStatusEnum.enumValues);
-export type OfflineSyncStatus = z.infer<typeof offlineSyncStatusSchema>;

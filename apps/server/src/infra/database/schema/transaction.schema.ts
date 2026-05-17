@@ -9,11 +9,9 @@ import {
 
 import {
   checkinSourceEnum,
-  offlineSyncStatusEnum,
   paymentGatewayEnum,
   paymentStatusEnum,
   registrationStatusEnum,
-  ticketStatusEnum,
 } from "./enums.schema";
 import { workshops } from "./event-core.schema";
 import { students, staff } from "./identity.schema";
@@ -57,38 +55,6 @@ export const registrations = pgTable(
     index("idx_registrations_workshop_id").on(table.workshopId),
     index("idx_registrations_status").on(table.status),
     index("idx_registrations_qr_code").on(table.qrCode),
-  ]
-);
-
-// ---------------------------------------------------------------------------
-// Tickets
-// ---------------------------------------------------------------------------
-
-export const tickets = pgTable(
-  "tickets",
-  (t) => ({
-    ticketId: t.uuid("ticket_id").primaryKey().defaultRandom(),
-    registrationId: t
-      .uuid("registration_id")
-      .notNull()
-      .references(() => registrations.registrationId, { onDelete: "restrict" }),
-    qrToken: t.varchar("qr_token", { length: 255 }).notNull(),
-    status: ticketStatusEnum("status").notNull().default("ACTIVE"),
-    issuedAt: t
-      .timestamp("issued_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    voidedAt: t.timestamp("voided_at", { withTimezone: true }),
-  }),
-  (table) => [
-    unique("uq_tickets_registration").on(table.registrationId),
-    unique("uq_tickets_qr_token").on(table.qrToken),
-    check(
-      "chk_tickets_void",
-      sql`(${table.status} = 'ACTIVE' AND ${table.voidedAt} IS NULL) OR (${table.status} = 'VOID' AND ${table.voidedAt} IS NOT NULL)`
-    ),
-    index("idx_tickets_qr_token").on(table.qrToken),
-    index("idx_tickets_status").on(table.status),
   ]
 );
 
@@ -176,22 +142,4 @@ export const checkinRecords = pgTable(
       .on(table.source)
       .where(sql`${table.source} = 'OFFLINE_SYNC'`),
   ]
-);
-
-export const offlineCheckinQueue = pgTable(
-  "offline_checkin_queue",
-  (t) => ({
-    localId: t.uuid("local_id").primaryKey(),
-    qrToken: t.varchar("qr_token", { length: 255 }).notNull(),
-    workshopId: t.uuid("workshop_id").notNull(),
-    checkedInAt: t.timestamp("checked_in_at", { withTimezone: true }).notNull(),
-    deviceId: t.varchar("device_id", { length: 100 }).notNull(),
-    checkedInBy: t.uuid("checked_in_by").notNull(),
-    syncStatus: offlineSyncStatusEnum("sync_status")
-      .notNull()
-      .default("PENDING"),
-    syncedAt: t.timestamp("synced_at", { withTimezone: true }),
-    conflictReason: t.text("conflict_reason"),
-  }),
-  () => []
 );

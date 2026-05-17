@@ -14,12 +14,7 @@ import {
   staff,
   students,
 } from "./identity.schema";
-import {
-  checkinRecords,
-  payments,
-  registrations,
-  tickets,
-} from "./transaction.schema";
+import { checkinRecords, payments, registrations } from "./transaction.schema";
 
 // ---------------------------------------------------------------------------
 // Identity
@@ -101,19 +96,10 @@ export const registrationsRelations = relations(
       fields: [registrations.workshopId],
       references: [workshops.workshopId],
     }),
-    ticket: one(tickets),
     payments: many(payments),
     checkinRecords: many(checkinRecords),
   })
 );
-
-export const ticketsRelations = relations(tickets, ({ one, many }) => ({
-  registration: one(registrations, {
-    fields: [tickets.registrationId],
-    references: [registrations.registrationId],
-  }),
-  checkinRecords: many(checkinRecords),
-}));
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
   registration: one(registrations, {

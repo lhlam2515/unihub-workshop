@@ -18,8 +18,6 @@ export const registrationStatusEnum = pgEnum("registration_status", [
   "CANCELLED",
 ]);
 
-export const ticketStatusEnum = pgEnum("ticket_status", ["ACTIVE", "VOID"]);
-
 export const paymentStatusEnum = pgEnum("payment_status", [
   "INITIATED",
   "SUCCEEDED",
@@ -70,12 +68,6 @@ export const syncJobStatusEnum = pgEnum("sync_job_status", [
   "SUCCESS",
   "PARTIAL_FAILURE",
   "FAILED",
-]);
-
-export const offlineSyncStatusEnum = pgEnum("offline_sync_status", [
-  "PENDING",
-  "SYNCED",
-  "CONFLICT",
 ]);
 
 export const syncErrorReasonEnum = pgEnum("sync_error_reason", [
