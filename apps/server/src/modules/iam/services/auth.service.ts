@@ -1,46 +1,41 @@
 import { Injectable } from "@nestjs/common";
 import bcrypt from "bcrypt";
 
-import type { User } from "@/infra/database/types/identity.types";
 import { authErrors } from "@/shared/response/errors";
 import { Result } from "@/shared/response/result";
 
-import { StudentProfileService } from "./student-profile.service";
 import { TokenService, ACCESS_EXPIRY } from "./token.service";
 import { AuthMeResponseBuilder } from "../dto/auth-me-response.dto";
 import { LoginResponseBuilder } from "../dto/login-response.dto";
 import { CheckinStaffAssignmentsRepository } from "../repositories/checkin-staff-assignments.repository";
+import { StaffRepository } from "../repositories/staff.repository";
 import { StudentsRepository } from "../repositories/students.repository";
-import { UsersRepository } from "../repositories/users.repository";
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly usersRepo: UsersRepository,
     private readonly tokenService: TokenService,
-    private readonly studentProfileService: StudentProfileService,
     private readonly assignmentsRepo: CheckinStaffAssignmentsRepository,
-    private readonly studentsRepo: StudentsRepository
+    private readonly studentsRepo: StudentsRepository,
+    private readonly staffRepo: StaffRepository
   ) {}
 
   /**
-   * Authenticates a user by account type and credentials.
+   * Authenticates an identity by account type and credentials.
    *
    * Business rules:
-   * - STUDENT: looks up by student_code (MSSV), resolves to linked user account.
-   * - STAFF (BTC/CHECKIN_STAFF): looks up by email.
+   * - STUDENT: looks up by student_code (MSSV) directly in students table.
+   * - STAFF (BTC/CHECKIN_STAFF): looks up by email directly in staff table.
    * - All failure modes return the same generic `INVALID_CREDENTIALS` to prevent
-   *   user enumeration.
-   * - Successfully authenticated CHECKIN_STAFF users have their workshop assignments
+   *   identity enumeration.
+   * - Successfully authenticated CHECKIN_STAFF have their workshop assignments
    *   loaded and embedded in the access token payload.
    * - Access token expiry is 15 minutes (default WEB TTL).
    *
-   * Side effects: Queries the users and students tables.
-   *
-   * @param params.accountType - "student" or "staff" — determines lookup strategy.
+   * @param params.accountType - "STUDENT" or "STAFF" — determines lookup strategy.
    * @param params.password - The plaintext password to verify against bcrypt hash.
-   * @param params.studentId - Required if accountType is "student" (MSSV format).
-   * @param params.email - Required if accountType is "staff".
+   * @param params.studentId - Required if accountType is "STUDENT" (MSSV format).
+   * @param params.email - Required if accountType is "STAFF".
    * @returns OkResult with LoginResponseDto, or FailResult with INVALID_CREDENTIALS.
    */
   async login(params: {
@@ -51,96 +46,107 @@ export class AuthService {
   }): Promise<Result<ReturnType<typeof LoginResponseBuilder.from>>> {
     const { accountType, password, studentId, email } = params;
 
-    let user: User;
-    let studentProfile: { studentId: string; fullName: string } | undefined;
-
     if (accountType === "STUDENT") {
       if (!studentId) return Result.fail(authErrors.invalidCredentials());
 
       const studentResult = await this.studentsRepo.findById(studentId);
-      if (
-        studentResult.isFailure ||
-        !studentResult.data ||
-        !studentResult.data.userId
-      ) {
+      if (studentResult.isFailure || !studentResult.data) {
         return Result.fail(authErrors.invalidCredentials());
       }
 
-      studentProfile = {
-        studentId: studentResult.data.studentId,
-        fullName: studentResult.data.fullName,
-      };
+      const student = studentResult.data;
+      if (!student.passwordHash) {
+        return Result.fail(authErrors.invalidCredentials());
+      }
 
-      const userResult = await this.usersRepo.findById(
-        studentResult.data.userId
+      const passwordValid = await bcrypt.compare(
+        password,
+        student.passwordHash
       );
-      if (userResult.isFailure || !userResult.data) {
+      if (!passwordValid) {
         return Result.fail(authErrors.invalidCredentials());
       }
-      user = userResult.data;
-    } else {
-      if (!email) return Result.fail(authErrors.invalidCredentials());
 
-      const userResult = await this.usersRepo.findByEmail(email);
-      if (userResult.isFailure || !userResult.data) {
-        return Result.fail(authErrors.invalidCredentials());
-      }
-      user = userResult.data;
+      const accessToken = await this.tokenService.signAccessToken(
+        {
+          identityId: student.studentId,
+          role: "STUDENT",
+          studentId: student.studentId,
+        },
+        "WEB"
+      );
+
+      const refreshToken = await this.tokenService.signRefreshToken(
+        student.studentId,
+        "STUDENT"
+      );
+
+      return Result.ok(
+        LoginResponseBuilder.from(
+          { accessToken, refreshToken, expiresIn: ACCESS_EXPIRY.WEB },
+          {
+            identityId: student.studentId,
+            email: student.email ?? "",
+            role: "STUDENT",
+          },
+          { studentId: student.studentId, fullName: student.fullName }
+        )
+      );
     }
 
-    if (user.status !== "ACTIVE") {
+    // STAFF login
+    if (!email) return Result.fail(authErrors.invalidCredentials());
+
+    const staffResult = await this.staffRepo.findByEmail(email);
+    if (staffResult.isFailure || !staffResult.data) {
       return Result.fail(authErrors.invalidCredentials());
     }
 
-    const passwordValid = await bcrypt.compare(password, user.passwordHash);
+    const staff = staffResult.data;
+    if (!staff.isActive) {
+      return Result.fail(authErrors.invalidCredentials());
+    }
+
+    const passwordValid = await bcrypt.compare(password, staff.passwordHash);
     if (!passwordValid) {
       return Result.fail(authErrors.invalidCredentials());
     }
 
     let allowedWorkshopIds: string[] | undefined;
-    if (user.role === "CHECKIN_STAFF") {
-      const assignmentResult = await this.assignmentsRepo.findByUserId(
-        user.userId
+    if (staff.role === "CHECKIN_STAFF") {
+      const assignmentResult = await this.assignmentsRepo.findByStaffId(
+        staff.staffId
       );
       if (assignmentResult.isSuccess && assignmentResult.data) {
         allowedWorkshopIds = assignmentResult.data.workshopIds;
       }
     }
 
-    let staffId: string | undefined;
-    if (user.role === "BTC" || user.role === "CHECKIN_STAFF") {
-      const profileResult = await this.usersRepo.findByIdWithProfile(
-        user.userId
-      );
-      if (profileResult.isSuccess && profileResult.data?.staffId) {
-        staffId = profileResult.data.staffId;
-      }
-    }
-
     const accessToken = await this.tokenService.signAccessToken(
       {
-        userId: user.userId,
-        role: user.role,
+        identityId: staff.staffId,
+        role: staff.role,
         allowedWorkshopIds,
-        studentId: studentProfile?.studentId,
-        staffId,
+        staffId: staff.staffId,
       },
       "WEB"
     );
 
-    const expiresIn = ACCESS_EXPIRY.WEB;
-    const refreshToken = await this.tokenService.signRefreshToken(user.userId);
+    const refreshToken = await this.tokenService.signRefreshToken(
+      staff.staffId,
+      "STAFF"
+    );
 
     return Result.ok(
       LoginResponseBuilder.from(
-        { accessToken, refreshToken, expiresIn },
+        { accessToken, refreshToken, expiresIn: ACCESS_EXPIRY.WEB },
         {
-          userId: user.userId,
-          email: user.email,
-          role: user.role,
+          identityId: staff.staffId,
+          email: staff.email,
+          role: staff.role,
           allowedWorkshopIds,
         },
-        studentProfile
+        { studentId: undefined, fullName: staff.fullName }
       )
     );
   }
@@ -150,8 +156,8 @@ export class AuthService {
    *
    * Business rules:
    * - The consumed refresh token is blacklisted in Redis (refresh token rotation).
-   * - If the refresh token is expired, already blacklisted, or the user status is
-   *   not ACTIVE, the request is rejected with REFRESH_TOKEN_INVALID.
+   * - If the refresh token is expired, already blacklisted, or the identity status is
+   *   not valid, the request is rejected with REFRESH_TOKEN_INVALID.
    *
    * Side effects: Blacklists the old refresh token's jti in Redis. Issues a new refresh token.
    *
@@ -172,67 +178,76 @@ export class AuthService {
       await this.tokenService.verifyRefreshToken(refreshTokenStr);
     if (verifyResult.isFailure) return Result.fail(verifyResult.error);
 
-    const { sub: userId, jti: oldJti } = verifyResult.data;
+    const { sub, type, jti: oldJti } = verifyResult.data;
 
-    // Check if the refresh token has been blacklisted (e.g., during logout)
     const isBlacklisted = await this.tokenService.isBlacklisted(oldJti);
     if (isBlacklisted) {
       return Result.fail(authErrors.refreshTokenInvalid());
     }
 
-    const userResult = await this.usersRepo.findById(userId);
-    if (userResult.isFailure) return Result.fail(userResult.error);
-    if (!userResult.data || userResult.data.status !== "ACTIVE") {
+    if (type === "STUDENT") {
+      const studentResult = await this.studentsRepo.findById(sub);
+      if (studentResult.isFailure || !studentResult.data) {
+        return Result.fail(authErrors.refreshTokenInvalid());
+      }
+
+      await this.tokenService.blacklistToken(oldJti, 604_800);
+
+      const newAccessToken = await this.tokenService.signAccessToken(
+        {
+          identityId: sub,
+          role: "STUDENT",
+          studentId: sub,
+        },
+        platform
+      );
+
+      const newRefreshToken = await this.tokenService.signRefreshToken(
+        sub,
+        "STUDENT"
+      );
+
+      return Result.ok({
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        expiresIn: ACCESS_EXPIRY[platform],
+      });
+    }
+
+    // STAFF refresh
+    const staffResult = await this.staffRepo.findById(sub);
+    if (staffResult.isFailure || !staffResult.data) {
       return Result.fail(authErrors.refreshTokenInvalid());
     }
 
-    const user = userResult.data;
+    const staff = staffResult.data;
+    if (!staff.isActive) {
+      return Result.fail(authErrors.refreshTokenInvalid());
+    }
 
-    // Blacklist old refresh token (rotation)
     await this.tokenService.blacklistToken(oldJti, 604_800);
 
     let allowedWorkshopIds: string[] | undefined;
-    let newStudentId: string | undefined;
-    let newStaffId: string | undefined;
-
-    if (user.role === "CHECKIN_STAFF") {
-      const assignmentResult = await this.assignmentsRepo.findByUserId(
-        user.userId
-      );
+    if (staff.role === "CHECKIN_STAFF") {
+      const assignmentResult = await this.assignmentsRepo.findByStaffId(sub);
       if (assignmentResult.isSuccess && assignmentResult.data) {
         allowedWorkshopIds = assignmentResult.data.workshopIds;
       }
     }
 
-    if (user.role === "STUDENT") {
-      const profileResult = await this.studentsRepo.findByUserId(user.userId);
-      if (profileResult.isSuccess && profileResult.data) {
-        newStudentId = profileResult.data.studentId;
-      }
-    }
-
-    if (user.role === "BTC" || user.role === "CHECKIN_STAFF") {
-      const profileResult = await this.usersRepo.findByIdWithProfile(
-        user.userId
-      );
-      if (profileResult.isSuccess && profileResult.data?.staffId) {
-        newStaffId = profileResult.data.staffId;
-      }
-    }
-
     const newAccessToken = await this.tokenService.signAccessToken(
       {
-        userId: user.userId,
-        role: user.role,
+        identityId: sub,
+        role: staff.role,
         allowedWorkshopIds,
-        studentId: newStudentId,
-        staffId: newStaffId,
+        staffId: sub,
       },
       platform
     );
 
     const newRefreshToken = await this.tokenService.signRefreshToken(
-      user.userId
+      sub,
+      "STAFF"
     );
 
     return Result.ok({
@@ -251,24 +266,21 @@ export class AuthService {
    *
    * Side effects: Writes to Redis key `token:blacklist:{jti}` with a 900-second TTL.
    *
-   * @param userId - The user's system ID (used for audit tracking).
+   * @param _identityId - The identity ID (studentId or staffId, used for audit).
    * @param jti - The unique token identifier to blacklist.
-   * @returns OkResult<void> on success.
    */
   async logout(
-    userId: string,
+    _identityId: string,
     jti: string,
     refreshTokenStr?: string
   ): Promise<Result<void>> {
-    // Blacklist access token (15 min TTL matches ACCESS_EXPIRY.WEB)
     await this.tokenService.blacklistToken(jti, 900);
 
-    // Blacklist refresh token if present in the request cookie
     if (refreshTokenStr) {
       const refreshJti =
         this.tokenService.extractRefreshTokenJti(refreshTokenStr);
       if (refreshJti) {
-        await this.tokenService.blacklistToken(refreshJti, 604_800); // 7 days
+        await this.tokenService.blacklistToken(refreshJti, 604_800);
       }
     }
 
@@ -276,46 +288,51 @@ export class AuthService {
   }
 
   /**
-   * Retrieves the authenticated user's profile with role-specific fields.
+   * Retrieves the authenticated identity's profile with role-specific fields.
    *
    * Business rules:
-   * - STUDENT users receive additional student profile fields (student_id, full_name).
-   * - CHECKIN_STAFF users receive their assigned workshop IDs.
-   * - BTC users receive only base fields.
+   * - STUDENT: profile from students table (studentId, fullName).
+   * - CHECKIN_STAFF: includes assigned workshop IDs.
+   * - BTC: base fields only.
    *
-   * Side effects: Queries the users table. For STUDENT, also queries the students table.
-   * For CHECKIN_STAFF, also queries the checkin_staff_assignments table.
-   *
-   * @param userId - The authenticated user's system ID.
-   * @returns OkResult with AuthMeResponseDto containing role-appropriate fields,
-   *          or FailResult with USER_NOT_FOUND.
+   * @param identityId - The identity ID (studentId for STUDENT, staffId for STAFF).
+   * @param role - RBAC role to determine which profile to fetch.
+   * @returns OkResult with AuthMeResponseDto containing role-appropriate fields.
    */
   async getMe(
-    userId: string
+    identityId: string,
+    role: string
   ): Promise<Result<ReturnType<typeof AuthMeResponseBuilder.from>>> {
-    const userResult = await this.usersRepo.findById(userId);
-    if (userResult.isFailure) return Result.fail(userResult.error);
-    if (!userResult.data) {
-      return Result.fail(authErrors.userNotFound(userId));
+    if (role === "STUDENT") {
+      const studentResult = await this.studentsRepo.findById(identityId);
+      if (studentResult.isFailure || !studentResult.data) {
+        return Result.fail(authErrors.userNotFound(identityId));
+      }
+
+      const student = studentResult.data;
+      return Result.ok(
+        AuthMeResponseBuilder.from(
+          {
+            identityId: student.studentId,
+            email: student.email ?? "",
+            role: "STUDENT",
+          },
+          { studentId: student.studentId, fullName: student.fullName }
+        )
+      );
     }
 
-    const user = userResult.data;
-    let studentProfile: { studentId: string; fullName: string } | undefined;
+    const staffResult = await this.staffRepo.findById(identityId);
+    if (staffResult.isFailure || !staffResult.data) {
+      return Result.fail(authErrors.userNotFound(identityId));
+    }
+
+    const staff = staffResult.data;
     let allowedWorkshopIds: string[] | undefined;
 
-    if (user.role === "STUDENT") {
-      const profileResult =
-        await this.studentProfileService.getProfileByUserId(userId);
-      if (profileResult.isSuccess && profileResult.data) {
-        studentProfile = {
-          studentId: profileResult.data.studentId,
-          fullName: profileResult.data.fullName,
-        };
-      }
-    }
-
-    if (user.role === "CHECKIN_STAFF") {
-      const assignmentResult = await this.assignmentsRepo.findByUserId(userId);
+    if (staff.role === "CHECKIN_STAFF") {
+      const assignmentResult =
+        await this.assignmentsRepo.findByStaffId(identityId);
       if (assignmentResult.isSuccess && assignmentResult.data) {
         allowedWorkshopIds = assignmentResult.data.workshopIds;
       }
@@ -324,12 +341,12 @@ export class AuthService {
     return Result.ok(
       AuthMeResponseBuilder.from(
         {
-          userId: user.userId,
-          email: user.email,
-          role: user.role,
+          identityId: staff.staffId,
+          email: staff.email,
+          role: staff.role,
           allowedWorkshopIds,
         },
-        studentProfile
+        { studentId: undefined, fullName: staff.fullName }
       )
     );
   }
