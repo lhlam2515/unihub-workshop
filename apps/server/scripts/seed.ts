@@ -45,16 +45,10 @@ function addSeconds(date: Date, secs: number): Date {
   return new Date(date.getTime() + secs * 1000);
 }
 
-/** 64-char hex token suitable for QR codes. */
-function qrToken(): string {
-  return crypto.randomBytes(32).toString("hex");
-}
-
-// ── Clear Phase ───────────────────────────────────────────────────────────────
+// ── Clear Phase ─────────────────────────────────────────────────────────────────
 
 async function clearAll() {
   // Order respects FK dependencies (children deleted before parents)
-  await db.delete(schema.offlineCheckinQueue);
   await db.delete(schema.checkinRecords);
   await db.delete(schema.aiSummaries);
   await db.delete(schema.workshopDocuments);
@@ -63,9 +57,7 @@ async function clearAll() {
   await db.delete(schema.studentSyncErrors);
   await db.delete(schema.studentSyncJobs);
   await db.delete(schema.payments);
-  await db.delete(schema.tickets);
   await db.delete(schema.registrations);
-  await db.delete(schema.workshopSlots);
   await db.delete(schema.workshops);
   await db.delete(schema.speakers);
   await db.delete(schema.rooms);
@@ -568,7 +560,6 @@ async function seedWorkshops(
 ): Promise<WorkshopRow[]> {
   const workshopRows: WorkshopRow[] = [];
   const insertValues: (typeof schema.workshops.$inferInsert)[] = [];
-  const slotValues: (typeof schema.workshopSlots.$inferInsert)[] = [];
 
   for (const def of WORKSHOP_DEFS) {
     const room = rooms[def.roomIdx];
@@ -599,20 +590,10 @@ async function seedWorkshops(
       createdBy: btcStaffId,
       version: 0,
     });
-
-    slotValues.push({
-      slotId: crypto.randomUUID(),
-      workshopId,
-      totalCapacity: room.capacity,
-      lockedCount: 0,
-      confirmedCount: 0,
-      version: 0,
-    });
   }
 
   await db.insert(schema.workshops).values(insertValues);
-  await db.insert(schema.workshopSlots).values(slotValues);
-  console.log(`✓ Workshops: ${workshopRows.length} workshops + slots`);
+  console.log(`✓ Workshops: ${workshopRows.length}`);
   return workshopRows;
 }
 
@@ -705,7 +686,7 @@ async function seedRegistrations(
       .values(allRows.slice(b * 200, (b + 1) * 200));
   }
 
-  // Reconcile seatsAvailable and workshopSlots.confirmedCount
+  // Reconcile seatsAvailable
   for (const ws of workshops) {
     const confirmed = allRows.filter(
       (r) =>
@@ -718,27 +699,18 @@ async function seedRegistrations(
       .update(schema.workshops)
       .set({ seatsAvailable })
       .where(eq(schema.workshops.workshopId, ws.workshopId));
-
-    await db
-      .update(schema.workshopSlots)
-      .set({ confirmedCount: confirmed })
-      .where(eq(schema.workshopSlots.workshopId, ws.workshopId));
   }
 
   console.log(`✓ Registrations: ${allRows.length} records, seats reconciled`);
   return { registrations: allRows };
 }
 
-// ── Phase 5: Payments + Tickets ───────────────────────────────────────────────
+// ── Phase 5: Payments ─────────────────────────────────────────────────────────
 
-async function seedPaymentsAndTickets(
-  workshops: WorkshopRow[],
-  registrations: RegRow[]
-) {
+async function seedPayments(workshops: WorkshopRow[], registrations: RegRow[]) {
   const priceMap = new Map(workshops.map((w) => [w.workshopId, w.def.price]));
 
   const paymentRows: (typeof schema.payments.$inferInsert)[] = [];
-  const ticketRows: (typeof schema.tickets.$inferInsert)[] = [];
   let unresolvedCount = 0;
 
   for (let i = 0; i < registrations.length; i++) {
@@ -746,7 +718,7 @@ async function seedPaymentsAndTickets(
     const price = priceMap.get(reg.workshopId) ?? 0;
     const isPaidWorkshop = price > 0;
 
-    // Payments: only for paid workshops, skip CONFIRMED (free-workshop path)
+    // Only for paid workshops, skip CONFIRMED (free-workshop path)
     if (isPaidWorkshop && reg.status !== "CONFIRMED") {
       let payStatus: "INITIATED" | "SUCCEEDED" | "FAILED" | "UNRESOLVED";
       if (reg.status === "PAID") payStatus = "SUCCEEDED";
@@ -775,24 +747,6 @@ async function seedPaymentsAndTickets(
         rawGatewayResponse: null,
       });
     }
-
-    // Tickets: all non-CANCELLED registrations
-    if (reg.status !== "CANCELLED") {
-      ticketRows.push({
-        ticketId: crypto.randomUUID(),
-        registrationId: reg.registrationId,
-        qrToken: qrToken(),
-        status: "ACTIVE",
-        issuedAt: reg.confirmedAt ?? reg.registeredAt,
-        voidedAt: null,
-      });
-    }
-  }
-
-  // Mark the first ticket VOID for demo (constraint: VOID requires voidedAt non-null)
-  if (ticketRows.length > 0) {
-    ticketRows[0].status = "VOID";
-    ticketRows[0].voidedAt = addSeconds(ticketRows[0].issuedAt as Date, 3600);
   }
 
   for (let b = 0; b < Math.ceil(paymentRows.length / 200); b++) {
@@ -800,16 +754,10 @@ async function seedPaymentsAndTickets(
       .insert(schema.payments)
       .values(paymentRows.slice(b * 200, (b + 1) * 200));
   }
-  for (let b = 0; b < Math.ceil(ticketRows.length / 200); b++) {
-    await db
-      .insert(schema.tickets)
-      .values(ticketRows.slice(b * 200, (b + 1) * 200));
-  }
 
   console.log(
-    `✓ Payments: ${paymentRows.length} (${unresolvedCount} UNRESOLVED), Tickets: ${ticketRows.length} (1 VOID)`
+    `✓ Payments: ${paymentRows.length} (${unresolvedCount} UNRESOLVED)`
   );
-  return { tickets: ticketRows };
 }
 
 // ── Phase 6: Check-in ─────────────────────────────────────────────────────────
@@ -817,7 +765,6 @@ async function seedPaymentsAndTickets(
 async function seedCheckins(
   workshops: WorkshopRow[],
   registrations: RegRow[],
-  tickets: (typeof schema.tickets.$inferInsert)[],
   checkin1UserId: string,
   checkin2UserId: string
 ) {
@@ -826,7 +773,6 @@ async function seedCheckins(
       .filter((w) => w.def.status === "COMPLETED")
       .map((w) => w.workshopId)
   );
-  const qrByRegId = new Map(tickets.map((t) => [t.registrationId, t.qrToken]));
   const startsByWorkshopId = new Map(
     workshops.map((w) => [w.workshopId, w.startsAt])
   );
@@ -838,8 +784,6 @@ async function seedCheckins(
   );
 
   const checkinRows: (typeof schema.checkinRecords.$inferInsert)[] = [];
-  const offlineRows: (typeof schema.offlineCheckinQueue.$inferInsert)[] = [];
-  let offlineSyncedAdded = 0;
 
   for (let i = 0; i < eligible.length; i++) {
     const reg = eligible[i];
@@ -861,42 +805,7 @@ async function seedCheckins(
         source: "ONLINE",
         deviceId,
       });
-
-      // Add SYNCED offline queue entry for ~every 10th online check-in (max 3)
-      if (i % 10 === 0 && offlineSyncedAdded < 3) {
-        offlineRows.push({
-          localId: crypto.randomUUID(),
-          qrToken:
-            qrByRegId.get(reg.registrationId) ??
-            crypto.randomBytes(32).toString("hex"),
-          workshopId: reg.workshopId,
-          checkedInAt,
-          deviceId,
-          checkedInBy,
-          syncStatus: "SYNCED",
-          syncedAt: addSeconds(checkedInAt, randomInt(30, 300)),
-          conflictReason: null,
-        });
-        offlineSyncedAdded++;
-      }
     }
-  }
-
-  // Add 1 PENDING offline queue entry (not yet synced)
-  if (eligible.length > 0) {
-    const last = eligible[eligible.length - 1];
-    const lastStartsAt = startsByWorkshopId.get(last.workshopId)!;
-    offlineRows.push({
-      localId: crypto.randomUUID(),
-      qrToken: crypto.randomBytes(32).toString("hex"),
-      workshopId: last.workshopId,
-      checkedInAt: addSeconds(lastStartsAt, randomInt(0, 1800)),
-      deviceId: "DEVICE_001",
-      checkedInBy: checkin1UserId,
-      syncStatus: "PENDING",
-      syncedAt: null,
-      conflictReason: null,
-    });
   }
 
   for (let b = 0; b < Math.ceil(checkinRows.length / 200); b++) {
@@ -904,13 +813,8 @@ async function seedCheckins(
       .insert(schema.checkinRecords)
       .values(checkinRows.slice(b * 200, (b + 1) * 200));
   }
-  if (offlineRows.length > 0) {
-    await db.insert(schema.offlineCheckinQueue).values(offlineRows);
-  }
 
-  console.log(
-    `✓ Check-ins: ${checkinRows.length} online, ${offlineRows.length} offline queue (1 PENDING)`
-  );
+  console.log(`✓ Check-ins: ${checkinRows.length} online`);
 }
 
 // ── Phase 7: Supplementary ────────────────────────────────────────────────────
@@ -1109,11 +1013,10 @@ async function main() {
     workshops,
     identity.studentIds
   );
-  const { tickets } = await seedPaymentsAndTickets(workshops, registrations);
+  await seedPayments(workshops, registrations);
   await seedCheckins(
     workshops,
     registrations,
-    tickets,
     identity.checkin1StaffId,
     identity.checkin2StaffId
   );

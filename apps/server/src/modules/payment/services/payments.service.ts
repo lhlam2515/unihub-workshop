@@ -15,8 +15,8 @@
  * 8. Finalize idempotency key and record CB outcome.
  *
  * Webhook processing:
- * - SUCCESS: ACID transaction (payment→SUCCESS, registration→CONFIRMED,
- *   ticket→ACTIVE), then release seat lock + fire event.
+ * - SUCCESS: ACID transaction (payment→SUCCESS, registration→CONFIRMED),
+ *   then release seat lock + fire event.
  * - FAILED: mark payment FAILED, release seat lock + increment counter + fire event.
  *
  * Cross-module communication:
@@ -28,7 +28,7 @@
  * - DB UNIQUE constraint on idempotency_key is Layer 2 fallback.
  *
  * Side effects:
- * - Inserts/updates payments, registrations, tickets in PostgreSQL.
+ * - Inserts/updates payments, registrations in PostgreSQL.
  * - Creates/reads/deletes Redis keys (idempotency, circuit breaker, seat lock).
  * - Enqueues BullMQ notification events (fire-and-forget).
  */
@@ -264,7 +264,7 @@ export class PaymentsService {
    *   the webhook response.
    *
    * Side effects:
-   * - Updates payment, registration rows; inserts ticket row in DB.
+   * - Updates payment and registration rows in DB.
    * - Deletes Redis key seat:lock:{workshopId}:{registrationId}.
    * - Increments seat:available:{workshopId} in Redis.
    * - Enqueues BullMQ notification event (fire-and-forget).
@@ -306,7 +306,7 @@ export class PaymentsService {
         let workshopId: string;
 
         if (webhookDto.status === "SUCCESS") {
-          // Success path: update payment + registration + create ticket
+          // Success path: update payment + registration
           const payUpdate = await this.paymentsRepo.updateStatus(
             payment.paymentId,
             "SUCCEEDED",

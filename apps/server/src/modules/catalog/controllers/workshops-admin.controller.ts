@@ -11,7 +11,7 @@
  * - PATCH /admin/workshops/:id — update a draft workshop
  * - POST /admin/workshops/:workshopId/publish — publish workshop and init Redis counter
  * - PATCH /admin/workshops/:workshopId/emergency-update — emergency update published workshop
- * - POST /admin/workshops/:workshopId/cancel — cancel workshop and cascade void tickets
+ * - POST /admin/workshops/:workshopId/cancel — cancel workshop
  * - GET /admin/workshops/:workshopId/stats — get workshop statistics
  */
 
