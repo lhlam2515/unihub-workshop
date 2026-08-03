@@ -45,9 +45,8 @@ jobs:
             turbo-${{ github.ref_name }}-
             turbo-main-
 
-      - name: Lint
-        run: pnpm lint
-
+      # Lint is not here on purpose. It fails on all three workspaces on main
+      # (server 71 errors, mobile 20, web 3) and runs in the quarantine job below.
       - name: Type check
         run: pnpm check-types
 
@@ -87,16 +86,20 @@ jobs:
 
   # Quarantine lane.
   #
-  # Measured on 2026-08-03 against commit HEAD of main:
-  #   integration  58 of 114 tests failing (4 of 6 suites)
-  #   e2e          68 of 83  tests failing (5 of 7 suites)
+  # Measured on 2026-08-03 against HEAD of main, before this pipeline existed:
+  #   lint server    477 problems, 71 errors
+  #   lint mobile    29 problems,  20 errors (18 are prettier formatting)
+  #   lint web       10 problems,   3 errors
+  #   integration    58 of 114 tests failing (4 of 6 suites)
+  #   e2e            68 of 83  tests failing (5 of 7 suites)
   #
-  # These suites were already broken before this pipeline existed - the
-  # integration config had no npm script calling it, so nothing ever ran it.
-  # They are reported, never enforced. Promote a suite into `verify` above the
-  # moment it goes green, otherwise this lane becomes noise everyone ignores.
+  # None of this was caused by adding CI - the integration config had no npm
+  # script calling it, so nothing had ever run it, and lint had never run in CI
+  # at all. Enforcing any of it today turns main red on the first commit, which
+  # teaches everyone to ignore a red build. Reported, not enforced. Promote a
+  # check into `verify` above the moment it goes green.
   quarantine:
-    name: Integration and e2e (known failing, not enforced)
+    name: Known failing checks (not enforced)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     continue-on-error: true
@@ -115,6 +118,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Lint (server)
+        id: lint_server
+        continue-on-error: true
+        run: pnpm exec turbo run lint --filter=server
+
+      - name: Lint (web)
+        id: lint_web
+        continue-on-error: true
+        run: pnpm exec turbo run lint --filter=web
+
+      - name: Lint (mobile)
+        id: lint_mobile
+        continue-on-error: true
+        run: pnpm exec turbo run lint --filter=mobile
+
       - name: Integration tests
         id: integration
         continue-on-error: true
@@ -129,12 +147,15 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Quarantined suites"
+            echo "## Quarantined checks"
             echo ""
-            echo "| Suite | Result |"
+            echo "| Check | Result |"
             echo "|---|---|"
+            echo "| Lint server | ${{ steps.lint_server.outcome }} |"
+            echo "| Lint web | ${{ steps.lint_web.outcome }} |"
+            echo "| Lint mobile | ${{ steps.lint_mobile.outcome }} |"
             echo "| Integration | ${{ steps.integration.outcome }} |"
             echo "| E2E | ${{ steps.e2e.outcome }} |"
             echo ""
-            echo "These do not block merges. Fix a suite, then move it into the \`verify\` job."
+            echo "These do not block merges. Fix one, then move it into the \`verify\` job."
           } >> "$GITHUB_STEP_SUMMARY"

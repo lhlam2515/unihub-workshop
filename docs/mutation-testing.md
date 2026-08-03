@@ -91,8 +91,8 @@ are in that state.
 
 | Workflow | Trigger | Blocks merge | What it answers |
 |---|---|---|---|
-| `ci.yml` → `verify` | every PR and push to main | **yes** | Does it lint, typecheck, build, and pass 651 unit tests? |
-| `ci.yml` → `quarantine` | same | no | Integration and e2e status. Both are currently failing (58/114 and 68/83) and were broken before this pipeline existed. |
+| `ci.yml` → `verify` | every PR and push to main | **yes** | Does it typecheck, build, and pass 651 unit tests? |
+| `ci.yml` → `quarantine` | same | no | Lint and the integration/e2e suites. All were already failing on main before CI existed: lint 71 errors on server, 20 on mobile, 3 on web; integration 58/114; e2e 68/83. |
 | `mutation.yml` | PR touching `apps/server/src`, plus nightly | no | Are the files this PR changed actually protected by tests? Nightly re-checks the full invariant scope. |
 | `mutation-ai-review.yml` | `mutation:ai-review` label, weekly, manual | no | An agent's triage of surviving mutants. Opt-in. |
 

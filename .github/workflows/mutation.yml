@@ -16,6 +16,7 @@ on:
     paths:
       - 'apps/server/src/**/*.ts'
       - 'apps/server/stryker.conf.mjs'
+      - 'apps/server/scripts/mutation-*.mjs'
       - '.github/workflows/mutation.yml'
   schedule:
     # 18:00 UTC = 01:00 Asia/Ho_Chi_Minh
@@ -75,7 +76,7 @@ jobs:
             stryker-${{ github.ref_name }}-
             stryker-main-
 
-      - name: Resolve changed source files
+      - name: Resolve mutation scope
         if: github.event_name == 'pull_request'
         id: changed
         run: |
@@ -89,21 +90,36 @@ jobs:
             | sed 's|^apps/server/||' \
             | paste -sd, -)
 
-          if [ -z "$CHANGED" ]; then
-            echo "No mutable source changes in this PR."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+          # A PR that changes the Stryker config or this workflow but no source
+          # still needs verifying - otherwise a config regression ships unnoticed.
+          CONFIG=$(git diff --name-only --diff-filter=d \
+            "origin/${{ github.base_ref }}...HEAD" \
+            -- apps/server/stryker.conf.mjs \
+               apps/server/scripts/mutation-ai-bundle.mjs \
+               .github/workflows/mutation.yml)
+
+          if [ -n "$CHANGED" ]; then
+            echo "mode=scoped" >> "$GITHUB_OUTPUT"
             echo "files=$CHANGED" >> "$GITHUB_OUTPUT"
-            echo "Mutating: $CHANGED"
+            echo "Mutating changed sources: $CHANGED"
+          elif [ -n "$CONFIG" ]; then
+            echo "mode=invariant" >> "$GITHUB_OUTPUT"
+            echo "No source changed, but mutation config did. Running invariant scope."
+          else
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "Nothing to mutate."
           fi
 
       # concurrency 2 matches the 2 vCPU on a GitHub-hosted runner. Going higher
       # makes the 24 spec files that read the real clock flaky, which shows up as
       # Timeout and inflates the score.
-      - name: Run Stryker (PR scope)
-        if: github.event_name == 'pull_request' && steps.changed.outputs.skip == 'false'
+      - name: Run Stryker (PR, changed files)
+        if: github.event_name == 'pull_request' && steps.changed.outputs.mode == 'scoped'
         run: pnpm exec stryker run --mutate "${{ steps.changed.outputs.files }}" --concurrency 2
+
+      - name: Run Stryker (PR, config changed)
+        if: github.event_name == 'pull_request' && steps.changed.outputs.mode == 'invariant'
+        run: pnpm exec stryker run --concurrency 2 --force
 
       - name: Run Stryker (nightly, invariant scope)
         if: github.event_name == 'schedule'
@@ -122,11 +138,11 @@ jobs:
       # the machine-readable summary, and the dossier the AI lane consumes.
       - name: Build report bundle
         id: bundle
-        if: always() && steps.changed.outputs.skip != 'true'
+        if: always() && steps.changed.outputs.mode != 'skip'
         run: pnpm run mutation:bundle
 
       - name: Upload mutation report
-        if: always() && steps.changed.outputs.skip != 'true'
+        if: always() && steps.changed.outputs.mode != 'skip'
         uses: actions/upload-artifact@v4
         with:
           name: mutation-report-${{ github.run_id }}
@@ -135,14 +151,14 @@ jobs:
           retention-days: 30
 
       - name: Job summary
-        if: always() && steps.changed.outputs.skip != 'true'
+        if: always() && steps.changed.outputs.mode != 'skip'
         run: cat reports/mutation/pr-comment.md >> "$GITHUB_STEP_SUMMARY" || true
 
       # Skipped automatically for fork PRs, which have no write token.
       - name: Comment on PR
         if: >-
           github.event_name == 'pull_request' &&
-          steps.changed.outputs.skip == 'false' &&
+          steps.changed.outputs.mode != 'skip' &&
           github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         uses: actions/github-script@v7
