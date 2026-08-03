@@ -148,7 +148,12 @@ jobs:
                naming the spec file it belongs in.
             3. A closing section "Validation required" listing, for each proposed test,
                the exact command a developer runs to verify it kills the mutant:
-               `pnpm --filter server exec stryker run --mutate "<file>:<line>-<line>"`
+               `node scripts/mutation-validate.mjs --file <path> --line <n>` run from
+               apps/server. That script runs both directions of the gate: the test must
+               pass on the original, and the mutant at that line must come back Killed.
+               Do NOT emit `stryker run --mutate "<file>:<line>-<line>"` - the line-range
+               form does not narrow the run, it still mutates the whole file, so it
+               proves nothing about the specific mutant.
 
             End the file with a line stating that every proposal is unverified until
             a human runs that command.
