@@ -18,6 +18,12 @@ apps/web/playwright-report/
 apps/web/playwright/.auth/
 apps/web/test-results/
 
+# Mutation testing
+# reports/ holds generated Stryker output; CI publishes it as an artifact.
+# stryker-incremental.json is restored from cache, not from the repo.
+apps/server/reports/
+apps/server/.stryker-tmp/
+
 # Turbo
 .turbo
 

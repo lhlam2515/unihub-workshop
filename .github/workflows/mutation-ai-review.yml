@@ -1,0 +1,225 @@
+name: Mutation AI Review
+
+# Opt-in lane. Everything the pipeline needs to function lives in mutation.yml;
+# this one only adds an agent's reading of the survivor dossier.
+#
+# It is opt-in for two reasons:
+#   1. Authentication uses CLAUDE_CODE_OAUTH_TOKEN, which draws on a Claude
+#      subscription quota shared with day-to-day development. Running it on
+#      every push would burn that quota on noise.
+#   2. Agent output is not reproducible. The deterministic half of the pipeline
+#      must never depend on it.
+#
+# The agent may only read the repo and write into reports/. It does not edit
+# source, does not write tests into the tree, and does not push commits.
+# Publishing the comment is done by a scripted step, not by the agent.
+#
+# Setup (one time):
+#   1. Run `claude setup-token` locally (Claude Pro or Max).
+#   2. Repo Settings -> Secrets and variables -> Actions -> New secret
+#      Name: CLAUDE_CODE_OAUTH_TOKEN
+#   3. Create the label `mutation:ai-review`.
+#
+# Installing the Claude Code GitHub App (github.com/apps/claude) is NOT
+# required here, because github_token below is set explicitly. Install it only
+# if you also want @claude mentions to work in issues and PR comments.
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+  schedule:
+    # Weekly rather than nightly, to keep subscription quota for actual dev work.
+    # Change to '0 19 * * *' for nightly.
+    - cron: '0 19 * * 0'
+
+concurrency:
+  group: mutation-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  # claude-code-action exchanges a GitHub OIDC token for its App token. This is
+  # required even when Anthropic auth uses CLAUDE_CODE_OAUTH_TOKEN rather than
+  # workload identity federation; without it the action fails on setup with
+  # "Could not fetch an OIDC token" before it ever reads the prompt.
+  id-token: write
+
+jobs:
+  ai-review:
+    name: Triage surviving mutants
+    # Label runs only fire for the one label we care about, and never for forks
+    # (a fork PR cannot read secrets, so the agent would fail on auth anyway).
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.label.name == 'mutation:ai-review' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore incremental report
+        uses: actions/cache@v4
+        with:
+          path: apps/server/reports/stryker-incremental.json
+          key: stryker-ai-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            stryker-${{ github.ref_name }}-
+            stryker-main-
+
+      - name: Run Stryker
+        working-directory: apps/server
+        run: pnpm exec stryker run --concurrency 2 --force
+
+      - name: Build survivor dossier
+        working-directory: apps/server
+        run: pnpm run mutation:bundle
+
+      # Nothing below this point runs if there is nothing worth reviewing.
+      - name: Check whether review is warranted
+        id: gate
+        working-directory: apps/server
+        run: |
+          COUNT=$(node -p "require('./reports/mutation/summary.json').survivorsInInvariantScope")
+          echo "survivors=$COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No survivor touches a business invariant. Skipping the agent."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Agent triage
+        if: steps.gate.outputs.run == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Accepts either spelling so an existing secret does not have to be
+          # recreated. CLAUDE_CODE_OAUTH_TOKEN is the name Anthropic documents.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.CLAUDE_CODE_AUTH_TOKEN }}
+          # Without this the action tries to exchange its OIDC token for a
+          # Claude Code GitHub App token, which 401s unless that app is
+          # installed on the repo. The agent only reads the tree and writes one
+          # report file, so the default job token covers what it needs.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Read-only over the source tree; the only writable target is the report file.
+          claude_args: >-
+            --allowedTools "Read,Glob,Grep,Write"
+            --max-turns 30
+          prompt: |
+            Read `apps/server/reports/mutation/ai-bundle.md`. It contains surviving
+            mutants from a StrykerJS run, each annotated with the business invariant
+            it threatens and the source context around it.
+
+            Follow the instructions in that file exactly. For each mutant, return one
+            of three verdicts: EQUIVALENT, MISSING ASSERTION, or MISSING TEST.
+
+            Read the relevant source and spec files before deciding. A verdict based
+            only on the snippet in the dossier is a guess, and a wrong verdict here
+            costs a developer more time than no verdict at all.
+
+            Hard rules:
+            - Every test you propose must PASS on the original code and FAIL on the
+              mutant. If you cannot argue both directions, say EQUIVALENT instead.
+            - Never assert the mutant's output as the expected value. The invariant
+              text in the dossier is the oracle, not the current implementation.
+            - Match the existing spec style: NestJS Test.createTestingModule with
+              mocked providers. No real Postgres or Redis.
+            - Do not modify any source file, spec file, or configuration.
+
+            Write your review to `apps/server/reports/mutation/ai-review.md` with:
+            1. A summary table: Mutant ID | File | Verdict | One-line reason.
+            2. For each non-equivalent verdict, the proposed test code in a ```ts block,
+               naming the spec file it belongs in.
+            3. A closing section "Validation required" listing, for each proposed test,
+               the exact command a developer runs to verify it kills the mutant:
+               `node scripts/mutation-validate.mjs --file <path> --line <n>` run from
+               apps/server. That script runs both directions of the gate: the test must
+               pass on the original, and the mutant at that line must come back Killed.
+               Do NOT emit `stryker run --mutate "<file>:<line>-<line>"` - the line-range
+               form does not narrow the run, it still mutates the whole file, so it
+               proves nothing about the specific mutant.
+
+            End the file with a line stating that every proposal is unverified until
+            a human runs that command.
+
+      - name: Publish review
+        if: steps.gate.outputs.run == 'true' && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'apps/server/reports/mutation/ai-review.md';
+            if (!fs.existsSync(path)) {
+              core.warning('Agent produced no review file.');
+              return;
+            }
+
+            const marker = '<!-- mutation-ai-review -->';
+            let review = fs.readFileSync(path, 'utf8');
+
+            // GitHub rejects comments over 65536 characters.
+            const LIMIT = 60000;
+            if (review.length > LIMIT) {
+              review = `${review.slice(0, LIMIT)}\n\n_Truncated. Full review in the workflow artifact._`;
+            }
+
+            const header = [
+              marker,
+              '## AI triage of surviving mutants',
+              '',
+              '> Draft produced by an agent. Nothing here is verified.',
+              '> Each proposed test must pass on the original and fail on the mutant',
+              '> before it is merged - the commands are at the end of this review.',
+              '',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              (c) => c.user.type === 'Bot' && c.body.includes(marker),
+            );
+            const body = header + review;
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Upload review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-ai-review-${{ github.run_id }}
+          path: apps/server/reports/mutation/
+          retention-days: 30

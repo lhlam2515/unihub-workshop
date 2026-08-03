@@ -1,0 +1,203 @@
+name: Mutation Testing
+
+# Two lanes, deliberately different questions:
+#
+#   PR      - "is the code you just wrote actually protected by a test?"
+#             mutates only files changed in this PR, reuses prior verdicts.
+#   Nightly - "are all eight business invariants still protected?"
+#             mutates the full invariant scope from stryker.conf.mjs.
+#
+# Neither lane blocks a merge. Stryker runs with thresholds.break = null and
+# every reporting step is guarded so a mutation run can never fail the PR.
+# Test quality is a conversation on the PR, not a gate that gets bypassed.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/server/src/**/*.ts'
+      - 'apps/server/stryker.conf.mjs'
+      - 'apps/server/scripts/mutation-*.mjs'
+      - '.github/workflows/mutation.yml'
+  schedule:
+    # 18:00 UTC = 01:00 Asia/Ho_Chi_Minh
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Mutation scope'
+        required: false
+        default: 'invariant'
+        type: choice
+        options: [invariant, full]
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mutation:
+    name: StrykerJS
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/server
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Needed to diff against the base branch in PR mode.
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      # Stryker reuses verdicts for mutants whose code and tests are unchanged.
+      # Falling back to main's file gives a fresh branch a warm start.
+      - name: Restore incremental report
+        uses: actions/cache@v4
+        with:
+          path: apps/server/reports/stryker-incremental.json
+          key: stryker-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            stryker-${{ github.ref_name }}-
+            stryker-main-
+
+      - name: Resolve mutation scope
+        if: github.event_name == 'pull_request'
+        id: changed
+        # Runs from the repo root, not apps/server: git pathspecs resolve
+        # relative to the cwd, so "-- apps/server/src" from inside apps/server
+        # would look for apps/server/apps/server/src and always match nothing.
+        working-directory: .
+        run: |
+          # Mutate what this PR touched: production .ts under src, minus the
+          # file types that only yield equivalent mutants.
+          CHANGED=$(git diff --name-only --diff-filter=d \
+            "origin/${{ github.base_ref }}...HEAD" -- apps/server/src \
+            | grep -E '\.ts$' \
+            | grep -vE '\.(spec|dto|module|type)\.ts$' \
+            | grep -vE '/index\.ts$' \
+            | sed 's|^apps/server/||' \
+            | paste -sd, -)
+
+          # A PR that changes the Stryker config or this workflow but no source
+          # still needs verifying - otherwise a config regression ships unnoticed.
+          CONFIG=$(git diff --name-only --diff-filter=d \
+            "origin/${{ github.base_ref }}...HEAD" \
+            -- apps/server/stryker.conf.mjs \
+               apps/server/scripts/mutation-ai-bundle.mjs \
+               .github/workflows/mutation.yml)
+
+          if [ -n "$CHANGED" ]; then
+            echo "mode=scoped" >> "$GITHUB_OUTPUT"
+            echo "files=$CHANGED" >> "$GITHUB_OUTPUT"
+            echo "Mutating changed sources: $CHANGED"
+          elif [ -n "$CONFIG" ]; then
+            echo "mode=invariant" >> "$GITHUB_OUTPUT"
+            echo "No source changed, but mutation config did. Running invariant scope."
+          else
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "Nothing to mutate."
+          fi
+
+      # concurrency 2 matches the 2 vCPU on a GitHub-hosted runner. Going higher
+      # makes the 24 spec files that read the real clock flaky, which shows up as
+      # Timeout and inflates the score.
+      - name: Run Stryker (PR, changed files)
+        if: github.event_name == 'pull_request' && steps.changed.outputs.mode == 'scoped'
+        run: pnpm exec stryker run --mutate "${{ steps.changed.outputs.files }}" --concurrency 2
+
+      - name: Run Stryker (PR, config changed)
+        if: github.event_name == 'pull_request' && steps.changed.outputs.mode == 'invariant'
+        run: pnpm exec stryker run --concurrency 2 --force
+
+      - name: Run Stryker (nightly, invariant scope)
+        if: github.event_name == 'schedule'
+        run: pnpm exec stryker run --concurrency 2 --force
+
+      - name: Run Stryker (manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ inputs.scope }}" = "full" ]; then
+            pnpm run stryker:full
+          else
+            pnpm exec stryker run --concurrency 2 --force
+          fi
+
+      # Deterministic, dependency-free, zero API cost. Produces the PR comment,
+      # the machine-readable summary, and the dossier the AI lane consumes.
+      - name: Build report bundle
+        id: bundle
+        if: always() && steps.changed.outputs.mode != 'skip'
+        run: pnpm run mutation:bundle
+
+      - name: Upload mutation report
+        if: always() && steps.changed.outputs.mode != 'skip'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ github.run_id }}
+          path: |
+            apps/server/reports/mutation/
+          retention-days: 30
+
+      - name: Job summary
+        if: always() && steps.changed.outputs.mode != 'skip'
+        run: cat reports/mutation/pr-comment.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      # Skipped automatically for fork PRs, which have no write token.
+      - name: Comment on PR
+        if: >-
+          github.event_name == 'pull_request' &&
+          steps.changed.outputs.mode != 'skip' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'apps/server/reports/mutation/pr-comment.md';
+            if (!fs.existsSync(path)) return;
+
+            const marker = '<!-- mutation-testing-report -->';
+            const body = `${marker}\n${fs.readFileSync(path, 'utf8')}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            // One rolling comment per PR instead of a new one per push.
+            const existing = comments.find(
+              (c) => c.user.type === 'Bot' && c.body.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
