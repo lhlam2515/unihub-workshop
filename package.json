@@ -17,7 +17,12 @@
     "agent-config:sync": "pnpm --filter=@repo/agent-config run sync",
     "agent-config:check": "pnpm --filter=@repo/agent-config run check",
     "db:seed": "pnpm --filter=server db:seed",
-    "test:e2e": "pnpm --filter=web test:e2e"
+    "test": "turbo run test",
+    "test:cov": "turbo run test:cov",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "pnpm --filter=server test:e2e",
+    "stryker": "pnpm --filter=server stryker",
+    "mutation:bundle": "pnpm --filter=server mutation:bundle"
   },
   "devDependencies": {
     "husky": "^9.1.7",

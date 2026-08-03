@@ -20,6 +20,15 @@
       "dependsOn": ["lint", "check-types", "build"],
       "cache": false
     },
+    "test": {
+      "outputs": []
+    },
+    "test:cov": {
+      "outputs": ["coverage/**"]
+    },
+    "test:integration": {
+      "outputs": []
+    },
     "format": {
       "dependsOn": ["^format"],
       "cache": false
