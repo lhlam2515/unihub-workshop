@@ -17,7 +17,7 @@ Baseline measured on 2026-08-03 against `main`:
 | Killed / Survived / No coverage / Timeout | 733 / 253 / 276 / 5 |
 | Mutation score (Stryker) | **73,97 %** |
 | Mutation score counting no-coverage as failed | **57,85 %** |
-| Full invariant-scope run | 4 min 47 s at concurrency 4 |
+| Full invariant-scope run | 4 min 47 s locally at concurrency 4, 11 min 3 s on a 2 vCPU runner |
 
 Read those last two rows together. Stryker's own score excludes mutants no test
 ever reached, which flatters the result. The 57,85 % figure is the honest one.
@@ -163,8 +163,16 @@ assertion is merged without this gate passing.
   `mutation-validate.mjs` mutates the whole file and filters by line itself.
 - **24 of 55 spec files read the real clock** (`Date.now()`, `new Date()`) with
   no fake timers. Under parallel mutation load they get slower, which shows up
-  as Timeout and is scored as killed — inflating the result. `timeoutMS` is set
-  to 60 s with `timeoutFactor: 2.5` to reduce this; `concurrency` is pinned to 2
-  in CI to match the 2 vCPU runner.
+  as Timeout, and Stryker counts Timeout alongside Killed in the numerator. A
+  slower test can therefore raise the score with no assertion added. Measured on
+  the same commit: 5 Timeout locally versus 1 on CI, moving the score from
+  73.97% to 74.37% with every other count identical. `timeoutMS` is 60 s with
+  `timeoutFactor: 2.5`, and `concurrency` is pinned to 2 in CI to match the
+  runner. Fake timers would remove the wobble entirely.
+- **A green mutation job does not mean Stryker ran.** The job sets
+  `working-directory: apps/server`, and git pathspecs resolve relative to the
+  cwd, so the scope-resolution step needs `working-directory: .` — otherwise
+  `-- apps/server/src` looks for `apps/server/apps/server/src`, matches nothing,
+  and every run skips silently while reporting success.
 - **Unit specs only.** Integration and e2e boot `AppModule`, are slower, and are
   currently failing anyway.
