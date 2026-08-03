@@ -79,6 +79,10 @@ jobs:
       - name: Resolve mutation scope
         if: github.event_name == 'pull_request'
         id: changed
+        # Runs from the repo root, not apps/server: git pathspecs resolve
+        # relative to the cwd, so "-- apps/server/src" from inside apps/server
+        # would look for apps/server/apps/server/src and always match nothing.
+        working-directory: .
         run: |
           # Mutate what this PR touched: production .ts under src, minus the
           # file types that only yield equivalent mutants.
