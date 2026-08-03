@@ -35,6 +35,12 @@ concurrency:
 permissions:
   contents: read
   pull-requests: write
+  issues: write
+  # claude-code-action exchanges a GitHub OIDC token for its App token. This is
+  # required even when Anthropic auth uses CLAUDE_CODE_OAUTH_TOKEN rather than
+  # workload identity federation; without it the action fails on setup with
+  # "Could not fetch an OIDC token" before it ever reads the prompt.
+  id-token: write
 
 jobs:
   ai-review:
