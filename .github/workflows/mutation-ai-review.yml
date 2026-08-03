@@ -19,6 +19,10 @@ name: Mutation AI Review
 #   2. Repo Settings -> Secrets and variables -> Actions -> New secret
 #      Name: CLAUDE_CODE_OAUTH_TOKEN
 #   3. Create the label `mutation:ai-review`.
+#
+# Installing the Claude Code GitHub App (github.com/apps/claude) is NOT
+# required here, because github_token below is set explicitly. Install it only
+# if you also want @claude mentions to work in issues and PR comments.
 on:
   pull_request:
     types: [labeled]
@@ -105,7 +109,14 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Accepts either spelling so an existing secret does not have to be
+          # recreated. CLAUDE_CODE_OAUTH_TOKEN is the name Anthropic documents.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.CLAUDE_CODE_AUTH_TOKEN }}
+          # Without this the action tries to exchange its OIDC token for a
+          # Claude Code GitHub App token, which 401s unless that app is
+          # installed on the repo. The agent only reads the tree and writes one
+          # report file, so the default job token covers what it needs.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           # Read-only over the source tree; the only writable target is the report file.
           claude_args: >-
             --allowedTools "Read,Glob,Grep,Write"
